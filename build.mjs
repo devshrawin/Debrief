@@ -2,7 +2,7 @@ import * as esbuild from 'esbuild';
 
 const watch = process.argv.includes('--watch');
 const opts = {
-  entryPoints: ['background', 'popup', 'offscreen', 'options', 'mom', 'pill'].map((n) => `src/${n}.js`),
+  entryPoints: ['background', 'popup', 'offscreen', 'options', 'mom', 'pill', 'mini'].map((n) => `src/${n}.js`),
   outdir: 'extension/dist',
   bundle: true,
   format: 'iife',

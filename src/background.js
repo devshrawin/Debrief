@@ -44,6 +44,38 @@ async function clearAlert() {
   if (st.alert) await setState({ ...st, alert: null });
 }
 
+// A small controller window outside the Meet page, so the mic switch never covers the meeting.
+async function openMini() {
+  const { miniWindowId } = await chrome.storage.session.get('miniWindowId');
+  if (miniWindowId != null) {
+    try {
+      await chrome.windows.get(miniWindowId);
+      return { ok: true };
+    } catch {}
+  }
+  const { miniBounds } = await chrome.storage.local.get('miniBounds');
+  const cur = await chrome.windows.getLastFocused().catch(() => null);
+  const b = miniBounds || { width: 340, height: 330, left: cur ? Math.max(0, (cur.left || 0) + (cur.width || 800) - 360) : 80, top: cur ? (cur.top || 0) + 80 : 80 };
+  const win = await chrome.windows.create({ url: chrome.runtime.getURL('mini.html'), type: 'popup', focused: false, width: b.width, height: b.height, left: b.left, top: b.top });
+  await chrome.storage.session.set({ miniWindowId: win.id });
+  return { ok: true };
+}
+
+async function closeMini() {
+  const { miniWindowId } = await chrome.storage.session.get('miniWindowId');
+  await chrome.storage.session.remove('miniWindowId');
+  if (miniWindowId != null) await chrome.windows.remove(miniWindowId).catch(() => {});
+}
+
+chrome.windows.onBoundsChanged?.addListener(async (w) => {
+  const { miniWindowId } = await chrome.storage.session.get('miniWindowId');
+  if (w.id === miniWindowId && w.width) await chrome.storage.local.set({ miniBounds: { left: w.left, top: w.top, width: w.width, height: w.height } });
+});
+chrome.windows.onRemoved.addListener(async (id) => {
+  const { miniWindowId } = await chrome.storage.session.get('miniWindowId');
+  if (id === miniWindowId) await chrome.storage.session.remove('miniWindowId');
+});
+
 async function ensureOffscreen() {
   const ctxs = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
   if (ctxs.length) return;
@@ -90,6 +122,7 @@ async function start(msg) {
     return { ok: false, error: r?.error || 'Recorder did not start.' };
   }
   await setState({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null });
+  if (settings.miniWindow !== false) openMini().catch(() => {});
   // The pill is a content script; inject it now so it appears without reloading the Meet tab.
   chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ['dist/pill.js'] }).catch(() => {});
   chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
@@ -112,6 +145,7 @@ function stop() {
     } catch {}
     await updateMeeting(st.meetingId, (m) => (m.endedAt = Date.now()));
     await closeOffscreen();
+    await closeMini();
     await setState({ recording: false });
     chrome.action.setBadgeText({ text: '' });
     chrome.action.setBadgeText({ tabId: st.tabId, text: '' }).catch(() => {});
@@ -156,6 +190,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await raiseAlert(msg.meetingId, msg.error);
     },
     'dismiss-alert': () => clearAlert(),
+    'open-mini': () => openMini(),
     'set-follow': async () => {
       await saveSettings({ ...(await getSettings()), followMeetMute: !!msg.on });
       return applyMic();
@@ -164,7 +199,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const rec = await getState();
       const { levels } = await chrome.storage.session.get('levels');
       const m = rec.meetingId ? await getMeeting(rec.meetingId) : null;
-      return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false };
+      return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true };
     },
   };
   const h = handlers[msg.type];

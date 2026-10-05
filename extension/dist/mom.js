@@ -2475,6 +2475,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguage: "auto",
+    // auto | hinglish | malayalam
+    miniWindow: true,
+    // open the controller window when recording starts
+    pillOnPage: false,
+    // also show the pill inside the Meet page
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -15786,6 +15792,7 @@ _(Output hit the length limit and was cut off.)_`;
       this.status = status;
     }
   };
+  var DEFAULT_STT_PROMPT = DEFAULTS.sttPrompt;
   async function check(res, provider) {
     if (res.ok) return res.json();
     let detail = "";
@@ -15795,12 +15802,27 @@ _(Output hit the length limit and was cut off.)_`;
     }
     throw new SttError(`${provider} HTTP ${res.status}: ${detail}`, res.status);
   }
+  var LANGUAGES = {
+    auto: {
+      codes: null,
+      hint: "It may mix Hindi, English and Malayalam: write Hindi in Devanagari, Malayalam in Malayalam script, and English words in English."
+    },
+    hinglish: {
+      codes: ["hi-IN", "en-IN"],
+      hint: "It mixes Hindi and English: write Hindi in Devanagari and English words in English."
+    },
+    malayalam: {
+      codes: ["ml-IN", "en-IN"],
+      hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
+    }
+  };
+  var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {
     const fd = new FormData();
     fd.append("file", wav, "chunk.wav");
     fd.append("model", s.sarvamModel);
     fd.append("mode", s.sarvamMode);
-    fd.append("language_code", s.sarvamLanguage);
+    fd.append("language_code", s.sarvamLanguage !== "unknown" ? s.sarvamLanguage : s.meetingLanguage === "malayalam" ? "ml-IN" : "unknown");
     const res = await fetch("https://api.sarvam.ai/speech-to-text", {
       method: "POST",
       headers: { "api-subscription-key": s.sarvamKey },
@@ -15830,7 +15852,9 @@ _(Output hit the length limit and was cut off.)_`;
     fd.append("file", wav, "chunk.wav");
     fd.append("model", s.sttModel);
     fd.append("response_format", "json");
-    if (s.sttPrompt) fd.append("prompt", s.sttPrompt);
+    if (s.meetingLanguage === "malayalam") fd.append("language", "ml");
+    const prompt = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    if (prompt) fd.append("prompt", prompt);
     const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
     const res = await fetch(`${s.sttBase.replace(/\/+$/, "")}/audio/transcriptions`, {
       method: "POST",
@@ -15848,20 +15872,32 @@ _(Output hit the length limit and was cut off.)_`;
   }
   async function geminiCall(wav, s, model) {
     const parts = [{ inlineData: { mimeType: "audio/wav", data: await toBase64(wav) } }];
-    const body = { contents: [{ role: "user", parts }] };
+    const post = async (body) => {
+      const res = await geminiFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }, s);
+      return check(res, "Gemini");
+    };
+    let j2;
     if (/transcribe/.test(model)) {
-      body.generationConfig = { audioTranscriptionConfig: { mode: "SMART" } };
+      const codes = lang(s).codes;
+      const cfg = (withCodes) => ({ contents: [{ role: "user", parts }], generationConfig: { audioTranscriptionConfig: { mode: "SMART", ...withCodes && codes ? { languageCodes: codes } : {} } } });
+      try {
+        j2 = await post(cfg(true));
+      } catch (e) {
+        if (!(codes && e.status === 400 && /languageCodes|language_codes|Invalid JSON/i.test(e.message))) throw e;
+        j2 = await post(cfg(false));
+      }
     } else {
-      parts.unshift({
-        text: "Transcribe this meeting audio exactly as spoken. It may mix Hindi and English: write Hindi in Devanagari and English words in English. Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing."
+      j2 = await post({
+        contents: [{
+          role: "user",
+          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts]
+        }]
       });
     }
-    const res = await geminiFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    }, s);
-    const j2 = await check(res, "Gemini");
     return (j2.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join("");
   }
   async function gemini2(wav, s) {
@@ -15937,10 +15973,10 @@ _(Output hit the length limit and was cut off.)_`;
 
   // src/prompt.js
   function buildSystemPrompt(language) {
-    return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, or a Hindi-English mix (Hinglish).
+    return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, Malayalam, or a mix of them (Hinglish, Manglish).
 
 About the transcript:
-- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi written in Devanagari or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
+- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi or Malayalam written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
 - Lines tagged ME come from the note-taker's own microphone. Lines tagged OTHERS are all remote participants mixed together, so you usually cannot tell which remote person spoke. Attribute statements to a named person only when the transcript itself makes it clear (someone is addressed by name, introduces themselves, or is assigned a task by name).
 - If the note-taker's microphone picked up speaker audio, the same sentence may appear under both ME and OTHERS. Count it once.
 

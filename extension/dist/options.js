@@ -1152,6 +1152,12 @@
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguage: "auto",
+    // auto | hinglish | malayalam
+    miniWindow: true,
+    // open the controller window when recording starts
+    pillOnPage: false,
+    // also show the pill inside the Meet page
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
