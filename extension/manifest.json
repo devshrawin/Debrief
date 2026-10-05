@@ -1,0 +1,71 @@
+{
+  "manifest_version": 3,
+  "name": "Debrief – Meeting Minutes",
+  "version": "0.1.0",
+  "description": "Records a Google Meet tab, transcribes Hindi/English/Hinglish, and writes Minutes of Meeting.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxF0ss4fQ/HOIKvnLFudxEkEGrD4yPsgMtfqoJChOg65lvF6LPuGzTd/v065ceUGLfE3R4WHTZDCBJ7Rc2cSncgHlsl909hHs8918pWN6jO4sVXJ24HIwggFmwyqfyPEaSzBMMIQtM358FY43W9my72uSDP6wST6tAE06oGNUeVkeNC4EWHorLzARI6cNThLy9+d+G+7Uc/nv4fDZp09J5ybJhmYOrCq8Cda77PBcn7VxZiRnS8i9iRlXb0n8eXzdQdpJ92MApvCmmp/CQzF6e/NFAuZCqstPgup5CJVRDrQfG+dSg2WH7tSsX3eQwSFqfS0VYQT6dj/+pzTiEhcAaQIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://api.sarvam.ai/*",
+    "https://api.deepgram.com/*",
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openai.com/*",
+    "https://api.groq.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["dist/pill.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Debrief",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Alt+Shift+M"
+      },
+      "description": "Start or stop recording the current tab"
+    },
+    "toggle-mic": {
+      "suggested_key": {
+        "default": "Alt+Shift+K"
+      },
+      "description": "Include or ignore my microphone while recording"
+    }
+  },
+  "options_page": "options.html"
+}

@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Minutes of Meeting</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
+    header h1 { font-size: 20px; margin: 0; }
+    header input { font-size: 20px; font-weight: 700; border-color: transparent; padding: 2px 4px; margin-left: -4px; }
+    header input:hover, header input:focus { border-color: var(--border); }
+    .meta { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 16px 0 0; }
+    .tabs button { border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; }
+    .tabs button.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .toolbar { margin: 12px 0; }
+    #mom { padding: 4px 2px; min-height: 120px; }
+    #mom table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    #mom th, #mom td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+    #mom th { background: var(--panel); }
+    #mdEdit { min-height: 480px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+    .transcript { font-size: 13px; }
+    .seg { display: grid; grid-template-columns: 56px 110px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+    .seg .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .seg .who { font-weight: 600; }
+    .seg .who.me { color: var(--accent); }
+    details { margin-top: 12px; }
+    #notes { min-height: 70px; }
+    @media (max-width: 600px) { .seg { grid-template-columns: 48px 1fr; } .seg .text { grid-column: 1 / -1; } }
+    @media print {
+      .no-print, .tabs, .toolbar, details { display: none !important; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand no-print" style="margin-bottom:12px;font-weight:600"><img src="icons/icon48.png" alt="" style="width:22px;height:22px;border-radius:5px">Debrief</div>
+    <input id="title" aria-label="Meeting title">
+    <div class="meta" id="meta"></div>
+  </header>
+  <div id="errors" class="warn hidden no-print"></div>
+  <div id="pendingBox" class="warn row hidden no-print" style="margin-top:8px"><span id="pendingText" style="flex:1"></span><button id="retry">Retry transcription</button></div>
+
+  <details class="no-print" id="notesBox">
+    <summary>Context for the MOM (attendees, agenda, correct spellings) — optional</summary>
+    <textarea id="notes" placeholder="e.g. Attendees: Rahul (PM), Priya (Dev). Project name is spelled 'UR Masters'."></textarea>
+  </details>
+
+  <div class="tabs no-print">
+    <button data-tab="momTab" class="active">Minutes</button>
+    <button data-tab="trTab">Transcript</button>
+  </div>
+
+  <div id="momTab">
+    <div class="toolbar row no-print">
+      <button id="gen" class="primary">Generate MOM</button>
+      <button id="abort" class="hidden">Stop</button>
+      <span id="genStatus" class="hint"></span>
+      <span style="flex:1"></span>
+      <button id="edit">Edit</button>
+      <button id="copy">Copy</button>
+      <button id="dlMd">.md</button>
+      <button id="dlDoc">Word</button>
+      <button id="print">Print / PDF</button>
+    </div>
+    <article id="mom"><p class="muted">No minutes yet.</p></article>
+    <textarea id="mdEdit" class="hidden"></textarea>
+  </div>
+
+  <div id="trTab" class="hidden">
+    <div class="toolbar row no-print">
+      <span id="trInfo" class="hint"></span>
+      <span style="flex:1"></span>
+      <button id="dlTxt">Download .txt</button>
+      <button id="del" class="danger">Delete meeting</button>
+    </div>
+    <div class="transcript" id="transcript"></div>
+  </div>
+</main>
+<script src="dist/mom.js"></script>
+</body>
+</html>

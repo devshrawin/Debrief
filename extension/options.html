@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Debrief Settings</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    main { max-width: 680px; margin: 0 auto; padding: 24px 16px 60px; }
+    section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px 18px 18px; margin: 16px 0; }
+    section h2 { font-size: 16px; margin: 14px 0 0; }
+    .bar { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--border); }
+    #msg { font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1 class="brand"><img src="icons/icon48.png" alt=""> Debrief settings</h1>
+  <p class="muted">Keys are stored only in this browser profile (<code>chrome.storage.local</code>). Audio and transcripts go straight from Chrome to the providers you pick.</p>
+
+  <section>
+    <h2>You</h2>
+    <label for="myName">Your name</label>
+    <input id="myName" placeholder="e.g. Shrawin Sisodiya">
+    <p class="hint">Your microphone lines are tagged with this name.</p>
+
+    <label><input type="checkbox" id="captureMic" style="width:auto"> Record my microphone too</label>
+    <label><input type="checkbox" id="followMeetMute" style="width:auto"> Ignore my mic while Google Meet is muted</label>
+    <p class="hint">Tab audio contains only the other participants. Chrome needs a one-time permission for the mic.</p>
+    <div class="row"><button id="grantMic">Grant microphone</button><span id="micStatus" class="hint"></span></div>
+
+    <label for="momLanguage">Write MOM in</label>
+    <select id="momLanguage">
+      <option>English</option>
+      <option>Hindi (Devanagari)</option>
+      <option value="the same language mix used in the meeting">Same as meeting</option>
+    </select>
+  </section>
+
+  <section id="geminiSection">
+    <h2>Google Gemini key (free)</h2>
+    <label for="geminiKey">Gemini API key</label>
+    <input id="geminiKey" type="password" autocomplete="off">
+    <p class="hint">Get one free at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> (no card needed). The same key is used for transcription and for writing the MOM.</p>
+    <label for="geminiKey2">Backup Gemini key (optional)</label>
+    <input id="geminiKey2" type="password" autocomplete="off">
+    <p class="hint">Used automatically when the main key fails or hits its limit. Limits are per Google Cloud project, not per key, so this only helps if the key comes from a <b>different project</b>.</p>
+    <p class="warn" style="margin-top:8px">On Google's free tier, your audio and transcripts may be used to improve Google's products, and human reviewers may read them. Don't use it for confidential meetings, or enable billing on the key to switch to paid-tier data terms.</p>
+  </section>
+
+  <section>
+    <h2>Speech-to-text</h2>
+    <label for="sttProvider">Provider</label>
+    <select id="sttProvider">
+      <option value="gemini">Google Gemini (free tier)</option>
+      <option value="sarvam">Sarvam AI (best for Hinglish)</option>
+      <option value="deepgram">Deepgram Nova-3 (multilingual)</option>
+      <option value="openai">OpenAI-compatible Whisper (OpenAI / Groq / local)</option>
+    </select>
+
+    <div data-stt="gemini">
+      <label for="sttGeminiModel">Model</label>
+      <input id="sttGeminiModel" placeholder="gemini-3.5-transcribe">
+      <p class="hint">gemini-3.5-transcribe handles Hindi–English switching. If your key has no quota for it, use a general model such as gemini-3.8-flash instead.</p>
+    </div>
+
+    <div data-stt="sarvam">
+      <label for="sarvamKey">Sarvam API key</label>
+      <input id="sarvamKey" type="password" autocomplete="off">
+      <p class="hint">From dashboard.sarvam.ai.</p>
+      <label for="sarvamModel">Model</label>
+      <input id="sarvamModel">
+      <label for="sarvamMode">Output mode</label>
+      <select id="sarvamMode">
+        <option value="codemix">codemix: Hindi in Devanagari, English words in English</option>
+        <option value="transcribe">transcribe: native script</option>
+        <option value="translate">translate: everything to English</option>
+      </select>
+      <label for="sarvamLanguage">Spoken language</label>
+      <select id="sarvamLanguage">
+        <option value="unknown">Auto-detect</option>
+        <option value="hi-IN">Hindi (hi-IN)</option>
+        <option value="en-IN">English (en-IN)</option>
+      </select>
+    </div>
+
+    <div data-stt="deepgram">
+      <label for="deepgramKey">Deepgram API key</label>
+      <input id="deepgramKey" type="password" autocomplete="off">
+      <label for="deepgramModel">Model</label>
+      <input id="deepgramModel">
+      <p class="hint">Sent with <code>language=multi</code> for Hindi–English switching.</p>
+    </div>
+
+    <div data-stt="openai">
+      <label for="sttBase">Base URL</label>
+      <input id="sttBase" placeholder="https://api.groq.com/openai/v1">
+      <p class="hint">Groq: https://api.groq.com/openai/v1 · OpenAI: https://api.openai.com/v1 · local server: http://localhost:8000/v1</p>
+      <label for="sttKey">API key</label>
+      <input id="sttKey" type="password" autocomplete="off" placeholder="blank for local servers">
+      <label for="sttModel">Model</label>
+      <input id="sttModel" placeholder="whisper-large-v3">
+      <label for="sttPrompt">Hint prompt</label>
+      <input id="sttPrompt">
+    </div>
+  </section>
+
+  <section>
+    <h2>MOM writer (LLM)</h2>
+    <label for="llmProvider">Provider</label>
+    <select id="llmProvider">
+      <option value="gemini">Google Gemini (free tier)</option>
+      <option value="anthropic">Anthropic Claude</option>
+      <option value="openai">OpenAI-compatible (OpenAI, Groq, OpenRouter, Ollama…)</option>
+    </select>
+
+    <div data-llm="anthropic">
+      <label for="anthropicKey">Anthropic API key</label>
+      <input id="anthropicKey" type="password" autocomplete="off">
+      <p class="hint">From console.anthropic.com.</p>
+      <label for="anthropicModel">Model</label>
+      <select id="anthropicModel">
+        <option value="claude-opus-5-5">Claude Opus 5.5 (best)</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (cheaper)</option>
+        <option value="claude-haiku-4-5">Claude Haiku 4.5 (cheapest)</option>
+      </select>
+    </div>
+
+    <div data-llm="openai">
+      <label for="oaBase">Base URL</label>
+      <input id="oaBase" placeholder="https://api.openai.com/v1">
+      <p class="hint">Ollama: http://localhost:11434/v1 · OpenRouter: https://openrouter.ai/api/v1 · Groq: https://api.groq.com/openai/v1</p>
+      <label for="oaKey">API key</label>
+      <input id="oaKey" type="password" autocomplete="off" placeholder="blank for Ollama">
+      <label for="oaModel">Model</label>
+      <input id="oaModel" placeholder="model id exactly as the provider names it">
+    </div>
+
+    <div data-llm="gemini">
+      <label for="geminiModel">Model</label>
+      <input id="geminiModel" placeholder="gemini-3.8-flash">
+      <p class="hint">Uses the Gemini key above. Model ids: ai.google.dev/gemini-api/docs/models</p>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="testLlm">Test LLM</button><span id="llmStatus" class="hint"></span></div>
+  </section>
+
+  <div class="bar row"><button id="save" class="primary">Save</button><span id="msg"></span></div>
+</main>
+<script src="dist/options.js"></script>
+</body>
+</html>
