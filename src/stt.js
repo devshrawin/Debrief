@@ -9,7 +9,9 @@ class SttError extends Error {
 
 import { geminiFetch, modelChain } from './gemini.js';
 import { isLoopNoise } from './noise.js';
-import { errorDetail } from './store.js';
+import { errorDetail, DEFAULTS } from './store.js';
+
+const DEFAULT_STT_PROMPT = DEFAULTS.sttPrompt;
 
 async function check(res, provider) {
   if (res.ok) return res.json();
@@ -20,12 +22,30 @@ async function check(res, provider) {
   throw new SttError(`${provider} HTTP ${res.status}: ${detail}`, res.status);
 }
 
+// What the meeting is spoken in. `codes` go to Gemini's transcription model; `hint` is the prompt for general models.
+export const LANGUAGES = {
+  auto: {
+    codes: null,
+    hint: 'It may mix Hindi, English and Malayalam: write Hindi in Devanagari, Malayalam in Malayalam script, and English words in English.',
+  },
+  hinglish: {
+    codes: ['hi-IN', 'en-IN'],
+    hint: 'It mixes Hindi and English: write Hindi in Devanagari and English words in English.',
+  },
+  malayalam: {
+    codes: ['ml-IN', 'en-IN'],
+    hint: 'It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (മലയാളം) and English words in English.',
+  },
+};
+const lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
+
 async function sarvam(wav, s) {
   const fd = new FormData();
   fd.append('file', wav, 'chunk.wav');
   fd.append('model', s.sarvamModel);
   fd.append('mode', s.sarvamMode);
-  fd.append('language_code', s.sarvamLanguage);
+  // An explicit Sarvam language wins; otherwise follow the meeting language.
+  fd.append('language_code', s.sarvamLanguage !== 'unknown' ? s.sarvamLanguage : s.meetingLanguage === 'malayalam' ? 'ml-IN' : 'unknown');
   const res = await fetch('https://api.sarvam.ai/speech-to-text', {
     method: 'POST',
     headers: { 'api-subscription-key': s.sarvamKey },
@@ -57,7 +77,9 @@ async function openaiCompat(wav, s) {
   fd.append('file', wav, 'chunk.wav');
   fd.append('model', s.sttModel);
   fd.append('response_format', 'json');
-  if (s.sttPrompt) fd.append('prompt', s.sttPrompt);
+  if (s.meetingLanguage === 'malayalam') fd.append('language', 'ml');
+  const prompt = s.meetingLanguage === 'malayalam' && s.sttPrompt === DEFAULT_STT_PROMPT ? 'Malayalam office meeting. Malayalam in Malayalam script, English words in English.' : s.sttPrompt;
+  if (prompt) fd.append('prompt', prompt);
   const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
   const res = await fetch(`${s.sttBase.replace(/\/+$/, '')}/audio/transcriptions`, {
     method: 'POST',
@@ -79,20 +101,33 @@ async function toBase64(blob) {
 // audioTranscriptionConfig; general models (e.g. gemini-3.8-flash) are told what to do in a prompt.
 async function geminiCall(wav, s, model) {
   const parts = [{ inlineData: { mimeType: 'audio/wav', data: await toBase64(wav) } }];
-  const body = { contents: [{ role: 'user', parts }] };
+  const post = async (body) => {
+    const res = await geminiFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }, s);
+    return check(res, 'Gemini');
+  };
+  let j;
   if (/transcribe/.test(model)) {
-    body.generationConfig = { audioTranscriptionConfig: { mode: 'SMART' } };
+    const codes = lang(s).codes;
+    const cfg = (withCodes) => ({ contents: [{ role: 'user', parts }], generationConfig: { audioTranscriptionConfig: { mode: 'SMART', ...(withCodes && codes ? { languageCodes: codes } : {}) } } });
+    try {
+      j = await post(cfg(true));
+    } catch (e) {
+      // If the API rejects the language hint, transcribe without it instead of failing the chunk.
+      if (!(codes && e.status === 400 && /languageCodes|language_codes|Invalid JSON/i.test(e.message))) throw e;
+      j = await post(cfg(false));
+    }
   } else {
-    parts.unshift({
-      text: 'Transcribe this meeting audio exactly as spoken. It may mix Hindi and English: write Hindi in Devanagari and English words in English. Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.',
+    j = await post({
+      contents: [{
+        role: 'user',
+        parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts],
+      }],
     });
   }
-  const res = await geminiFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, s);
-  const j = await check(res, 'Gemini');
   return (j.candidates?.[0]?.content?.parts || [])
     .filter((p) => p.text && !p.thought)
     .map((p) => p.text)

@@ -221,8 +221,8 @@
     if (!host) return;
     const rec = S.rec;
     const mine = rec.recording && !rec.stopping && rec.tabId === myTab;
-    host.style.display = mine ? '' : 'none';
-    if (!mine) return;
+    host.style.display = mine && S.showPill ? '' : 'none';
+    if (!mine || !S.showPill) return;
 
     timeEl.textContent = fmt((Date.now() - rec.startedAt) / 1000);
     const lv = S.levels;

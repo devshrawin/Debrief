@@ -338,3 +338,49 @@ await test('alerts classify quota and key errors, ignore the rest', () => {
   assert.equal(classifyError('Failed to fetch'), null);
   assert.equal(classifyError('Gemini HTTP 404: model gone'), null);
 });
+
+// ---- Malayalam ----
+await test('malayalam: transcribe model gets languageCodes ml-IN + en-IN', async () => {
+  calls = [];
+  responder = () => Response.json({ candidates: [{ content: { parts: [{ text: 'ഹലോ team' }] } }] });
+  const s = { ...DEFAULTS, geminiKey: 'gk', meetingLanguage: 'malayalam' };
+  assert.equal(await transcribe(wav, s), 'ഹലോ team');
+  const body = JSON.parse(await calls[0].req.text());
+  assert.deepEqual(body.generationConfig.audioTranscriptionConfig, { mode: 'SMART', languageCodes: ['ml-IN', 'en-IN'] });
+});
+
+await test('malayalam: auto mode sends no language codes', async () => {
+  calls = [];
+  responder = () => Response.json({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] });
+  await transcribe(wav, { ...DEFAULTS, geminiKey: 'gk' });
+  const body = JSON.parse(await calls[0].req.text());
+  assert.deepEqual(body.generationConfig.audioTranscriptionConfig, { mode: 'SMART' });
+});
+
+await test('malayalam: a rejected language hint is retried without it', async () => {
+  calls = [];
+  responder = (_r, n) => (n === 1 ? Response.json({ error: { message: 'Invalid JSON payload: unknown field languageCodes' } }, { status: 400 }) : Response.json({ candidates: [{ content: { parts: [{ text: 'fine' }] } }] }));
+  assert.equal(await transcribe(wav, { ...DEFAULTS, geminiKey: 'gk', meetingLanguage: 'malayalam' }), 'fine');
+  const second = JSON.parse(await calls.at(-1).req.text());
+  assert.deepEqual(second.generationConfig.audioTranscriptionConfig, { mode: 'SMART' });
+});
+
+await test('malayalam: general model prompt asks for Malayalam script', async () => {
+  calls = [];
+  responder = () => Response.json({ candidates: [{ content: { parts: [{ text: 'ശരി' }] } }] });
+  await transcribe(wav, { ...DEFAULTS, geminiKey: 'gk', sttGeminiModel: 'gemini-3.8-flash', meetingLanguage: 'malayalam' });
+  const body = JSON.parse(await calls[0].req.text());
+  assert.match(body.contents[0].parts[0].text, /Malayalam script/);
+});
+
+await test('malayalam: sarvam uses ml-IN, whisper gets language=ml', async () => {
+  calls = [];
+  responder = () => Response.json({ transcript: 'x', text: 'y' });
+  await transcribe(wav, { ...DEFAULTS, sttProvider: 'sarvam', sarvamKey: 'k', meetingLanguage: 'malayalam' });
+  assert.equal((await calls[0].req.formData()).get('language_code'), 'ml-IN');
+  calls = [];
+  await transcribe(wav, { ...DEFAULTS, sttProvider: 'openai', sttBase: 'http://x/v1', meetingLanguage: 'malayalam' });
+  const fd = await calls[0].req.formData();
+  assert.equal(fd.get('language'), 'ml');
+  assert.match(fd.get('prompt'), /Malayalam/);
+});

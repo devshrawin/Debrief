@@ -29,10 +29,22 @@
     <p class="hint">Tab audio contains only the other participants. Chrome needs a one-time permission for the mic.</p>
     <div class="row"><button id="grantMic">Grant microphone</button><span id="micStatus" class="hint"></span></div>
 
+    <label for="meetingLanguage">Meeting language</label>
+    <select id="meetingLanguage">
+      <option value="auto">Auto: Hindi, English, Malayalam, any mix</option>
+      <option value="hinglish">Hindi + English (Hinglish)</option>
+      <option value="malayalam">Malayalam + English (Manglish)</option>
+    </select>
+    <p class="hint">Tunes transcription. Gemini and Sarvam handle Malayalam; Deepgram does not.</p>
+
+    <label><input type="checkbox" id="miniWindow" style="width:auto"> Open the small controls window when recording starts</label>
+    <label><input type="checkbox" id="pillOnPage" style="width:auto"> Also show the pill on top of the Meet page</label>
+
     <label for="momLanguage">Write MOM in</label>
     <select id="momLanguage">
       <option>English</option>
       <option>Hindi (Devanagari)</option>
+      <option>Malayalam</option>
       <option value="the same language mix used in the meeting">Same as meeting</option>
     </select>
   </section>
@@ -81,6 +93,7 @@
         <option value="unknown">Auto-detect</option>
         <option value="hi-IN">Hindi (hi-IN)</option>
         <option value="en-IN">English (en-IN)</option>
+        <option value="ml-IN">Malayalam (ml-IN)</option>
       </select>
     </div>
 

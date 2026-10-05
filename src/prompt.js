@@ -1,10 +1,10 @@
 import { fmtTime } from './store.js';
 
 export function buildSystemPrompt(language) {
-  return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, or a Hindi-English mix (Hinglish).
+  return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, Malayalam, or a mix of them (Hinglish, Manglish).
 
 About the transcript:
-- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi written in Devanagari or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
+- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi or Malayalam written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
 - Lines tagged ME come from the note-taker's own microphone. Lines tagged OTHERS are all remote participants mixed together, so you usually cannot tell which remote person spoke. Attribute statements to a named person only when the transcript itself makes it clear (someone is addressed by name, introduces themselves, or is assigned a task by name).
 - If the note-taker's microphone picked up speaker audio, the same sentence may appear under both ME and OTHERS. Count it once.
 
