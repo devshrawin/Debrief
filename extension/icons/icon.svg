@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4338CA"/>
+      <stop offset="1" stop-color="#1E1B6B"/>
+    </linearGradient>
+    <linearGradient id="saffron" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFB347"/>
+      <stop offset="1" stop-color="#FF7A1A"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <!-- speech bubble -->
+  <path d="M34 20h60a18 18 0 0 1 18 18v38a18 18 0 0 1-18 18H56l-20 17a3 3 0 0 1-4.9-2.3V94A18 18 0 0 1 16 76V38a18 18 0 0 1 18-18z" fill="#FFFFFF"/>
+  <!-- waveform hanging from the headline, like letters -->
+  <rect x="36" y="40" width="9" height="26" rx="4.5" fill="#3730A3"/>
+  <rect x="51" y="40" width="9" height="40" rx="4.5" fill="#3730A3"/>
+  <rect x="66" y="40" width="9" height="20" rx="4.5" fill="#3730A3"/>
+  <rect x="81" y="40" width="9" height="32" rx="4.5" fill="#3730A3"/>
+  <!-- drawn last so the bars hang from it; shirorekha: the Devanagari headline -->
+  <rect x="30" y="36" width="68" height="9" rx="4.5" fill="url(#saffron)"/>
+</svg>
