@@ -32,7 +32,10 @@ function doPost(e) {
     const recipients = to.length ? to.join(',') : me;
 
     const attachments = (d.attachments || []).map(function (a) {
-      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', a.name || 'attachment.txt');
+      const name = a.name || 'attachment.txt';
+      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).
+      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);
+      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);
     });
     MailApp.sendEmail({
       to: recipients,

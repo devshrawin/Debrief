@@ -60,6 +60,7 @@ $('save').onclick = async () => {
   try {
     await save();
     $('msg').textContent = 'Saved ✓';
+    updateGuide();
   } catch (e) {
     $('msg').textContent = e.message;
   }
@@ -100,6 +101,14 @@ $('testLlm').onclick = async () => {
   }
 };
 
+// Tick the getting-started steps as the settings fill in.
+async function updateGuide() {
+  const s = await getSettings();
+  const mic = await navigator.permissions.query({ name: 'microphone' }).then((p) => p.state === 'granted').catch(() => false);
+  const done = { g1: !!s.geminiKey || (s.sttProvider !== 'gemini' && s.llmProvider !== 'gemini'), g2: mic, g3: !!s.myName, g4: mailReady(s) };
+  for (const [id, ok] of Object.entries(done)) $(id)?.classList.toggle('done', ok);
+}
+
 $('scriptText').textContent = scriptText;
 $('copyScript').onclick = async () => {
   await navigator.clipboard.writeText(scriptText);
@@ -137,4 +146,5 @@ $('testMail').onclick = async () => {
   }
   showProviderFields();
   micStatus();
+  updateGuide();
 })();

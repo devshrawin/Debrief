@@ -71,3 +71,9 @@ label { display: block; font-weight: 600; margin: 12px 0 4px; }
 .brand img { width: 28px; height: 28px; border-radius: 7px; }
 .brand .tag { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); }
+
+.steps { margin: 0; padding-left: 0; list-style: none; counter-reset: step; }
+.steps li { position: relative; margin: 8px 0; padding-left: 34px; line-height: 1.45; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--border); color: var(--text); }
+.steps li.done::before { content: "\2713"; background: var(--ok); color: #fff; }

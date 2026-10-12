@@ -398,16 +398,29 @@ await test('mail: ready only with a script.google.com exec URL and a token', () 
   assert.equal(mailReady(DEFAULTS), false);
 });
 
-await test('mail: email has subject, escaped title, inline-styled table, optional transcript attachment', () => {
-  const m = buildEmail(mailMeeting, { ...mailSettings, emailTranscript: true }, fakeRender, 'Me: नमस्ते');
+await test('mail: email has subject, escaped title, inline-styled table', () => {
+  const m = buildEmail(mailMeeting, { ...mailSettings, emailPdf: false }, fakeRender, 'x');
   assert.equal(m.subject, 'MOM: UR Weekly <sync> (2026-10-12)');
   assert.match(m.html, /UR Weekly &lt;sync&gt;/);
   assert.match(m.html, /<table style="border-collapse/);
   assert.match(m.html, /<td style="border/);
   assert.match(m.text, /## Decisions/);
-  assert.equal(m.attachments.length, 1);
-  assert.equal(Buffer.from(m.attachments[0].base64, 'base64').toString('utf8'), 'Me: नमस्ते');
-  assert.equal(buildEmail(mailMeeting, mailSettings, fakeRender, 'x').attachments.length, 0);
+  assert.equal(m.attachments.length, 0);
+});
+
+await test('mail: attachments follow the settings (PDF / Word / Markdown / transcript)', () => {
+  const all = buildEmail(mailMeeting, { ...mailSettings, emailPdf: true, emailWord: true, emailMd: true, emailTranscript: true }, fakeRender, 'Me: नमस्ते');
+  assert.deepEqual(all.attachments.map((a) => a.name.split('.').pop()), ['pdf', 'doc', 'md', 'txt']);
+  const [pdf, doc, md, tx] = all.attachments;
+  assert.equal(pdf.mime, 'application/pdf');
+  assert.match(pdf.fromHtml, /<h1>UR Weekly &lt;sync&gt;<\/h1>/);
+  assert.match(pdf.fromHtml, /@page\{size:A4/);
+  assert.equal(pdf.base64, undefined);
+  assert.match(Buffer.from(doc.base64, 'base64').toString('utf8'), /urn:schemas-microsoft-com:office:word/);
+  assert.equal(Buffer.from(md.base64, 'base64').toString('utf8'), mailMeeting.mom);
+  assert.equal(Buffer.from(tx.base64, 'base64').toString('utf8'), 'Me: नमस्ते');
+  assert.ok(!/[<>:"]/.test(pdf.name), 'file names are safe');
+  assert.equal(buildEmail(mailMeeting, { ...mailSettings, emailPdf: false }, fakeRender, 'x').attachments.length, 0);
 });
 
 await test('mail: sendMail posts token + payload as text/plain and returns recipients', async () => {
@@ -438,7 +451,7 @@ await test('apps script: needs the token, only mails allowed recipients', async 
   const env = {
     Session: { getEffectiveUser: () => ({ getEmail: () => 'Me@Co.com' }) },
     MailApp: { sendEmail: (o) => sent.push(o) },
-    Utilities: { newBlob: (b, mime, name) => ({ b, mime, name }), base64Decode: (s) => s },
+    Utilities: { newBlob: (b, mime, name) => ({ b, mime, name, getAs(t) { return { ...this, mime: t, setName(n) { this.name = n; return this; } }; } }), base64Decode: (s) => s },
     ContentService: { createTextOutput: (t) => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
   };
   const run = new Function(...Object.keys(env), `${src}; return { doPost, doGet };`)(...Object.values(env));
@@ -449,6 +462,11 @@ await test('apps script: needs the token, only mails allowed recipients', async 
   assert.equal(post({ token: 'secret', to: 'team@co.com, attacker@evil.com', subject: 's' }).to, 'team@co.com');
   assert.equal(post({ token: 'secret', to: 'attacker@evil.com', subject: 's' }).to, 'Me@Co.com');
   assert.equal(sent.length, 3);
+  post({ token: 'secret', subject: 's', attachments: [{ name: 'MOM x.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
+  const att = sent.at(-1).attachments;
+  assert.equal(att[0].mime, 'application/pdf');
+  assert.equal(att[0].name, 'MOM x.pdf');
+  assert.equal(att[1].name, 'a.md');
   assert.equal(JSON.parse(run.doGet().t).ok, true);
   const untouched = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
   assert.match(untouched, /TOKEN = 'CHANGE-ME'/);

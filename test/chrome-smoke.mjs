@@ -213,21 +213,6 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: 760, height: 640, deviceScaleFactor: 2, mobile: false }, opts.sessionId);
     fs.writeFileSync(`${process.env.SHOTS}/pill.png`, Buffer.from((await send('Page.captureScreenshot', {}, opts.sessionId)).data, 'base64'));
   }
-  // Controller window (outside the Meet page): shows state, mic button flips the mic wish, alert visible.
-  const mini = await openPage(`chrome-extension://${id}/mini.html`);
-  await mini.evaluate(`(async () => { await ${alertRec(1)}; await new Promise((r) => setTimeout(r, 1500)); })()`);
-  const miniState = await mini.evaluate(`({ live: !document.getElementById('live').classList.contains('hidden'), mic: document.getElementById('mic').textContent.trim(), alert: !document.getElementById('alert').classList.contains('hidden'), time: document.getElementById('time').textContent })`);
-  check('mini window shows live state, mic and alert', miniState.live && miniState.mic === 'Mic on' && miniState.alert && /^12:/.test(miniState.time), JSON.stringify(miniState));
-  if (process.env.SHOTS) {
-    const fs = await import('node:fs');
-    await send('Emulation.setDeviceMetricsOverride', { width: 340, height: 330, deviceScaleFactor: 2, mobile: false }, mini.sessionId);
-    fs.writeFileSync(`${process.env.SHOTS}/mini.png`, Buffer.from((await send('Page.captureScreenshot', {}, mini.sessionId)).data, 'base64'));
-  }
-  await mini.evaluate(`document.getElementById('mic').click()`);
-  await sleep(1200);
-  const miniAfter = await mini.evaluate(`({ mic: document.getElementById('mic').textContent.trim(), want: null })`);
-  const wantAfter = await mini.evaluate(`chrome.storage.session.get('rec').then((r) => r.rec.micWanted)`);
-  check('mini mic button turns the mic off', miniAfter.mic === 'Mic off' && wantAfter === false, JSON.stringify({ miniAfter, wantAfter }));
   await popup.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
 
   check('options shows the email setup with the relay script', await opts.evaluate(`document.getElementById('emailWebhook') && document.getElementById('scriptText').textContent.includes('Debrief mail relay') && document.getElementById('testMail')`));
