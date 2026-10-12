@@ -83,7 +83,31 @@
   `;
     const MIC_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
     const MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg>';
-    const send = (msg) => chrome.runtime.sendMessage({ target: "bg", ...msg }).catch(() => null);
+    let timer = null;
+    const alive = () => {
+      try {
+        return !!chrome.runtime?.id;
+      } catch {
+        return false;
+      }
+    };
+    function shutdown() {
+      clearInterval(timer);
+      host?.remove();
+      window.__debriefPill = false;
+    }
+    const send = async (msg) => {
+      if (!alive()) {
+        shutdown();
+        return null;
+      }
+      try {
+        return await chrome.runtime.sendMessage({ target: "bg", ...msg });
+      } catch {
+        if (!alive()) shutdown();
+        return null;
+      }
+    };
     const el = (tag, cls, text) => {
       const e = document.createElement(tag);
       if (cls) e.className = cls;
@@ -298,16 +322,18 @@
       }
     }
     async function tick() {
+      if (!alive()) return shutdown();
       await load();
       render();
       reportMute();
     }
     async function init() {
+      document.querySelectorAll("[data-debrief]").forEach((n) => n.remove());
       const r = await send({ type: "whoami" });
       myTab = r?.tabId ?? null;
       mount();
       await tick();
-      setInterval(tick, 1e3);
+      timer = setInterval(tick, 1e3);
     }
     init();
   })();
