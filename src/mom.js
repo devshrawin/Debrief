@@ -4,6 +4,7 @@ import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
 import { buildSystemPrompt, buildUserPrompt, formatTranscript } from './prompt.js';
+import { buildEmail, sendMail, mailReady } from './mailer.js';
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get('id');
@@ -115,6 +116,8 @@ async function runGenerate() {
     await saveMeeting(meeting);
     renderMom();
     $('genStatus').textContent = `Done · ${meeting.model}`;
+    // First time only: regenerating or editing never re-sends on its own.
+    if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt) emailMom(true);
   } catch (e) {
     $('genStatus').textContent = abortCtl.signal.aborted ? 'Stopped.' : `Failed: ${e.message}`;
     renderMom();
@@ -123,6 +126,33 @@ async function runGenerate() {
     $('gen').disabled = false;
     $('gen').textContent = 'Regenerate';
     $('abort').classList.add('hidden');
+  }
+}
+
+async function emailMom(auto) {
+  if (!meeting.mom?.trim()) {
+    $('mailStatus').textContent = 'No minutes to email yet.';
+    return;
+  }
+  if (!mailReady(settings)) {
+    $('mailStatus').textContent = 'Email is not set up. Add the Apps Script URL and token in Settings.';
+    return;
+  }
+  $('mail').disabled = true;
+  $('mailStatus').textContent = auto ? 'Emailing the minutes…' : 'Sending…';
+  try {
+    const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName) : '');
+    const r = await sendMail(mail, settings);
+    meeting.emailedAt = Date.now();
+    meeting.emailedTo = r.to;
+    await saveMeeting(meeting);
+    $('mailStatus').textContent = `Emailed to ${r.to} ✓`;
+    $('mail').textContent = 'Email again';
+    chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Debrief: MOM emailed', message: `${meeting.title} was sent to ${r.to}.` });
+  } catch (e) {
+    $('mailStatus').textContent = `Email failed: ${e.message}`;
+  } finally {
+    $('mail').disabled = false;
   }
 }
 
@@ -191,6 +221,7 @@ function download(name, type, content) {
 const fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
 $('gen').onclick = runGenerate;
+$('mail').onclick = () => emailMom(false);
 $('abort').onclick = () => abortCtl?.abort();
 $('edit').onclick = () => setEditing($('mdEdit').classList.contains('hidden'));
 $('print').onclick = () => window.print();
@@ -251,6 +282,10 @@ document.querySelectorAll('.tabs button').forEach((b) => {
   // Recover audio that failed mid-meeting before writing the minutes, so nothing is missing.
   const hadPending = (await listPending(id)).length > 0;
   if (hadPending) await retryPending();
+  if (meeting.emailedAt) {
+    $('mailStatus').textContent = `Emailed to ${meeting.emailedTo || 'you'} ✓`;
+    $('mail').textContent = 'Email again';
+  }
   if (meeting.mom && !hadPending) $('gen').textContent = 'Regenerate';
   else if (meeting.segments.length && (!meeting.mom || hadPending)) runGenerate();
 })();

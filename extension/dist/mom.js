@@ -2481,6 +2481,15 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // open the controller window when recording starts
     pillOnPage: false,
     // also show the pill inside the Meet page
+    emailWebhook: "",
+    // Google Apps Script web app URL (apps-script/Code.gs)
+    emailToken: "",
+    emailTo: "",
+    // optional; the script only allows you and its ALLOWED list
+    emailAuto: true,
+    // email the MOM as soon as it is written
+    emailTranscript: false,
+    // attach the transcript as .txt
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -16026,14 +16035,79 @@ Output only the Markdown MOM, with no preamble.`;
     return lines.join("\n");
   }
 
+  // src/mailer.js
+  var escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "") && !!s.emailToken;
+  function inlineStyles(html) {
+    return html.replace(/<table>/g, '<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:14px">').replace(/<th>/g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left">').replace(/<th /g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left" ').replace(/<td>/g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top">').replace(/<td /g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top" ').replace(/<h1>/g, '<h1 style="font-size:20px;margin:18px 0 8px">').replace(/<h2>/g, '<h2 style="font-size:17px;margin:18px 0 6px;color:#1e1b6b">').replace(/<h3>/g, '<h3 style="font-size:15px;margin:14px 0 4px">');
+  }
+  var meta = (m) => {
+    const start = new Date(m.startedAt);
+    const mins = m.endedAt ? Math.max(1, Math.round((m.endedAt - m.startedAt) / 6e4)) : null;
+    return `${start.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}${mins ? ` \xB7 ${mins} min` : ""}`;
+  };
+  function buildEmail(meeting2, settings2, renderHtml, transcriptText) {
+    const date = new Date(meeting2.startedAt).toISOString().slice(0, 10);
+    const body = inlineStyles(renderHtml(meeting2.mom || ""));
+    const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2328;max-width:760px">
+<div style="border-left:4px solid #ff7a1a;padding:2px 0 2px 12px;margin-bottom:14px">
+<div style="font-size:19px;font-weight:700;color:#1e1b6b">${escapeHtml(meeting2.title)}</div>
+<div style="color:#656d76;font-size:13px">${escapeHtml(meta(meeting2))}</div>
+</div>
+${body}
+<p style="color:#8a9099;font-size:12px;margin-top:22px;border-top:1px solid #e3e6ea;padding-top:10px">Written by Debrief${meeting2.model ? ` with ${escapeHtml(meeting2.model)}` : ""}. Speech-to-text can mishear names and numbers, so check before circulating.</p>
+</div>`;
+    const text = `${meeting2.title}
+${meta(meeting2)}
+
+${meeting2.mom || ""}
+
+-- Written by Debrief`;
+    const attachments = [];
+    if (settings2.emailTranscript && transcriptText) {
+      const b = new TextEncoder().encode(transcriptText);
+      let bin = "";
+      for (let i = 0; i < b.length; i += 32768) bin += String.fromCharCode(...b.subarray(i, i + 32768));
+      attachments.push({ name: `Transcript ${meeting2.title} ${date}.txt`.replace(/[\\/:*?"<>|]+/g, "-"), mime: "text/plain", base64: btoa(bin) });
+    }
+    return { subject: `MOM: ${meeting2.title} (${date})`, html, text, attachments };
+  }
+  async function sendMail(mail, settings2) {
+    if (!mailReady(settings2)) throw new Error("Email is not set up: add the Apps Script URL and token in Settings.");
+    let res;
+    try {
+      res = await fetch(settings2.emailWebhook, {
+        method: "POST",
+        // text/plain keeps this a "simple" request: Apps Script web apps do not answer CORS preflights.
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(6e4),
+        body: JSON.stringify({ token: settings2.emailToken, to: settings2.emailTo || "", ...mail })
+      });
+    } catch (e) {
+      throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
+    }
+    const raw = await res.text();
+    let j2;
+    try {
+      j2 = JSON.parse(raw);
+    } catch {
+      throw new Error(
+        /<html|accounts\.google\.com|Sign in/i.test(raw) ? 'The relay asked for a Google sign-in. Redeploy the web app with "Who has access: Anyone".' : `Unexpected reply from the mail relay (HTTP ${res.status}).`
+      );
+    }
+    if (!j2.ok) throw new Error(j2.error || "The mail relay refused the request.");
+    return j2;
+  }
+
   // src/mom.js
   var $2 = (id2) => document.getElementById(id2);
   var id = new URLSearchParams(location.search).get("id");
   var meeting = null;
   var settings = null;
   var abortCtl = null;
-  var escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  k.use({ gfm: true, renderer: { html: ({ text }) => escapeHtml(text) } });
+  var escapeHtml2 = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  k.use({ gfm: true, renderer: { html: ({ text }) => escapeHtml2(text) } });
   var renderMd = (md) => k.parse(md || "");
   function renderMom() {
     $2("mom").innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
@@ -16128,6 +16202,7 @@ Output only the Markdown MOM, with no preamble.`;
       await saveMeeting(meeting);
       renderMom();
       $2("genStatus").textContent = `Done \xB7 ${meeting.model}`;
+      if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt) emailMom(true);
     } catch (e) {
       $2("genStatus").textContent = abortCtl.signal.aborted ? "Stopped." : `Failed: ${e.message}`;
       renderMom();
@@ -16136,6 +16211,32 @@ Output only the Markdown MOM, with no preamble.`;
       $2("gen").disabled = false;
       $2("gen").textContent = "Regenerate";
       $2("abort").classList.add("hidden");
+    }
+  }
+  async function emailMom(auto) {
+    if (!meeting.mom?.trim()) {
+      $2("mailStatus").textContent = "No minutes to email yet.";
+      return;
+    }
+    if (!mailReady(settings)) {
+      $2("mailStatus").textContent = "Email is not set up. Add the Apps Script URL and token in Settings.";
+      return;
+    }
+    $2("mail").disabled = true;
+    $2("mailStatus").textContent = auto ? "Emailing the minutes\u2026" : "Sending\u2026";
+    try {
+      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName) : "");
+      const r = await sendMail(mail, settings);
+      meeting.emailedAt = Date.now();
+      meeting.emailedTo = r.to;
+      await saveMeeting(meeting);
+      $2("mailStatus").textContent = `Emailed to ${r.to} \u2713`;
+      $2("mail").textContent = "Email again";
+      chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: "basic", iconUrl: "icons/icon128.png", title: "Debrief: MOM emailed", message: `${meeting.title} was sent to ${r.to}.` });
+    } catch (e) {
+      $2("mailStatus").textContent = `Email failed: ${e.message}`;
+    } finally {
+      $2("mail").disabled = false;
     }
   }
   var sleep2 = (ms, signal) => new Promise((resolve, reject) => {
@@ -16195,6 +16296,7 @@ Output only the Markdown MOM, with no preamble.`;
   }
   var fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, "-");
   $2("gen").onclick = runGenerate;
+  $2("mail").onclick = () => emailMom(false);
   $2("abort").onclick = () => abortCtl?.abort();
   $2("edit").onclick = () => setEditing($2("mdEdit").classList.contains("hidden"));
   $2("print").onclick = () => window.print();
@@ -16251,6 +16353,10 @@ Output only the Markdown MOM, with no preamble.`;
     };
     const hadPending = (await listPending(id)).length > 0;
     if (hadPending) await retryPending();
+    if (meeting.emailedAt) {
+      $2("mailStatus").textContent = `Emailed to ${meeting.emailedTo || "you"} \u2713`;
+      $2("mail").textContent = "Email again";
+    }
     if (meeting.mom && !hadPending) $2("gen").textContent = "Regenerate";
     else if (meeting.segments.length && (!meeting.mom || hadPending)) runGenerate();
   })();

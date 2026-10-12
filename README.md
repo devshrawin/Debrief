@@ -39,6 +39,7 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 | **API limit alerts** | When a free-tier quota runs out or a key is rejected, the controls window and popup turn red and Chrome shows a notification. Nothing is lost: failed audio is kept and retried. |
 | **Quota-proof by design** | Free quotas are per model. Debrief falls back across several Gemini models and both of your keys before giving up. |
 | **Noise-proof transcripts** | Looped filler that models invent on silent or noisy audio is detected and dropped. |
+| **Auto-email** | The minutes land in your inbox the moment they're written, as a clean HTML email (tables intact), with the transcript attached if you like. It sends from *your own* Gmail through a 40-line Google Apps Script you deploy once. See [Email the MOM](#email-the-mom). |
 | **MOM your way** | Streams Markdown minutes: summary, decisions, action items table. Edit, copy, export `.md`, Word or PDF. Write in English or Hindi. |
 | **Manage meetings** | Delete a single meeting or clear them all from the popup. |
 | **Private** | Everything goes straight from Chrome to the provider you choose. No server of ours, ever. |
@@ -76,6 +77,19 @@ A separate little window, so nothing sits on top of your meeting:
 - It opens by itself when recording starts, remembers where you left it, and closes on stop. Reopen it any time from the popup (**Controls → Open**). Turn auto-open off in Settings.
 
 Prefer something on the page itself? Tick **Also show the pill on top of the Meet page** in Settings for a compact draggable capsule with the same mic button.
+
+## Email the MOM
+
+Debrief can mail you the minutes automatically as soon as they are written. There is no server of ours in the loop: the extension posts to a tiny script in **your** Google account, and that script sends the email as you.
+
+1. Open [script.google.com](https://script.google.com/home/start), create a **New project**, delete the sample code and paste [`apps-script/Code.gs`](apps-script/Code.gs). (Settings has a **Copy the script** button.)
+2. Change `TOKEN` to a long random string.
+3. **Deploy → New deployment → Web app**. *Execute as:* **Me**. *Who has access:* **Anyone**. Authorize when Google asks.
+4. In Debrief **Settings → Email the MOM**, paste the web app URL and the same token, and press **Send test email**.
+
+From then on every meeting emails itself once the MOM is generated (regenerating or editing never re-sends by itself; press **Email me** on the MOM page to send again).
+
+Safety: the script refuses requests without your token and only ever mails **your own address** plus whatever you put in its `ALLOWED` list, so a leaked URL can't be used to spam people. Consumer Gmail allows roughly 100 emails a day through scripts. If your Workspace admin blocks Apps Script web apps, ask them to allow it or use a personal Google account for the script.
 
 ## How it works
 
@@ -146,6 +160,8 @@ node test/chrome-smoke.mjs   # loads the unpacked extension into headless Chrome
 ```
 
 ```
+apps-script/
+  Code.gs         the mail relay you deploy in your own Google account
 src/
   background.js   service worker: recording state, mic logic, alerts, notifications
   offscreen.js    audio capture, chunking, transcription pipeline
@@ -153,6 +169,7 @@ src/
   stt.js          Gemini / Sarvam / Deepgram / Whisper clients, empty-reply and model fallback
   gemini.js       key + model fallback chain
   llm.js          MOM generation (Gemini / Claude / OpenAI-compatible), streaming
+  mailer.js       builds and sends the MOM email through the Apps Script relay
   noise.js        looped-filler detector
   alerts.js       quota / key error classifier
   mini.js         controls window (mic, meters, alerts, Keep on top)
@@ -176,7 +193,7 @@ The manifest pins the extension ID (`nckojmcchehoejdfklcmllhpekagiddo`) with a `
 
 - Speaker names from Meet's active-speaker indicator
 - Auto-retry of kept chunks the moment quota resets
-- One-click share of the MOM
+- Slack / Teams / WhatsApp delivery of the MOM
 
 ---
 

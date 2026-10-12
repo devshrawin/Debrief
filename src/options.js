@@ -1,5 +1,7 @@
 import { DEFAULTS, getSettings, saveSettings } from './store.js';
 import { generate } from './llm.js';
+import { sendMail, mailReady } from './mailer.js';
+import scriptText from '../apps-script/Code.gs';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -95,6 +97,33 @@ $('testLlm').onclick = async () => {
     $('llmStatus').textContent = results.join(' · ');
   } catch (e) {
     $('llmStatus').textContent = `Failed: ${e.message}`;
+  }
+};
+
+$('scriptText').textContent = scriptText;
+$('copyScript').onclick = async () => {
+  await navigator.clipboard.writeText(scriptText);
+  $('copyMsg').textContent = 'Copied ✓';
+  setTimeout(() => ($('copyMsg').textContent = ''), 1500);
+};
+
+$('testMail').onclick = async () => {
+  $('mailMsg').textContent = 'Sending…';
+  try {
+    const s = await save();
+    if (!mailReady(s)) throw new Error('Paste the Apps Script web app URL (it ends in /exec) and the token first.');
+    const r = await sendMail(
+      {
+        subject: 'Debrief test email',
+        html: '<p>This is a test from <b>Debrief</b>. Your minutes will arrive like this.</p>',
+        text: 'This is a test from Debrief. Your minutes will arrive like this.',
+        attachments: [],
+      },
+      s
+    );
+    $('mailMsg').textContent = `Sent to ${r.to} ✓ Check your inbox.`;
+  } catch (e) {
+    $('mailMsg').textContent = `Failed: ${e.message}`;
   }
 };
 

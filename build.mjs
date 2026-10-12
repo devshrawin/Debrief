@@ -7,6 +7,7 @@ const opts = {
   bundle: true,
   format: 'iife',
   target: 'chrome116',
+  loader: { '.gs': 'text' },
   logLevel: 'info',
 };
 

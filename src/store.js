@@ -6,6 +6,11 @@ export const DEFAULTS = {
   meetingLanguage: 'auto', // auto | hinglish | malayalam
   miniWindow: true, // open the controller window when recording starts
   pillOnPage: false, // also show the pill inside the Meet page
+  emailWebhook: '', // Google Apps Script web app URL (apps-script/Code.gs)
+  emailToken: '',
+  emailTo: '', // optional; the script only allows you and its ALLOWED list
+  emailAuto: true, // email the MOM as soon as it is written
+  emailTranscript: false, // attach the transcript as .txt
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
 
