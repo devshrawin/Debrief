@@ -446,7 +446,7 @@ await test('mail: relay errors and sign-in pages become readable messages', asyn
 // The Apps Script itself, run against stubs of the Google services it uses.
 await test('apps script: needs the token, only mails allowed recipients', async () => {
   const fs = await import('node:fs');
-  const src = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8').replace("'CHANGE-ME';\nconst ALLOWED = [];", "'secret';\nconst ALLOWED = ['team@co.com'];");
+  const src = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8').replace("'put-a-long-random-string-here';\nconst ALLOWED = [];", "'secret-secret-123';\nconst ALLOWED = ['team@co.com'];");
   const sent = [];
   const env = {
     Session: { getEffectiveUser: () => ({ getEmail: () => 'Me@Co.com' }) },
@@ -458,16 +458,20 @@ await test('apps script: needs the token, only mails allowed recipients', async 
   const post = (o) => JSON.parse(run.doPost({ postData: { contents: JSON.stringify(o) } }).t);
   assert.equal(post({ token: 'nope', subject: 's' }).ok, false);
   assert.equal(sent.length, 0);
-  assert.equal(post({ token: 'secret', subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
-  assert.equal(post({ token: 'secret', to: 'team@co.com, attacker@evil.com', subject: 's' }).to, 'team@co.com');
-  assert.equal(post({ token: 'secret', to: 'attacker@evil.com', subject: 's' }).to, 'Me@Co.com');
+  assert.equal(post({ token: 'secret-secret-123', subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
+  assert.equal(post({ token: 'secret-secret-123', to: 'team@co.com, attacker@evil.com', subject: 's' }).to, 'team@co.com');
+  assert.equal(post({ token: 'secret-secret-123', to: 'attacker@evil.com', subject: 's' }).to, 'Me@Co.com');
   assert.equal(sent.length, 3);
-  post({ token: 'secret', subject: 's', attachments: [{ name: 'MOM x.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
+  post({ token: 'secret-secret-123', subject: 's', attachments: [{ name: 'MOM x.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
   const att = sent.at(-1).attachments;
   assert.equal(att[0].mime, 'application/pdf');
   assert.equal(att[0].name, 'MOM x.pdf');
   assert.equal(att[1].name, 'a.md');
   assert.equal(JSON.parse(run.doGet().t).ok, true);
   const untouched = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  assert.match(untouched, /TOKEN = 'CHANGE-ME'/);
+  assert.match(untouched, /TOKEN = 'put-a-long-random-string-here'/);
+  const fresh = new Function(...Object.keys(env), `${untouched}; return { doPost, doGet };`)(...Object.values(env));
+  assert.match(JSON.parse(fresh.doPost({ postData: { contents: JSON.stringify({ token: 'put-a-long-random-string-here' }) } }).t).error, /not set/);
+  assert.equal(JSON.parse(fresh.doGet().t).tokenSet, false);
+  assert.equal(JSON.parse(run.doGet().t).tokenSet, true);
 });

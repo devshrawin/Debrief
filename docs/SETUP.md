@@ -75,7 +75,7 @@ Debrief can email the minutes the moment they are ready. It does this through a 
 2. Click **New project**.
 3. Delete everything in the editor.
 4. Open the file [`apps-script/Code.gs`](../apps-script/Code.gs) from this project (or press **Copy the script** in Debrief's Settings → *Email the MOM*) and paste it into the editor.
-5. Near the top, change `const TOKEN = 'CHANGE-ME';` to a long random string, for example `const TOKEN = 'k7Qp-2vXr9-LmT4-8aZw';`. This is your password for the relay. Keep it.
+5. Near the top, change the text inside the quotes on the line `const TOKEN = 'put-a-long-random-string-here';` to a random string of 12 or more characters, for example `const TOKEN = 'k7Qp-2vXr9-LmT4-8aZw';`. Edit **only that line**. This is your password for the relay. Keep it.
 6. Click the disk icon to **Save**.
 
 ### 5.2 Publish it
@@ -128,6 +128,7 @@ For the minutes you can also pick **Claude** (Anthropic key) or any **OpenAI-com
 | Meeting audio bar says **silent** | The Meet tab is muted or nobody is talking |
 | **No audio data arriving** | Stop and start the recording again |
 | Mic bar says **silent** | Wrong input device, or you are muted in Meet |
+| Test email: *"TOKEN in the script is not set"* | The script still has the placeholder, or you saved it but did not redeploy. Edit only the `TOKEN` line, save, then **Deploy → Manage deployments → pencil → Version: New version → Deploy**. Check by opening the web app URL in a browser: it should show `"tokenSet": true` |
 | Test email: *"Token does not match"* | The token in Settings differs from `TOKEN` in the script. Paste exactly the same value, then **redeploy** (Deploy → Manage deployments → pencil → *New version*) |
 | Test email: *"asked for a Google sign-in"* | Redeploy with **Who has access: Anyone** |
 | Test email: *"Could not reach the mail relay"* | The URL is wrong. It must end in `/exec` |
