@@ -388,12 +388,11 @@ await test('malayalam: sarvam uses ml-IN, whisper gets language=ml', async () =>
 // ---- email ----
 const { buildEmail, sendMail, mailReady } = await import('../src/mailer.js');
 const mailMeeting = { id: 'm1', title: 'UR Weekly <sync>', startedAt: Date.UTC(2026, 9, 12, 5, 30), endedAt: Date.UTC(2026, 9, 12, 6, 15), mom: '## Decisions\n\n| Owner | Task |\n|---|---|\n| Ravi | Ship it |', model: 'Gemini · gemini-3.6-flash' };
-const mailSettings = { ...DEFAULTS, emailWebhook: 'https://script.google.com/macros/s/AKfycbx_abc-123/exec', emailToken: 'tok' };
+const mailSettings = { ...DEFAULTS, emailWebhook: 'https://script.google.com/macros/s/AKfycbx_abc-123/exec' };
 const fakeRender = (md) => '<h2>Decisions</h2><table><thead><tr><th>Owner</th></tr></thead><tbody><tr><td>Ravi</td></tr></tbody></table>';
 
-await test('mail: ready only with a script.google.com exec URL and a token', () => {
+await test('mail: ready only with a script.google.com exec URL', () => {
   assert.equal(mailReady(mailSettings), true);
-  assert.equal(mailReady({ ...mailSettings, emailToken: '' }), false);
   assert.equal(mailReady({ ...mailSettings, emailWebhook: 'https://evil.example/macros/s/x/exec' }), false);
   assert.equal(mailReady(DEFAULTS), false);
 });
@@ -423,7 +422,7 @@ await test('mail: attachments follow the settings (PDF / Word / Markdown / trans
   assert.equal(buildEmail(mailMeeting, { ...mailSettings, emailPdf: false }, fakeRender, 'x').attachments.length, 0);
 });
 
-await test('mail: sendMail posts token + payload as text/plain and returns recipients', async () => {
+await test('mail: sendMail posts the payload as text/plain and returns recipients', async () => {
   calls = [];
   responder = () => new Response(JSON.stringify({ ok: true, to: 'me@x.com' }), { status: 200 });
   const r = await sendMail({ subject: 's', html: 'h', text: 't', attachments: [] }, mailSettings);
@@ -431,22 +430,23 @@ await test('mail: sendMail posts token + payload as text/plain and returns recip
   assert.equal(calls[0].url, mailSettings.emailWebhook);
   assert.match(calls[0].req.headers.get('content-type'), /^text\/plain/);
   const body = JSON.parse(await calls[0].req.text());
-  assert.equal(body.token, 'tok');
+  assert.equal(body.token, undefined);
   assert.equal(body.subject, 's');
 });
 
 await test('mail: relay errors and sign-in pages become readable messages', async () => {
-  responder = () => new Response(JSON.stringify({ ok: false, error: 'Token does not match.' }));
-  await assert.rejects(() => sendMail({}, mailSettings), /Token does not match/);
+  responder = () => new Response(JSON.stringify({ ok: false, error: 'Boom from the script.' }));
+  await assert.rejects(() => sendMail({}, mailSettings), /Boom from the script/);
   responder = () => new Response('<html>Sign in - Google Accounts</html>', { status: 200 });
   await assert.rejects(() => sendMail({}, mailSettings), /Anyone/);
   await assert.rejects(() => sendMail({}, DEFAULTS), /not set up/);
 });
 
 // The Apps Script itself, run against stubs of the Google services it uses.
-await test('apps script: needs the token, only mails allowed recipients', async () => {
+await test('apps script: only ever mails the owner and the ALLOWED list', async () => {
   const fs = await import('node:fs');
-  const src = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8').replace("'put-a-long-random-string-here';\nconst ALLOWED = [];", "'secret-secret-123';\nconst ALLOWED = ['team@co.com'];");
+  const src = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8').replace('const ALLOWED = [];', "const ALLOWED = ['team@co.com'];");
+  assert.ok(!/TOKEN/.test(src), 'no token to mistype');
   const sent = [];
   const env = {
     Session: { getEffectiveUser: () => ({ getEmail: () => 'Me@Co.com' }) },
@@ -456,22 +456,17 @@ await test('apps script: needs the token, only mails allowed recipients', async 
   };
   const run = new Function(...Object.keys(env), `${src}; return { doPost, doGet };`)(...Object.values(env));
   const post = (o) => JSON.parse(run.doPost({ postData: { contents: JSON.stringify(o) } }).t);
-  assert.equal(post({ token: 'nope', subject: 's' }).ok, false);
-  assert.equal(sent.length, 0);
-  assert.equal(post({ token: 'secret-secret-123', subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
-  assert.equal(post({ token: 'secret-secret-123', to: 'team@co.com, attacker@evil.com', subject: 's' }).to, 'team@co.com');
-  assert.equal(post({ token: 'secret-secret-123', to: 'attacker@evil.com', subject: 's' }).to, 'Me@Co.com');
+  assert.equal(post({ subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
+  assert.equal(post({ to: 'team@co.com, attacker@evil.com', subject: 's' }).to, 'team@co.com');
+  assert.equal(post({ to: 'attacker@evil.com', subject: 's' }).to, 'Me@Co.com');
   assert.equal(sent.length, 3);
-  post({ token: 'secret-secret-123', subject: 's', attachments: [{ name: 'MOM x.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
+  post({ subject: 's', attachments: [{ name: 'MOM x.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
   const att = sent.at(-1).attachments;
   assert.equal(att[0].mime, 'application/pdf');
   assert.equal(att[0].name, 'MOM x.pdf');
   assert.equal(att[1].name, 'a.md');
   assert.equal(JSON.parse(run.doGet().t).ok, true);
-  const untouched = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  assert.match(untouched, /TOKEN = 'put-a-long-random-string-here'/);
-  const fresh = new Function(...Object.keys(env), `${untouched}; return { doPost, doGet };`)(...Object.values(env));
-  assert.match(JSON.parse(fresh.doPost({ postData: { contents: JSON.stringify({ token: 'put-a-long-random-string-here' }) } }).t).error, /not set/);
-  assert.equal(JSON.parse(fresh.doGet().t).tokenSet, false);
-  assert.equal(JSON.parse(run.doGet().t).tokenSet, true);
+  assert.equal(post({ not: 'valid' }).ok, true, 'a bare request still only mails the owner');
+  const bad = JSON.parse(run.doPost({ postData: { contents: 'not json' } }).t);
+  assert.equal(bad.ok, false);
 });

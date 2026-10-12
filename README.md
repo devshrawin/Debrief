@@ -81,14 +81,14 @@ Debrief can mail you the minutes automatically as soon as they are written, as a
 
 There is no server of ours in the loop: the extension posts to a tiny script in **your** Google account, and that script sends the email as you. One-time setup, about 2 minutes:
 
-1. Open [script.google.com](https://script.google.com/home/start), create a **New project** and paste [`apps-script/Code.gs`](apps-script/Code.gs). (Settings has a **Copy the script** button.)
-2. Change the text inside the quotes on the `TOKEN` line to a random string of 12+ characters (that line only).
-3. **Deploy → New deployment → Web app**. *Execute as:* **Me**. *Who has access:* **Anyone**. Authorize when Google asks.
-4. In Debrief **Settings → Email the MOM**, paste the web app URL and the same token, tick the attachments you want, and press **Send test email**.
+1. In Debrief **Settings → Email the MOM**, press **Copy the script**.
+2. Open [script.google.com](https://script.google.com/home/start), click **New project**, paste the script and save. (It lives in [`apps-script/Code.gs`](apps-script/Code.gs).)
+3. **Deploy → New deployment → Web app**, set **Who has access** to **Anyone**, click **Deploy**, and allow access when Google asks.
+4. Paste the **Web app URL** into Debrief, tick the attachments you want, and press **Send test email**.
 
 The full walkthrough, with troubleshooting, is in the [setup guide](docs/SETUP.md#5-email-the-minutes-to-yourself-optional). Regenerating or editing never re-sends by itself; press **Email me** on the MOM page to send again.
 
-Safety: the script refuses requests without your token and only ever mails **your own address** plus whatever you put in its `ALLOWED` list, so a leaked URL can't be used to spam people. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
+Safety: whatever a request says, the script only ever mails **your own address** plus whatever you put in its `ALLOWED` list, and the URL is a long secret only Debrief knows. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
 
 ## How it works
 

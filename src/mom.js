@@ -135,7 +135,7 @@ async function emailMom(auto) {
     return;
   }
   if (!mailReady(settings)) {
-    $('mailStatus').textContent = 'Email is not set up. Add the Apps Script URL and token in Settings.';
+    $('mailStatus').textContent = 'Email is not set up. Add the Apps Script URL in Settings.';
     return;
   }
   $('mail').disabled = true;

@@ -2481,7 +2481,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // also show the pill inside the Meet page
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
-    emailToken: "",
     emailTo: "",
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,
@@ -16041,7 +16040,7 @@ Output only the Markdown MOM, with no preamble.`;
 
   // src/mailer.js
   var escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "") && !!s.emailToken;
+  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
   function inlineStyles(html) {
     return html.replace(/<table>/g, '<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:14px">').replace(/<th>/g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left">').replace(/<th /g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left" ').replace(/<td>/g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top">').replace(/<td /g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top" ').replace(/<h1>/g, '<h1 style="font-size:20px;margin:18px 0 8px">').replace(/<h2>/g, '<h2 style="font-size:17px;margin:18px 0 6px;color:#1e1b6b">').replace(/<h3>/g, '<h3 style="font-size:15px;margin:14px 0 4px">');
   }
@@ -16088,7 +16087,7 @@ ${meeting2.mom || ""}
     return { subject: `MOM: ${meeting2.title} (${date})`, html, text, attachments };
   }
   async function sendMail(mail, settings2) {
-    if (!mailReady(settings2)) throw new Error("Email is not set up: add the Apps Script URL and token in Settings.");
+    if (!mailReady(settings2)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
     let res;
     try {
       res = await fetch(settings2.emailWebhook, {
@@ -16097,7 +16096,7 @@ ${meeting2.mom || ""}
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         redirect: "follow",
         signal: AbortSignal.timeout(6e4),
-        body: JSON.stringify({ token: settings2.emailToken, to: settings2.emailTo || "", ...mail })
+        body: JSON.stringify({ to: settings2.emailTo || "", ...mail })
       });
     } catch (e) {
       throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
@@ -16234,7 +16233,7 @@ ${meeting2.mom || ""}
       return;
     }
     if (!mailReady(settings)) {
-      $2("mailStatus").textContent = "Email is not set up. Add the Apps Script URL and token in Settings.";
+      $2("mailStatus").textContent = "Email is not set up. Add the Apps Script URL in Settings.";
       return;
     }
     $2("mail").disabled = true;

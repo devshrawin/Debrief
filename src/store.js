@@ -6,7 +6,6 @@ export const DEFAULTS = {
   meetingLanguage: 'auto', // auto | hinglish | malayalam
   pillOnPage: false, // also show the pill inside the Meet page
   emailWebhook: '', // Google Apps Script web app URL (apps-script/Code.gs)
-  emailToken: '',
   emailTo: '', // optional; the script only allows you and its ALLOWED list
   emailAuto: true, // email the MOM as soon as it is written
   emailPdf: true, // attach the MOM as PDF

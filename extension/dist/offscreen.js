@@ -43,7 +43,6 @@
     // also show the pill inside the Meet page
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
-    emailToken: "",
     emailTo: "",
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,

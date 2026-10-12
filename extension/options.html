@@ -173,19 +173,17 @@
     <p class="hint" style="margin-top:0">Debrief can email you the minutes the moment they are written. It sends through a tiny script in <b>your own Google account</b>, so no server of ours is involved and the mail comes from you.</p>
     <details>
       <summary>Set it up (2 minutes)</summary>
-      <ol class="hint" style="padding-left:18px;line-height:1.6">
-        <li>Open <a href="https://script.google.com/home/start" target="_blank">script.google.com</a>, click <b>New project</b>, delete the sample code and paste the script below.</li>
-        <li>On the <code>TOKEN</code> line, replace the text inside the quotes with a random string of 12+ characters (that line only).</li>
-        <li><b>Deploy → New deployment → Web app</b>: <i>Execute as: Me</i>, <i>Who has access: Anyone</i>. Authorize when asked.</li>
-        <li>Paste the Web app URL and the same token here, then press <b>Send test email</b>.</li>
+      <ol class="hint" style="padding-left:18px;line-height:1.7">
+        <li>Press <b>Copy the script</b> below.</li>
+        <li>Open <a href="https://script.google.com/home/start" target="_blank">script.google.com</a> and click <b>New project</b>. Select all the text there, paste, and press <b>Save</b>.</li>
+        <li>Click <b>Deploy → New deployment</b>, choose <b>Web app</b>, set <b>Who has access</b> to <b>Anyone</b>, and click <b>Deploy</b>. Allow access when Google asks.</li>
+        <li>Copy the <b>Web app URL</b>, paste it in the box below and press <b>Send test email</b>.</li>
       </ol>
       <div class="row"><button id="copyScript">Copy the script</button><span id="copyMsg" class="hint"></span></div>
       <pre id="scriptText" class="hint" style="max-height:180px;overflow:auto;white-space:pre-wrap;background:var(--panel);padding:8px;border-radius:6px;border:1px solid var(--border)"></pre>
     </details>
     <label for="emailWebhook">Apps Script web app URL</label>
     <input id="emailWebhook" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
-    <label for="emailToken">Token</label>
-    <input id="emailToken" type="password" autocomplete="off" placeholder="the TOKEN value from the script">
     <label for="emailTo">Send to (optional)</label>
     <input id="emailTo" placeholder="blank = your own address">
     <p class="hint">The script only ever sends to your address plus anything in its <code>ALLOWED</code> list.</p>
