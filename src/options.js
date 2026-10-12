@@ -120,7 +120,7 @@ $('testMail').onclick = async () => {
   $('mailMsg').textContent = 'Sending…';
   try {
     const s = await save();
-    if (!mailReady(s)) throw new Error('Paste the Apps Script web app URL (it ends in /exec) and the token first.');
+    if (!mailReady(s)) throw new Error('Paste the Apps Script web app URL (it ends in /exec) first.');
     const r = await sendMail(
       {
         subject: 'Debrief test email',

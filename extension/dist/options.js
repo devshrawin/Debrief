@@ -1158,7 +1158,6 @@
     // also show the pill inside the Meet page
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
-    emailToken: "",
     emailTo: "",
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,
@@ -14422,9 +14421,9 @@ _(Output hit the length limit and was cut off.)_`;
   }
 
   // src/mailer.js
-  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "") && !!s.emailToken;
+  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
   async function sendMail(mail, settings) {
-    if (!mailReady(settings)) throw new Error("Email is not set up: add the Apps Script URL and token in Settings.");
+    if (!mailReady(settings)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
     let res;
     try {
       res = await fetch(settings.emailWebhook, {
@@ -14433,7 +14432,7 @@ _(Output hit the length limit and was cut off.)_`;
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         redirect: "follow",
         signal: AbortSignal.timeout(6e4),
-        body: JSON.stringify({ token: settings.emailToken, to: settings.emailTo || "", ...mail })
+        body: JSON.stringify({ to: settings.emailTo || "", ...mail })
       });
     } catch (e) {
       throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
@@ -14452,7 +14451,7 @@ _(Output hit the length limit and was cut off.)_`;
   }
 
   // apps-script/Code.gs
-  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\n//\n// Setup (2 minutes):\n//   1. Go to script.google.com > New project, delete the sample code, paste this whole file.\n//   2. Change the text between the quotes in the TOKEN line below (only that one line) to any\n//      random string of 12+ characters, and keep it handy.\n//   3. Deploy > New deployment > type: Web app\n//        Execute as: Me\n//        Who has access: Anyone\n//      Authorize when asked (it needs permission to send email as you).\n//   4. Copy the Web app URL and your TOKEN into Debrief > Settings > Email the MOM.\n//\n// Safety: mail only goes to YOUR address plus anything you list in ALLOWED, and only\n// when the request carries your TOKEN, so a leaked URL alone cannot be used to send spam.\n\nconst TOKEN = 'put-a-long-random-string-here';\nconst ALLOWED = []; // extra recipients you are happy to send to, e.g. ['team@company.com']\n\n// Open the web app URL in a browser to check the deployment: it reports whether TOKEN is set.\nfunction doGet() {\n  return out({ ok: true, message: 'Debrief mail relay is live.', tokenSet: tokenIsSet(), version: 3 });\n}\n\nfunction tokenIsSet() {\n  return typeof TOKEN === 'string' && TOKEN.length >= 12 && TOKEN !== 'put-a-long-random-string-here';\n}\n\nfunction doPost(e) {\n  try {\n    if (!tokenIsSet()) return out({ ok: false, error: 'TOKEN in the script is not set (needs 12+ characters). Edit the TOKEN line, save, and deploy a NEW VERSION.' });\n    const d = JSON.parse(e.postData.contents);\n    if (d.token !== TOKEN) return out({ ok: false, error: 'Token does not match.' });\n\n    const me = Session.getEffectiveUser().getEmail();\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\n    const recipients = to.length ? to.join(',') : me;\n\n    const attachments = (d.attachments || []).map(function (a) {\n      const name = a.name || 'attachment.txt';\n      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).\n      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);\n    });\n    MailApp.sendEmail({\n      to: recipients,\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\n      body: String(d.text || ''),\n      htmlBody: String(d.html || ''),\n      attachments: attachments,\n      name: 'Debrief',\n    });\n    return out({ ok: true, to: recipients });\n  } catch (err) {\n    return out({ ok: false, error: String(err) });\n  }\n}\n\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\n//\n// Setup:  paste this whole file into a new project at script.google.com, then\n//         Deploy > New deployment > Web app > Who has access: Anyone > Deploy.\n//         Copy the Web app URL into Debrief > Settings > Email the MOM.\n//\n// Safety: mail only ever goes to YOUR address (plus anything you list in ALLOWED), whatever the\n// request says, and the web app URL is a long secret that only Debrief knows.\n\nconst ALLOWED = []; // optional extra recipients, e.g. ['team@company.com']\n\nfunction doGet() {\n  return out({ ok: true, message: 'Debrief mail relay is live.', version: 4 });\n}\n\nfunction doPost(e) {\n  try {\n    const d = JSON.parse(e.postData.contents);\n\n    const me = Session.getEffectiveUser().getEmail();\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\n    const recipients = to.length ? to.join(',') : me;\n\n    const attachments = (d.attachments || []).map(function (a) {\n      const name = a.name || 'attachment.txt';\n      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).\n      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);\n    });\n    MailApp.sendEmail({\n      to: recipients,\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\n      body: String(d.text || ''),\n      htmlBody: String(d.html || ''),\n      attachments: attachments,\n      name: 'Debrief',\n    });\n    return out({ ok: true, to: recipients });\n  } catch (err) {\n    return out({ ok: false, error: String(err) });\n  }\n}\n\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
 
   // src/options.js
   var $ = (id) => document.getElementById(id);
@@ -14559,7 +14558,7 @@ _(Output hit the length limit and was cut off.)_`;
     $("mailMsg").textContent = "Sending\u2026";
     try {
       const s = await save();
-      if (!mailReady(s)) throw new Error("Paste the Apps Script web app URL (it ends in /exec) and the token first.");
+      if (!mailReady(s)) throw new Error("Paste the Apps Script web app URL (it ends in /exec) first.");
       const r = await sendMail(
         {
           subject: "Debrief test email",

@@ -68,46 +68,34 @@ Good practice: tell participants you are recording, and use headphones so your m
 
 ## 5. Email the minutes to yourself (optional)
 
-Debrief can email the minutes the moment they are ready. It does this through a tiny script that runs **inside your own Google account**, so the email comes from you and no other server is involved. You do this setup once.
+Debrief can email you the minutes as soon as they are ready. It uses a small script in **your own Google account**, so the email comes from you. Setup is one copy, one paste, one URL.
 
-### 5.1 Create the relay script
-1. Open <https://script.google.com/home/start> and sign in with the Google account that should send the email.
-2. Click **New project**.
-3. Delete everything in the editor.
-4. Open the file [`apps-script/Code.gs`](../apps-script/Code.gs) from this project (or press **Copy the script** in Debrief's Settings → *Email the MOM*) and paste it into the editor.
-5. Near the top, change the text inside the quotes on the line `const TOKEN = 'put-a-long-random-string-here';` to a random string of 12 or more characters, for example `const TOKEN = 'k7Qp-2vXr9-LmT4-8aZw';`. Edit **only that line**. This is your password for the relay. Keep it.
-6. Click the disk icon to **Save**.
+1. In Debrief open **Settings → Email the MOM** and press **Copy the script**.
+2. Go to <https://script.google.com/home/start> and sign in. Click **New project**. Click inside the code box, press `Ctrl+A` to select everything, then `Ctrl+V` to paste. Press `Ctrl+S` to save.
+3. Click the blue **Deploy** button (top right) → **New deployment**.
+4. Next to *Select type* click the gear and choose **Web app**.
+5. Set **Who has access** to **Anyone**. Leave *Execute as* on *Me*. Click **Deploy**.
+6. Google asks you to **Authorize access**. Choose your account. If it warns *"Google hasn't verified this app"*, click **Advanced → Go to … (unsafe)** and then **Allow**. It's your own script.
+7. Copy the **Web app URL** (it ends in `/exec`).
+8. Back in Debrief paste it into **Apps Script web app URL**, tick the attachments you want, press **Save**, then **Send test email**. It should arrive within a minute.
 
-### 5.2 Publish it
-1. Click **Deploy → New deployment**.
-2. Click the gear next to *Select type* and choose **Web app**.
-3. Set **Execute as: Me** and **Who has access: Anyone**.
-4. Click **Deploy**.
-5. Click **Authorize access**, choose your account, and approve. If Google says *"Google hasn't verified this app"*, click **Advanced → Go to (project name)**. It's your own script.
-6. Copy the **Web app URL**. It ends in `/exec`.
+> Is "Anyone" safe? The script can only email **you** (plus any addresses you add to `ALLOWED` at the top of the script), whatever a request says, and the URL is a long secret only Debrief knows. Keep the URL private.
 
-> *"Anyone"* sounds scary but the script rejects every request that does not carry your token, and it only ever emails **your own address** plus anything you list in its `ALLOWED` setting.
+**What can be attached** (the email itself always contains the full minutes):
 
-### 5.3 Connect Debrief
-1. Open Debrief **Settings → Email the MOM**.
-2. Paste the **Web app URL** and your **Token**.
-3. Leave **Send to** empty to email yourself, or enter an address you added to `ALLOWED` in the script.
-4. Tick what you want attached. The email body always contains the full minutes.
+| Option | What you get |
+|---|---|
+| **MOM as PDF** | A formatted A4 PDF (default on) |
+| **MOM as Word (.doc)** | Opens in Word with tables intact |
+| **MOM as Markdown (.md)** | Plain text with formatting marks |
+| **Transcript (.txt)** | The full transcript |
 
-   | Option | What you get |
-   |---|---|
-   | **MOM as PDF** | A formatted A4 PDF (default on) |
-   | **MOM as Word (.doc)** | Opens in Word with tables intact |
-   | **MOM as Markdown (.md)** | Plain text with formatting marks |
-   | **Transcript (.txt)** | The full transcript |
-
-5. Keep **Email the MOM automatically** ticked to send as soon as the minutes are written.
-6. Press **Save**, then **Send test email**. It should arrive within a minute. If it doesn't, see [troubleshooting](#7-troubleshooting).
-
-### 5.4 Day to day
+**Day to day**
 - After a meeting, leave the minutes tab open until it says **Emailed to … ✓**.
 - Regenerating or editing the minutes never re-sends by itself. Press **Email me** on the minutes page to send again.
-- Sending limits: about 100 emails per day for a normal Gmail account.
+- Limit: about 100 emails per day for a normal Gmail account.
+
+**If you change the script later:** press **Deploy → Manage deployments → pencil → Version: New version → Deploy**. Saving alone doesn't update the live copy.
 
 ## 6. Other speech providers (optional)
 
@@ -128,11 +116,9 @@ For the minutes you can also pick **Claude** (Anthropic key) or any **OpenAI-com
 | Meeting audio bar says **silent** | The Meet tab is muted or nobody is talking |
 | **No audio data arriving** | Stop and start the recording again |
 | Mic bar says **silent** | Wrong input device, or you are muted in Meet |
-| Test email: *"TOKEN in the script is not set"* | The script still has the placeholder, or you saved it but did not redeploy. Edit only the `TOKEN` line, save, then **Deploy → Manage deployments → pencil → Version: New version → Deploy**. Check by opening the web app URL in a browser: it should show `"tokenSet": true` |
-| Test email: *"Token does not match"* | The token in Settings differs from `TOKEN` in the script. Paste exactly the same value, then **redeploy** (Deploy → Manage deployments → pencil → *New version*) |
-| Test email: *"asked for a Google sign-in"* | Redeploy with **Who has access: Anyone** |
+| Test email: *"asked for a Google sign-in"* | The web app is not set to **Who has access: Anyone**. Deploy again with that setting |
+| Test email works but the PDF is missing | Tick **MOM as PDF** and press Save. If you changed the script, deploy a new version |
 | Test email: *"Could not reach the mail relay"* | The URL is wrong. It must end in `/exec` |
-| PDF missing from the email | Tick **MOM as PDF** and save. The script needs the *Authorize access* step to have been completed |
 | Nothing happens after installing | Reload your Meet tab once so the extension attaches to it |
 | Errors "Extension context invalidated" in `chrome://extensions` | Harmless. Appears when the extension is reloaded while a Meet tab is open. Reload the tab and press **Clear all** |
 

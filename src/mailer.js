@@ -3,7 +3,7 @@
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-export const mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || '') && !!s.emailToken;
+export const mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || '');
 
 // Email clients drop <style> blocks, so give tables and headings inline styles.
 function inlineStyles(html) {
@@ -66,7 +66,7 @@ ${body}
 }
 
 export async function sendMail(mail, settings) {
-  if (!mailReady(settings)) throw new Error('Email is not set up: add the Apps Script URL and token in Settings.');
+  if (!mailReady(settings)) throw new Error('Email is not set up: add the Apps Script URL in Settings.');
   let res;
   try {
     res = await fetch(settings.emailWebhook, {
@@ -75,7 +75,7 @@ export async function sendMail(mail, settings) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow',
       signal: AbortSignal.timeout(60000),
-      body: JSON.stringify({ token: settings.emailToken, to: settings.emailTo || '', ...mail }),
+      body: JSON.stringify({ to: settings.emailTo || '', ...mail }),
     });
   } catch (e) {
     throw new Error(e.name === 'TimeoutError' ? 'The mail relay did not answer in 60 s.' : `Could not reach the mail relay (${e.message}).`);

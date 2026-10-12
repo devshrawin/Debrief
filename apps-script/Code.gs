@@ -1,35 +1,21 @@
 // Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.
 //
-// Setup (2 minutes):
-//   1. Go to script.google.com > New project, delete the sample code, paste this whole file.
-//   2. Change the text between the quotes in the TOKEN line below (only that one line) to any
-//      random string of 12+ characters, and keep it handy.
-//   3. Deploy > New deployment > type: Web app
-//        Execute as: Me
-//        Who has access: Anyone
-//      Authorize when asked (it needs permission to send email as you).
-//   4. Copy the Web app URL and your TOKEN into Debrief > Settings > Email the MOM.
+// Setup:  paste this whole file into a new project at script.google.com, then
+//         Deploy > New deployment > Web app > Who has access: Anyone > Deploy.
+//         Copy the Web app URL into Debrief > Settings > Email the MOM.
 //
-// Safety: mail only goes to YOUR address plus anything you list in ALLOWED, and only
-// when the request carries your TOKEN, so a leaked URL alone cannot be used to send spam.
+// Safety: mail only ever goes to YOUR address (plus anything you list in ALLOWED), whatever the
+// request says, and the web app URL is a long secret that only Debrief knows.
 
-const TOKEN = 'put-a-long-random-string-here';
-const ALLOWED = []; // extra recipients you are happy to send to, e.g. ['team@company.com']
+const ALLOWED = []; // optional extra recipients, e.g. ['team@company.com']
 
-// Open the web app URL in a browser to check the deployment: it reports whether TOKEN is set.
 function doGet() {
-  return out({ ok: true, message: 'Debrief mail relay is live.', tokenSet: tokenIsSet(), version: 3 });
-}
-
-function tokenIsSet() {
-  return typeof TOKEN === 'string' && TOKEN.length >= 12 && TOKEN !== 'put-a-long-random-string-here';
+  return out({ ok: true, message: 'Debrief mail relay is live.', version: 4 });
 }
 
 function doPost(e) {
   try {
-    if (!tokenIsSet()) return out({ ok: false, error: 'TOKEN in the script is not set (needs 12+ characters). Edit the TOKEN line, save, and deploy a NEW VERSION.' });
     const d = JSON.parse(e.postData.contents);
-    if (d.token !== TOKEN) return out({ ok: false, error: 'Token does not match.' });
 
     const me = Session.getEffectiveUser().getEmail();
     const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });
