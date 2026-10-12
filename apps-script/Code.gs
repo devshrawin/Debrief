@@ -2,7 +2,8 @@
 //
 // Setup (2 minutes):
 //   1. Go to script.google.com > New project, delete the sample code, paste this whole file.
-//   2. Change TOKEN below to any long random string and keep it handy.
+//   2. Change the text between the quotes in the TOKEN line below (only that one line) to any
+//      random string of 12+ characters, and keep it handy.
 //   3. Deploy > New deployment > type: Web app
 //        Execute as: Me
 //        Who has access: Anyone
@@ -12,16 +13,21 @@
 // Safety: mail only goes to YOUR address plus anything you list in ALLOWED, and only
 // when the request carries your TOKEN, so a leaked URL alone cannot be used to send spam.
 
-const TOKEN = 'CHANGE-ME';
+const TOKEN = 'put-a-long-random-string-here';
 const ALLOWED = []; // extra recipients you are happy to send to, e.g. ['team@company.com']
 
+// Open the web app URL in a browser to check the deployment: it reports whether TOKEN is set.
 function doGet() {
-  return out({ ok: true, message: 'Debrief mail relay is live.' });
+  return out({ ok: true, message: 'Debrief mail relay is live.', tokenSet: tokenIsSet(), version: 3 });
+}
+
+function tokenIsSet() {
+  return typeof TOKEN === 'string' && TOKEN.length >= 12 && TOKEN !== 'put-a-long-random-string-here';
 }
 
 function doPost(e) {
   try {
-    if (TOKEN === 'CHANGE-ME') return out({ ok: false, error: 'Set TOKEN in the script first.' });
+    if (!tokenIsSet()) return out({ ok: false, error: 'TOKEN in the script is not set (needs 12+ characters). Edit the TOKEN line, save, and deploy a NEW VERSION.' });
     const d = JSON.parse(e.postData.contents);
     if (d.token !== TOKEN) return out({ ok: false, error: 'Token does not match.' });
 

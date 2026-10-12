@@ -82,7 +82,7 @@ Debrief can mail you the minutes automatically as soon as they are written, as a
 There is no server of ours in the loop: the extension posts to a tiny script in **your** Google account, and that script sends the email as you. One-time setup, about 2 minutes:
 
 1. Open [script.google.com](https://script.google.com/home/start), create a **New project** and paste [`apps-script/Code.gs`](apps-script/Code.gs). (Settings has a **Copy the script** button.)
-2. Change `TOKEN` to a long random string.
+2. Change the text inside the quotes on the `TOKEN` line to a random string of 12+ characters (that line only).
 3. **Deploy → New deployment → Web app**. *Execute as:* **Me**. *Who has access:* **Anyone**. Authorize when Google asks.
 4. In Debrief **Settings → Email the MOM**, paste the web app URL and the same token, tick the attachments you want, and press **Send test email**.
 
