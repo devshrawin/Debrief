@@ -1,4 +1,14 @@
 (() => {
+  // src/meetend.js
+  var BUTTON_ONLY = /^(rejoin|return to (the )?home screen)$/i;
+  var HEADLINE = /(you(?:'|’)?ve|you have) left the meeting|you left the meeting|the meeting has ended|this call has ended|call ended|you(?:'|’)?ve been removed from the meeting|you were removed from the meeting|meeting ended/i;
+  function meetingEnded(texts) {
+    return (texts || []).some((raw) => {
+      const t = String(raw || "").replace(/\s+/g, " ").trim();
+      return t.length > 0 && t.length < 120 && (BUTTON_ONLY.test(t) || HEADLINE.test(t));
+    });
+  }
+
   // src/pill.js
   (() => {
     if (window.__debriefPill) return;
@@ -321,11 +331,22 @@
         send({ type: "meet-mute", muted: m });
       }
     }
+    let endedHits = 0;
+    function checkEnded() {
+      if (!S.rec.recording || S.rec.stopping || S.rec.tabId !== myTab) {
+        endedHits = 0;
+        return;
+      }
+      const texts = [...document.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map((e) => e.innerText || e.textContent);
+      endedHits = meetingEnded(texts) ? endedHits + 1 : 0;
+      if (endedHits === 2) send({ type: "meet-ended" });
+    }
     async function tick() {
       if (!alive()) return shutdown();
       await load();
       render();
       reportMute();
+      checkEnded();
     }
     async function init() {
       document.querySelectorAll("[data-debrief]").forEach((n) => n.remove());

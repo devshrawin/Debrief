@@ -165,6 +165,22 @@
       </div>
 
       <div class="card">
+        <h2>Recording</h2>
+        <label class="toggle"><span class="t"><b>Stop automatically when the meeting ends</b><span>Detects Google Meet's "you left" and "meeting ended" screens, and leaving the call page. The minutes are then written (and emailed) without you doing anything.</span></span><input type="checkbox" id="autoStop"></label>
+        <div class="row2">
+          <label for="autoStopQuietMin">Also stop after silence</label>
+          <select id="autoStopQuietMin">
+            <option value="0">Never</option>
+            <option value="5">After 5 quiet minutes</option>
+            <option value="10">After 10 quiet minutes</option>
+            <option value="15">After 15 quiet minutes</option>
+            <option value="30">After 30 quiet minutes</option>
+          </select>
+          <p class="hint">A safety net for when nobody (including you) has made a sound for that long, for example if Meet never shows an end screen.</p>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Language</h2>
         <div class="row2">
           <label for="meetingLanguage">Language spoken in meetings</label>

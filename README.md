@@ -39,6 +39,7 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 | **API limit alerts** | When a free-tier quota runs out or a key is rejected, the popup (and the optional pill) turn red and Chrome shows a notification. Nothing is lost: failed audio is kept and retried. |
 | **Quota-proof by design** | Free quotas are per model. Debrief falls back across several Gemini models and both of your keys before giving up. |
 | **Noise-proof transcripts** | Looped filler that models invent on silent or noisy audio is detected and dropped. |
+| **Stops by itself** | Debrief spots Meet's "you left" and "meeting ended" screens (or you leaving the call page) and stops the recording, then writes and emails the minutes. A silence timer (default 10 minutes) is the safety net. Both are in Settings → General → Recording. |
 | **Auto-email** | The minutes land in your inbox the moment they're written, as a clean HTML email (tables intact), with the transcript attached if you like. It sends from *your own* Gmail through a 40-line Google Apps Script you deploy once. See [Email the MOM](#email-the-mom). |
 | **MOM your way** | Streams Markdown minutes: summary, decisions, action items table. Edit, copy, export `.md`, Word or PDF. Write in English or Hindi. |
 | **Manage meetings** | Delete a single meeting or clear them all from the popup. |
