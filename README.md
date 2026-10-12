@@ -56,7 +56,7 @@ npm run build
 ```
 
 1. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked** and pick the `extension/` folder.
-2. Open Debrief's **Settings**. Paste a free Gemini key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (a second key from another Google Cloud project is optional but doubles your daily quota). Enter your name, click **Grant microphone** once, then **Save**.
+2. Open Debrief's **Settings** (the *Get started* page walks you through it). Paste a free Gemini key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (a second key from another Google Cloud project is optional but doubles your daily quota). Under **General** enter your name and click **Allow microphone** once, then **Save changes**.
 3. Pick your **Meeting language** in Settings (Auto works for Hindi, English and Malayalam). Join a Meet, click the Debrief icon, then **Start recording this tab** (or `Alt+Shift+M`).
 4. When the meeting ends, hit **Stop & write MOM**. The MOM page opens and writes the minutes.
 
@@ -81,7 +81,7 @@ Debrief can mail you the minutes automatically as soon as they are written, as a
 
 There is no server of ours in the loop: the extension posts to a tiny script in **your** Google account, and that script sends the email as you. One-time setup, about 2 minutes:
 
-1. In Debrief **Settings → Email the MOM**, press **Copy the script**.
+1. In Debrief **Settings → Email**, press **Copy the script**.
 2. Open [script.google.com](https://script.google.com/home/start), click **New project**, paste the script and save. (It lives in [`apps-script/Code.gs`](apps-script/Code.gs).)
 3. **Deploy → New deployment → Web app**, set **Who has access** to **Anyone**, click **Deploy**, and allow access when Google asks.
 4. Paste the **Web app URL** into Debrief, tick the attachments you want, and press **Send test email**.

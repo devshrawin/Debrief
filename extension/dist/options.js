@@ -14465,10 +14465,18 @@ _(Output hit the length limit and was cut off.)_`;
     }
     return s;
   }
+  function showTab(name) {
+    if (!document.getElementById(`page-${name}`)) name = "start";
+    document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${name}`));
+    document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
+  document.querySelectorAll("[data-go]").forEach((a) => a.onclick = () => showTab(a.dataset.go));
   function showProviderFields() {
     document.querySelectorAll("[data-stt]").forEach((el) => el.classList.toggle("hidden", el.dataset.stt !== $("sttProvider").value));
     document.querySelectorAll("[data-llm]").forEach((el) => el.classList.toggle("hidden", el.dataset.llm !== $("llmProvider").value));
-    $("geminiSection").classList.toggle("hidden", $("sttProvider").value !== "gemini" && $("llmProvider").value !== "gemini");
   }
   async function requestOrigins(s) {
     const urls = [];
@@ -14584,5 +14592,6 @@ _(Output hit the length limit and was cut off.)_`;
     showProviderFields();
     micStatus();
     updateGuide();
+    showTab(location.hash.slice(1) || "start");
   })();
 })();

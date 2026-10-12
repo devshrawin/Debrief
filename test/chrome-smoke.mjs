@@ -86,7 +86,7 @@ try {
   const opts = await openPage(`chrome-extension://${id}/options.html`);
   check('options renders', await opts.evaluate(`document.getElementById('sttProvider').value === 'gemini' && document.getElementById('llmProvider').value === 'gemini' && !document.getElementById('geminiSection').classList.contains('hidden') && !document.querySelector('[data-stt=gemini]').classList.contains('hidden') && document.querySelector('[data-stt=sarvam]').classList.contains('hidden')`));
   await opts.evaluate(`(() => { const s = document.getElementById('llmProvider'); s.value = 'anthropic'; s.onchange(); const t = document.getElementById('sttProvider'); t.value = 'deepgram'; t.onchange(); })()`);
-  check('options switches provider fields', await opts.evaluate(`!document.querySelector('[data-llm=anthropic]').classList.contains('hidden') && document.querySelector('[data-llm=gemini]').classList.contains('hidden') && document.getElementById('geminiSection').classList.contains('hidden')`));
+  check('options switches provider fields', await opts.evaluate(`!document.querySelector('[data-llm=anthropic]').classList.contains('hidden') && document.querySelector('[data-llm=gemini]').classList.contains('hidden')`));
 
   // Save settings and seed a finished meeting, as the service worker would after a recording.
   await opts.evaluate(`(async () => {

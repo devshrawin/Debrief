@@ -149,13 +149,14 @@
   async function renderRecent() {
     const items = await listMeetings();
     $("clearAll").classList.toggle("hidden", !items.length);
+    $("meetCount").textContent = items.length;
     if (!items.length) {
-      $("recent").replaceChildren(Object.assign(document.createElement("p"), { className: "hint", textContent: "None yet." }));
+      $("recent").replaceChildren(Object.assign(document.createElement("p"), { className: "empty", textContent: "No meetings yet. Start a recording and it will show up here." }));
       return;
     }
     const st = await getState();
     $("recent").replaceChildren(
-      ...items.slice(0, 6).map((m) => {
+      ...items.map((m) => {
         const row = document.createElement("div");
         row.className = "item";
         const a = document.createElement("a");
@@ -198,6 +199,12 @@
       })
     );
   }
+  document.querySelectorAll("#tabs button").forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
+      document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", p.id === b.dataset.pane));
+    };
+  });
   $("clearAll").onclick = async () => {
     const b = $("clearAll");
     if (b.dataset.armed !== "1") {
