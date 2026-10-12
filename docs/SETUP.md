@@ -44,17 +44,17 @@ Debrief uses Google Gemini to turn speech into text and to write the minutes. Th
 
 ## 3. Configure Debrief
 
-Click the Debrief icon, then **Settings** (or right-click the icon → *Options*). A *Get started* card at the top ticks off each step as you finish it.
+Click the Debrief icon, then **Settings** (or right-click the icon → *Options*). The settings page has five sections on the left: **Get started**, **General**, **Speech to text**, **Minutes** and **Email**. *Get started* ticks off each step as you finish it.
 
-1. Paste the key into **Gemini API key**.
-2. Type your **name**. Lines from your own microphone are tagged with it.
-3. Click **Grant microphone** and choose *Allow*. This lets Debrief include your own voice. Skip it if you only want other people's audio.
-4. Pick the **Meeting language**:
+1. **Get started:** paste the key into **API key** under *Google Gemini*.
+2. **General → Profile:** type your **name**. Lines from your own microphone are tagged with it.
+3. **General → Microphone:** click **Allow microphone** and choose *Allow*. This lets Debrief include your own voice. Skip it if you only want other people's audio.
+4. **General → Language:** pick the **Language spoken in meetings**:
    - *Auto*: Hindi, English and Malayalam in any mix (default).
    - *Hindi + English*: Hinglish meetings.
    - *Malayalam + English*: Manglish meetings.
-5. Choose the language the minutes should be **written in** (English, Hindi or Malayalam).
-6. Press **Save**, then **Test LLM**. You should see `works ✓`.
+5. Choose the **Language of the minutes** (English, Hindi or Malayalam).
+6. Press **Save changes**. Then open **Minutes** and press **Test connection**. You should see `works ✓`.
 
 ## 4. Record a meeting
 
@@ -70,7 +70,7 @@ Good practice: tell participants you are recording, and use headphones so your m
 
 Debrief can email you the minutes as soon as they are ready. It uses a small script in **your own Google account**, so the email comes from you. Setup is one copy, one paste, one URL.
 
-1. In Debrief open **Settings → Email the MOM** and press **Copy the script**.
+1. In Debrief open **Settings → Email** and press **Copy the script** (inside *How to set it up*).
 2. Go to <https://script.google.com/home/start> and sign in. Click **New project**. Click inside the code box, press `Ctrl+A` to select everything, then `Ctrl+V` to paste. Press `Ctrl+S` to save.
 3. Click the blue **Deploy** button (top right) → **New deployment**.
 4. Next to *Select type* click the gear and choose **Web app**.
