@@ -384,3 +384,72 @@ await test('malayalam: sarvam uses ml-IN, whisper gets language=ml', async () =>
   assert.equal(fd.get('language'), 'ml');
   assert.match(fd.get('prompt'), /Malayalam/);
 });
+
+// ---- email ----
+const { buildEmail, sendMail, mailReady } = await import('../src/mailer.js');
+const mailMeeting = { id: 'm1', title: 'UR Weekly <sync>', startedAt: Date.UTC(2026, 9, 12, 5, 30), endedAt: Date.UTC(2026, 9, 12, 6, 15), mom: '## Decisions\n\n| Owner | Task |\n|---|---|\n| Ravi | Ship it |', model: 'Gemini · gemini-3.6-flash' };
+const mailSettings = { ...DEFAULTS, emailWebhook: 'https://script.google.com/macros/s/AKfycbx_abc-123/exec', emailToken: 'tok' };
+const fakeRender = (md) => '<h2>Decisions</h2><table><thead><tr><th>Owner</th></tr></thead><tbody><tr><td>Ravi</td></tr></tbody></table>';
+
+await test('mail: ready only with a script.google.com exec URL and a token', () => {
+  assert.equal(mailReady(mailSettings), true);
+  assert.equal(mailReady({ ...mailSettings, emailToken: '' }), false);
+  assert.equal(mailReady({ ...mailSettings, emailWebhook: 'https://evil.example/macros/s/x/exec' }), false);
+  assert.equal(mailReady(DEFAULTS), false);
+});
+
+await test('mail: email has subject, escaped title, inline-styled table, optional transcript attachment', () => {
+  const m = buildEmail(mailMeeting, { ...mailSettings, emailTranscript: true }, fakeRender, 'Me: नमस्ते');
+  assert.equal(m.subject, 'MOM: UR Weekly <sync> (2026-10-12)');
+  assert.match(m.html, /UR Weekly &lt;sync&gt;/);
+  assert.match(m.html, /<table style="border-collapse/);
+  assert.match(m.html, /<td style="border/);
+  assert.match(m.text, /## Decisions/);
+  assert.equal(m.attachments.length, 1);
+  assert.equal(Buffer.from(m.attachments[0].base64, 'base64').toString('utf8'), 'Me: नमस्ते');
+  assert.equal(buildEmail(mailMeeting, mailSettings, fakeRender, 'x').attachments.length, 0);
+});
+
+await test('mail: sendMail posts token + payload as text/plain and returns recipients', async () => {
+  calls = [];
+  responder = () => new Response(JSON.stringify({ ok: true, to: 'me@x.com' }), { status: 200 });
+  const r = await sendMail({ subject: 's', html: 'h', text: 't', attachments: [] }, mailSettings);
+  assert.equal(r.to, 'me@x.com');
+  assert.equal(calls[0].url, mailSettings.emailWebhook);
+  assert.match(calls[0].req.headers.get('content-type'), /^text\/plain/);
+  const body = JSON.parse(await calls[0].req.text());
+  assert.equal(body.token, 'tok');
+  assert.equal(body.subject, 's');
+});
+
+await test('mail: relay errors and sign-in pages become readable messages', async () => {
+  responder = () => new Response(JSON.stringify({ ok: false, error: 'Token does not match.' }));
+  await assert.rejects(() => sendMail({}, mailSettings), /Token does not match/);
+  responder = () => new Response('<html>Sign in - Google Accounts</html>', { status: 200 });
+  await assert.rejects(() => sendMail({}, mailSettings), /Anyone/);
+  await assert.rejects(() => sendMail({}, DEFAULTS), /not set up/);
+});
+
+// The Apps Script itself, run against stubs of the Google services it uses.
+await test('apps script: needs the token, only mails allowed recipients', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8').replace("'CHANGE-ME';\nconst ALLOWED = [];", "'secret';\nconst ALLOWED = ['team@co.com'];");
+  const sent = [];
+  const env = {
+    Session: { getEffectiveUser: () => ({ getEmail: () => 'Me@Co.com' }) },
+    MailApp: { sendEmail: (o) => sent.push(o) },
+    Utilities: { newBlob: (b, mime, name) => ({ b, mime, name }), base64Decode: (s) => s },
+    ContentService: { createTextOutput: (t) => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
+  };
+  const run = new Function(...Object.keys(env), `${src}; return { doPost, doGet };`)(...Object.values(env));
+  const post = (o) => JSON.parse(run.doPost({ postData: { contents: JSON.stringify(o) } }).t);
+  assert.equal(post({ token: 'nope', subject: 's' }).ok, false);
+  assert.equal(sent.length, 0);
+  assert.equal(post({ token: 'secret', subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
+  assert.equal(post({ token: 'secret', to: 'team@co.com, attacker@evil.com', subject: 's' }).to, 'team@co.com');
+  assert.equal(post({ token: 'secret', to: 'attacker@evil.com', subject: 's' }).to, 'Me@Co.com');
+  assert.equal(sent.length, 3);
+  assert.equal(JSON.parse(run.doGet().t).ok, true);
+  const untouched = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
+  assert.match(untouched, /TOKEN = 'CHANGE-ME'/);
+});

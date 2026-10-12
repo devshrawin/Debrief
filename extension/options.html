@@ -157,6 +157,32 @@
     <div class="row" style="margin-top:12px"><button id="testLlm">Test LLM</button><span id="llmStatus" class="hint"></span></div>
   </section>
 
+  <section>
+    <h2>Email the MOM</h2>
+    <p class="hint" style="margin-top:0">Debrief can email you the minutes the moment they are written. It sends through a tiny script in <b>your own Google account</b>, so no server of ours is involved and the mail comes from you.</p>
+    <details>
+      <summary>Set it up (2 minutes)</summary>
+      <ol class="hint" style="padding-left:18px;line-height:1.6">
+        <li>Open <a href="https://script.google.com/home/start" target="_blank">script.google.com</a>, click <b>New project</b>, delete the sample code and paste the script below.</li>
+        <li>Change <code>TOKEN</code> to a long random string.</li>
+        <li><b>Deploy → New deployment → Web app</b>: <i>Execute as: Me</i>, <i>Who has access: Anyone</i>. Authorize when asked.</li>
+        <li>Paste the Web app URL and the same token here, then press <b>Send test email</b>.</li>
+      </ol>
+      <div class="row"><button id="copyScript">Copy the script</button><span id="copyMsg" class="hint"></span></div>
+      <pre id="scriptText" class="hint" style="max-height:180px;overflow:auto;white-space:pre-wrap;background:var(--panel);padding:8px;border-radius:6px;border:1px solid var(--border)"></pre>
+    </details>
+    <label for="emailWebhook">Apps Script web app URL</label>
+    <input id="emailWebhook" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    <label for="emailToken">Token</label>
+    <input id="emailToken" type="password" autocomplete="off" placeholder="the TOKEN value from the script">
+    <label for="emailTo">Send to (optional)</label>
+    <input id="emailTo" placeholder="blank = your own address">
+    <p class="hint">The script only ever sends to your address plus anything in its <code>ALLOWED</code> list.</p>
+    <label><input type="checkbox" id="emailAuto" style="width:auto"> Email the MOM automatically when it is written</label>
+    <label><input type="checkbox" id="emailTranscript" style="width:auto"> Attach the transcript (.txt)</label>
+    <div class="row" style="margin-top:10px"><button id="testMail">Send test email</button><span id="mailMsg" class="hint"></span></div>
+  </section>
+
   <div class="bar row"><button id="save" class="primary">Save</button><span id="msg"></span></div>
 </main>
 <script src="dist/options.js"></script>

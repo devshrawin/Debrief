@@ -230,6 +230,11 @@ try {
   check('mini mic button turns the mic off', miniAfter.mic === 'Mic off' && wantAfter === false, JSON.stringify({ miniAfter, wantAfter }));
   await popup.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
 
+  check('options shows the email setup with the relay script', await opts.evaluate(`document.getElementById('emailWebhook') && document.getElementById('scriptText').textContent.includes('Debrief mail relay') && document.getElementById('testMail')`));
+  const noSetup = await opts.evaluate(`(async () => { document.getElementById('emailWebhook').value = ''; document.getElementById('testMail').click(); await new Promise((r) => setTimeout(r, 800)); return document.getElementById('mailMsg').textContent; })()`);
+  check('test email without setup explains what is missing', /Paste the Apps Script/.test(noSetup), noSetup);
+  check('MOM page has an Email me button', await mom.evaluate(`!!document.getElementById('mail')`));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);
