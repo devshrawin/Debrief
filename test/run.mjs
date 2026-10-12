@@ -470,3 +470,17 @@ await test('apps script: only ever mails the owner and the ALLOWED list', async 
   const bad = JSON.parse(run.doPost({ postData: { contents: 'not json' } }).t);
   assert.equal(bad.ok, false);
 });
+
+// ---- meeting end detection ----
+const { meetingEnded } = await import('../src/meetend.js');
+await test('meet end screens are recognised, live-call UI and chat are not', () => {
+  assert.equal(meetingEnded(['Rejoin', 'Submit feedback']), true);
+  assert.equal(meetingEnded(['You left the meeting']), true);
+  assert.equal(meetingEnded(["You've left the meeting"]), true);
+  assert.equal(meetingEnded(['The meeting has ended']), true);
+  assert.equal(meetingEnded(['Return to home screen']), true);
+  assert.equal(meetingEnded(['Leave call', 'Turn off microphone', 'Chat with everyone', 'Raise hand']), false);
+  assert.equal(meetingEnded(['Ready to join?', 'Join now']), false);
+  assert.equal(meetingEnded(['Should we rejoin the call at 3? The meeting has ended up being long and I left the meeting notes in the shared drive folder for everyone to read tomorrow morning']), false, 'long text is not a headline');
+  assert.equal(meetingEnded([]), false);
+});

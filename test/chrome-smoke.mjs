@@ -220,6 +220,39 @@ try {
   check('test email without setup explains what is missing', /Paste the Apps Script/.test(noSetup), noSetup);
   check('MOM page has an Email me button', await mom.evaluate(`!!document.getElementById('mail')`));
 
+  // Auto-stop: Meet's end screen (reported by the page script) and the silence safety net.
+  const stopTest = await opts.evaluate(`(async () => {
+    const send = (m) => chrome.runtime.sendMessage({ target: 'bg', ...m });
+    const { tabId } = await send({ type: 'whoami' });
+    const live = (extra = {}) => chrome.storage.session.set({ rec: { recording: true, meetingId: 'mtest', tabId, startedAt: Date.now() - 60000, mic: false, micOn: false, meetCode: 'abc-defg-hij', ...extra } });
+    const out = {};
+    await live();
+    await send({ type: 'meet-ended' });
+    await new Promise((r) => setTimeout(r, 1500));
+    out.afterEnd = (await chrome.storage.session.get('rec')).rec.recording;
+    await live();
+    await chrome.storage.session.set({ quietSince: Date.now() - 11 * 60000 });
+    await send({ type: 'level', tab: 0.001, mic: null, ctx: 'running' });
+    await new Promise((r) => setTimeout(r, 1500));
+    out.afterQuiet = (await chrome.storage.session.get('rec')).rec.recording;
+    await live();
+    await chrome.storage.session.set({ quietSince: Date.now() - 11 * 60000 });
+    await send({ type: 'level', tab: 0.2, mic: null, ctx: 'running' });
+    await new Promise((r) => setTimeout(r, 800));
+    out.afterLoud = (await chrome.storage.session.get('rec')).rec.recording;
+    await chrome.storage.session.set({ rec: { recording: false } });
+    const cur = (await chrome.storage.local.get('settings')).settings || {};
+    await chrome.storage.local.set({ settings: { ...cur, autoStop: false } });
+    await live();
+    out.disabled = await send({ type: 'meet-ended' });
+    await new Promise((r) => setTimeout(r, 500));
+    out.afterDisabled = (await chrome.storage.session.get('rec')).rec.recording;
+    await chrome.storage.local.set({ settings: { ...cur, autoStop: true } });
+    await chrome.storage.session.set({ rec: { recording: false } });
+    return out;
+  })()`);
+  check('auto-stop: end screen stops, long silence stops, sound keeps going, setting off ignores', stopTest.afterEnd === false && stopTest.afterQuiet === false && stopTest.afterLoud === true && stopTest.afterDisabled === true, JSON.stringify(stopTest));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);

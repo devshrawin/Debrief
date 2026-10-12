@@ -22,6 +22,9 @@
     return null;
   }
 
+  // src/meetend.js
+  var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -44,6 +47,10 @@
     // attach the MOM as Markdown
     emailTranscript: false,
     // attach the transcript as .txt
+    autoStop: true,
+    // stop recording by itself when the meeting is over
+    autoStopQuietMin: 10,
+    // ...or after this many silent minutes (0 = never)
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -186,7 +193,8 @@
       });
       return { ok: false, error: r?.error || "Recorder did not start." };
     }
-    await setState({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null });
+    await setState({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || "").match(MEET_CODE)?.[0] || null });
+    await chrome.storage.session.set({ quietSince: Date.now() });
     chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ["dist/pill.js"] }).catch(() => {
     });
     chrome.action.setBadgeBackgroundColor({ color: "#d93025" });
@@ -196,7 +204,7 @@
     return { ok: true };
   }
   var stopping = null;
-  function stop() {
+  function stop(opts = {}) {
     stopping ||= (async () => {
       const st = await getState();
       if (!st.recording) return { ok: true };
@@ -211,7 +219,7 @@
       chrome.action.setBadgeText({ text: "" });
       chrome.action.setBadgeText({ tabId: st.tabId, text: "" }).catch(() => {
       });
-      await chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${st.meetingId}`) });
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${st.meetingId}`), active: !opts.background });
       return { ok: true };
     })().finally(() => stopping = null);
     return stopping;
@@ -229,6 +237,18 @@
     await setState({ ...st, micOn });
     return { ok: true, micOn, micWanted: !!st.micWanted };
   }
+  async function autoStop(reason) {
+    const st = await getState();
+    if (!st.recording || st.stopping) return;
+    await updateMeeting(st.meetingId, (m) => (m.debug ||= []).push(`auto-stop: ${reason}`));
+    await stop({ background: true });
+    chrome.notifications?.create("debrief-autostop", {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: "Debrief stopped recording",
+      message: `${reason} Writing the minutes now.`
+    });
+  }
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.target !== "bg") return;
     const handlers = {
@@ -238,7 +258,25 @@
       "mic-refresh": () => applyMic(),
       "meet-mute": () => applyMic({ meetMuted: msg.muted }),
       whoami: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
-      level: () => chrome.storage.session.set({ levels: { tab: msg.tab, mic: msg.mic, ctx: msg.ctx, at: Date.now() } }),
+      level: async () => {
+        await chrome.storage.session.set({ levels: { tab: msg.tab, mic: msg.mic, ctx: msg.ctx, at: Date.now() } });
+        const now = Date.now();
+        const { quietSince } = await chrome.storage.session.get("quietSince");
+        if (Math.max(msg.tab || 0, msg.mic || 0) >= 0.012 || !quietSince) {
+          await chrome.storage.session.set({ quietSince: now });
+          return;
+        }
+        const s = await getSettings();
+        const mins = Number(s.autoStopQuietMin);
+        if (s.autoStop !== false && mins > 0 && now - quietSince > mins * 6e4) await autoStop(`It was silent for ${mins} minutes.`);
+      },
+      "meet-ended": async () => {
+        const st = await getState();
+        if (!st.recording || sender.tab?.id !== st.tabId) return { ok: false };
+        if ((await getSettings()).autoStop === false) return { ok: false };
+        await autoStop("The meeting ended.");
+        return { ok: true };
+      },
       dbg: () => updateMeeting(msg.meetingId, (m) => (m.debug ||= []).push(msg.note)),
       segment: async () => {
         await updateMeeting(msg.meetingId, (m) => m.segments.push(msg.seg));
@@ -299,6 +337,14 @@
       chrome.action.setBadgeText({ tabId, text: "\u25CF" });
       chrome.action.setTitle({ tabId, title: "Debrief: click (or press Alt+Shift+M) to record this meeting" });
     }
+  });
+  chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+    if (!info.url) return;
+    const st = await getState();
+    if (!st.recording || st.stopping || tabId !== st.tabId || !st.meetCode) return;
+    if (info.url.includes(st.meetCode)) return;
+    if ((await getSettings()).autoStop === false) return;
+    await autoStop("You left the meeting page.");
   });
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     const st = await getState();

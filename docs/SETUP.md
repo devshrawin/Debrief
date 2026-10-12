@@ -62,7 +62,7 @@ Click the Debrief icon, then **Settings** (or right-click the icon → *Options*
 2. Click the Debrief icon, then **Start recording this tab** (or press `Alt+Shift+M`). The icon shows a red **REC** badge.
 3. Talk as usual. In the popup, the **meeting audio** bar should move when others speak. The first transcript segment appears after about 2 to 3 minutes.
 4. **Your microphone:** use the switch in the popup, or press `Alt+Shift+K`, to include or ignore your voice at any time. Debrief also ignores your mic automatically while *you are muted in Meet*.
-5. When the meeting ends click **Stop & write MOM**. The minutes page opens and the minutes are written for you. You can edit them, copy them, or save as Markdown, Word or PDF.
+5. When the meeting ends, Debrief stops by itself: it notices Meet's *"You left the meeting"* or *"The meeting has ended"* screen, or that you left the call page, and opens the minutes in a background tab. (Turn this off, or change the silence safety net, under **Settings → General → Recording**.) You can also click **Stop & write MOM** yourself at any time. The minutes page opens and the minutes are written for you. You can edit them, copy them, or save as Markdown, Word or PDF.
 
 Good practice: tell participants you are recording, and use headphones so your mic doesn't pick up the speakers.
 

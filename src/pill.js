@@ -1,5 +1,7 @@
 // On-page recording pill for Google Meet: shows recording status and lets you switch your mic
 // in or out of the transcript. Lives in a shadow root so Meet's CSS can't touch it.
+import { meetingEnded } from './meetend.js';
+
 (() => {
   if (window.__debriefPill) return;
   window.__debriefPill = true;
@@ -343,11 +345,25 @@
     }
   }
 
+  // Watches for Meet's "you left / the meeting ended" screens while this tab is being recorded.
+  let endedHits = 0;
+  function checkEnded() {
+    if (!S.rec.recording || S.rec.stopping || S.rec.tabId !== myTab) {
+      endedHits = 0;
+      return;
+    }
+    const texts = [...document.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map((e) => e.innerText || e.textContent);
+    endedHits = meetingEnded(texts) ? endedHits + 1 : 0;
+    // Two checks in a row (about 2 s) so a flicker during a screen change can't stop a live meeting.
+    if (endedHits === 2) send({ type: 'meet-ended' });
+  }
+
   async function tick() {
     if (!alive()) return shutdown();
     await load();
     render();
     reportMute();
+    checkEnded();
   }
 
   async function init() {

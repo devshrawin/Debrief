@@ -2493,6 +2493,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // attach the MOM as Markdown
     emailTranscript: false,
     // attach the transcript as .txt
+    autoStop: true,
+    // stop recording by itself when the meeting is over
+    autoStopQuietMin: 10,
+    // ...or after this many silent minutes (0 = never)
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
