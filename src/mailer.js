@@ -18,6 +18,22 @@ function inlineStyles(html) {
     .replace(/<h3>/g, '<h3 style="font-size:15px;margin:14px 0 4px">');
 }
 
+const safeName = (s) => String(s).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 120);
+const b64 = (str) => {
+  const b = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+
+// Word opens HTML saved as .doc, tables and headings intact.
+export const wordDocHtml = (bodyHtml) =>
+  `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${bodyHtml}</body></html>`;
+
+// The relay turns this page into a PDF (Apps Script can convert HTML to PDF, the browser cannot offline).
+const pdfPageHtml = (bodyHtml, m) =>
+  `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1f2328}h1{font-size:18pt;color:#1e1b6b;border-bottom:3px solid #ff7a1a;padding-bottom:6px}h2{font-size:14pt;color:#1e1b6b;margin-top:18px}h3{font-size:12pt}table{border-collapse:collapse;width:100%;margin:10px 0}th{background:#eef0f8;text-align:left}td,th{border:1px solid #c8ccd4;padding:5px 8px;vertical-align:top}.meta{color:#656d76;margin-bottom:14px}</style></head><body><h1>${escapeHtml(m.title)}</h1><div class="meta">${escapeHtml(meta(m))}</div>${bodyHtml}</body></html>`;
+
 const meta = (m) => {
   const start = new Date(m.startedAt);
   const mins = m.endedAt ? Math.max(1, Math.round((m.endedAt - m.startedAt) / 60000)) : null;
@@ -38,11 +54,13 @@ ${body}
 </div>`;
   const text = `${meeting.title}\n${meta(meeting)}\n\n${meeting.mom || ''}\n\n-- Written by Debrief`;
   const attachments = [];
+  const base = safeName(`MOM ${meeting.title} ${date}`);
+  const raw = renderHtml(meeting.mom || '');
+  if (settings.emailPdf) attachments.push({ name: `${base}.pdf`, mime: 'application/pdf', fromHtml: pdfPageHtml(raw, meeting) });
+  if (settings.emailWord) attachments.push({ name: `${base}.doc`, mime: 'application/msword', base64: b64(wordDocHtml(raw)) });
+  if (settings.emailMd) attachments.push({ name: `${base}.md`, mime: 'text/markdown', base64: b64(meeting.mom || '') });
   if (settings.emailTranscript && transcriptText) {
-    const b = new TextEncoder().encode(transcriptText);
-    let bin = '';
-    for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
-    attachments.push({ name: `Transcript ${meeting.title} ${date}.txt`.replace(/[\\/:*?"<>|]+/g, '-'), mime: 'text/plain', base64: btoa(bin) });
+    attachments.push({ name: safeName(`Transcript ${meeting.title} ${date}`) + '.txt', mime: 'text/plain', base64: b64(transcriptText) });
   }
   return { subject: `MOM: ${meeting.title} (${date})`, html, text, attachments };
 }

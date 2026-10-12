@@ -1154,8 +1154,6 @@
     captureMic: true,
     meetingLanguage: "auto",
     // auto | hinglish | malayalam
-    miniWindow: true,
-    // open the controller window when recording starts
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailWebhook: "",
@@ -1165,6 +1163,12 @@
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,
     // email the MOM as soon as it is written
+    emailPdf: true,
+    // attach the MOM as PDF
+    emailWord: false,
+    // attach the MOM as Word (.doc)
+    emailMd: false,
+    // attach the MOM as Markdown
     emailTranscript: false,
     // attach the transcript as .txt
     followMeetMute: true,
@@ -14448,7 +14452,7 @@ _(Output hit the length limit and was cut off.)_`;
   }
 
   // apps-script/Code.gs
-  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\n//\n// Setup (2 minutes):\n//   1. Go to script.google.com > New project, delete the sample code, paste this whole file.\n//   2. Change TOKEN below to any long random string and keep it handy.\n//   3. Deploy > New deployment > type: Web app\n//        Execute as: Me\n//        Who has access: Anyone\n//      Authorize when asked (it needs permission to send email as you).\n//   4. Copy the Web app URL and your TOKEN into Debrief > Settings > Email the MOM.\n//\n// Safety: mail only goes to YOUR address plus anything you list in ALLOWED, and only\n// when the request carries your TOKEN, so a leaked URL alone cannot be used to send spam.\n\nconst TOKEN = 'CHANGE-ME';\nconst ALLOWED = []; // extra recipients you are happy to send to, e.g. ['team@company.com']\n\nfunction doGet() {\n  return out({ ok: true, message: 'Debrief mail relay is live.' });\n}\n\nfunction doPost(e) {\n  try {\n    if (TOKEN === 'CHANGE-ME') return out({ ok: false, error: 'Set TOKEN in the script first.' });\n    const d = JSON.parse(e.postData.contents);\n    if (d.token !== TOKEN) return out({ ok: false, error: 'Token does not match.' });\n\n    const me = Session.getEffectiveUser().getEmail();\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\n    const recipients = to.length ? to.join(',') : me;\n\n    const attachments = (d.attachments || []).map(function (a) {\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', a.name || 'attachment.txt');\n    });\n    MailApp.sendEmail({\n      to: recipients,\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\n      body: String(d.text || ''),\n      htmlBody: String(d.html || ''),\n      attachments: attachments,\n      name: 'Debrief',\n    });\n    return out({ ok: true, to: recipients });\n  } catch (err) {\n    return out({ ok: false, error: String(err) });\n  }\n}\n\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\n//\n// Setup (2 minutes):\n//   1. Go to script.google.com > New project, delete the sample code, paste this whole file.\n//   2. Change TOKEN below to any long random string and keep it handy.\n//   3. Deploy > New deployment > type: Web app\n//        Execute as: Me\n//        Who has access: Anyone\n//      Authorize when asked (it needs permission to send email as you).\n//   4. Copy the Web app URL and your TOKEN into Debrief > Settings > Email the MOM.\n//\n// Safety: mail only goes to YOUR address plus anything you list in ALLOWED, and only\n// when the request carries your TOKEN, so a leaked URL alone cannot be used to send spam.\n\nconst TOKEN = 'CHANGE-ME';\nconst ALLOWED = []; // extra recipients you are happy to send to, e.g. ['team@company.com']\n\nfunction doGet() {\n  return out({ ok: true, message: 'Debrief mail relay is live.' });\n}\n\nfunction doPost(e) {\n  try {\n    if (TOKEN === 'CHANGE-ME') return out({ ok: false, error: 'Set TOKEN in the script first.' });\n    const d = JSON.parse(e.postData.contents);\n    if (d.token !== TOKEN) return out({ ok: false, error: 'Token does not match.' });\n\n    const me = Session.getEffectiveUser().getEmail();\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\n    const recipients = to.length ? to.join(',') : me;\n\n    const attachments = (d.attachments || []).map(function (a) {\n      const name = a.name || 'attachment.txt';\n      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).\n      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);\n    });\n    MailApp.sendEmail({\n      to: recipients,\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\n      body: String(d.text || ''),\n      htmlBody: String(d.html || ''),\n      attachments: attachments,\n      name: 'Debrief',\n    });\n    return out({ ok: true, to: recipients });\n  } catch (err) {\n    return out({ ok: false, error: String(err) });\n  }\n}\n\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
 
   // src/options.js
   var $ = (id) => document.getElementById(id);
@@ -14501,6 +14505,7 @@ _(Output hit the length limit and was cut off.)_`;
     try {
       await save();
       $("msg").textContent = "Saved \u2713";
+      updateGuide();
     } catch (e) {
       $("msg").textContent = e.message;
     }
@@ -14538,6 +14543,12 @@ _(Output hit the length limit and was cut off.)_`;
       $("llmStatus").textContent = `Failed: ${e.message}`;
     }
   };
+  async function updateGuide() {
+    const s = await getSettings();
+    const mic = await navigator.permissions.query({ name: "microphone" }).then((p) => p.state === "granted").catch(() => false);
+    const done = { g1: !!s.geminiKey || s.sttProvider !== "gemini" && s.llmProvider !== "gemini", g2: mic, g3: !!s.myName, g4: mailReady(s) };
+    for (const [id, ok] of Object.entries(done)) $(id)?.classList.toggle("done", ok);
+  }
   $("scriptText").textContent = Code_default;
   $("copyScript").onclick = async () => {
     await navigator.clipboard.writeText(Code_default);
@@ -14573,5 +14584,6 @@ _(Output hit the length limit and was cut off.)_`;
     }
     showProviderFields();
     micStatus();
+    updateGuide();
   })();
 })();

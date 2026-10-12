@@ -17,7 +17,7 @@ Records your Google Meet tab, transcribes it as people actually talk (code-switc
 
 <img src="docs/popup-recording.png" width="280" alt="Debrief popup while recording">
 &nbsp;&nbsp;&nbsp;
-<img src="docs/mini.png" width="280" alt="The small controls window that sits beside your meeting">
+<img src="docs/pill.png" width="280" alt="The optional on-page pill, expanded">
 
 </div>
 
@@ -33,10 +33,10 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 |---|---|
 | **One-click recording** | Start from the popup or press `Alt+Shift+M`. An amber dot on the icon reminds you when a Meet is open and not being recorded. |
 | **Hinglish and Malayalam aware** | Hindi comes out in Devanagari, Malayalam in Malayalam script, English words stay in English. Pick *Auto*, *Hindi + English* or *Malayalam + English* in Settings. Works with Gemini and Sarvam; Whisper-compatible servers get a Malayalam hint too. |
-| **Controls outside the meeting** | A small window opens beside your call with a big **Mic on / Mic off** button, live meters, alerts and Stop. Nothing is drawn over Meet, so you can focus on the meeting. **Keep on top** pins it above every window. Prefer a keyboard? `Alt+Shift+K`. |
+| **Mic on your terms** | Switch your own voice in or out of the transcript from the popup, with `Alt+Shift+K`, or from an optional compact pill on the Meet page. |
 | **Follows Meet's mute** | While Meet itself is muted, Debrief ignores your mic, so side conversations stay out of the transcript. |
-| **Live health meters** | See meeting-audio and mic levels in the popup and the controls window. If the recorder dies or the meeting is silent, you see it immediately instead of after the call. |
-| **API limit alerts** | When a free-tier quota runs out or a key is rejected, the controls window and popup turn red and Chrome shows a notification. Nothing is lost: failed audio is kept and retried. |
+| **Live health meters** | See meeting-audio and mic levels in the popup and the optional pill. If the recorder dies or the meeting is silent, you see it immediately instead of after the call. |
+| **API limit alerts** | When a free-tier quota runs out or a key is rejected, the popup (and the optional pill) turn red and Chrome shows a notification. Nothing is lost: failed audio is kept and retried. |
 | **Quota-proof by design** | Free quotas are per model. Debrief falls back across several Gemini models and both of your keys before giving up. |
 | **Noise-proof transcripts** | Looped filler that models invent on silent or noisy audio is detected and dropped. |
 | **Auto-email** | The minutes land in your inbox the moment they're written, as a clean HTML email (tables intact), with the transcript attached if you like. It sends from *your own* Gmail through a 40-line Google Apps Script you deploy once. See [Email the MOM](#email-the-mom). |
@@ -57,39 +57,38 @@ npm run build
 
 1. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked** and pick the `extension/` folder.
 2. Open Debrief's **Settings**. Paste a free Gemini key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (a second key from another Google Cloud project is optional but doubles your daily quota). Enter your name, click **Grant microphone** once, then **Save**.
-3. Pick your **Meeting language** in Settings (Auto works for Hindi, English and Malayalam). Join a Meet, click the Debrief icon, then **Start recording this tab** (or `Alt+Shift+M`). A small controls window opens beside the call.
+3. Pick your **Meeting language** in Settings (Auto works for Hindi, English and Malayalam). Join a Meet, click the Debrief icon, then **Start recording this tab** (or `Alt+Shift+M`).
 4. When the meeting ends, hit **Stop & write MOM**. The MOM page opens and writes the minutes.
+
+> **New here?** The [step-by-step setup guide](docs/SETUP.md) covers the API key, languages and email in detail, and the Settings page has a *Get started* checklist.
 
 > Free-tier Gemini data may be used by Google and seen by reviewers. For confidential meetings, enable billing on the key or use a provider you trust.
 
-## The controls window
+## The optional on-page pill
 
-<div align="center">
-<img src="docs/mini.png" width="320" alt="Debrief controls window">
-</div>
-
-A separate little window, so nothing sits on top of your meeting:
-
-- **Big mic button**: green `Mic on`, grey `Mic off`, amber `Muted in Meet` (Meet is muted, so Debrief is skipping you). One click flips it.
-- **Red dot + equalizer + timer**: recording, and audio is flowing. Bars turn amber if no audio arrives.
-- **Meters** for the meeting and your mic, and a red **alert** box when an API limit or key problem hits.
-- **Keep on top** pins the controls above every other window (Chrome's Picture-in-Picture window). **Stop & write MOM** ends the call's recording.
-- It opens by itself when recording starts, remembers where you left it, and closes on stop. Reopen it any time from the popup (**Controls → Open**). Turn auto-open off in Settings.
-
-Prefer something on the page itself? Tick **Also show the pill on top of the Meet page** in Settings for a compact draggable capsule with the same mic button.
+Off by default so nothing sits on top of your meeting. Tick **Also show the pill on top of the Meet page** in Settings to get a compact draggable capsule with the recording timer, an equalizer, the mic button (green `Mic on`, grey `Mic off`, amber `Muted`), a red chip when an API limit hits, and a detail card on hover with meters and **Stop & write MOM**.
 
 ## Email the MOM
 
-Debrief can mail you the minutes automatically as soon as they are written. There is no server of ours in the loop: the extension posts to a tiny script in **your** Google account, and that script sends the email as you.
+Debrief can mail you the minutes automatically as soon as they are written, as a clean HTML email, with optional attachments:
 
-1. Open [script.google.com](https://script.google.com/home/start), create a **New project**, delete the sample code and paste [`apps-script/Code.gs`](apps-script/Code.gs). (Settings has a **Copy the script** button.)
+| Attachment | |
+|---|---|
+| **PDF** | Formatted A4, built by your own relay script |
+| **Word (.doc)** | Opens in Word with tables intact |
+| **Markdown (.md)** | Plain text |
+| **Transcript (.txt)** | The full transcript |
+
+There is no server of ours in the loop: the extension posts to a tiny script in **your** Google account, and that script sends the email as you. One-time setup, about 2 minutes:
+
+1. Open [script.google.com](https://script.google.com/home/start), create a **New project** and paste [`apps-script/Code.gs`](apps-script/Code.gs). (Settings has a **Copy the script** button.)
 2. Change `TOKEN` to a long random string.
 3. **Deploy → New deployment → Web app**. *Execute as:* **Me**. *Who has access:* **Anyone**. Authorize when Google asks.
-4. In Debrief **Settings → Email the MOM**, paste the web app URL and the same token, and press **Send test email**.
+4. In Debrief **Settings → Email the MOM**, paste the web app URL and the same token, tick the attachments you want, and press **Send test email**.
 
-From then on every meeting emails itself once the MOM is generated (regenerating or editing never re-sends by itself; press **Email me** on the MOM page to send again).
+The full walkthrough, with troubleshooting, is in the [setup guide](docs/SETUP.md#5-email-the-minutes-to-yourself-optional). Regenerating or editing never re-sends by itself; press **Email me** on the MOM page to send again.
 
-Safety: the script refuses requests without your token and only ever mails **your own address** plus whatever you put in its `ALLOWED` list, so a leaked URL can't be used to spam people. Consumer Gmail allows roughly 100 emails a day through scripts. If your Workspace admin blocks Apps Script web apps, ask them to allow it or use a personal Google account for the script.
+Safety: the script refuses requests without your token and only ever mails **your own address** plus whatever you put in its `ALLOWED` list, so a leaked URL can't be used to spam people. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
 
 ## How it works
 
@@ -146,7 +145,7 @@ For heavy use, add a second key from a *different* Google Cloud project, or enab
 | Red "API limit reached" | A model's free quota is spent. Debrief keeps the audio. Wait, add a second project's key, or enable billing. |
 | Red "API key rejected" | The key is invalid or lacks access. Re-paste it in Settings. |
 | Weird repeated Hindi filler in old transcripts | Model noise on silent audio. Fixed in the current build (loop filter). |
-| Controls window missing | Reopen it from the popup (**Controls → Open**). It is off if you disabled auto-open in Settings. The on-page pill is off by default. |
+| Pill missing | The on-page pill is off by default. Tick it in Settings. |
 | Malayalam comes out as English letters | Set **Meeting language** to *Malayalam + English* in Settings. |
 
 ## Develop
@@ -172,7 +171,6 @@ src/
   mailer.js       builds and sends the MOM email through the Apps Script relay
   noise.js        looped-filler detector
   alerts.js       quota / key error classifier
-  mini.js         controls window (mic, meters, alerts, Keep on top)
   pill.js         optional on-page Meet pill (content script)
   popup.js        popup UI
   mom.js          MOM page: transcript, generation, export

@@ -18,6 +18,18 @@
   <h1 class="brand"><img src="icons/icon48.png" alt=""> Debrief settings</h1>
   <p class="muted">Keys are stored only in this browser profile (<code>chrome.storage.local</code>). Audio and transcripts go straight from Chrome to the providers you pick.</p>
 
+  <section id="guide" style="border:1px solid var(--border);background:var(--panel);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+    <h2 style="margin:0 0 4px">Get started</h2>
+    <p class="hint" style="margin:0 0 10px">Four steps. The ticks update as you go. Full walkthrough: <a href="https://github.com/devshrawin/Debrief/blob/main/docs/SETUP.md" target="_blank">setup guide</a>.</p>
+    <ol class="steps">
+      <li id="g1"><b>Add a free Gemini key.</b> Open <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>, sign in, click <i>Create API key</i>, copy it, and paste it under <i>Google Gemini key</i> below. No card needed.</li>
+      <li id="g2"><b>Allow your microphone</b> (optional, for your own voice): click <i>Grant microphone</i> and choose Allow.</li>
+      <li id="g3"><b>Pick your meeting language</b> and your name, then press <i>Save</i> at the bottom.</li>
+      <li id="g4"><b>Email the minutes to yourself</b> (optional): follow <i>Email the MOM</i> near the bottom. Needs a free Google account, takes 2 minutes.</li>
+    </ol>
+    <p class="hint" style="margin:10px 0 0">Then open a Google Meet, click the Debrief icon and press <b>Start recording this tab</b>. When the meeting ends, press <b>Stop &amp; write MOM</b>.</p>
+  </section>
+
   <section>
     <h2>You</h2>
     <label for="myName">Your name</label>
@@ -37,7 +49,6 @@
     </select>
     <p class="hint">Tunes transcription. Gemini and Sarvam handle Malayalam; Deepgram does not.</p>
 
-    <label><input type="checkbox" id="miniWindow" style="width:auto"> Open the small controls window when recording starts</label>
     <label><input type="checkbox" id="pillOnPage" style="width:auto"> Also show the pill on top of the Meet page</label>
 
     <label for="momLanguage">Write MOM in</label>
@@ -179,7 +190,12 @@
     <input id="emailTo" placeholder="blank = your own address">
     <p class="hint">The script only ever sends to your address plus anything in its <code>ALLOWED</code> list.</p>
     <label><input type="checkbox" id="emailAuto" style="width:auto"> Email the MOM automatically when it is written</label>
-    <label><input type="checkbox" id="emailTranscript" style="width:auto"> Attach the transcript (.txt)</label>
+    <label style="margin-bottom:2px">Attach to the email</label>
+    <label style="font-weight:400;margin:4px 0"><input type="checkbox" id="emailPdf" style="width:auto"> MOM as PDF</label>
+    <label style="font-weight:400;margin:4px 0"><input type="checkbox" id="emailWord" style="width:auto"> MOM as Word (.doc)</label>
+    <label style="font-weight:400;margin:4px 0"><input type="checkbox" id="emailMd" style="width:auto"> MOM as Markdown (.md)</label>
+    <label style="font-weight:400;margin:4px 0"><input type="checkbox" id="emailTranscript" style="width:auto"> Transcript (.txt)</label>
+    <p class="hint">The email body always contains the full MOM. Attachments are optional extras.</p>
     <div class="row" style="margin-top:10px"><button id="testMail">Send test email</button><span id="mailMsg" class="hint"></span></div>
   </section>
 

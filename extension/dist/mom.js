@@ -2477,8 +2477,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     captureMic: true,
     meetingLanguage: "auto",
     // auto | hinglish | malayalam
-    miniWindow: true,
-    // open the controller window when recording starts
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailWebhook: "",
@@ -2488,6 +2486,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,
     // email the MOM as soon as it is written
+    emailPdf: true,
+    // attach the MOM as PDF
+    emailWord: false,
+    // attach the MOM as Word (.doc)
+    emailMd: false,
+    // attach the MOM as Markdown
     emailTranscript: false,
     // attach the transcript as .txt
     followMeetMute: true,
@@ -16041,6 +16045,15 @@ Output only the Markdown MOM, with no preamble.`;
   function inlineStyles(html) {
     return html.replace(/<table>/g, '<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:14px">').replace(/<th>/g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left">').replace(/<th /g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left" ').replace(/<td>/g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top">').replace(/<td /g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top" ').replace(/<h1>/g, '<h1 style="font-size:20px;margin:18px 0 8px">').replace(/<h2>/g, '<h2 style="font-size:17px;margin:18px 0 6px;color:#1e1b6b">').replace(/<h3>/g, '<h3 style="font-size:15px;margin:14px 0 4px">');
   }
+  var safeName = (s) => String(s).replace(/[\\/:*?"<>|]+/g, "-").slice(0, 120);
+  var b64 = (str) => {
+    const b = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < b.length; i += 32768) bin += String.fromCharCode(...b.subarray(i, i + 32768));
+    return btoa(bin);
+  };
+  var wordDocHtml = (bodyHtml) => `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${bodyHtml}</body></html>`;
+  var pdfPageHtml = (bodyHtml, m) => `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1f2328}h1{font-size:18pt;color:#1e1b6b;border-bottom:3px solid #ff7a1a;padding-bottom:6px}h2{font-size:14pt;color:#1e1b6b;margin-top:18px}h3{font-size:12pt}table{border-collapse:collapse;width:100%;margin:10px 0}th{background:#eef0f8;text-align:left}td,th{border:1px solid #c8ccd4;padding:5px 8px;vertical-align:top}.meta{color:#656d76;margin-bottom:14px}</style></head><body><h1>${escapeHtml(m.title)}</h1><div class="meta">${escapeHtml(meta(m))}</div>${bodyHtml}</body></html>`;
   var meta = (m) => {
     const start = new Date(m.startedAt);
     const mins = m.endedAt ? Math.max(1, Math.round((m.endedAt - m.startedAt) / 6e4)) : null;
@@ -16064,11 +16077,13 @@ ${meeting2.mom || ""}
 
 -- Written by Debrief`;
     const attachments = [];
+    const base = safeName(`MOM ${meeting2.title} ${date}`);
+    const raw = renderHtml(meeting2.mom || "");
+    if (settings2.emailPdf) attachments.push({ name: `${base}.pdf`, mime: "application/pdf", fromHtml: pdfPageHtml(raw, meeting2) });
+    if (settings2.emailWord) attachments.push({ name: `${base}.doc`, mime: "application/msword", base64: b64(wordDocHtml(raw)) });
+    if (settings2.emailMd) attachments.push({ name: `${base}.md`, mime: "text/markdown", base64: b64(meeting2.mom || "") });
     if (settings2.emailTranscript && transcriptText) {
-      const b = new TextEncoder().encode(transcriptText);
-      let bin = "";
-      for (let i = 0; i < b.length; i += 32768) bin += String.fromCharCode(...b.subarray(i, i + 32768));
-      attachments.push({ name: `Transcript ${meeting2.title} ${date}.txt`.replace(/[\\/:*?"<>|]+/g, "-"), mime: "text/plain", base64: btoa(bin) });
+      attachments.push({ name: safeName(`Transcript ${meeting2.title} ${date}`) + ".txt", mime: "text/plain", base64: b64(transcriptText) });
     }
     return { subject: `MOM: ${meeting2.title} (${date})`, html, text, attachments };
   }
@@ -16302,7 +16317,7 @@ ${meeting2.mom || ""}
   $2("print").onclick = () => window.print();
   $2("dlMd").onclick = () => download(`${fileBase()}.md`, "text/markdown", meeting.mom);
   $2("dlDoc").onclick = () => {
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${renderMd(meeting.mom)}</body></html>`;
+    const html = wordDocHtml(renderMd(meeting.mom));
     download(`${fileBase()}.doc`, "application/msword", html);
   };
   $2("copy").onclick = async () => {

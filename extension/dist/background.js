@@ -28,8 +28,6 @@
     captureMic: true,
     meetingLanguage: "auto",
     // auto | hinglish | malayalam
-    miniWindow: true,
-    // open the controller window when recording starts
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailWebhook: "",
@@ -39,6 +37,12 @@
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,
     // email the MOM as soon as it is written
+    emailPdf: true,
+    // attach the MOM as PDF
+    emailWord: false,
+    // attach the MOM as Word (.doc)
+    emailMd: false,
+    // attach the MOM as Markdown
     emailTranscript: false,
     // attach the transcript as .txt
     followMeetMute: true,
@@ -142,36 +146,6 @@
     const st = await getState();
     if (st.alert) await setState({ ...st, alert: null });
   }
-  async function openMini() {
-    const { miniWindowId } = await chrome.storage.session.get("miniWindowId");
-    if (miniWindowId != null) {
-      try {
-        await chrome.windows.get(miniWindowId);
-        return { ok: true };
-      } catch {
-      }
-    }
-    const { miniBounds } = await chrome.storage.local.get("miniBounds");
-    const cur = await chrome.windows.getLastFocused().catch(() => null);
-    const b = miniBounds || { width: 340, height: 330, left: cur ? Math.max(0, (cur.left || 0) + (cur.width || 800) - 360) : 80, top: cur ? (cur.top || 0) + 80 : 80 };
-    const win = await chrome.windows.create({ url: chrome.runtime.getURL("mini.html"), type: "popup", focused: false, width: b.width, height: b.height, left: b.left, top: b.top });
-    await chrome.storage.session.set({ miniWindowId: win.id });
-    return { ok: true };
-  }
-  async function closeMini() {
-    const { miniWindowId } = await chrome.storage.session.get("miniWindowId");
-    await chrome.storage.session.remove("miniWindowId");
-    if (miniWindowId != null) await chrome.windows.remove(miniWindowId).catch(() => {
-    });
-  }
-  chrome.windows.onBoundsChanged?.addListener(async (w) => {
-    const { miniWindowId } = await chrome.storage.session.get("miniWindowId");
-    if (w.id === miniWindowId && w.width) await chrome.storage.local.set({ miniBounds: { left: w.left, top: w.top, width: w.width, height: w.height } });
-  });
-  chrome.windows.onRemoved.addListener(async (id) => {
-    const { miniWindowId } = await chrome.storage.session.get("miniWindowId");
-    if (id === miniWindowId) await chrome.storage.session.remove("miniWindowId");
-  });
   async function ensureOffscreen() {
     const ctxs = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
     if (ctxs.length) return;
@@ -214,8 +188,6 @@
       return { ok: false, error: r?.error || "Recorder did not start." };
     }
     await setState({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null });
-    if (settings.miniWindow !== false) openMini().catch(() => {
-    });
     chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ["dist/pill.js"] }).catch(() => {
     });
     chrome.action.setBadgeBackgroundColor({ color: "#d93025" });
@@ -236,7 +208,6 @@
       }
       await updateMeeting(st.meetingId, (m) => m.endedAt = Date.now());
       await closeOffscreen();
-      await closeMini();
       await setState({ recording: false });
       chrome.action.setBadgeText({ text: "" });
       chrome.action.setBadgeText({ tabId: st.tabId, text: "" }).catch(() => {
@@ -279,7 +250,6 @@
         await raiseAlert(msg.meetingId, msg.error);
       },
       "dismiss-alert": () => clearAlert(),
-      "open-mini": () => openMini(),
       "set-follow": async () => {
         await saveSettings({ ...await getSettings(), followMeetMute: !!msg.on });
         return applyMic();

@@ -126,8 +126,6 @@ $('clearAll').onclick = async () => {
   renderRecent();
 };
 
-$('popOut').onclick = () => send({ type: 'open-mini' });
-
 $('alertX').onclick = () => send({ type: 'dismiss-alert' }).then(refresh);
 
 $('start').onclick = async () => {

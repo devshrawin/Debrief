@@ -4,7 +4,7 @@ import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
 import { buildSystemPrompt, buildUserPrompt, formatTranscript } from './prompt.js';
-import { buildEmail, sendMail, mailReady } from './mailer.js';
+import { buildEmail, sendMail, mailReady, wordDocHtml } from './mailer.js';
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get('id');
@@ -227,8 +227,7 @@ $('edit').onclick = () => setEditing($('mdEdit').classList.contains('hidden'));
 $('print').onclick = () => window.print();
 $('dlMd').onclick = () => download(`${fileBase()}.md`, 'text/markdown', meeting.mom);
 $('dlDoc').onclick = () => {
-  // Word opens HTML saved with a .doc extension, tables and headings intact.
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${renderMd(meeting.mom)}</body></html>`;
+  const html = wordDocHtml(renderMd(meeting.mom));
   download(`${fileBase()}.doc`, 'application/msword', html);
 };
 $('copy').onclick = async () => {

@@ -39,8 +39,6 @@
     captureMic: true,
     meetingLanguage: "auto",
     // auto | hinglish | malayalam
-    miniWindow: true,
-    // open the controller window when recording starts
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailWebhook: "",
@@ -50,6 +48,12 @@
     // optional; the script only allows you and its ALLOWED list
     emailAuto: true,
     // email the MOM as soon as it is written
+    emailPdf: true,
+    // attach the MOM as PDF
+    emailWord: false,
+    // attach the MOM as Word (.doc)
+    emailMd: false,
+    // attach the MOM as Markdown
     emailTranscript: false,
     // attach the transcript as .txt
     followMeetMute: true,
