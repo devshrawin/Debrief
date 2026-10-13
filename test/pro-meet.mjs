@@ -105,4 +105,18 @@ await test('adapters: the right reader is chosen per site', () => {
   assert.ok(OTHER_SITES.length >= 5);
 });
 
+
+await test('in-call detection: Zoom-like page, Meet lobby vs call, and the end screen', () => {
+  const zoomCall = page('<footer><button aria-label="mute my microphone"></button><button aria-label="stop my video"></button><button>Leave</button></footer>');
+  assert.equal(generic.inCall(zoomCall), true);
+  assert.equal(generic.micButton(zoomCall).muted, false);
+  assert.equal(generic.inCall(page('<button aria-label="unmute my microphone"></button><button>Leave</button>')), true);
+  assert.equal(generic.inCall(page('<button aria-label="Join audio"></button><button>Join</button>')), false, 'a lobby is not a call');
+  assert.equal(generic.inCall(page('<button aria-label="mute"></button><button>Leave</button><h2>You left the meeting</h2>')), false, 'end screen wins');
+  assert.equal(generic.inCall(page('<button aria-label="Mute"></button><div>Send message</div><button>Send</button>')), false, 'Send is not End');
+  assert.equal(meet.inCall(page('<button data-is-muted="false" aria-label="Turn off microphone"></button><button aria-label="Leave call"></button>')), true);
+  assert.equal(meet.inCall(page('<button data-is-muted="false" aria-label="Turn off microphone"></button><button>Join now</button>')), false);
+  assert.match(meet.diagnose(page('<button data-is-muted="false" aria-label="Turn off microphone"></button><button aria-label="Leave call"></button>')).inCall, /yes/);
+});
+
 console.log(`\n${passed} passed`);

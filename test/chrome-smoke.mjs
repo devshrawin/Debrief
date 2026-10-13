@@ -352,6 +352,22 @@ try {
   await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguage: 'auto', dictionary: '' } }))`);
   check('popup links to the tour', await popup.evaluate(`!!document.getElementById('openTour') && !!document.getElementById('openTour1')`));
 
+  // The amber "a call is on" dot comes from the page script on any supported site.
+  const dot = await opts.evaluate(`(async () => {
+    const send = (m) => chrome.runtime.sendMessage({ target: 'bg', ...m });
+    const { tabId } = await send({ type: 'whoami' });
+    await chrome.storage.session.set({ rec: { recording: false } });
+    await send({ type: 'in-call', on: true, site: 'Zoom (web client)' });
+    await new Promise((r) => setTimeout(r, 300));
+    const on = await chrome.action.getBadgeText({ tabId });
+    const title = await chrome.action.getTitle({ tabId });
+    await send({ type: 'in-call', on: false });
+    await new Promise((r) => setTimeout(r, 300));
+    const off = await chrome.action.getBadgeText({ tabId });
+    return { on, off, title };
+  })()`);
+  check('amber reminder dot shows during a call on any supported site and clears after', dot.on === '\u25cf' && dot.off === '' && /Zoom/.test(dot.title), JSON.stringify(dot));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);

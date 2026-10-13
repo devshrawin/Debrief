@@ -246,6 +246,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       return { ok: true };
     },
+    // A page script saw a live call (or the call ended): glow the icon amber unless we are already recording it.
+    'in-call': async () => {
+      const tabId = sender.tab?.id;
+      if (tabId == null) return { ok: false };
+      const st = await getState();
+      if (st.recording && st.tabId === tabId) return { ok: true };
+      if (msg.on) {
+        chrome.action.setBadgeBackgroundColor({ tabId, color: '#F59E0B' });
+        chrome.action.setBadgeText({ tabId, text: '●' });
+        chrome.action.setTitle({ tabId, title: `Debrief: a ${msg.site || 'meeting'} call is on. Click (or press Alt+Shift+M) to record it` });
+      } else {
+        chrome.action.setBadgeText({ tabId, text: '' });
+      }
+      return { ok: true };
+    },
     'dismiss-alert': () => clearAlert(),
     'set-follow': async () => {
       await saveSettings({ ...(await getSettings()), followMeetMute: !!msg.on });

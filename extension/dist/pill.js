@@ -12,6 +12,7 @@
     captionsRegion: () => captionsRegion,
     diagnose: () => diagnose,
     endScreen: () => endScreen,
+    inCall: () => inCall,
     micButton: () => micButton,
     readCaptions: () => readCaptions,
     readParticipants: () => readParticipants,
@@ -91,6 +92,10 @@
     const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map(text);
     return meetingEnded(texts);
   }
+  function inCall(doc) {
+    const leave = [...doc.querySelectorAll("button[aria-label]")].some((b) => /leave call/i.test(b.getAttribute("aria-label")));
+    return !!(micButton(doc) && leave && !endScreen(doc));
+  }
   function snapshot(doc) {
     return { mic: micButton(doc), participants: readParticipants(doc), captions: readCaptions(doc), ended: endScreen(doc) };
   }
@@ -102,6 +107,7 @@
       participants: s.participants.length ? `${s.participants.length} found: ${s.participants.slice(0, 6).join(", ")}` : "none found (open the People panel, or join the call first)",
       captions: captionsRegion(doc) ? `region found, ${s.captions.length} caption block(s) now${s.captions[0] ? `, e.g. "${s.captions[0].name}"` : ""}` : "captions are not showing (turn them on with the CC button)",
       captionsButton: captionsButton(doc) ? "found" : "not found (captions may already be on)",
+      inCall: inCall(doc) ? "yes, a call is on" : "no call detected (lobby or not joined yet)",
       endScreen: s.ended ? "the end-of-meeting screen is showing" : "no (normal while in a call)"
     };
   }
@@ -111,6 +117,8 @@
   __export(generic_exports, {
     diagnose: () => diagnose2,
     endScreen: () => endScreen2,
+    inCall: () => inCall2,
+    leaveButton: () => leaveButton,
     micButton: () => micButton2,
     snapshot: () => snapshot2
   });
@@ -131,12 +139,18 @@
     }
     return null;
   }
+  function leaveButton(doc) {
+    return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text2(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
+  }
+  function inCall2(doc) {
+    return !!(micButton2(doc) && leaveButton(doc) && !endScreen2(doc));
+  }
   function endScreen2(doc) {
     const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"]')].slice(0, 300).map(text2);
     return meetingEnded(texts) || texts.some((t) => /^(this )?(meeting|call) (has )?(been )?ended( by (the )?host)?\.?$/i.test(t.trim()));
   }
   function snapshot2(doc) {
-    return { mic: micButton2(doc), participants: [], captions: [], ended: endScreen2(doc) };
+    return { mic: micButton2(doc), participants: [], captions: [], ended: endScreen2(doc), inCall: inCall2(doc) };
   }
   function diagnose2(doc, name = "This meeting app") {
     const s = snapshot2(doc);
@@ -145,6 +159,7 @@
       micButton: s.mic ? `found, ${s.mic.muted ? "muted" : "unmuted"}` : "NOT found: use the manual mic switch",
       participants: "not read for this app",
       captions: "not read for this app",
+      inCall: s.inCall ? "yes, a call is on" : "no call detected",
       endScreen: s.ended ? "the end-of-meeting screen is showing" : "no (normal while in a call)"
     };
   }
@@ -530,6 +545,14 @@
         }
       }
     });
+    let lastInCall;
+    function reportCall() {
+      const on = !!app.inCall(document);
+      if (on !== lastInCall) {
+        lastInCall = on;
+        send({ type: "in-call", on, site: app.name });
+      }
+    }
     async function tick() {
       if (!alive()) return shutdown();
       await load();
@@ -537,6 +560,7 @@
       reportMute();
       checkEnded();
       sampleMeeting();
+      reportCall();
     }
     async function init() {
       document.querySelectorAll("[data-debrief]").forEach((n) => n.remove());
