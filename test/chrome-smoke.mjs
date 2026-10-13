@@ -266,6 +266,11 @@ try {
       dict: !!document.getElementById('dictionary'), share: !!document.getElementById('shareList') && !!document.getElementById('copyScriptAllow'), local: !!document.getElementById('useOllama') && !!document.getElementById('useWhisper'), sites: !!document.getElementById('enableSites'), mode: !!document.getElementById('minutesMode') };
   })()`);
   check('usage page shows counted requests and the learned limit', proOpts.active && proOpts.rows.some((r) => /gemini . gemini-3.8-flash/.test(r) && /Minutes/.test(r) && /of 20/.test(r)) && /[0-9]+ requests/.test(proOpts.totals), JSON.stringify(proOpts));
+  if (process.env.SHOTS) {
+    const fs = await import('node:fs');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 700, deviceScaleFactor: 1.5, mobile: false }, opts.sessionId);
+    fs.writeFileSync(`${process.env.SHOTS}/usage.png`, Buffer.from((await send('Page.captureScreenshot', {}, opts.sessionId)).data, 'base64'));
+  }
   check('settings has dictionary, sharing, local presets, other sites, minutes mode', proOpts.dict && proOpts.share && proOpts.local && proOpts.sites && proOpts.mode);
 
   const popupWarn = await popup.evaluate(`(async () => { await new Promise((r) => setTimeout(r, 300)); location.reload(); })()`);
