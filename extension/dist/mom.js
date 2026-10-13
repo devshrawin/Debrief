@@ -2505,6 +2505,22 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    shareList: "",
+    // default people to share the minutes with
+    shareGroups: "",
+    // per recurring meeting: "title words | a@x.com, b@y.com"
+    shareMode: "review",
+    // review = only I get it until I press Share; auto = send to them too
+    shareHow: "to",
+    // to | cc | bcc
+    shareDomains: false,
+    // script helper: allow whole company domains instead of single addresses
+    calendarLookup: true,
+    // ask the relay who was invited (needs the calendar permission)
+    meetCaptions: "read",
+    // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
+    otherSites: false,
+    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -2822,6 +2838,25 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     }
     return out.join("\n");
   }
+  var wordsOf = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  function guardOwners(items, windowText) {
+    const sentences = String(windowText).split(/(?<=[.!?।])\s+|\n+/).map((x2) => x2.trim()).filter(Boolean);
+    const plain = sentences.map((x2) => wordsOf(x2).join(" "));
+    return items.map((it2) => {
+      if (!it2.owner || it2.owner === "-") return it2;
+      const probe = wordsOf(it2.quote || it2.text).slice(0, 5).join(" ");
+      if (probe.split(" ").length < 3) return it2;
+      const at2 = plain.findIndex((p) => p.includes(probe));
+      if (at2 < 0) return it2;
+      const first = wordsOf(it2.owner)[0];
+      const short = (x2) => x2 && x2.split(" ").length <= 5 ? x2 : "";
+      const near = [short(plain[at2 - 1]), plain[at2], short(plain[at2 + 1])].filter(Boolean).join(" ");
+      return first && near.split(" ").includes(first) ? it2 : { ...it2, owner: "-", ownerDropped: it2.owner };
+    });
+  }
+  function sanitizeMinutes(md) {
+    return String(md || "").replace(/^```(?:markdown|md)?\s*\n/i, "").replace(/\n```\s*$/i, "").split("\n").filter((l3) => !/^\s*<\/?(checklist|transcript|speakers|minutes)>\s*$/i.test(l3)).join("\n").replace(/\s*\|?\s*"?quote_of_max_12_words"?/gi, "").replace(/<\/?(checklist|transcript|speakers|minutes)>/gi, "").trim();
+  }
 
   // src/attendance.js
   var norm2 = (s) => String(s || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
@@ -2921,6 +2956,16 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     return lines.join("\n");
   }
 
+  // src/local.js
+  function isLocalBase(base) {
+    try {
+      const h2 = new URL(base).hostname;
+      return h2 === "localhost" || h2 === "127.0.0.1" || h2 === "[::1]" || h2.endsWith(".localhost");
+    } catch {
+      return false;
+    }
+  }
+
   // src/minutes.js
   var wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
   function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
@@ -2936,18 +2981,19 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     const lines = formatTranscript(meeting2, settings2.myName, ctx).split("\n").filter(Boolean);
     const transcript = lines.join("\n");
     const words = wordCount(transcript);
+    const local = settings2.llmProvider === "openai" && isLocalBase(settings2.oaBase);
     const thorough = settings2.minutesMode !== "quick" && words >= 400;
     const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0 };
     let checklist = "";
     if (thorough) {
-      const windows = splitWindows(lines);
+      const windows = splitWindows(lines, local ? 1500 : 3200);
       const items = [];
       for (let i = 0; i < windows.length; i++) {
         onStatus(`Reading the transcript carefully (part ${i + 1} of ${windows.length})\u2026`);
         try {
           stats.calls++;
           const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting2, settings2, windows[i].join("\n"), ctx));
-          items.push(...parseItems(out));
+          items.push(...guardOwners(parseItems(out), windows[i].join("\n")));
           stats.extractWindows++;
         } catch (e) {
           if (e?.name === "AbortError") throw e;
@@ -2959,13 +3005,13 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     }
     onStatus("Writing the minutes\u2026");
     stats.calls++;
-    let mom = (await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText)).trim();
-    if (thorough && words <= 24e3) {
+    let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText));
+    if (thorough && words <= (local ? 6e3 : 24e3)) {
       onStatus("Checking nothing was left out\u2026");
       try {
         stats.calls++;
         const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom));
-        const missing = out.split(/\r?\n/).map((l3) => l3.replace(/^[-*\s]+/, "").trim()).filter((l3) => l3 && !/^NONE\b/i.test(l3));
+        const missing = sanitizeMinutes(out).split(/\r?\n/).map((l3) => l3.replace(/^[-*\s]+/, "").trim()).filter((l3) => l3 && !/^NONE\b/i.test(l3));
         stats.missed = missing.length;
         if (missing.length) {
           mom += `
@@ -16519,7 +16565,7 @@ ${meeting2.mom || ""}
     }
     return { subject: `MOM: ${meeting2.title} (${date})`, html, text, attachments };
   }
-  async function sendMail(mail, settings2) {
+  async function callRelay(payload, settings2) {
     if (!mailReady(settings2)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
     let res;
     try {
@@ -16529,7 +16575,7 @@ ${meeting2.mom || ""}
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         redirect: "follow",
         signal: AbortSignal.timeout(6e4),
-        body: JSON.stringify({ to: settings2.emailTo || "", ...mail })
+        body: JSON.stringify(payload)
       });
     } catch (e) {
       throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
@@ -16545,6 +16591,47 @@ ${meeting2.mom || ""}
     }
     if (!j2.ok) throw new Error(j2.error || "The mail relay refused the request.");
     return j2;
+  }
+  function sendMail(mail, settings2, who = {}) {
+    return callRelay({ to: who.to ?? settings2.emailTo ?? "", cc: who.cc || "", bcc: who.bcc || "", ...mail }, settings2);
+  }
+  var EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+  function parseAddresses(text) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const raw of String(text || "").split(/[\s,;]+/)) {
+      const a = raw.trim().replace(/^<|>$/g, "");
+      if (EMAIL.test(a) && !seen.has(a.toLowerCase())) {
+        seen.add(a.toLowerCase());
+        out.push(a);
+      }
+    }
+    return out;
+  }
+  function parseGroups(text) {
+    const out = [];
+    for (const line of String(text || "").split(/\r?\n/)) {
+      const [match, rest] = line.split("|");
+      if (!rest || !match.trim()) continue;
+      const list = parseAddresses(rest);
+      if (list.length) out.push({ match: match.trim().toLowerCase(), list });
+    }
+    return out;
+  }
+  function recipientsFor(meeting2, settings2) {
+    const title = String(meeting2?.title || "").toLowerCase();
+    const group = parseGroups(settings2.shareGroups).find((g) => title.includes(g.match));
+    if (group) return { list: group.list, source: `group "${group.match}"` };
+    return { list: parseAddresses(settings2.shareList), source: "your default list" };
+  }
+  function inviteeEmails(meeting2, { absentOnly = false, absentNames: absentNames2 = [] } = {}) {
+    const gone = new Set(absentNames2.map((n) => String(n).toLowerCase()));
+    return (meeting2?.invited || []).filter((p) => p.email && (!absentOnly || gone.has(String(p.name || p.email).toLowerCase()))).map((p) => p.email);
+  }
+  async function lookupInvitees(meeting2, settings2) {
+    const code = (meeting2.url || "").match(/[a-z]{3}-[a-z]{4}-[a-z]{3}/)?.[0] || "";
+    const j2 = await callRelay({ action: "invitees", code, title: meeting2.title, start: meeting2.startedAt, end: meeting2.endedAt || Date.now() }, settings2);
+    return j2.found ? j2.guests : null;
   }
 
   // src/mom.js
@@ -16687,6 +16774,8 @@ ${meeting2.mom || ""}
       const r = await sendMail(mail, settings);
       meeting.emailedAt = Date.now();
       meeting.emailedTo = r.to;
+      if (auto && settings.shareMode === "auto" && !meeting.sharedAt) shareMom(true).catch(() => {
+      });
       await saveMeeting(meeting);
       $2("mailStatus").textContent = `Emailed to ${r.to} \u2713`;
       $2("mail").textContent = "Email again";
@@ -16696,6 +16785,80 @@ ${meeting2.mom || ""}
     } finally {
       $2("mail").disabled = false;
     }
+  }
+  function absentNames() {
+    return matchPeople(meeting.invited, meeting.presence, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name || r.email);
+  }
+  function initShare() {
+    const saved = meeting.shareTo;
+    const r = recipientsFor(meeting, settings);
+    $2("shareTo").value = (saved || r.list).join(", ");
+    $2("shareSrc").textContent = saved ? "Last used for this meeting." : r.list.length ? `Filled in from ${r.source}.` : "Add the people who should get a copy.";
+    $2("shareHowSel").value = settings.shareHow || "to";
+    const hasInv = (meeting.invited || []).some((p) => p.email);
+    $2("shareInvited").classList.toggle("hidden", !hasInv);
+    $2("shareAbsent").classList.toggle("hidden", !hasInv || !meeting.presence);
+    if (meeting.sharedAt) $2("shareStatus").textContent = `Shared with ${(meeting.sharedTo || []).join(", ")} \u2713`;
+  }
+  async function shareMom(auto) {
+    if (!meeting.mom?.trim()) {
+      $2("shareStatus").textContent = "No minutes to share yet.";
+      return;
+    }
+    if (!mailReady(settings)) {
+      $2("shareStatus").textContent = "Email is not set up. Add the Apps Script URL in Settings.";
+      return;
+    }
+    const list = parseAddresses($2("shareTo").value || (auto ? recipientsFor(meeting, settings).list.join(",") : ""));
+    if (!list.length) {
+      $2("shareStatus").textContent = auto ? "" : "Add at least one email address.";
+      return;
+    }
+    const how = auto ? settings.shareHow || "to" : $2("shareHowSel").value;
+    $2("shareSend").disabled = true;
+    $2("shareStatus").textContent = `Sending to ${list.length} ${list.length === 1 ? "person" : "people"}\u2026`;
+    try {
+      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
+      const r = await sendMail(mail, settings, { to: how === "to" ? list.join(",") : "", cc: how === "cc" ? list.join(",") : "", bcc: how === "bcc" ? list.join(",") : "" });
+      const sent = [...r.to && how === "to" ? String(r.to).split(",") : [], ...r.cc || [], ...r.bcc || []];
+      meeting.sharedAt = Date.now();
+      meeting.sharedTo = sent;
+      meeting.shareTo = list;
+      await saveMeeting(meeting);
+      $2("shareStatus").textContent = r.skipped?.length ? `Sent to ${sent.join(", ") || "nobody"}. Not allowed by your script: ${r.skipped.join(", ")}. Add them under Settings \u2192 Email \u2192 Sharing, copy the updated script and deploy a new version.` : `Shared with ${sent.join(", ")} \u2713`;
+    } catch (e) {
+      $2("shareStatus").textContent = `Share failed: ${e.message}`;
+    } finally {
+      $2("shareSend").disabled = false;
+    }
+  }
+  var addTo = (emails) => $2("shareTo").value = parseAddresses(`${$2("shareTo").value},${emails.join(",")}`).join(", ");
+  $2("shareSend").onclick = () => shareMom(false);
+  $2("shareInvited").onclick = () => addTo(inviteeEmails(meeting));
+  $2("shareAbsent").onclick = () => addTo(inviteeEmails(meeting, { absentOnly: true, absentNames: absentNames() }));
+  async function ensureInvited() {
+    if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
+    try {
+      const guests = await lookupInvitees(meeting, settings);
+      if (guests) meeting.invited = guests;
+      meeting.invitedChecked = true;
+    } catch (e) {
+      meeting.invitedError = e.message;
+    }
+    await saveMeeting(meeting);
+  }
+  function ensureAttendees() {
+    if (meeting.attendees?.length) return;
+    const entries = parseDictionary(settings.dictionary);
+    const presence = Object.entries(meeting.presence || {}).map(([name]) => /^you$/i.test(name) && settings.myName ? settings.myName : name);
+    let names = [];
+    if (presence.length) {
+      const m = matchPeople(meeting.invited, meeting.presence, { entries, myName: settings.myName });
+      names = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
+    } else if (meeting.invited?.length) {
+      names = meeting.invited.filter((p) => p.status !== "no").map((p) => p.name || p.email.split("@")[0]);
+    }
+    if (names.length) meeting.attendees = [...new Set(names)];
   }
   var sleep2 = (ms, signal) => new Promise((resolve, reject) => {
     const t = setTimeout(resolve, ms);
@@ -16844,8 +17007,11 @@ ${meeting2.mom || ""}
       document.querySelector("main").innerHTML = "<p>Meeting not found.</p>";
       return;
     }
+    await ensureInvited();
+    ensureAttendees();
     $2("notes").value = meeting.notes || "";
     $2("attendees").value = (meeting.attendees || []).join("\n");
+    initShare();
     renderMeta();
     renderErrors();
     renderTranscript();

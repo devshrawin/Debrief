@@ -1,9 +1,10 @@
 // On-page recording pill for Google Meet: shows recording status and lets you switch your mic
 // in or out of the transcript. Lives in a shadow root so Meet's CSS can't touch it.
-import { meetingEnded } from './meetend.js';
+import { adapterFor } from './adapters/index.js';
 
 (() => {
   if (window.__debriefPill) return;
+  const app = adapterFor(location.hostname);
   window.__debriefPill = true;
 
   const POS_KEY = 'debrief.pill.pos';
@@ -128,15 +129,8 @@ import { meetingEnded } from './meetend.js';
     return h ? `${h}:${m}:${s}` : `${m}:${s}`;
   };
 
-  // Meet's mic button carries data-is-muted; fall back to its label. null = could not tell.
-  function meetMuted() {
-    const btns = [...document.querySelectorAll('button[data-is-muted], [role="button"][data-is-muted]')];
-    const mic = btns.find((b) => /microphone|mic\b/i.test(b.getAttribute('aria-label') || ''));
-    if (mic) return mic.getAttribute('data-is-muted') === 'true';
-    const byLabel = [...document.querySelectorAll('button[aria-label]')].find((b) => /turn (on|off) microphone/i.test(b.getAttribute('aria-label')));
-    if (byLabel) return /turn on/i.test(byLabel.getAttribute('aria-label'));
-    return null;
-  }
+  // null = could not tell. The page readers live in adapters/ (Meet has its own, other sites share a generic one).
+  const meetMuted = () => app.micButton(document)?.muted ?? null;
 
   let myTab = null;
   let S = { rec: { recording: false }, levels: null, counts: { segs: 0, errs: 0 }, follow: true };
@@ -352,11 +346,55 @@ import { meetingEnded } from './meetend.js';
       endedHits = 0;
       return;
     }
-    const texts = [...document.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map((e) => e.innerText || e.textContent);
-    endedHits = meetingEnded(texts) ? endedHits + 1 : 0;
+    endedHits = app.endScreen(document) ? endedHits + 1 : 0;
     // Two checks in a row (about 2 s) so a flicker during a screen change can't stop a live meeting.
     if (endedHits === 2) send({ type: 'meet-ended' });
   }
+
+  // Who is in the call and who is speaking, sampled once per second but only sent when it changes.
+  let lastPeople = '';
+  let lastCaps = new Map();
+  let captionTries = 0;
+  function sampleMeeting() {
+    if (!S.rec.recording || S.rec.stopping || S.rec.tabId !== myTab || !app.hasPeople) return;
+    const mode = S.captionMode || 'read';
+    const t = Math.max(0, (Date.now() - S.rec.startedAt) / 1000);
+    const people = app.readParticipants(document);
+    const key = people.join('|');
+    const payload = {};
+    if (key !== lastPeople) {
+      lastPeople = key;
+      payload.names = people;
+    }
+    if (mode !== 'off') {
+      if (mode === 'auto' && captionTries < 3 && !app.captionsRegion(document)) {
+        const btn = app.captionsButton(document);
+        if (btn) {
+          captionTries++;
+          btn.click();
+        }
+      }
+      const fresh = [];
+      for (const c of app.readCaptions(document)) {
+        if (lastCaps.get(c.name) !== c.text) {
+          lastCaps.set(c.name, c.text);
+          fresh.push({ name: c.name, text: c.text, t });
+        }
+      }
+      if (fresh.length) payload.captions = fresh;
+    }
+    if (payload.names || payload.captions) send({ type: 'meet-snap', t, ...payload });
+  }
+
+  chrome.runtime.onMessage.addListener((msg, _s, reply) => {
+    if (msg?.target === 'page' && msg.type === 'diagnose') {
+      try {
+        reply({ ok: true, diag: app.diagnose(document), site: app.name });
+      } catch (e) {
+        reply({ ok: false, error: e.message });
+      }
+    }
+  });
 
   async function tick() {
     if (!alive()) return shutdown();
@@ -364,6 +402,7 @@ import { meetingEnded } from './meetend.js';
     render();
     reportMute();
     checkEnded();
+    sampleMeeting();
   }
 
   async function init() {

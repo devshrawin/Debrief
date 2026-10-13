@@ -11,8 +11,11 @@ import {
   splitWindows,
   parseItems,
   itemsToChecklist,
+  guardOwners,
+  sanitizeMinutes,
 } from './prompt.js';
 import { attendanceMarkdown } from './attendance.js';
+import { isLocalBase } from './local.js';
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -29,19 +32,21 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   const lines = formatTranscript(meeting, settings.myName, ctx).split('\n').filter(Boolean);
   const transcript = lines.join('\n');
   const words = wordCount(transcript);
+  // Small local models read less at a time: use smaller windows and skip the whole-transcript audit for long meetings.
+  const local = settings.llmProvider === 'openai' && isLocalBase(settings.oaBase);
   const thorough = settings.minutesMode !== 'quick' && words >= 400;
   const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0 };
 
   let checklist = '';
   if (thorough) {
-    const windows = splitWindows(lines);
+    const windows = splitWindows(lines, local ? 1500 : 3200);
     const items = [];
     for (let i = 0; i < windows.length; i++) {
       onStatus(`Reading the transcript carefully (part ${i + 1} of ${windows.length})…`);
       try {
         stats.calls++;
         const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting, settings, windows[i].join('\n'), ctx));
-        items.push(...parseItems(out));
+        items.push(...guardOwners(parseItems(out), windows[i].join('\n')));
         stats.extractWindows++;
       } catch (e) {
         if (e?.name === 'AbortError') throw e;
@@ -54,14 +59,14 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
 
   onStatus('Writing the minutes…');
   stats.calls++;
-  let mom = (await gen(buildSystemPrompt(settings.momLanguage, { evidence: true }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText)).trim();
+  let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText));
 
-  if (thorough && words <= 24000) {
+  if (thorough && words <= (local ? 6000 : 24000)) {
     onStatus('Checking nothing was left out…');
     try {
       stats.calls++;
       const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom));
-      const missing = out.split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => l && !/^NONE\b/i.test(l));
+      const missing = sanitizeMinutes(out).split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => l && !/^NONE\b/i.test(l));
       stats.missed = missing.length;
       if (missing.length) {
         mom += `\n\n## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;

@@ -65,7 +65,8 @@ ${body}
   return { subject: `MOM: ${meeting.title} (${date})`, html, text, attachments };
 }
 
-export async function sendMail(mail, settings) {
+// One call to the user's relay script. `payload.action` selects what it does (default: send mail).
+export async function callRelay(payload, settings) {
   if (!mailReady(settings)) throw new Error('Email is not set up: add the Apps Script URL in Settings.');
   let res;
   try {
@@ -75,7 +76,7 @@ export async function sendMail(mail, settings) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow',
       signal: AbortSignal.timeout(60000),
-      body: JSON.stringify({ to: settings.emailTo || '', ...mail }),
+      body: JSON.stringify(payload),
     });
   } catch (e) {
     throw new Error(e.name === 'TimeoutError' ? 'The mail relay did not answer in 60 s.' : `Could not reach the mail relay (${e.message}).`);
@@ -93,4 +94,77 @@ export async function sendMail(mail, settings) {
   }
   if (!j.ok) throw new Error(j.error || 'The mail relay refused the request.');
   return j;
+}
+
+// who: { to, cc, bcc } comma-separated. With nothing given the mail goes to the script owner only.
+export function sendMail(mail, settings, who = {}) {
+  return callRelay({ to: who.to ?? settings.emailTo ?? '', cc: who.cc || '', bcc: who.bcc || '', ...mail }, settings);
+}
+
+// ---- sharing ----------------------------------------------------------------------------------
+
+const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+export function parseAddresses(text) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of String(text || '').split(/[\s,;]+/)) {
+    const a = raw.trim().replace(/^<|>$/g, '');
+    if (EMAIL.test(a) && !seen.has(a.toLowerCase())) {
+      seen.add(a.toLowerCase());
+      out.push(a);
+    }
+  }
+  return out;
+}
+
+// Groups: one per line, "words in the meeting title | a@x.com, b@y.com".
+export function parseGroups(text) {
+  const out = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const [match, rest] = line.split('|');
+    if (!rest || !match.trim()) continue;
+    const list = parseAddresses(rest);
+    if (list.length) out.push({ match: match.trim().toLowerCase(), list });
+  }
+  return out;
+}
+
+// Who a meeting should be shared with: the first matching recurring-meeting group, else the default list.
+export function recipientsFor(meeting, settings) {
+  const title = String(meeting?.title || '').toLowerCase();
+  const group = parseGroups(settings.shareGroups).find((g) => title.includes(g.match));
+  if (group) return { list: group.list, source: `group "${group.match}"` };
+  return { list: parseAddresses(settings.shareList), source: 'your default list' };
+}
+
+// Email addresses of invited people from the calendar, optionally only those not seen in the meeting.
+export function inviteeEmails(meeting, { absentOnly = false, absentNames = [] } = {}) {
+  const gone = new Set(absentNames.map((n) => String(n).toLowerCase()));
+  return (meeting?.invited || [])
+    .filter((p) => p.email && (!absentOnly || gone.has(String(p.name || p.email).toLowerCase())))
+    .map((p) => p.email);
+}
+
+// Lines to put in the relay script so it is allowed to mail these people.
+export function allowListLines(addresses, { domains = false } = {}) {
+  const q = (x) => `'${String(x).replace(/'/g, "\'")}'`;
+  const list = parseAddresses(addresses.join(','));
+  if (domains) {
+    const ds = [...new Set(list.map((a) => a.split('@')[1].toLowerCase()))];
+    return { allowed: '[]', domains: `[${ds.map(q).join(', ')}]` };
+  }
+  return { allowed: `[${list.map(q).join(', ')}]`, domains: '[]' };
+}
+
+export function scriptWithAllowList(scriptText, addresses, opts) {
+  const { allowed, domains } = allowListLines(addresses, opts);
+  return scriptText.replace(/const ALLOWED = \[[^\]]*\];/, `const ALLOWED = ${allowed};`).replace(/const ALLOWED_DOMAINS = \[[^\]]*\];/, `const ALLOWED_DOMAINS = ${domains};`);
+}
+
+// Calendar lookup through the relay: who was invited to this meeting and what they replied.
+export async function lookupInvitees(meeting, settings) {
+  const code = (meeting.url || '').match(/[a-z]{3}-[a-z]{4}-[a-z]{3}/)?.[0] || '';
+  const j = await callRelay({ action: 'invitees', code, title: meeting.title, start: meeting.startedAt, end: meeting.endedAt || Date.now() }, settings);
+  return j.found ? j.guests : null;
 }

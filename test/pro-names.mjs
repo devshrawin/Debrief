@@ -180,4 +180,30 @@ await test('attendance: table lists absent people, late joiners and early leaver
   assert.match(A.attendanceMarkdown({ invited: [], presence: { You: [0, 5, 1] }, durationSec: 5, myName: 'Me' }), /\| Me \|/);
 });
 
-console.log(`\n${passed} passed`);
+
+// ---------------- guards ----------------
+const G = await import('../src/prompt.js');
+await test('guard: an owner the transcript does not back is dropped, a backed one is kept', () => {
+  const text = '[00:10] OTHERS: Amal will share the validation sheet by Friday. Priya raised a risk about the mapping file. Please send the revised timeline to the client by Monday evening.';
+  const items = [
+    { type: 'ACTION', owner: 'Amal Raj', due: 'Friday', at: '[00:10]', text: 'share sheet', quote: 'Amal will share the validation sheet' },
+    { type: 'ACTION', owner: 'Priya Nair', due: '-', at: '[00:10]', text: 'send timeline', quote: 'send the revised timeline to the client' },
+    { type: 'ACTION', owner: 'Ravi', due: '-', at: '[00:10]', text: 'x', quote: 'nowhere to be found in the text at all' },
+  ];
+  const out = G.guardOwners(items, text);
+  assert.equal(out[0].owner, 'Amal Raj');
+  assert.equal(out[1].owner, '-');
+  assert.equal(out[1].ownerDropped, 'Priya Nair');
+  assert.equal(out[2].owner, 'Ravi', 'unverifiable items are left alone');
+});
+
+await test('guard: leaked prompt tags, fences and placeholders are stripped from the minutes', () => {
+  const dirty = '```markdown\n# T\n<checklist>\nFoo | quote_of_max_12_words\n</checklist>\n- point "quote_of_max_12_words"\n```';
+  const clean = G.sanitizeMinutes(dirty);
+  assert.doesNotMatch(clean, /checklist|quote_of|```/);
+  assert.match(clean, /# T/);
+  assert.match(clean, /- point/);
+});
+
+console.log(`
+${passed} passed`);

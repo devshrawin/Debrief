@@ -1,4 +1,23 @@
 (() => {
+  var __defProp = Object.defineProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+
+  // src/adapters/meet.js
+  var meet_exports = {};
+  __export(meet_exports, {
+    captionsButton: () => captionsButton,
+    captionsRegion: () => captionsRegion,
+    diagnose: () => diagnose,
+    endScreen: () => endScreen,
+    micButton: () => micButton,
+    readCaptions: () => readCaptions,
+    readParticipants: () => readParticipants,
+    snapshot: () => snapshot
+  });
+
   // src/meetend.js
   var BUTTON_ONLY = /^(rejoin|return to (the )?home screen)$/i;
   var HEADLINE = /(you(?:'|’)?ve|you have) left the meeting|you left the meeting|the meeting has ended|this call has ended|call ended|you(?:'|’)?ve been removed from the meeting|you were removed from the meeting|meeting ended/i;
@@ -9,9 +28,145 @@
     });
   }
 
+  // src/adapters/meet.js
+  var text = (el) => (el?.innerText ?? el?.textContent ?? "").replace(/ /g, " ").trim();
+  var lines = (el) => text(el).split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  var NOT_A_NAME = /^(you|your|presenting|pinned|unpin|pin|mute|unmute|muted|more options|more|host|co-host|\d+|\d+ more|\+\d+|raised hand|lower hand|audio|video|camera|microphone|remove|admit|deny|in the meeting|contributors|people|participants|visible|backgrounds?)$/i;
+  function cleanName(raw) {
+    const n = String(raw || "").replace(/\s*\((you|host|presenting|co-host)\)\s*$/i, "").replace(/\s+/g, " ").trim();
+    if (!n || n.length > 60 || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return "";
+    return n;
+  }
+  function micButton(doc) {
+    const withAttr = [...doc.querySelectorAll('button[data-is-muted], [role="button"][data-is-muted]')];
+    const labelled = withAttr.find((b) => /microphone|mic\b/i.test(b.getAttribute("aria-label") || ""));
+    if (labelled) return { el: labelled, muted: labelled.getAttribute("data-is-muted") === "true" };
+    const byLabel = [...doc.querySelectorAll("button[aria-label]")].find((b) => /turn (on|off) microphone/i.test(b.getAttribute("aria-label")));
+    if (byLabel) return { el: byLabel, muted: /turn on/i.test(byLabel.getAttribute("aria-label")) };
+    return null;
+  }
+  function readParticipants(doc) {
+    const names = /* @__PURE__ */ new Set();
+    const panel = [...doc.querySelectorAll('[role="list"]')].find((l) => /participants|people|in the meeting|contributors/i.test(l.getAttribute("aria-label") || ""));
+    if (panel) {
+      for (const item of panel.querySelectorAll('[role="listitem"]')) {
+        const n = cleanName(item.getAttribute("aria-label")) || cleanName(lines(item)[0]);
+        if (n) names.add(n);
+      }
+    }
+    if (!names.size) {
+      for (const tile of doc.querySelectorAll("[data-participant-id]")) {
+        const self = tile.querySelector("[data-self-name]")?.getAttribute("data-self-name");
+        const n = cleanName(self) || cleanName(lines(tile).find((l) => cleanName(l)));
+        if (n) names.add(n);
+      }
+    }
+    return [...names];
+  }
+  function captionsRegion(doc) {
+    return [...doc.querySelectorAll('[role="region"][aria-label], [aria-live][aria-label]')].find((r) => /caption/i.test(r.getAttribute("aria-label") || "")) || null;
+  }
+  function readCaptions(doc) {
+    const region = captionsRegion(doc);
+    if (!region) return [];
+    const blocks = [...region.querySelectorAll(":scope > div, :scope > div > div")].filter((b) => lines(b).length >= 2 && !b.querySelector(":scope > div > div > div > div > div"));
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const b of blocks) {
+      const l = lines(b);
+      const name = cleanName(l[0]);
+      const said = l.slice(1).join(" ").trim();
+      const key = `${name}|${said}`;
+      if (name && said && !seen.has(key)) {
+        seen.add(key);
+        out.push({ name, text: said });
+      }
+    }
+    return out;
+  }
+  function captionsButton(doc) {
+    return [...doc.querySelectorAll("button[aria-label]")].find((b) => /turn on captions|captions \(c\)|show captions/i.test(b.getAttribute("aria-label") || "")) || null;
+  }
+  function endScreen(doc) {
+    const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map(text);
+    return meetingEnded(texts);
+  }
+  function snapshot(doc) {
+    return { mic: micButton(doc), participants: readParticipants(doc), captions: readCaptions(doc), ended: endScreen(doc) };
+  }
+  function diagnose(doc) {
+    const s = snapshot(doc);
+    return {
+      app: "Google Meet",
+      micButton: s.mic ? `found, ${s.mic.muted ? "muted" : "unmuted"}` : "NOT found",
+      participants: s.participants.length ? `${s.participants.length} found: ${s.participants.slice(0, 6).join(", ")}` : "none found (open the People panel, or join the call first)",
+      captions: captionsRegion(doc) ? `region found, ${s.captions.length} caption block(s) now${s.captions[0] ? `, e.g. "${s.captions[0].name}"` : ""}` : "captions are not showing (turn them on with the CC button)",
+      captionsButton: captionsButton(doc) ? "found" : "not found (captions may already be on)",
+      endScreen: s.ended ? "the end-of-meeting screen is showing" : "no (normal while in a call)"
+    };
+  }
+
+  // src/adapters/generic.js
+  var generic_exports = {};
+  __export(generic_exports, {
+    diagnose: () => diagnose2,
+    endScreen: () => endScreen2,
+    micButton: () => micButton2,
+    snapshot: () => snapshot2
+  });
+  var text2 = (el) => (el?.innerText ?? el?.textContent ?? "").replace(/ /g, " ").trim();
+  var label = (el) => `${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""} ${el.getAttribute("data-tid") || ""}`.trim();
+  function micButton2(doc) {
+    const candidates = [...doc.querySelectorAll('button, [role="button"], [role="switch"]')];
+    for (const b of candidates) {
+      const l = label(b);
+      if (/(^|\b)(un-?mute)\b.{0,20}(mic|audio)?/i.test(l) && !/camera|video/i.test(l)) return { el: b, muted: true };
+      if (/turn on (your )?(microphone|mic)/i.test(l)) return { el: b, muted: true };
+    }
+    for (const b of candidates) {
+      const l = label(b);
+      if (/(^|\b)mute\b.{0,20}(mic|audio)?/i.test(l) && !/camera|video|un-?mute/i.test(l)) return { el: b, muted: false };
+      if (/turn off (your )?(microphone|mic)/i.test(l)) return { el: b, muted: false };
+      if (/microphone/i.test(l) && b.getAttribute("aria-pressed") != null) return { el: b, muted: b.getAttribute("aria-pressed") === "false" };
+    }
+    return null;
+  }
+  function endScreen2(doc) {
+    const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"]')].slice(0, 300).map(text2);
+    return meetingEnded(texts) || texts.some((t) => /^(this )?(meeting|call) (has )?(been )?ended( by (the )?host)?\.?$/i.test(t.trim()));
+  }
+  function snapshot2(doc) {
+    return { mic: micButton2(doc), participants: [], captions: [], ended: endScreen2(doc) };
+  }
+  function diagnose2(doc, name = "This meeting app") {
+    const s = snapshot2(doc);
+    return {
+      app: `${name} (experimental, generic detection)`,
+      micButton: s.mic ? `found, ${s.mic.muted ? "muted" : "unmuted"}` : "NOT found: use the manual mic switch",
+      participants: "not read for this app",
+      captions: "not read for this app",
+      endScreen: s.ended ? "the end-of-meeting screen is showing" : "no (normal while in a call)"
+    };
+  }
+
+  // src/adapters/index.js
+  var OTHER_SITES = [
+    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*"] },
+    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*"] },
+    { name: "Webex", matches: ["https://*.webex.com/*"] },
+    { name: "Whereby", matches: ["https://whereby.com/*"] },
+    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
+  ];
+  function adapterFor(hostname) {
+    if (hostname === "meet.google.com") return { id: "meet", name: "Google Meet", ...meet_exports, hasPeople: true };
+    const site = OTHER_SITES.find((s) => s.matches.some((m) => new RegExp(`^${m.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`).test(`https://${hostname}/`)));
+    return { id: "generic", name: site?.name || hostname, ...generic_exports, diagnose: (doc) => diagnose2(doc, site?.name || hostname), hasPeople: false };
+  }
+
   // src/pill.js
   (() => {
     if (window.__debriefPill) return;
+    const app = adapterFor(location.hostname);
     window.__debriefPill = true;
     const POS_KEY = "debrief.pill.pos";
     const CSS = `
@@ -118,10 +273,10 @@
         return null;
       }
     };
-    const el = (tag, cls, text) => {
+    const el = (tag, cls, text3) => {
       const e = document.createElement(tag);
       if (cls) e.className = cls;
-      if (text != null) e.textContent = text;
+      if (text3 != null) e.textContent = text3;
       return e;
     };
     const fmt = (sec) => {
@@ -131,14 +286,7 @@
       const s = String(sec % 60).padStart(2, "0");
       return h ? `${h}:${m}:${s}` : `${m}:${s}`;
     };
-    function meetMuted() {
-      const btns = [...document.querySelectorAll('button[data-is-muted], [role="button"][data-is-muted]')];
-      const mic = btns.find((b) => /microphone|mic\b/i.test(b.getAttribute("aria-label") || ""));
-      if (mic) return mic.getAttribute("data-is-muted") === "true";
-      const byLabel = [...document.querySelectorAll("button[aria-label]")].find((b) => /turn (on|off) microphone/i.test(b.getAttribute("aria-label")));
-      if (byLabel) return /turn on/i.test(byLabel.getAttribute("aria-label"));
-      return null;
-    }
+    const meetMuted = () => app.micButton(document)?.muted ?? null;
     let myTab = null;
     let S = { rec: { recording: false }, levels: null, counts: { segs: 0, errs: 0 }, follow: true };
     let host;
@@ -231,11 +379,11 @@
         st = null;
       });
     }
-    const label = (v) => v == null ? "off" : v < 3e-3 ? "silent" : v < 0.012 ? "very quiet" : "good";
+    const label2 = (v) => v == null ? "off" : v < 3e-3 ? "silent" : v < 0.012 ? "very quiet" : "good";
     function meter(name, v) {
       const box = el("div", "meter");
       const top = el("div", "top");
-      top.append(el("span", null, name), el("span", null, label(v)));
+      top.append(el("span", null, name), el("span", null, label2(v)));
       const b = el("div", "bar");
       const f = el("div", "fill" + (v != null && v < 3e-3 ? " dead" : v != null && v < 0.012 ? " low" : ""));
       f.style.width = (v == null ? 0 : Math.min(100, Math.round(Math.sqrt(v) * 160))) + "%";
@@ -337,16 +485,58 @@
         endedHits = 0;
         return;
       }
-      const texts = [...document.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map((e) => e.innerText || e.textContent);
-      endedHits = meetingEnded(texts) ? endedHits + 1 : 0;
+      endedHits = app.endScreen(document) ? endedHits + 1 : 0;
       if (endedHits === 2) send({ type: "meet-ended" });
     }
+    let lastPeople = "";
+    let lastCaps = /* @__PURE__ */ new Map();
+    let captionTries = 0;
+    function sampleMeeting() {
+      if (!S.rec.recording || S.rec.stopping || S.rec.tabId !== myTab || !app.hasPeople) return;
+      const mode = S.captionMode || "read";
+      const t = Math.max(0, (Date.now() - S.rec.startedAt) / 1e3);
+      const people = app.readParticipants(document);
+      const key = people.join("|");
+      const payload = {};
+      if (key !== lastPeople) {
+        lastPeople = key;
+        payload.names = people;
+      }
+      if (mode !== "off") {
+        if (mode === "auto" && captionTries < 3 && !app.captionsRegion(document)) {
+          const btn = app.captionsButton(document);
+          if (btn) {
+            captionTries++;
+            btn.click();
+          }
+        }
+        const fresh = [];
+        for (const c of app.readCaptions(document)) {
+          if (lastCaps.get(c.name) !== c.text) {
+            lastCaps.set(c.name, c.text);
+            fresh.push({ name: c.name, text: c.text, t });
+          }
+        }
+        if (fresh.length) payload.captions = fresh;
+      }
+      if (payload.names || payload.captions) send({ type: "meet-snap", t, ...payload });
+    }
+    chrome.runtime.onMessage.addListener((msg, _s, reply) => {
+      if (msg?.target === "page" && msg.type === "diagnose") {
+        try {
+          reply({ ok: true, diag: app.diagnose(document), site: app.name });
+        } catch (e) {
+          reply({ ok: false, error: e.message });
+        }
+      }
+    });
     async function tick() {
       if (!alive()) return shutdown();
       await load();
       render();
       reportMute();
       checkEnded();
+      sampleMeeting();
     }
     async function init() {
       document.querySelectorAll("[data-debrief]").forEach((n) => n.remove());

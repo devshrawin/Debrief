@@ -70,6 +70,22 @@
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    shareList: "",
+    // default people to share the minutes with
+    shareGroups: "",
+    // per recurring meeting: "title words | a@x.com, b@y.com"
+    shareMode: "review",
+    // review = only I get it until I press Share; auto = send to them too
+    shareHow: "to",
+    // to | cc | bcc
+    shareDomains: false,
+    // script helper: allow whole company domains instead of single addresses
+    calendarLookup: true,
+    // ask the relay who was invited (needs the calendar permission)
+    meetCaptions: "read",
+    // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
+    otherSites: false,
+    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -277,6 +293,23 @@
     b.dataset.armed = "";
     b.textContent = "Clear all";
     renderRecent();
+  };
+  $("diagnose").onclick = async (e) => {
+    e.preventDefault();
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    $("diagResult").textContent = "Checking\u2026";
+    try {
+      const r = await chrome.tabs.sendMessage(tab.id, { target: "page", type: "diagnose" });
+      if (!r?.ok) throw new Error(r?.error || "no answer");
+      $("diagResult").innerHTML = "";
+      const ul = document.createElement("div");
+      ul.style.cssText = "margin-top:6px;line-height:1.5";
+      ul.textContent = Object.entries({ Site: r.site, ...r.diag }).map(([k, v]) => `${k}: ${v}`).join("\n");
+      ul.style.whiteSpace = "pre-wrap";
+      $("diagResult").append(ul);
+    } catch {
+      $("diagResult").textContent = "Open a Meet (or enabled meeting site) tab and reload it once, then try again.";
+    }
   };
   $("alertX").onclick = () => send({ type: "dismiss-alert" }).then(refresh);
   $("start").onclick = async () => {

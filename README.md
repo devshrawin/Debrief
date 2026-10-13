@@ -45,6 +45,23 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 | **Manage meetings** | Delete a single meeting or clear them all from the popup. |
 | **Private** | Everything goes straight from Chrome to the provider you choose. No server of ours, ever. |
 
+## New in Pro
+
+This branch (`pro`) adds, on top of everything above:
+
+| | |
+|---|---|
+| **Names that are right** | A personal dictionary (`Amal | Aman`) corrects misheard names in the transcript and feeds the speech and minutes models. A per-meeting attendee list makes it smart: "Aman" becomes "Amal" only if Amal is in the meeting and Aman is not. Fix a name once on the minutes page and it is remembered. |
+| **Minutes that leave nothing out** | *Thorough* mode reads the transcript window by window to extract every decision, action, question and risk, writes the minutes with that checklist, then audits the result against the transcript and appends anything missing. Every action item carries a timestamp and a quote so you can verify it. Invented owners are dropped when the transcript does not name them. A coverage warning appears if audio could not be transcribed. |
+| **Attendance** | The minutes include an attendance table: invited (from your Google Calendar through your relay script) against who was actually seen in the meeting, with late joiners, early leavers, absentees and uninvited guests. Action items for absent people are flagged. |
+| **Speaker names** | Meet's live captions are read for who was speaking when, and given to the minutes writer to attribute statements. *Check page detection* in the popup shows what Debrief can read from your Meet page. |
+| **Share with your team** | Recipient lists, per recurring meeting. You get the email first; press **Share** after checking it, or let it go to everyone automatically. To / Cc / Bcc, replies come to you, and the script only mails people you allow (single addresses or whole company domains). |
+| **Usage** | A Usage page counts requests, tokens, audio minutes and quota hits per model (today, 7 and 30 days), learns daily limits from Google's own error messages, and warns in the popup at 80%. |
+| **Local models** | One-click presets for Ollama and local Whisper servers, an installed-model picker, context-length advice, and smaller reading windows for small models. See the [local models guide](docs/LOCAL.md). |
+| **Other meeting apps (experimental)** | Optional generic detection for Teams, Zoom web, Webex, Whereby and Jitsi: mute follow and end-of-call detection. |
+
+Not in Pro yet: voice enrolment ("recognise Amal by voice"). It needs a speaker-recognition model and finer time-stamped chunks, and cannot be checked without real recordings of your team, so it is left for a later release. Speaker names from Meet's captions cover the common case without it.
+
 ## Quick start
 
 You need Chrome 116+ and Node.js (only to build).
@@ -171,6 +188,12 @@ src/
   llm.js          MOM generation (Gemini / Claude / OpenAI-compatible), streaming
   mailer.js       builds and sends the MOM email through the Apps Script relay
   noise.js        looped-filler detector
+  dictionary.js   names and terms, attendee-aware correction, suggestions
+  minutes.js      the multi-pass minutes pipeline
+  attendance.js   invited vs present matching and the attendance table
+  usage.js        request/token/audio counters and limit learning
+  local.js        Ollama / local Whisper helpers
+  adapters/       page readers: Meet, and a generic one for other meeting apps
   alerts.js       quota / key error classifier
   pill.js         optional on-page Meet pill (content script)
   popup.js        popup UI
@@ -193,6 +216,8 @@ The manifest pins the extension ID (`nckojmcchehoejdfklcmllhpekagiddo`) with a `
 - Speaker names from Meet's active-speaker indicator
 - Auto-retry of kept chunks the moment quota resets
 - Slack / Teams / WhatsApp delivery of the MOM
+- Voice enrolment for closed groups
+- Verified selectors for Meet captions and participants on live calls
 
 ---
 

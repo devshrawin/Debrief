@@ -1,7 +1,9 @@
 import { DEFAULTS, getSettings, saveSettings } from './store.js';
 import { generate } from './llm.js';
-import { sendMail, mailReady } from './mailer.js';
+import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, allowListLines } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
+import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvice, explain } from './local.js';
+import { OTHER_SITES } from './adapters/index.js';
 import { summarize, parseLimits, parsePrices, estimateCost, dayKey } from './usage.js';
 
 const $ = (id) => document.getElementById(id);
@@ -14,6 +16,7 @@ function read() {
     if (!el) continue;
     s[k] = el.type === 'checkbox' ? el.checked : el.value.trim();
   }
+  s.shareMode = $('shareAuto').checked ? 'auto' : 'review';
   return s;
 }
 
@@ -154,6 +157,80 @@ $('grantMic').onclick = async () => {
   micStatus();
 };
 
+// ---- other meeting sites ----
+const SITE_ORIGINS = OTHER_SITES.flatMap((s) => s.matches);
+async function siteStatus() {
+  const granted = await chrome.permissions.contains({ origins: SITE_ORIGINS }).catch(() => false);
+  $('siteStatus').textContent = granted ? 'Enabled for ' + OTHER_SITES.map((s) => s.name).join(', ') : 'Off';
+  $('enableSites').disabled = granted;
+  $('disableSites').disabled = !granted;
+}
+$('enableSites').onclick = async () => {
+  const ok = await chrome.permissions.request({ origins: SITE_ORIGINS });
+  if (!ok) {
+    $('siteStatus').textContent = 'Chrome permission was not granted.';
+    return;
+  }
+  await chrome.runtime.sendMessage({ target: 'bg', type: 'sites', on: true, matches: SITE_ORIGINS });
+  siteStatus();
+};
+$('disableSites').onclick = async () => {
+  await chrome.runtime.sendMessage({ target: 'bg', type: 'sites', on: false });
+  await chrome.permissions.remove({ origins: SITE_ORIGINS }).catch(() => {});
+  siteStatus();
+};
+
+// ---- local models ----
+$('useOllama').onclick = () => {
+  $('llmProvider').value = 'openai';
+  showProviderFields();
+  $('oaBase').value = OLLAMA_BASE;
+  $('oaKey').value = '';
+  $('localStatus').textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
+};
+
+$('findOllama').onclick = async () => {
+  $('localStatus').textContent = 'Looking for Ollama…';
+  const base = $('oaBase').value.trim() || OLLAMA_BASE;
+  const r = await listOllamaModels(base);
+  if (!r.ok) {
+    $('ollamaPick').classList.add('hidden');
+    $('localStatus').textContent = r.message;
+    return;
+  }
+  const sel = $('ollamaModels');
+  sel.replaceChildren(...r.models.map((m) => Object.assign(document.createElement('option'), { value: m.name, textContent: `${m.name}${m.sizeGB ? ` (${m.sizeGB} GB)` : ''}` })));
+  if (r.models.some((m) => m.name === $('oaModel').value)) sel.value = $('oaModel').value;
+  $('ollamaPick').classList.remove('hidden');
+  const pick = async () => {
+    $('oaBase').value = base;
+    $('oaModel').value = sel.value;
+    const ctx = await ollamaContext(sel.value, base);
+    $('localStatus').textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
+  };
+  sel.onchange = pick;
+  await pick();
+};
+
+$('useWhisper').onclick = () => {
+  $('sttProvider').value = 'openai';
+  showProviderFields();
+  $('sttBase').value = WHISPER_BASE;
+  $('sttKey').value = '';
+  $('whisperStatus').textContent = 'Set to http://localhost:8000/v1. Change the address if your server uses another port.';
+};
+
+$('testWhisper').onclick = async () => {
+  $('whisperStatus').textContent = 'Testing…';
+  const base = ($('sttBase').value.trim() || WHISPER_BASE).replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(6000) });
+    $('whisperStatus').textContent = res.ok ? 'The server answered ✓' : explain(null, res.status, 'The server');
+  } catch (e) {
+    $('whisperStatus').textContent = explain(e, 0, 'the server');
+  }
+};
+
 $('testLlm').onclick = async () => {
   $('llmStatus').textContent = 'Testing…';
   try {
@@ -184,6 +261,22 @@ async function updateGuide() {
   const done = { g1: !!s.geminiKey || (s.sttProvider !== 'gemini' && s.llmProvider !== 'gemini'), g2: mic, g3: !!s.myName, g4: mailReady(s) };
   for (const [id, ok] of Object.entries(done)) $(id)?.classList.toggle('done', ok);
 }
+
+// People to allow in the script: default list plus every recurring-meeting list.
+function allAllowed() {
+  return parseAddresses([$('shareList').value, ...parseGroups($('shareGroups').value).map((g) => g.list.join(','))].join(','));
+}
+function renderAllow() {
+  const l = allowListLines(allAllowed(), { domains: $('shareDomains').checked });
+  $('allowLines').textContent = `const ALLOWED = ${l.allowed};\nconst ALLOWED_DOMAINS = ${l.domains};`;
+}
+['shareList', 'shareGroups'].forEach((id) => ($(id).oninput = renderAllow));
+$('shareDomains').onchange = renderAllow;
+$('copyScriptAllow').onclick = async () => {
+  await navigator.clipboard.writeText(scriptWithAllowList(scriptText, allAllowed(), { domains: $('shareDomains').checked }));
+  $('copyAllowMsg').textContent = 'Copied. Paste it over your script, save, then deploy a new version.';
+  setTimeout(() => ($('copyAllowMsg').textContent = ''), 6000);
+};
 
 $('scriptText').textContent = scriptText;
 $('copyScript').onclick = async () => {
@@ -220,9 +313,12 @@ $('testMail').onclick = async () => {
     if (el.type === 'checkbox') el.checked = !!s[k];
     else el.value = s[k];
   }
+  $('shareAuto').checked = s.shareMode === 'auto';
   showProviderFields();
+  renderAllow();
   micStatus();
   updateGuide();
   renderUsage();
+  siteStatus();
   showTab(location.hash.slice(1) || 'start');
 })();

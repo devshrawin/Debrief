@@ -7,7 +7,7 @@ import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
 import { buildSystemPrompt, buildUserPrompt, formatTranscript } from './prompt.js';
-import { buildEmail, sendMail, mailReady, wordDocHtml } from './mailer.js';
+import { buildEmail, sendMail, mailReady, wordDocHtml, parseAddresses, recipientsFor, inviteeEmails, lookupInvitees } from './mailer.js';
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get('id');
@@ -161,6 +161,7 @@ async function emailMom(auto) {
     const r = await sendMail(mail, settings);
     meeting.emailedAt = Date.now();
     meeting.emailedTo = r.to;
+    if (auto && settings.shareMode === 'auto' && !meeting.sharedAt) shareMom(true).catch(() => {});
     await saveMeeting(meeting);
     $('mailStatus').textContent = `Emailed to ${r.to} ✓`;
     $('mail').textContent = 'Email again';
@@ -170,6 +171,91 @@ async function emailMom(auto) {
   } finally {
     $('mail').disabled = false;
   }
+}
+
+// ---- sharing with other people ----
+function absentNames() {
+  return matchPeople(meeting.invited, meeting.presence, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name || r.email);
+}
+
+function initShare() {
+  const saved = meeting.shareTo;
+  const r = recipientsFor(meeting, settings);
+  $('shareTo').value = (saved || r.list).join(', ');
+  $('shareSrc').textContent = saved ? 'Last used for this meeting.' : r.list.length ? `Filled in from ${r.source}.` : 'Add the people who should get a copy.';
+  $('shareHowSel').value = settings.shareHow || 'to';
+  const hasInv = (meeting.invited || []).some((p) => p.email);
+  $('shareInvited').classList.toggle('hidden', !hasInv);
+  $('shareAbsent').classList.toggle('hidden', !hasInv || !meeting.presence);
+  if (meeting.sharedAt) $('shareStatus').textContent = `Shared with ${(meeting.sharedTo || []).join(', ')} ✓`;
+}
+
+async function shareMom(auto) {
+  if (!meeting.mom?.trim()) {
+    $('shareStatus').textContent = 'No minutes to share yet.';
+    return;
+  }
+  if (!mailReady(settings)) {
+    $('shareStatus').textContent = 'Email is not set up. Add the Apps Script URL in Settings.';
+    return;
+  }
+  const list = parseAddresses($('shareTo').value || (auto ? recipientsFor(meeting, settings).list.join(',') : ''));
+  if (!list.length) {
+    $('shareStatus').textContent = auto ? '' : 'Add at least one email address.';
+    return;
+  }
+  const how = auto ? settings.shareHow || 'to' : $('shareHowSel').value;
+  $('shareSend').disabled = true;
+  $('shareStatus').textContent = `Sending to ${list.length} ${list.length === 1 ? 'person' : 'people'}…`;
+  try {
+    const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
+    const r = await sendMail(mail, settings, { to: how === 'to' ? list.join(',') : '', cc: how === 'cc' ? list.join(',') : '', bcc: how === 'bcc' ? list.join(',') : '' });
+    const sent = [...(r.to && how === 'to' ? String(r.to).split(',') : []), ...(r.cc || []), ...(r.bcc || [])];
+    meeting.sharedAt = Date.now();
+    meeting.sharedTo = sent;
+    meeting.shareTo = list;
+    await saveMeeting(meeting);
+    $('shareStatus').textContent = r.skipped?.length
+      ? `Sent to ${sent.join(', ') || 'nobody'}. Not allowed by your script: ${r.skipped.join(', ')}. Add them under Settings → Email → Sharing, copy the updated script and deploy a new version.`
+      : `Shared with ${sent.join(', ')} ✓`;
+  } catch (e) {
+    $('shareStatus').textContent = `Share failed: ${e.message}`;
+  } finally {
+    $('shareSend').disabled = false;
+  }
+}
+
+const addTo = (emails) => ($('shareTo').value = parseAddresses(`${$('shareTo').value},${emails.join(',')}`).join(', '));
+$('shareSend').onclick = () => shareMom(false);
+$('shareInvited').onclick = () => addTo(inviteeEmails(meeting));
+$('shareAbsent').onclick = () => addTo(inviteeEmails(meeting, { absentOnly: true, absentNames: absentNames() }));
+
+// Who was invited, from the calendar through the relay. Quiet if it is not set up or not permitted yet.
+async function ensureInvited() {
+  if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
+  try {
+    const guests = await lookupInvitees(meeting, settings);
+    if (guests) meeting.invited = guests;
+    meeting.invitedChecked = true;
+  } catch (e) {
+    meeting.invitedError = e.message;
+  }
+  await saveMeeting(meeting);
+}
+
+// Pre-fill the attendee list: who was actually seen (matched to calendar names), else who was invited.
+function ensureAttendees() {
+  if (meeting.attendees?.length) return;
+  const entries = parseDictionary(settings.dictionary);
+  const presence = Object.entries(meeting.presence || {}).map(([name]) => (/^you$/i.test(name) && settings.myName ? settings.myName : name));
+  let names = [];
+  if (presence.length) {
+    const m = matchPeople(meeting.invited, meeting.presence, { entries, myName: settings.myName });
+    names = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
+  } else if (meeting.invited?.length) {
+    names = meeting.invited.filter((p) => p.status !== 'no').map((p) => p.name || p.email.split('@')[0]);
+  }
+  if (names.length) meeting.attendees = [...new Set(names)];
 }
 
 const sleep = (ms, signal) =>
@@ -332,8 +418,11 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     document.querySelector('main').innerHTML = '<p>Meeting not found.</p>';
     return;
   }
+  await ensureInvited();
+  ensureAttendees();
   $('notes').value = meeting.notes || '';
   $('attendees').value = (meeting.attendees || []).join('\n');
+  initShare();
   renderMeta();
   renderErrors();
   renderTranscript();
