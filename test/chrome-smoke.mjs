@@ -253,6 +253,49 @@ try {
   })()`);
   check('auto-stop: end screen stops, long silence stops, sound keeps going, setting off ignores', stopTest.afterEnd === false && stopTest.afterQuiet === false && stopTest.afterLoud === true && stopTest.afterDisabled === true, JSON.stringify(stopTest));
 
+  // ---- Pro: usage page, dictionary + name tools on the MOM page, sharing box, detection check ----
+  const proOpts = await opts.evaluate(`(async () => {
+    const send = (m) => chrome.runtime.sendMessage({ target: 'bg', ...m });
+    await send({ type: 'usage', entry: { provider: 'gemini', model: 'gemini-3.8-flash', kind: 'llm', req: 17, tin: 1200, tout: 300 } });
+    await send({ type: 'usage', entry: { provider: 'gemini', model: 'gemini-3.8-flash', kind: 'llm', req: 1, fail: true, rl: true, learned: { model: 'gemini-3.8-flash', limit: 20 } } });
+    await new Promise((r) => setTimeout(r, 600));
+    document.querySelector('#nav button[data-tab=usage]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const rows = [...document.querySelectorAll('#usageTable tbody tr')].map((r) => r.textContent);
+    return { rows, totals: document.getElementById('usageTotals').textContent, active: document.getElementById('page-usage').classList.contains('active'),
+      dict: !!document.getElementById('dictionary'), share: !!document.getElementById('shareList') && !!document.getElementById('copyScriptAllow'), local: !!document.getElementById('useOllama') && !!document.getElementById('useWhisper'), sites: !!document.getElementById('enableSites'), mode: !!document.getElementById('minutesMode') };
+  })()`);
+  check('usage page shows counted requests and the learned limit', proOpts.active && proOpts.rows.some((r) => /gemini . gemini-3.8-flash/.test(r) && /Minutes/.test(r) && /of 20/.test(r)) && /[0-9]+ requests/.test(proOpts.totals), JSON.stringify(proOpts));
+  check('settings has dictionary, sharing, local presets, other sites, minutes mode', proOpts.dict && proOpts.share && proOpts.local && proOpts.sites && proOpts.mode);
+
+  const popupWarn = await popup.evaluate(`(async () => { await new Promise((r) => setTimeout(r, 300)); location.reload(); })()`);
+  await sleep(1500);
+  check('popup warns when a model is near its daily limit', await popup.evaluate(`!document.getElementById('usageWarn').classList.contains('hidden') && /gemini-3.8-flash: [0-9]+ of 20/.test(document.getElementById('usageWarnText').textContent)`));
+
+  // MOM page: attendee-aware names, fix-everywhere tool, share box
+  await mom.evaluate(`(async () => { location.reload(); })()`);
+  await sleep(1500);
+  const momPro = await mom.evaluate(`(async () => {
+    const q = (id) => document.getElementById(id);
+    q('attendees').value = ['Rahul Verma', 'Amal Raj'].join(String.fromCharCode(10));
+    q('attendees').dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 300));
+    const shareBox = !!q('shareBox') && !!q('shareSend');
+    q('fixWrong').value = 'deployment';
+    q('fixRight').value = 'rollout';
+    q('fixRemember').checked = true;
+    q('fixApply').click();
+    await new Promise((r) => setTimeout(r, 600));
+    const meeting = (await chrome.storage.local.get('meeting:mtest'))['meeting:mtest'];
+    const settings = (await chrome.storage.local.get('settings')).settings;
+    return { shareBox, attendees: meeting.attendees, seg: meeting.segments[1].text, dict: settings.dictionary, msg: q('fixMsg').textContent, shown: q('transcript').textContent };
+  })()`);
+  check('MOM page: attendees saved, fix-a-name replaces everywhere and is remembered', momPro.shareBox && momPro.attendees?.[1] === 'Amal Raj' && /rollout/.test(momPro.seg) && /rollout \| deployment/.test(momPro.dict) && /rollout/.test(momPro.shown), JSON.stringify(momPro));
+
+  // Page-reader check (the popup link) answers from a content script
+  const diag = await opts.evaluate(`chrome.runtime.sendMessage({ target: 'bg', type: 'pill-state' }).then((r) => ({ ok: r.ok, captionMode: r.captionMode, hasRec: !!r.rec }))`);
+  check('pill-state carries the caption mode', diag.ok && diag.captionMode === 'read', JSON.stringify(diag));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);

@@ -81,6 +81,18 @@
       <button id="print">Print / PDF</button>
       <button id="mail" title="Send this MOM to your email">Email me</button>
     </div>
+    <details class="no-print" id="shareBox" style="margin:10px 0">
+      <summary>Share these minutes with others</summary>
+      <p class="hint" id="shareSrc"></p>
+      <textarea id="shareTo" rows="2" placeholder="priya@company.com, ravi@company.com"></textarea>
+      <div class="row" style="margin-top:8px">
+        <select id="shareHowSel" style="width:auto"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc</option></select>
+        <button id="shareInvited" class="hidden">Add everyone invited</button>
+        <button id="shareAbsent" class="hidden">Add people who were absent</button>
+        <button id="shareSend" class="primary">Share</button>
+        <span id="shareStatus" class="hint"></span>
+      </div>
+    </details>
     <article id="mom"><p class="muted">No minutes yet.</p></article>
     <textarea id="mdEdit" class="hidden"></textarea>
   </div>

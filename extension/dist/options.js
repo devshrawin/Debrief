@@ -1182,6 +1182,22 @@
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    shareList: "",
+    // default people to share the minutes with
+    shareGroups: "",
+    // per recurring meeting: "title words | a@x.com, b@y.com"
+    shareMode: "review",
+    // review = only I get it until I press Share; auto = send to them too
+    shareHow: "to",
+    // to | cc | bcc
+    shareDomains: false,
+    // script helper: allow whole company domains instead of single addresses
+    calendarLookup: true,
+    // ask the relay who was invited (needs the calendar permission)
+    meetCaptions: "read",
+    // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
+    otherSites: false,
+    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -14527,7 +14543,7 @@ _(Output hit the length limit and was cut off.)_`;
 
   // src/mailer.js
   var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
-  async function sendMail(mail, settings) {
+  async function callRelay(payload, settings) {
     if (!mailReady(settings)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
     let res;
     try {
@@ -14537,7 +14553,7 @@ _(Output hit the length limit and was cut off.)_`;
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         redirect: "follow",
         signal: AbortSignal.timeout(6e4),
-        body: JSON.stringify({ to: settings.emailTo || "", ...mail })
+        body: JSON.stringify(payload)
       });
     } catch (e) {
       throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
@@ -14554,9 +14570,209 @@ _(Output hit the length limit and was cut off.)_`;
     if (!j.ok) throw new Error(j.error || "The mail relay refused the request.");
     return j;
   }
+  function sendMail(mail, settings, who = {}) {
+    return callRelay({ to: who.to ?? settings.emailTo ?? "", cc: who.cc || "", bcc: who.bcc || "", ...mail }, settings);
+  }
+  var EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+  function parseAddresses(text) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const raw of String(text || "").split(/[\s,;]+/)) {
+      const a = raw.trim().replace(/^<|>$/g, "");
+      if (EMAIL.test(a) && !seen.has(a.toLowerCase())) {
+        seen.add(a.toLowerCase());
+        out.push(a);
+      }
+    }
+    return out;
+  }
+  function parseGroups(text) {
+    const out = [];
+    for (const line of String(text || "").split(/\r?\n/)) {
+      const [match, rest] = line.split("|");
+      if (!rest || !match.trim()) continue;
+      const list = parseAddresses(rest);
+      if (list.length) out.push({ match: match.trim().toLowerCase(), list });
+    }
+    return out;
+  }
+  function allowListLines(addresses, { domains = false } = {}) {
+    const q = (x) => `'${String(x).replace(/'/g, "'")}'`;
+    const list = parseAddresses(addresses.join(","));
+    if (domains) {
+      const ds = [...new Set(list.map((a) => a.split("@")[1].toLowerCase()))];
+      return { allowed: "[]", domains: `[${ds.map(q).join(", ")}]` };
+    }
+    return { allowed: `[${list.map(q).join(", ")}]`, domains: "[]" };
+  }
+  function scriptWithAllowList(scriptText, addresses, opts) {
+    const { allowed, domains } = allowListLines(addresses, opts);
+    return scriptText.replace(/const ALLOWED = \[[^\]]*\];/, `const ALLOWED = ${allowed};`).replace(/const ALLOWED_DOMAINS = \[[^\]]*\];/, `const ALLOWED_DOMAINS = ${domains};`);
+  }
 
   // apps-script/Code.gs
-  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\r\n//\r\n// Setup:  paste this whole file into a new project at script.google.com, then\r\n//         Deploy > New deployment > Web app > Who has access: Anyone > Deploy.\r\n//         Copy the Web app URL into Debrief > Settings > Email the MOM.\r\n//\r\n// Safety: mail only ever goes to YOUR address (plus anything you list in ALLOWED), whatever the\r\n// request says, and the web app URL is a long secret that only Debrief knows.\r\n\r\nconst ALLOWED = []; // optional extra recipients, e.g. ['team@company.com']\r\n\r\nfunction doGet() {\r\n  return out({ ok: true, message: 'Debrief mail relay is live.', version: 4 });\r\n}\r\n\r\nfunction doPost(e) {\r\n  try {\r\n    const d = JSON.parse(e.postData.contents);\r\n\r\n    const me = Session.getEffectiveUser().getEmail();\r\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\r\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\r\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\r\n    const recipients = to.length ? to.join(',') : me;\r\n\r\n    const attachments = (d.attachments || []).map(function (a) {\r\n      const name = a.name || 'attachment.txt';\r\n      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).\r\n      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);\r\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);\r\n    });\r\n    MailApp.sendEmail({\r\n      to: recipients,\r\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\r\n      body: String(d.text || ''),\r\n      htmlBody: String(d.html || ''),\r\n      attachments: attachments,\r\n      name: 'Debrief',\r\n    });\r\n    return out({ ok: true, to: recipients });\r\n  } catch (err) {\r\n    return out({ ok: false, error: String(err) });\r\n  }\r\n}\r\n\r\nfunction out(o) {\r\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\r\n}\r\n";
+  var Code_default = `// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.
+//
+// Setup:  paste this whole file into a new project at script.google.com, then
+//         Deploy > New deployment > Web app > Who has access: Anyone > Deploy.
+//         Copy the Web app URL into Debrief > Settings > Email.
+//
+// After you change this file later: Deploy > Manage deployments > pencil > Version: New version > Deploy.
+// The first time (and whenever Google asks for new permissions), pick the function "authorize" in the
+// toolbar and press Run once, then allow access. That grants email sending and calendar reading.
+//
+// Safety: mail only ever goes to YOUR address plus the people you list below, whatever a request
+// says, and the web app URL is a long secret that only Debrief knows.
+
+const ALLOWED = []; // people you want to be able to share minutes with, e.g. ['priya@company.com']
+const ALLOWED_DOMAINS = []; // or everyone at a company, e.g. ['company.com']
+
+function doGet() {
+  return out({ ok: true, message: 'Debrief mail relay is live.', version: 5 });
+}
+
+function authorize() {
+  CalendarApp.getDefaultCalendar();
+  MailApp.getRemainingDailyQuota();
+}
+
+function doPost(e) {
+  try {
+    const d = JSON.parse(e.postData.contents);
+    if (d.action === 'invitees') return findInvitees(d);
+
+    const me = Session.getEffectiveUser().getEmail();
+    const pick = function (list) {
+      const wanted = String(list || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      const ok = [];
+      const skipped = [];
+      wanted.forEach(function (a) {
+        (isAllowed(a, me) ? ok : skipped).push(a);
+      });
+      return { ok: ok, skipped: skipped };
+    };
+    const to = pick(d.to);
+    const cc = pick(d.cc);
+    const bcc = pick(d.bcc);
+    const recipients = to.ok.length ? to.ok.join(',') : (cc.ok.length || bcc.ok.length ? '' : me);
+
+    const attachments = (d.attachments || []).map(function (a) {
+      const name = a.name || 'attachment.txt';
+      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).
+      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);
+      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);
+    });
+    const options = {
+      to: recipients || me,
+      subject: String(d.subject || 'Debrief MOM').slice(0, 250),
+      body: String(d.text || ''),
+      htmlBody: String(d.html || ''),
+      attachments: attachments,
+      name: 'Debrief',
+      replyTo: me,
+    };
+    if (cc.ok.length) options.cc = cc.ok.join(',');
+    if (bcc.ok.length) options.bcc = bcc.ok.join(',');
+    MailApp.sendEmail(options);
+    return out({ ok: true, to: options.to, cc: cc.ok, bcc: bcc.ok, skipped: to.skipped.concat(cc.skipped, bcc.skipped) });
+  } catch (err) {
+    return out({ ok: false, error: String(err) });
+  }
+}
+
+function isAllowed(address, me) {
+  const a = String(address).toLowerCase();
+  if (a === String(me).toLowerCase()) return true;
+  if (ALLOWED.some(function (x) { return String(x).toLowerCase() === a; })) return true;
+  const domain = a.split('@')[1] || '';
+  return ALLOWED_DOMAINS.some(function (x) { return String(x).toLowerCase() === domain; });
+}
+
+// Finds the calendar event for this meeting (by Meet code in its description or location, else by title)
+// and returns who was invited and what they replied.
+function findInvitees(d) {
+  const start = new Date(Number(d.start) - 45 * 60000);
+  const end = new Date(Number(d.end) + 45 * 60000);
+  const code = String(d.code || '').toLowerCase();
+  const title = String(d.title || '').toLowerCase();
+  let best = null;
+  CalendarApp.getDefaultCalendar().getEvents(start, end).forEach(function (ev) {
+    const where = (ev.getLocation() + ' ' + ev.getDescription()).toLowerCase();
+    if (code && where.indexOf(code) >= 0) best = ev;
+    else if (!best && title && ev.getTitle().toLowerCase() === title) best = ev;
+  });
+  if (!best) return out({ ok: true, found: false, guests: [] });
+  const status = function (g) {
+    const s = String(g.getGuestStatus()).toLowerCase();
+    return s.indexOf('yes') >= 0 ? 'yes' : s.indexOf('no') >= 0 && s.indexOf('not') < 0 ? 'no' : s.indexOf('maybe') >= 0 ? 'maybe' : 'invited';
+  };
+  const guests = best.getGuestList(true).map(function (g) {
+    return { name: g.getName() || '', email: g.getEmail(), status: status(g) };
+  });
+  const me = Session.getEffectiveUser().getEmail();
+  if (!guests.some(function (g) { return String(g.email).toLowerCase() === String(me).toLowerCase(); })) guests.push({ name: '', email: me, status: 'owner' });
+  return out({ ok: true, found: true, title: best.getTitle(), guests: guests });
+}
+
+function out(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+`;
+
+  // src/local.js
+  var OLLAMA_BASE = "http://localhost:11434/v1";
+  var WHISPER_BASE = "http://localhost:8000/v1";
+  function explain(err, status, what = "Ollama") {
+    if (status === 403) return `${what} refused the extension. Start it with the environment variable OLLAMA_ORIGINS=chrome-extension://* (see the local models guide), then restart it.`;
+    if (status === 404) return `${what} answered but this address is wrong. For Ollama use http://localhost:11434/v1.`;
+    if (status) return `${what} answered with HTTP ${status}.`;
+    const m = String(err?.message || err || "");
+    if (/failed to fetch|networkerror|load failed|connection|refused/i.test(m)) return `Could not reach ${what}. Is it running? For Ollama, start it with "ollama serve", and allow the extension with OLLAMA_ORIGINS=chrome-extension://*.`;
+    return `${what}: ${m || "unknown error"}`;
+  }
+  var origin = (base) => new URL(base).origin;
+  async function listOllamaModels(base = OLLAMA_BASE, fetchFn = fetch) {
+    let res;
+    try {
+      res = await fetchFn(`${origin(base)}/api/tags`, { signal: AbortSignal.timeout(6e3) });
+    } catch (e) {
+      return { ok: false, message: explain(e) };
+    }
+    if (!res.ok) return { ok: false, message: explain(null, res.status) };
+    const j = await res.json().catch(() => ({}));
+    const models = (j.models || []).map((m) => ({ name: m.name, sizeGB: Math.round((m.size || 0) / 1e9 * 10) / 10 }));
+    if (!models.length) return { ok: false, message: "Ollama is running but has no models yet. Install one, for example: ollama pull gemma3" };
+    return { ok: true, models };
+  }
+  async function ollamaContext(model, base = OLLAMA_BASE, fetchFn = fetch) {
+    try {
+      const res = await fetchFn(`${origin(base)}/api/show`, { method: "POST", body: JSON.stringify({ model, name: model }), signal: AbortSignal.timeout(6e3) });
+      if (!res.ok) return null;
+      const j = await res.json();
+      const set = Number((String(j.parameters || "").match(/num_ctx\s+(\d+)/) || [])[1]);
+      const max = Object.entries(j.model_info || {}).find(([k]) => k.endsWith(".context_length"))?.[1];
+      return { configured: set || null, max: max ? Number(max) : null };
+    } catch {
+      return null;
+    }
+  }
+  var wordsForContext = (tokens) => Math.max(500, Math.floor(tokens * 0.45));
+  function contextAdvice(ctx, transcriptWords = 9e3) {
+    if (!ctx) return "";
+    const have = ctx.configured || 4096;
+    const need = Math.ceil(transcriptWords / 0.45);
+    if (have >= need) return `Context length ${have} tokens is enough for about ${wordsForContext(have)} words of transcript.`;
+    return `Context length is ${ctx.configured ? ctx.configured : "Ollama's default (about 4096)"} tokens, enough for roughly ${wordsForContext(have)} words. A one-hour meeting can reach ${transcriptWords} words, and Ollama silently cuts off what does not fit. Set OLLAMA_CONTEXT_LENGTH=16384 (or more) and restart Ollama.`;
+  }
+
+  // src/adapters/index.js
+  var OTHER_SITES = [
+    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*"] },
+    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*"] },
+    { name: "Webex", matches: ["https://*.webex.com/*"] },
+    { name: "Whereby", matches: ["https://whereby.com/*"] },
+    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
+  ];
 
   // src/options.js
   var $ = (id) => document.getElementById(id);
@@ -14568,6 +14784,7 @@ _(Output hit the length limit and was cut off.)_`;
       if (!el) continue;
       s[k] = el.type === "checkbox" ? el.checked : el.value.trim();
     }
+    s.shareMode = $("shareAuto").checked ? "auto" : "review";
     return s;
   }
   function showTab(name) {
@@ -14694,6 +14911,74 @@ _(Output hit the length limit and was cut off.)_`;
     }
     micStatus();
   };
+  var SITE_ORIGINS = OTHER_SITES.flatMap((s) => s.matches);
+  async function siteStatus() {
+    const granted = await chrome.permissions.contains({ origins: SITE_ORIGINS }).catch(() => false);
+    $("siteStatus").textContent = granted ? "Enabled for " + OTHER_SITES.map((s) => s.name).join(", ") : "Off";
+    $("enableSites").disabled = granted;
+    $("disableSites").disabled = !granted;
+  }
+  $("enableSites").onclick = async () => {
+    const ok = await chrome.permissions.request({ origins: SITE_ORIGINS });
+    if (!ok) {
+      $("siteStatus").textContent = "Chrome permission was not granted.";
+      return;
+    }
+    await chrome.runtime.sendMessage({ target: "bg", type: "sites", on: true, matches: SITE_ORIGINS });
+    siteStatus();
+  };
+  $("disableSites").onclick = async () => {
+    await chrome.runtime.sendMessage({ target: "bg", type: "sites", on: false });
+    await chrome.permissions.remove({ origins: SITE_ORIGINS }).catch(() => {
+    });
+    siteStatus();
+  };
+  $("useOllama").onclick = () => {
+    $("llmProvider").value = "openai";
+    showProviderFields();
+    $("oaBase").value = OLLAMA_BASE;
+    $("oaKey").value = "";
+    $("localStatus").textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
+  };
+  $("findOllama").onclick = async () => {
+    $("localStatus").textContent = "Looking for Ollama\u2026";
+    const base = $("oaBase").value.trim() || OLLAMA_BASE;
+    const r = await listOllamaModels(base);
+    if (!r.ok) {
+      $("ollamaPick").classList.add("hidden");
+      $("localStatus").textContent = r.message;
+      return;
+    }
+    const sel = $("ollamaModels");
+    sel.replaceChildren(...r.models.map((m) => Object.assign(document.createElement("option"), { value: m.name, textContent: `${m.name}${m.sizeGB ? ` (${m.sizeGB} GB)` : ""}` })));
+    if (r.models.some((m) => m.name === $("oaModel").value)) sel.value = $("oaModel").value;
+    $("ollamaPick").classList.remove("hidden");
+    const pick = async () => {
+      $("oaBase").value = base;
+      $("oaModel").value = sel.value;
+      const ctx = await ollamaContext(sel.value, base);
+      $("localStatus").textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
+    };
+    sel.onchange = pick;
+    await pick();
+  };
+  $("useWhisper").onclick = () => {
+    $("sttProvider").value = "openai";
+    showProviderFields();
+    $("sttBase").value = WHISPER_BASE;
+    $("sttKey").value = "";
+    $("whisperStatus").textContent = "Set to http://localhost:8000/v1. Change the address if your server uses another port.";
+  };
+  $("testWhisper").onclick = async () => {
+    $("whisperStatus").textContent = "Testing\u2026";
+    const base = ($("sttBase").value.trim() || WHISPER_BASE).replace(/\/+$/, "");
+    try {
+      const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(6e3) });
+      $("whisperStatus").textContent = res.ok ? "The server answered \u2713" : explain(null, res.status, "The server");
+    } catch (e) {
+      $("whisperStatus").textContent = explain(e, 0, "the server");
+    }
+  };
   $("testLlm").onclick = async () => {
     $("llmStatus").textContent = "Testing\u2026";
     try {
@@ -14722,6 +15007,21 @@ _(Output hit the length limit and was cut off.)_`;
     const done = { g1: !!s.geminiKey || s.sttProvider !== "gemini" && s.llmProvider !== "gemini", g2: mic, g3: !!s.myName, g4: mailReady(s) };
     for (const [id, ok] of Object.entries(done)) $(id)?.classList.toggle("done", ok);
   }
+  function allAllowed() {
+    return parseAddresses([$("shareList").value, ...parseGroups($("shareGroups").value).map((g) => g.list.join(","))].join(","));
+  }
+  function renderAllow() {
+    const l = allowListLines(allAllowed(), { domains: $("shareDomains").checked });
+    $("allowLines").textContent = `const ALLOWED = ${l.allowed};
+const ALLOWED_DOMAINS = ${l.domains};`;
+  }
+  ["shareList", "shareGroups"].forEach((id) => $(id).oninput = renderAllow);
+  $("shareDomains").onchange = renderAllow;
+  $("copyScriptAllow").onclick = async () => {
+    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $("shareDomains").checked }));
+    $("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
+    setTimeout(() => $("copyAllowMsg").textContent = "", 6e3);
+  };
   $("scriptText").textContent = Code_default;
   $("copyScript").onclick = async () => {
     await navigator.clipboard.writeText(Code_default);
@@ -14755,10 +15055,13 @@ _(Output hit the length limit and was cut off.)_`;
       if (el.type === "checkbox") el.checked = !!s[k];
       else el.value = s[k];
     }
+    $("shareAuto").checked = s.shareMode === "auto";
     showProviderFields();
+    renderAllow();
     micStatus();
     updateGuide();
     renderUsage();
+    siteStatus();
     showTab(location.hash.slice(1) || "start");
   })();
 })();

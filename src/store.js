@@ -18,6 +18,14 @@ export const DEFAULTS = {
   usagePrices: '', // one "model=USD per 1M input,USD per 1M output" per line
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
+  shareList: '', // default people to share the minutes with
+  shareGroups: '', // per recurring meeting: "title words | a@x.com, b@y.com"
+  shareMode: 'review', // review = only I get it until I press Share; auto = send to them too
+  shareHow: 'to', // to | cc | bcc
+  shareDomains: false, // script helper: allow whole company domains instead of single addresses
+  calendarLookup: true, // ask the relay who was invited (needs the calendar permission)
+  meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
+  otherSites: false, // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
 

@@ -180,6 +180,24 @@
       </div>
 
       <div class="card">
+        <h2>Meeting pages</h2>
+        <div class="row2">
+          <label for="meetCaptions">Speaker names from Meet</label>
+          <select id="meetCaptions">
+            <option value="read">Use Meet's captions when I have them on</option>
+            <option value="auto">Turn captions on for me while recording</option>
+            <option value="off">Don't read captions</option>
+          </select>
+          <p class="hint">Meet's live captions say who is speaking. Debrief uses that to put names to the minutes (your own transcript text is still used). Turning captions on shows subtitles on your screen. Who joined and left is read from the participant tiles either way.</p>
+        </div>
+        <div class="row2">
+          <span class="lab">Other meeting sites (experimental)</span>
+          <div class="btnrow" style="margin-top:0"><button id="enableSites" class="btn">Enable Teams, Zoom web, Webex, Whereby, Jitsi</button><button id="disableSites" class="btn">Disable</button><span id="siteStatus" class="status"></span></div>
+          <p class="hint">Recording, transcription, minutes and email already work on any web meeting tab. Enabling these sites also lets Debrief follow the mute button and notice when the call ends, using generic detection that may not fit every app. It asks Chrome for permission to read those sites. Desktop apps (the installed Zoom or Teams) cannot be recorded by a browser extension.</p>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Recording</h2>
         <label class="toggle"><span class="t"><b>Stop automatically when the meeting ends</b><span>Detects Google Meet's "you left" and "meeting ended" screens, and leaving the call page. The minutes are then written (and emailed) without you doing anything.</span></span><input type="checkbox" id="autoStop"></label>
         <div class="row2">
@@ -280,6 +298,11 @@
         </div>
 
         <div data-stt="openai">
+          <div class="row2">
+            <span class="lab">Run it on this computer</span>
+            <div class="btnrow" style="margin-top:0"><button id="useWhisper" class="btn">Use a local Whisper server</button><button id="testWhisper" class="btn">Test it</button><span id="whisperStatus" class="status"></span></div>
+            <p class="hint">Any server that offers <code>/v1/audio/transcriptions</code> works (faster-whisper based servers, whisper.cpp server, LocalAI). Good for English and Hindi; for Malayalam use a Malayalam fine-tuned model. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank">Setup guide</a>.</p>
+          </div>
           <div class="row2"><label for="sttBase">Base URL</label><input id="sttBase" placeholder="https://api.groq.com/openai/v1"><p class="hint">Groq: https://api.groq.com/openai/v1 · OpenAI: https://api.openai.com/v1 · local: http://localhost:8000/v1</p></div>
           <div class="row2"><label for="sttKey">API key</label><input id="sttKey" type="password" autocomplete="off" placeholder="Leave blank for local servers"></div>
           <div class="row2"><label for="sttModel">Model</label><input id="sttModel" placeholder="whisper-large-v3"></div>
@@ -317,6 +340,13 @@
         </div>
 
         <div data-llm="openai">
+          <div class="row2">
+            <span class="lab">Run it on this computer</span>
+            <div class="btnrow" style="margin-top:0"><button id="useOllama" class="btn">Use Ollama on this PC</button><button id="findOllama" class="btn">Find my installed models</button></div>
+            <div id="ollamaPick" class="hidden" style="margin-top:8px"><select id="ollamaModels"></select></div>
+            <p class="hint" id="localStatus"></p>
+            <p class="hint">Nothing leaves your computer, and there are no quotas. Quality is lower than Gemini or Claude on messy Hindi, Hinglish or Malayalam, and a CPU-only PC takes a few minutes per meeting. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank">Setup guide for local models</a>.</p>
+          </div>
           <div class="row2"><label for="oaBase">Base URL</label><input id="oaBase" placeholder="https://api.openai.com/v1"><p class="hint">Ollama: http://localhost:11434/v1 · OpenRouter: https://openrouter.ai/api/v1 · Groq: https://api.groq.com/openai/v1</p></div>
           <div class="row2"><label for="oaKey">API key</label><input id="oaKey" type="password" autocomplete="off" placeholder="Leave blank for Ollama"></div>
           <div class="row2"><label for="oaModel">Model</label><input id="oaModel" placeholder="The model id exactly as the provider names it"></div>
@@ -381,6 +411,38 @@
       <div class="card">
         <h2>Delivery</h2>
         <label class="toggle"><span class="t"><b>Send automatically</b><span>Email the minutes as soon as they are written. You can always send again from the minutes page.</span></span><input type="checkbox" id="emailAuto"></label>
+      </div>
+
+      <div class="card">
+        <h2>Sharing with others</h2>
+        <p class="hint" style="margin-top:8px">You always get the email. People listed here can get a copy as well: after you review the minutes and press <b>Share</b> on the minutes page, or automatically.</p>
+        <div class="row2">
+          <label for="shareList">Default people</label>
+          <textarea id="shareList" class="mono" style="max-width:none;min-height:60px" placeholder="priya@company.com, ravi@company.com"></textarea>
+        </div>
+        <div class="row2">
+          <label for="shareGroups">Recurring meetings</label>
+          <textarea id="shareGroups" class="mono" style="max-width:none;min-height:70px" placeholder="Cadence Call | priya@company.com, ravi@company.com&#10;Data Discussion | amal@company.com"></textarea>
+          <p class="hint">One per line: words from the meeting title, then who gets it. A matching meeting uses its own list instead of the default.</p>
+        </div>
+        <label class="toggle"><span class="t"><b>Send to them automatically</b><span>Off (recommended): you get the minutes first and press Share after checking names and numbers. On: they get a copy the moment it is written.</span></span><input type="checkbox" id="shareAuto"></label>
+        <div class="row2">
+          <label for="shareHow">Address them as</label>
+          <select id="shareHow"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc (hidden from each other)</option></select>
+          <p class="hint">Replies come to you.</p>
+        </div>
+        <div class="row2">
+          <span class="lab">Allow them in your script</span>
+          <p class="hint" style="margin:0 0 8px">Your relay script only mails people you allow, so a leaked URL cannot be used for spam. After adding people, copy the updated script, replace the one in script.google.com, and deploy a <b>new version</b>.</p>
+          <label class="toggle" style="border-top:0;padding-top:0"><span class="t"><b>Allow everyone at their company</b><span>Uses the part after the @ instead of single addresses, so new colleagues work without editing the script.</span></span><input type="checkbox" id="shareDomains"></label>
+          <pre id="allowLines" style="margin:0 0 8px"></pre>
+          <div class="btnrow" style="margin-top:0"><button id="copyScriptAllow" class="btn">Copy script with these people allowed</button><span id="copyAllowMsg" class="status"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Calendar</h2>
+        <label class="toggle"><span class="t"><b>Look up who was invited</b><span>Reads the invite for each meeting from your Google Calendar, through your script, to fill in the attendance table and name hints. Needs the calendar permission: in the script editor choose <code>authorize</code> and press Run once.</span></span><input type="checkbox" id="calendarLookup"></label>
       </div>
 
       <div class="card">

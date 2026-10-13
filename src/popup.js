@@ -143,6 +143,24 @@ $('clearAll').onclick = async () => {
   renderRecent();
 };
 
+$('diagnose').onclick = async (e) => {
+  e.preventDefault();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  $('diagResult').textContent = 'Checking…';
+  try {
+    const r = await chrome.tabs.sendMessage(tab.id, { target: 'page', type: 'diagnose' });
+    if (!r?.ok) throw new Error(r?.error || 'no answer');
+    $('diagResult').innerHTML = '';
+    const ul = document.createElement('div');
+    ul.style.cssText = 'margin-top:6px;line-height:1.5';
+    ul.textContent = Object.entries({ Site: r.site, ...r.diag }).map(([k, v]) => `${k}: ${v}`).join('\n');
+    ul.style.whiteSpace = 'pre-wrap';
+    $('diagResult').append(ul);
+  } catch {
+    $('diagResult').textContent = 'Open a Meet (or enabled meeting site) tab and reload it once, then try again.';
+  }
+};
+
 $('alertX').onclick = () => send({ type: 'dismiss-alert' }).then(refresh);
 
 $('start').onclick = async () => {

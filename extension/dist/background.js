@@ -83,6 +83,22 @@
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    shareList: "",
+    // default people to share the minutes with
+    shareGroups: "",
+    // per recurring meeting: "title words | a@x.com, b@y.com"
+    shareMode: "review",
+    // review = only I get it until I press Share; auto = send to them too
+    shareHow: "to",
+    // to | cc | bcc
+    shareDomains: false,
+    // script helper: allow whole company domains instead of single addresses
+    calendarLookup: true,
+    // ask the relay who was invited (needs the calendar permission)
+    meetCaptions: "read",
+    // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
+    otherSites: false,
+    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -324,6 +340,47 @@
         if (msg.entry?.learned) next.learnedLimits = { ...learnedLimits, [msg.entry.learned.model]: msg.entry.learned.limit };
         await chrome.storage.local.set(next);
       }),
+      // People and captions sampled from the meeting page: who was there when, and who spoke.
+      "meet-snap": async () => {
+        const st = await getState();
+        if (!st.recording || sender.tab?.id !== st.tabId) return { ok: false };
+        const me = (await getSettings()).myName;
+        const who = (n) => /^you$/i.test(n) && me ? me : n;
+        await updateMeeting(st.meetingId, (m) => {
+          const pres = m.presence ||= {};
+          for (const n of msg.names || []) {
+            const k = who(n);
+            const p = pres[k];
+            if (p) {
+              p[1] = msg.t;
+              p[2] = (p[2] || 0) + 1;
+            } else pres[k] = [msg.t, msg.t, 1];
+          }
+          if (msg.names) {
+          }
+          const caps = m.captions ||= [];
+          for (const c of msg.captions || []) {
+            const name = who(c.name);
+            const last = [...caps].reverse().find((x) => x.name === name);
+            if (last && c.t - last.t2 < 15 && (c.text.startsWith(last.text) || last.text.startsWith(c.text) || last.text.slice(0, 20) === c.text.slice(0, 20))) {
+              last.text = c.text.length >= last.text.length ? c.text : last.text;
+              last.t2 = c.t;
+            } else caps.push({ t: c.t, t2: c.t, name, text: c.text });
+          }
+          if (caps.length > 4e3) caps.splice(0, caps.length - 4e3);
+        });
+        return { ok: true };
+      },
+      // Switch the page script on for other meeting sites (Teams, Zoom web, ...) once the user grants access.
+      sites: async () => {
+        const id = "debrief-sites";
+        const have = await chrome.scripting.getRegisteredContentScripts({ ids: [id] }).catch(() => []);
+        if (have.length) await chrome.scripting.unregisterContentScripts({ ids: [id] });
+        if (msg.on) {
+          await chrome.scripting.registerContentScripts([{ id, matches: msg.matches, js: ["dist/pill.js"], runAt: "document_idle", persistAcrossSessions: true }]);
+        }
+        return { ok: true };
+      },
       "dismiss-alert": () => clearAlert(),
       "set-follow": async () => {
         await saveSettings({ ...await getSettings(), followMeetMute: !!msg.on });
@@ -333,7 +390,7 @@
         const rec = await getState();
         const { levels } = await chrome.storage.session.get("levels");
         const m = rec.meetingId ? await getMeeting(rec.meetingId) : null;
-        return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true };
+        return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || "read" };
       }
     };
     const h = handlers[msg.type];

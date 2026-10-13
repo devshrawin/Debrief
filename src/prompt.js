@@ -161,3 +161,40 @@ export function itemsToChecklist(items) {
   }
   return out.join('\n');
 }
+
+// ---- guards against model slips (small local models especially) --------------------------------
+
+const wordsOf = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+
+// An extracted owner must be named in or next to the sentence the item came from. Models invent owners
+// ("please send the timeline" becomes "owner: Priya"), so when the transcript does not back the name,
+// the owner is dropped instead of trusted. If the sentence cannot be located the item is left as it is.
+export function guardOwners(items, windowText) {
+  const sentences = String(windowText).split(/(?<=[.!?।])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+  const plain = sentences.map((x) => wordsOf(x).join(' '));
+  return items.map((it) => {
+    if (!it.owner || it.owner === '-') return it;
+    const probe = wordsOf(it.quote || it.text).slice(0, 5).join(' ');
+    if (probe.split(' ').length < 3) return it;
+    const at = plain.findIndex((p) => p.includes(probe));
+    if (at < 0) return it;
+    const first = wordsOf(it.owner)[0];
+    // The same sentence, or a very short neighbour ("Amal?") that is just addressing someone.
+    const short = (x) => (x && x.split(' ').length <= 5 ? x : '');
+    const near = [short(plain[at - 1]), plain[at], short(plain[at + 1])].filter(Boolean).join(' ');
+    return first && near.split(' ').includes(first) ? it : { ...it, owner: '-', ownerDropped: it.owner };
+  });
+}
+
+// Removes leaked prompt markup and placeholders that weaker models copy into their answer.
+export function sanitizeMinutes(md) {
+  return String(md || '')
+    .replace(/^```(?:markdown|md)?\s*\n/i, '')
+    .replace(/\n```\s*$/i, '')
+    .split('\n')
+    .filter((l) => !/^\s*<\/?(checklist|transcript|speakers|minutes)>\s*$/i.test(l))
+    .join('\n')
+    .replace(/\s*\|?\s*"?quote_of_max_12_words"?/gi, '')
+    .replace(/<\/?(checklist|transcript|speakers|minutes)>/gi, '')
+    .trim();
+}

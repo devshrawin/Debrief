@@ -97,6 +97,19 @@ Debrief can email you the minutes as soon as they are ready. It uses a small scr
 
 **If you change the script later:** press **Deploy → Manage deployments → pencil → Version: New version → Deploy**. Saving alone doesn't update the live copy.
 
+### Sharing the minutes with your team (optional)
+1. **Settings → Email → Sharing with others**: list the people (a default list, and a list per recurring meeting, matched by words in the title).
+2. Press **Copy script with these people allowed**, paste it over your script at script.google.com, save, and **Deploy → Manage deployments → pencil → Version: New version → Deploy**. The script only ever emails you plus the people you allow. Tick *Allow everyone at their company* to allow whole domains instead of single addresses.
+3. After a meeting you receive the email. Open the minutes page, check names and numbers, and press **Share** under *Share these minutes with others*. Choose *Send to them automatically* in Settings if you would rather skip the review.
+
+### Who was invited vs who attended (optional)
+Debrief can read each meeting's invite from your Google Calendar through the same script and compare it with the people seen in the call.
+1. In script.google.com open your script, choose the **`authorize`** function in the toolbar and press **Run** once. Allow access to your calendar and email.
+2. Deploy a **new version** if you changed the script.
+3. Keep *Look up who was invited* on in **Settings → Email → Calendar**.
+
+The minutes then include an attendance table, and the attendee list on the minutes page is filled in for you.
+
 ## 6. Other speech providers (optional)
 
 | Provider | When to use it | Setup |
