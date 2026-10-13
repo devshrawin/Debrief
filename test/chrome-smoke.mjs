@@ -301,6 +301,57 @@ try {
   const diag = await opts.evaluate(`chrome.runtime.sendMessage({ target: 'bg', type: 'pill-state' }).then((r) => ({ ok: r.ok, captionMode: r.captionMode, hasRec: !!r.rec }))`);
   check('pill-state carries the caption mode', diag.ok && diag.captionMode === 'read', JSON.stringify(diag));
 
+  // ---- first-run tour ----
+  const tour = await openPage(`chrome-extension://${id}/welcome.html?restart=1`);
+  await sleep(800);
+  const t0 = await tour.evaluate(`({ h1: document.querySelector('#stage h1').textContent, nav: document.querySelectorAll('#stepsNav button').length, next: document.getElementById('next').textContent, back: document.getElementById('back').style.visibility })`);
+  check('tour opens on the welcome step with every step listed', /minutes without taking notes/i.test(t0.h1) && t0.nav === 11 && /Start the tour/.test(t0.next) && t0.back === 'hidden', JSON.stringify(t0));
+  if (process.env.SHOTS) {
+    const fs = await import('node:fs');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1180, height: 760, deviceScaleFactor: 1.4, mobile: false }, tour.sessionId);
+    fs.writeFileSync(`${process.env.SHOTS}/tour-welcome.png`, Buffer.from((await send('Page.captureScreenshot', {}, tour.sessionId)).data, 'base64'));
+    await tour.evaluate(`document.querySelectorAll('#stepsNav button')[5].click()`);
+    await sleep(500);
+    fs.writeFileSync(`${process.env.SHOTS}/tour-record.png`, Buffer.from((await send('Page.captureScreenshot', {}, tour.sessionId)).data, 'base64'));
+    await tour.evaluate(`document.querySelectorAll('#stepsNav button')[0].click()`);
+    await sleep(300);
+  }
+  const t1 = await tour.evaluate(`(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    document.getElementById('next').click();
+    await wait(300);
+    const out = { key: document.querySelector('#stage h1').textContent };
+    document.getElementById('t-key').value = 'AIzaNotARealKey';
+    [...document.querySelectorAll('#stage button')].find((b) => /Test my key/.test(b.textContent)).click();
+    await wait(4500);
+    out.status = document.querySelector('#stage .status').textContent;
+    document.getElementById('next').click();
+    await wait(300);
+    out.mic = document.querySelector('#stage h1').textContent;
+    document.getElementById('next').click();
+    await wait(300);
+    out.you = document.querySelector('#stage h1').textContent;
+    document.getElementById('t-name').value = 'Tour Tester';
+    document.getElementById('t-lang').value = 'malayalam';
+    document.getElementById('next').click();
+    await wait(500);
+    out.names = document.querySelector('#stage h1').textContent;
+    document.getElementById('t-dict').value = 'Amal | Aman';
+    document.querySelectorAll('#stepsNav button')[10].click();
+    await wait(600);
+    const settings = (await chrome.storage.local.get('settings')).settings;
+    out.saved = { name: settings.myName, lang: settings.meetingLanguage, dict: settings.dictionary, key: settings.geminiKey };
+    out.done = document.querySelector('#stage h1').textContent;
+    out.items = [...document.querySelectorAll('.checklist li')].map((l) => l.textContent.slice(0, 30));
+    out.finish = document.getElementById('next').textContent;
+    return out;
+  })()`);
+  check('tour: key test reports a clear failure for a bad key', /did not work|invalid|API key/i.test(t1.status), t1.status);
+  check('tour: steps advance and answers are saved as you go', /Your microphone/.test(t1.mic) && /name and languages/i.test(t1.you) && /Teach Debrief your names/.test(t1.names) && t1.saved.name === 'Tour Tester' && t1.saved.lang === 'malayalam' && t1.saved.dict === 'Amal | Aman', JSON.stringify(t1));
+  check('tour: the last step shows a setup checklist and Finish', /ready/i.test(t1.done) && t1.items.length === 7 && t1.finish === 'Finish', JSON.stringify([t1.done, t1.items, t1.finish]));
+  await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguage: 'auto', dictionary: '' } }))`);
+  check('popup links to the tour', await popup.evaluate(`!!document.getElementById('openTour') && !!document.getElementById('openTour1')`));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);

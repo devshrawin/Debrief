@@ -52,6 +52,8 @@ This branch (`pro`) adds, on top of everything above:
 | | |
 |---|---|
 | **Names that are right** | A personal dictionary (`Amal | Aman`) corrects misheard names in the transcript and feeds the speech and minutes models. A per-meeting attendee list makes it smart: "Aman" becomes "Amal" only if Amal is in the meeting and Aman is not. Fix a name once on the minutes page and it is remembered. |
+| **Learns by itself** | After each meeting Debrief remembers the real names it saw (people in the call, the invite, your attendee list) as spelling hints, and queues likely mishearings (a word that keeps appearing one letter off a real attendee's name) for one-click approval in Settings. An optional switch accepts clear-cut fixes automatically. |
+| **First-run tour** | A guided tour opens on install: key, microphone, language, names, how to record, email, sharing, local models and limits, with live tests along the way. Reopen it from the popup. |
 | **Minutes that leave nothing out** | *Thorough* mode reads the transcript window by window to extract every decision, action, question and risk, writes the minutes with that checklist, then audits the result against the transcript and appends anything missing. Every action item carries a timestamp and a quote so you can verify it. Invented owners are dropped when the transcript does not name them. A coverage warning appears if audio could not be transcribed. |
 | **Attendance** | The minutes include an attendance table: invited (from your Google Calendar through your relay script) against who was actually seen in the meeting, with late joiners, early leavers, absentees and uninvited guests. Action items for absent people are flagged. |
 | **Speaker names** | Meet's live captions are read for who was speaking when, and given to the minutes writer to attribute statements. *Check page detection* in the popup shows what Debrief can read from your Meet page. |
@@ -63,6 +65,8 @@ This branch (`pro`) adds, on top of everything above:
 Not in Pro yet: voice enrolment ("recognise Amal by voice"). It needs a speaker-recognition model and finer time-stamped chunks, and cannot be checked without real recordings of your team, so it is left for a later release. Speaker names from Meet's captions cover the common case without it.
 
 ## Quick start
+
+> **First time?** After you install, a guided tour opens by itself. It takes about five minutes, tests your key, microphone and email as you go, and teaches the whole workflow. You can reopen it any time from the popup (**Take the tour**) or Settings.
 
 You need Chrome 116+ and Node.js (only to build).
 

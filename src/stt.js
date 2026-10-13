@@ -40,7 +40,7 @@ export const LANGUAGES = {
   },
 };
 // Names and terms from the personal dictionary, as spelling hints for the speech models.
-const sttTerms = (s) => hintTerms(parseDictionary(s.dictionary)).slice(0, 80);
+const sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
 const audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32000);
 const lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
 

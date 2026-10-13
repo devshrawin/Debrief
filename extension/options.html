@@ -116,7 +116,7 @@
       <button data-tab="email"><span class="num">5</span>Email</button>
       <button data-tab="usage"><span class="num">6</span>Usage</button>
     </nav>
-    <div class="foot"><a href="https://github.com/devshrawin/Debrief/blob/main/docs/SETUP.md" target="_blank">Setup guide</a></div>
+    <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a><br><a href="https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md" target="_blank">Setup guide</a></div>
   </aside>
 
   <main class="content">
@@ -218,7 +218,23 @@
         <div class="row2">
           <label for="dictionary">Your dictionary</label>
           <textarea id="dictionary" class="mono" style="max-width:none;min-height:130px" placeholder="Amal | Aman, Amaal&#10;Unified Registry&#10;DSM"></textarea>
+          <p class="hint" style="margin-top:8px"><b>Debrief also learns on its own.</b> After each meeting it remembers the names it saw (people in the call, the invite, the attendee list) as spelling hints, and it notices likely mishearings (a word that keeps appearing one letter off a real attendee's name) and offers them below.</p>
           <p class="hint">One per line. <code>Right spelling | misheard as, another</code> fixes recurring mistakes (Amal | Aman). A plain line is a term to spell exactly. Used as a hint to the speech model, as a find-and-replace on transcripts, and by the minutes writer. If you list who was in a meeting on the minutes page, an alias that is really one of those people is left alone.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Learned automatically</h2>
+        <div class="row2" id="pendingBox">
+          <span class="lab">Suggested fixes</span>
+          <div id="pendingList"></div>
+          <p class="hint" id="pendingEmpty">Nothing to review yet. Suggestions appear after meetings where a name was heard wrongly more than once.</p>
+        </div>
+        <label class="toggle"><span class="t"><b>Accept clear-cut fixes automatically</b><span>A suggestion seen three or more times is added to your dictionary without asking. Off by default, because a wrong rule would change future transcripts.</span></span><input type="checkbox" id="dictAutoAlias"></label>
+        <div class="row2">
+          <span class="lab">Names Debrief has learned</span>
+          <p class="hint" id="learnedNames" style="margin:4px 0 8px"></p>
+          <button id="clearLearned" class="btn">Forget learned names</button>
         </div>
       </div>
 

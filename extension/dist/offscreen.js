@@ -102,6 +102,8 @@
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictAutoAlias: false,
+    // accept clear-cut learned fixes (3+ sightings) without asking
     dictionary: "",
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
@@ -222,7 +224,7 @@
       hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
     }
   };
-  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary)).slice(0, 80);
+  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {

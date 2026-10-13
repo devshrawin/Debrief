@@ -2501,6 +2501,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictAutoAlias: false,
+    // accept clear-cut learned fixes (3+ sightings) without asking
     dictionary: "",
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
@@ -2552,11 +2554,13 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     geminiModel: "gemini-3.8-flash"
   };
   async function getSettings() {
-    const { settings: settings2 } = await chrome.storage.local.get("settings");
-    return { ...DEFAULTS, ...settings2 || {} };
+    const { settings: settings2, learned } = await chrome.storage.local.get(["settings", "learned"]);
+    const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+    return { ...DEFAULTS, ...settings2 || {}, learnedNames };
   }
   async function saveSettings(s) {
-    await chrome.storage.local.set({ settings: s });
+    const { learnedNames, ...own } = s;
+    await chrome.storage.local.set({ settings: own });
   }
   function llmReady(s) {
     if (s.llmProvider === "anthropic") return !!s.anthropicKey && !!s.anthropicModel;
@@ -2697,6 +2701,43 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     if (!wrong) return text;
     return String(text).replace(new RegExp(`(?<![${WORD}])${esc(wrong)}(?![${WORD}])`, "giu"), right);
   }
+  var titleCase = (s) => s.replace(new RegExp("\\b\\p{L}", "gu"), (c) => c.toUpperCase());
+  function cleanLearned(n) {
+    const c = String(n || "").replace(/\s+/g, " ").trim();
+    return c && c.length <= 40 && new RegExp("^\\p{L}[\\p{L}\\p{M} .'-]*$", "u").test(c) && !/^(you|guest|unknown|presentation|presenting)$/i.test(c) ? c : "";
+  }
+  function learnFromMeeting(meeting2, { entries = [], myName = "" } = {}) {
+    const names = /* @__PURE__ */ new Set();
+    const add = (n) => {
+      const c = cleanLearned(n);
+      if (c) names.add(c);
+    };
+    (meeting2.attendees || []).forEach(add);
+    Object.keys(meeting2.presence || {}).forEach((n) => add(/^you$/i.test(n) ? myName : n));
+    (meeting2.invited || []).filter((p) => p.status !== "no").forEach((p) => add(p.name || titleCase(String(p.email || "").split("@")[0].replace(/[._-]+/g, " "))));
+    (meeting2.captions || []).forEach((c) => add(/^you$/i.test(c.name) ? myName : c.name));
+    const list = [...names];
+    const text = (meeting2.segments || []).map((s) => s.text).join(" ");
+    return { names: list, candidates: suggestNames(text, list, entries).filter((c) => c.count >= 2) };
+  }
+  function mergeLearned(learned, found, { auto = false, title = "", now = Date.now() } = {}) {
+    const next = { names: { ...learned?.names || {} }, pending: [...learned?.pending || []], rejected: [...learned?.rejected || []] };
+    for (const n of found.names) next.names[n] = now;
+    const keys = Object.keys(next.names);
+    if (keys.length > 300) for (const k2 of keys.sort((a, b) => next.names[a] - next.names[b]).slice(0, keys.length - 300)) delete next.names[k2];
+    for (const c of found.candidates) {
+      const id2 = `${c.found.toLowerCase()}>${c.suggest.toLowerCase()}`;
+      if (next.rejected.includes(id2)) continue;
+      const have = next.pending.find((p) => p.id === id2);
+      if (have) {
+        have.count += c.count;
+        have.at = now;
+      } else next.pending.push({ id: id2, found: c.found, suggest: c.suggest, count: c.count, meeting: title, at: now });
+    }
+    const accepted = auto ? next.pending.filter((p) => p.count >= 3) : [];
+    next.pending = next.pending.filter((p) => !accepted.includes(p));
+    return { learned: next, accepted };
+  }
 
   // src/prompt.js
   function buildSystemPrompt(language, { evidence = true } = {}) {
@@ -2770,7 +2811,7 @@ Do not write an Attendance section or notes about the recording: they are added 
   }
   function buildUserPrompt(meeting2, settings2, notes, ctx = {}) {
     const lines = header(meeting2, settings2);
-    const names = glossaryLine(ctx.entries || [], ctx.attendees || []);
+    const names = glossaryLine(ctx.entries || [], [...ctx.attendees || [], ...ctx.learned || []]);
     if (names) lines.push("", `Names and terms (spell exactly like this): ${names}`);
     if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(", ")}`);
     if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
@@ -16353,7 +16394,7 @@ _(Output hit the length limit and was cut off.)_`;
       hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
     }
   };
-  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary)).slice(0, 80);
+  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {
@@ -16644,7 +16685,7 @@ ${meeting2.mom || ""}
   k.use({ gfm: true, renderer: { html: ({ text }) => escapeHtml2(text) } });
   var renderMd = (md) => k.parse(md || "");
   var attendeeList = () => (meeting?.attendees || []).filter(Boolean);
-  var nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList() });
+  var nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40) });
   var parseAttendees = (text) => text.split(/[\n,]+/).map((x2) => x2.trim()).filter(Boolean);
   function renderMom() {
     $2("mom").innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
@@ -16965,6 +17006,17 @@ ${meeting2.mom || ""}
       })
     );
   }
+  async function learn() {
+    const found = learnFromMeeting(meeting, { entries: parseDictionary(settings.dictionary), myName: settings.myName });
+    if (!found.names.length && !found.candidates.length) return;
+    const { learned } = await chrome.storage.local.get("learned");
+    const { learned: next, accepted } = mergeLearned(learned, meeting.learnedAt ? { ...found, candidates: [] } : found, { auto: settings.dictAutoAlias, title: meeting.title });
+    for (const a of accepted) settings.dictionary = learnAlias(settings.dictionary, a.suggest, a.found);
+    if (accepted.length) await saveSettings(settings);
+    await chrome.storage.local.set({ learned: next });
+    meeting.learnedAt = Date.now();
+    await saveMeeting(meeting);
+  }
   async function fixName(wrong, right, remember) {
     wrong = wrong.trim();
     right = right.trim();
@@ -16992,6 +17044,8 @@ ${meeting2.mom || ""}
     await saveMeeting(meeting);
     renderTranscript();
     renderSuggestions();
+    learn().catch(() => {
+    });
   };
   document.querySelectorAll(".tabs button").forEach((b) => {
     b.onclick = () => {
@@ -17009,6 +17063,8 @@ ${meeting2.mom || ""}
     }
     await ensureInvited();
     ensureAttendees();
+    learn().catch(() => {
+    });
     $2("notes").value = meeting.notes || "";
     $2("attendees").value = (meeting.attendees || []).join("\n");
     initShare();

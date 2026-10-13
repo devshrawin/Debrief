@@ -1178,6 +1178,8 @@
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictAutoAlias: false,
+    // accept clear-cut learned fixes (3+ sightings) without asking
     dictionary: "",
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
@@ -1229,11 +1231,13 @@
     geminiModel: "gemini-3.8-flash"
   };
   async function getSettings() {
-    const { settings } = await chrome.storage.local.get("settings");
-    return { ...DEFAULTS, ...settings || {} };
+    const { settings, learned } = await chrome.storage.local.get(["settings", "learned"]);
+    const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+    return { ...DEFAULTS, ...settings || {}, learnedNames };
   }
   async function saveSettings(s) {
-    await chrome.storage.local.set({ settings: s });
+    const { learnedNames, ...own } = s;
+    await chrome.storage.local.set({ settings: own });
   }
   function errorDetail(text) {
     try {
@@ -14774,6 +14778,33 @@ function out(o) {
     { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
   ];
 
+  // src/dictionary.js
+  var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
+  function parseDictionary(text) {
+    const entries = [];
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const [name, rest = ""] = line.split("|");
+      const canonical = name.trim();
+      if (!canonical) continue;
+      const aliases = rest.split(",").map((a) => a.trim()).filter((a) => a && norm(a) !== norm(canonical));
+      entries.push({ name: canonical, aliases });
+    }
+    return entries;
+  }
+  function serializeDictionary(entries) {
+    return entries.map((e) => e.aliases.length ? `${e.name} | ${e.aliases.join(", ")}` : e.name).join("\n");
+  }
+  function learnAlias(text, right, wrong) {
+    const entries = parseDictionary(text);
+    let e = entries.find((x) => norm(x.name) === norm(right));
+    if (!e) entries.push(e = { name: right.trim(), aliases: [] });
+    if (wrong && !e.aliases.some((a) => norm(a) === norm(wrong)) && norm(wrong) !== norm(right)) e.aliases.push(wrong.trim());
+    return serializeDictionary(entries);
+  }
+  var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
+
   // src/options.js
   var $ = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
@@ -14796,6 +14827,44 @@ function out(o) {
   }
   document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
   document.querySelectorAll("[data-go]").forEach((a) => a.onclick = () => showTab(a.dataset.go));
+  async function renderLearned() {
+    const { learned } = await chrome.storage.local.get("learned");
+    const names = Object.keys(learned?.names || {});
+    $("learnedNames").textContent = names.length ? names.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
+    const pending = learned?.pending || [];
+    $("pendingEmpty").classList.toggle("hidden", pending.length > 0);
+    $("pendingList").replaceChildren(
+      ...pending.map((p) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap";
+        const t = document.createElement("span");
+        t.innerHTML = `<b></b> was heard as <b></b>`;
+        t.children[0].textContent = p.suggest;
+        t.children[1].textContent = p.found;
+        const meta = document.createElement("span");
+        meta.className = "hint";
+        meta.style.margin = "0";
+        meta.textContent = `${p.count}\xD7 \xB7 ${p.meeting || "a meeting"}`;
+        const ok = Object.assign(document.createElement("button"), { className: "btn", textContent: "Fix it from now on" });
+        const no = Object.assign(document.createElement("button"), { className: "btn", textContent: "Dismiss" });
+        ok.onclick = async () => {
+          $("dictionary").value = learnAlias($("dictionary").value, p.suggest, p.found);
+          await save();
+          await chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id) } });
+        };
+        no.onclick = async () => chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id), rejected: [...learned.rejected || [], p.id] } });
+        row.append(t, meta, ok, no);
+        return row;
+      })
+    );
+  }
+  $("clearLearned").onclick = async () => {
+    const { learned } = await chrome.storage.local.get("learned");
+    await chrome.storage.local.set({ learned: { ...learned, names: {} } });
+  };
+  chrome.storage.onChanged.addListener((c) => {
+    if (c.learned) renderLearned();
+  });
   var usageDays = 1;
   var fmtN = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n);
   var KIND = { stt: "Speech to text", llm: "Minutes" };
@@ -15061,6 +15130,7 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     micStatus();
     updateGuide();
     renderUsage();
+    renderLearned();
     siteStatus();
     showTab(location.hash.slice(1) || "start");
   })();

@@ -4,6 +4,11 @@ import { addEntry } from './usage.js';
 import { getSettings, saveSettings, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
+// First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
+chrome.runtime.onInstalled.addListener((d) => {
+  if (d.reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html?restart=1') });
+});
+
 // The on-page Meet pill reads recorder state, so let content scripts see session storage.
 chrome.storage.session.setAccessOptions?.({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
 

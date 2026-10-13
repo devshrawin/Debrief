@@ -205,5 +205,50 @@ await test('guard: leaked prompt tags, fences and placeholders are stripped from
   assert.match(clean, /- point/);
 });
 
-console.log(`
-${passed} passed`);
+
+// ---------------- auto-learning ----------------
+await test('learning: real names from the meeting are learned, mishearings are queued, "You" is ignored', () => {
+  const m = {
+    attendees: ['Amal Raj'],
+    presence: { You: [0, 10, 1], 'Priya N.': [0, 10, 1], 'Guest': [0, 1, 1] },
+    invited: [{ name: 'Ravi Kumar', email: 'ravi@x.com', status: 'yes' }, { name: '', email: 'sita.menon@x.com', status: 'maybe' }, { name: 'Declined Dan', email: 'd@x.com', status: 'no' }],
+    captions: [{ name: 'Amal Raj', text: 'hi' }],
+    segments: [{ t: 1, src: 'others', text: 'Then Amam will check it. Amam again said yes. Ok Priya.' }],
+  };
+  const r = D.learnFromMeeting(m, { entries: [], myName: 'Shrawin' });
+  assert.deepEqual(r.names.sort(), ['Amal Raj', 'Priya N.', 'Ravi Kumar', 'Shrawin', 'Sita Menon'].sort());
+  assert.deepEqual(r.candidates.map((c) => [c.found, c.suggest, c.count]), [['Amam', 'Amal', 2]]);
+});
+
+await test('learning: merging remembers names, counts repeated fixes, honours dismissals, auto-accepts at 3', () => {
+  const found = { names: ['Amal Raj'], candidates: [{ found: 'Amam', suggest: 'Amal', count: 2 }] };
+  let { learned, accepted } = D.mergeLearned(null, found, { title: 'Sync', now: 1000 });
+  assert.equal(learned.pending.length, 1);
+  assert.equal(accepted.length, 0);
+  ({ learned, accepted } = D.mergeLearned(learned, found, { title: 'Sync 2', now: 2000 }));
+  assert.equal(learned.pending[0].count, 4);
+  ({ learned, accepted } = D.mergeLearned(learned, { names: [], candidates: [] }, { auto: true }));
+  assert.deepEqual(accepted.map((a) => a.found), ['Amam']);
+  assert.equal(learned.pending.length, 0);
+  const rejected = { names: {}, pending: [], rejected: ['amam>amal'] };
+  assert.equal(D.mergeLearned(rejected, found).learned.pending.length, 0, 'a dismissed fix stays dismissed');
+  const big = { names: Object.fromEntries(Array.from({ length: 305 }, (_, i) => [`N${i}`, i])), pending: [], rejected: [] };
+  assert.equal(Object.keys(D.mergeLearned(big, { names: ['New'], candidates: [] }).learned.names).length, 300);
+});
+
+await test('learning: learned names reach the speech hints and the prompt, never the settings file', async () => {
+  const { DEFAULTS: DF } = await import('../src/store.js');
+  const { buildUserPrompt: bup } = await import('../src/prompt.js');
+  const u = bup({ title: 't', startedAt: 0, segments: [] }, { ...DF }, '', { entries: [], attendees: [], learned: ['Sita Menon'] });
+  assert.match(u, /Names and terms \(spell exactly like this\): Sita Menon/);
+  const stored = {};
+  globalThis.chrome = { storage: { local: { get: async () => ({ settings: { myName: 'X' }, learned: { names: { 'Amal Raj': 5, 'Priya Nair': 9 } } }), set: async (o) => Object.assign(stored, o) } } };
+  const { getSettings, saveSettings } = await import('../src/store.js');
+  const s = await getSettings();
+  assert.deepEqual(s.learnedNames, ['Amal Raj', 'Priya Nair']);
+  await saveSettings(s);
+  assert.equal('learnedNames' in stored.settings, false);
+  delete globalThis.chrome;
+});
+
+console.log(`\n${passed} passed`);

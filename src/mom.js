@@ -1,6 +1,6 @@
 import { marked } from 'marked';
 import { getSettings, saveSettings, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
-import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord } from './dictionary.js';
+import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople } from './attendance.js';
 import { generate, modelLabel, isRetryable } from './llm.js';
@@ -24,7 +24,7 @@ const renderMd = (md) => marked.parse(md || '');
 
 // Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
 const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
-const nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList() });
+const nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40) });
 const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
 function renderMom() {
@@ -373,6 +373,19 @@ function renderSuggestions() {
   );
 }
 
+// Remembers the names this meeting proved to be real, and queues likely mishearings for approval.
+async function learn() {
+  const found = learnFromMeeting(meeting, { entries: parseDictionary(settings.dictionary), myName: settings.myName });
+  if (!found.names.length && !found.candidates.length) return;
+  const { learned } = await chrome.storage.local.get('learned');
+  const { learned: next, accepted } = mergeLearned(learned, meeting.learnedAt ? { ...found, candidates: [] } : found, { auto: settings.dictAutoAlias, title: meeting.title });
+  for (const a of accepted) settings.dictionary = learnAlias(settings.dictionary, a.suggest, a.found);
+  if (accepted.length) await saveSettings(settings);
+  await chrome.storage.local.set({ learned: next });
+  meeting.learnedAt = Date.now();
+  await saveMeeting(meeting);
+}
+
 async function fixName(wrong, right, remember) {
   wrong = wrong.trim();
   right = right.trim();
@@ -401,6 +414,7 @@ $('attendees').onchange = async () => {
   await saveMeeting(meeting);
   renderTranscript();
   renderSuggestions();
+  learn().catch(() => {});
 };
 
 document.querySelectorAll('.tabs button').forEach((b) => {
@@ -420,6 +434,7 @@ document.querySelectorAll('.tabs button').forEach((b) => {
   }
   await ensureInvited();
   ensureAttendees();
+  learn().catch(() => {});
   $('notes').value = meeting.notes || '';
   $('attendees').value = (meeting.attendees || []).join('\n');
   initShare();

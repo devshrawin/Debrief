@@ -4,6 +4,7 @@ import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, 
 import scriptText from '../apps-script/Code.gs';
 import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvice, explain } from './local.js';
 import { OTHER_SITES } from './adapters/index.js';
+import { learnAlias } from './dictionary.js';
 import { summarize, parseLimits, parsePrices, estimateCost, dayKey } from './usage.js';
 
 const $ = (id) => document.getElementById(id);
@@ -30,6 +31,46 @@ function showTab(name) {
 }
 document.querySelectorAll('#nav button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 document.querySelectorAll('[data-go]').forEach((a) => (a.onclick = () => showTab(a.dataset.go)));
+
+// ---- learned names and suggested fixes ----
+async function renderLearned() {
+  const { learned } = await chrome.storage.local.get('learned');
+  const names = Object.keys(learned?.names || {});
+  $('learnedNames').textContent = names.length ? names.slice(-60).join(', ') : 'None yet. Names are learned from your meetings.';
+  const pending = learned?.pending || [];
+  $('pendingEmpty').classList.toggle('hidden', pending.length > 0);
+  $('pendingList').replaceChildren(
+    ...pending.map((p) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap';
+      const t = document.createElement('span');
+      t.innerHTML = `<b></b> was heard as <b></b>`;
+      t.children[0].textContent = p.suggest;
+      t.children[1].textContent = p.found;
+      const meta = document.createElement('span');
+      meta.className = 'hint';
+      meta.style.margin = '0';
+      meta.textContent = `${p.count}× · ${p.meeting || 'a meeting'}`;
+      const ok = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Fix it from now on' });
+      const no = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Dismiss' });
+      ok.onclick = async () => {
+        $('dictionary').value = learnAlias($('dictionary').value, p.suggest, p.found);
+        await save();
+        await chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id) } });
+      };
+      no.onclick = async () => chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id), rejected: [...(learned.rejected || []), p.id] } });
+      row.append(t, meta, ok, no);
+      return row;
+    })
+  );
+}
+$('clearLearned').onclick = async () => {
+  const { learned } = await chrome.storage.local.get('learned');
+  await chrome.storage.local.set({ learned: { ...learned, names: {} } });
+};
+chrome.storage.onChanged.addListener((c) => {
+  if (c.learned) renderLearned();
+});
 
 // ---- usage page ----
 let usageDays = 1;
@@ -319,6 +360,7 @@ $('testMail').onclick = async () => {
   micStatus();
   updateGuide();
   renderUsage();
+  renderLearned();
   siteStatus();
   showTab(location.hash.slice(1) || 'start');
 })();

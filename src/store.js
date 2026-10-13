@@ -16,6 +16,7 @@ export const DEFAULTS = {
   autoStopQuietMin: 10, // ...or after this many silent minutes (0 = never)
   usageLimits: '', // one "model=daily requests" per line; learned from 429s too
   usagePrices: '', // one "model=USD per 1M input,USD per 1M output" per line
+  dictAutoAlias: false, // accept clear-cut learned fixes (3+ sightings) without asking
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
   shareList: '', // default people to share the minutes with
@@ -54,12 +55,15 @@ export const DEFAULTS = {
 };
 
 export async function getSettings() {
-  const { settings } = await chrome.storage.local.get('settings');
-  return { ...DEFAULTS, ...(settings || {}) };
+  const { settings, learned } = await chrome.storage.local.get(['settings', 'learned']);
+  // Names learned from past meetings (not part of what the user typed) are used as spelling hints.
+  const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+  return { ...DEFAULTS, ...(settings || {}), learnedNames };
 }
 
 export async function saveSettings(s) {
-  await chrome.storage.local.set({ settings: s });
+  const { learnedNames, ...own } = s;
+  await chrome.storage.local.set({ settings: own });
 }
 
 export function sttReady(s) {
