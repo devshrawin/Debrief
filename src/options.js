@@ -3,7 +3,6 @@ import { generate } from './llm.js';
 import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, allowListLines } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
 import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvice, explain } from './local.js';
-import { OTHER_SITES } from './adapters/index.js';
 import { learnAlias } from './dictionary.js';
 import { summarize, parseLimits, parsePrices, estimateCost, dayKey } from './usage.js';
 
@@ -198,29 +197,6 @@ $('grantMic').onclick = async () => {
   micStatus();
 };
 
-// ---- other meeting sites ----
-const SITE_ORIGINS = OTHER_SITES.flatMap((s) => s.matches);
-async function siteStatus() {
-  const granted = await chrome.permissions.contains({ origins: SITE_ORIGINS }).catch(() => false);
-  $('siteStatus').textContent = granted ? 'Enabled for ' + OTHER_SITES.map((s) => s.name).join(', ') : 'Off';
-  $('enableSites').disabled = granted;
-  $('disableSites').disabled = !granted;
-}
-$('enableSites').onclick = async () => {
-  const ok = await chrome.permissions.request({ origins: SITE_ORIGINS });
-  if (!ok) {
-    $('siteStatus').textContent = 'Chrome permission was not granted.';
-    return;
-  }
-  await chrome.runtime.sendMessage({ target: 'bg', type: 'sites', on: true, matches: SITE_ORIGINS });
-  siteStatus();
-};
-$('disableSites').onclick = async () => {
-  await chrome.runtime.sendMessage({ target: 'bg', type: 'sites', on: false });
-  await chrome.permissions.remove({ origins: SITE_ORIGINS }).catch(() => {});
-  siteStatus();
-};
-
 // ---- local models ----
 $('useOllama').onclick = () => {
   $('llmProvider').value = 'openai';
@@ -361,6 +337,5 @@ $('testMail').onclick = async () => {
   updateGuide();
   renderUsage();
   renderLearned();
-  siteStatus();
   showTab(location.hash.slice(1) || 'start');
 })();

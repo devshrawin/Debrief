@@ -25,7 +25,7 @@ export function micButton(doc) {
 
 // A call is on when there is a mic button and a leave/end button and no end screen.
 export function leaveButton(doc) {
-  return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
+  return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang\s*-?up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
 }
 
 export function inCall(doc) {

@@ -410,6 +410,8 @@ import { adapterFor } from './adapters/index.js';
     if (!alive()) return shutdown();
     await load();
     render();
+    // Other meeting apps can be switched off in Settings; Google Meet always works.
+    if (app.id === 'generic' && S.otherSites === false) return;
     reportMute();
     checkEnded();
     sampleMeeting();

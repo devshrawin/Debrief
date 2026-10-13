@@ -26,7 +26,7 @@ export const DEFAULTS = {
   shareDomains: false, // script helper: allow whole company domains instead of single addresses
   calendarLookup: true, // ask the relay who was invited (needs the calendar permission)
   meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
-  otherSites: false, // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
+  otherSites: true, // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
 

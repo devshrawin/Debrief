@@ -1198,8 +1198,8 @@
     // ask the relay who was invited (needs the calendar permission)
     meetCaptions: "read",
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
-    otherSites: false,
-    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
+    otherSites: true,
+    // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -14733,7 +14733,7 @@ function out(o) {
           h(
             "ol",
             { class: "how" },
-            h("li", {}, "You join a Google Meet as you always do."),
+            h("li", {}, "You join your online meeting in Chrome as you always do: Google Meet, Zoom or Teams in the browser, Webex and others."),
             h("li", {}, "You start Debrief. It records the sound of that browser tab (the other people) and, if you want, your own microphone."),
             h("li", {}, "It turns the speech into text, in Hindi, English, Malayalam or any mix of them."),
             h("li", {}, "When the call ends, Debrief stops by itself, writes the minutes with decisions and action items, and can email them to you and your team.")
@@ -14823,7 +14823,7 @@ function out(o) {
           card(
             "How your voice is handled",
             toggle("captureMic", "Include my microphone", "Your own voice goes into the transcript, labelled with your name."),
-            toggle("followMeetMute", "Pause my mic while muted in Meet", "Muting yourself in Google Meet does not mute Debrief by itself, so this makes Debrief follow your Meet mute button. Side conversations stay out of the transcript."),
+            toggle("followMeetMute", "Pause my mic while muted in the meeting", "Muting yourself in the meeting app does not mute Debrief by itself, so this makes Debrief follow the app's mute button. Side conversations stay out of the transcript."),
             p("You can also switch your voice in or out at any time from the popup or with the keyboard.", "hint")
           )
         ];
@@ -14902,7 +14902,7 @@ function out(o) {
           h(
             "ol",
             { class: "how" },
-            h("li", {}, "Join your Google Meet as usual and keep that tab in front."),
+            h("li", {}, "Join your meeting in Chrome as usual (Google Meet, or Zoom, Teams and others in the browser) and keep that tab in front. The Debrief icon glows amber on the tab while a call is on, as a reminder to record."),
             h("li", {}, "Click the Debrief icon in the toolbar and press ", h("b", {}, "Start recording this tab"), ", or just press ", kbd(shortcuts["toggle-recording"] || "Alt+Shift+M"), ". The icon shows a red REC badge."),
             h("li", {}, "Open the popup any time to see two level bars: ", h("b", {}, "Meeting audio"), " should move when others speak, and ", h("b", {}, "Your mic"), ' when you do. If they say "silent", fix the sound before you have lost minutes.'),
             h("li", {}, "To leave your own voice out for a while, use the switch in the popup or press ", kbd(shortcuts["toggle-mic"] || "Alt+Shift+K"), "."),
@@ -14912,7 +14912,7 @@ function out(o) {
         ),
         card(
           "Automatic behaviour",
-          toggle("autoStop", "Stop when the meeting ends", `Notices Meet's "you left" and "meeting ended" screens, or you leaving the call page.`),
+          toggle("autoStop", "Stop when the meeting ends", 'Notices the "you left" or "meeting ended" screen, or you leaving the call page.'),
           h("label", { for: "t-quiet" }, "Also stop after silence"),
           h(
             "select",
@@ -14926,9 +14926,9 @@ function out(o) {
           p("A safety net for when nobody has made a sound for that long.", "hint")
         ),
         card(
-          "Optional extras on the Meet page",
+          "Optional extras on the meeting page",
           toggle("pillOnPage", "Show a small recording pill on the call", "A draggable capsule with the timer, a mic switch and alerts. Off by default so nothing covers your meeting."),
-          h("label", { for: "t-cap" }, "Speaker names from Meet"),
+          h("label", { for: "t-cap" }, "Speaker names (Google Meet only)"),
           h(
             "select",
             { id: "t-cap", onchange: (e) => patch({ meetCaptions: e.target.value }) },
@@ -14937,7 +14937,7 @@ function out(o) {
             h("option", { value: "off" }, "Don't read captions")
           ),
           p("Meet's live captions say who is speaking, so the minutes can name people. Turning captions on shows subtitles on your screen.", "hint"),
-          p('In the popup, "Check page detection" shows what Debrief can read from your Meet page. Use it once in a call to see that speaker names, attendance and the mute button are recognised.', "hint")
+          p('In the popup, "Check page detection" shows what Debrief can read from your meeting page. Use it once in a call to see that the mute button, speaker names and attendance are recognised.', "hint")
         )
       ],
       after: () => {
@@ -15057,7 +15057,7 @@ function out(o) {
         ),
         card(
           "Other meeting apps",
-          p("Recording, transcription, minutes and email already work on any web meeting tab, not only Meet. For Teams, Zoom (web), Webex, Whereby and Jitsi you can also switch on mute-following and end-of-call detection in Settings \u2192 General \u2192 Meeting pages (experimental). Installed desktop apps cannot be recorded by a browser extension.")
+          p('Recording, transcription, minutes and email work on any web meeting tab. For Zoom (in the browser), Teams, Webex, Whereby, Jitsi, GoTo Meeting, BlueJeans, Chime, Zoho Meeting and Skype for Web, Debrief also glows amber during a call, follows your mute button and stops when the call ends. This uses generic detection, so "Check page detection" in the popup tells you what it can read. Installed desktop apps (the Zoom or Teams program) cannot be recorded by a browser extension.')
         )
       ]
     },
@@ -15114,7 +15114,7 @@ function out(o) {
             ),
             h("div", { class: "btnrow" }, h("a", { class: "btn", href: "options.html", target: "_blank" }, "Open Settings"), h("a", { class: "btn", href: GUIDE, target: "_blank" }, "Read the full guide"))
           ),
-          h("div", { class: "callout" }, "Next: open a Google Meet, click the Debrief icon, and press Start recording this tab. You can reopen this tour any time from the popup (Take the tour).")
+          h("div", { class: "callout" }, "Next: join an online meeting in Chrome, click the Debrief icon, and press Start recording this tab. You can reopen this tour any time from the popup (Take the tour).")
         ];
       }
     }

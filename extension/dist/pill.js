@@ -140,7 +140,7 @@
     return null;
   }
   function leaveButton(doc) {
-    return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text2(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
+    return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang\s*-?up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text2(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
   }
   function inCall2(doc) {
     return !!(micButton2(doc) && leaveButton(doc) && !endScreen2(doc));
@@ -166,15 +166,28 @@
 
   // src/adapters/index.js
   var OTHER_SITES = [
-    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*"] },
-    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*"] },
+    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*", "https://zoom.us/wc/*"] },
+    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*", "https://teams.cloud.microsoft/*"] },
     { name: "Webex", matches: ["https://*.webex.com/*"] },
     { name: "Whereby", matches: ["https://whereby.com/*"] },
-    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
+    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*", "https://8x8.vc/*"] },
+    { name: "GoTo Meeting", matches: ["https://app.goto.com/*", "https://app.gotomeeting.com/*"] },
+    { name: "BlueJeans", matches: ["https://app.bluejeans.com/*"] },
+    { name: "Amazon Chime", matches: ["https://app.chime.aws/*"] },
+    { name: "Zoho Meeting", matches: ["https://meeting.zoho.com/*", "https://meeting.zoho.in/*", "https://meeting.zoho.eu/*"] },
+    { name: "Skype for Web", matches: ["https://web.skype.com/*"] }
   ];
+  var hostOf = (pattern) => pattern.replace(/^https:\/\//, "").split("/")[0];
+  var hostMatches = (pattern, hostname) => {
+    const h = hostOf(pattern);
+    return h.startsWith("*.") ? hostname === h.slice(2) || hostname.endsWith(h.slice(1)) : hostname === h;
+  };
+  function siteFor(hostname) {
+    return OTHER_SITES.find((s) => s.matches.some((m) => hostMatches(m, hostname))) || null;
+  }
   function adapterFor(hostname) {
     if (hostname === "meet.google.com") return { id: "meet", name: "Google Meet", ...meet_exports, hasPeople: true };
-    const site = OTHER_SITES.find((s) => s.matches.some((m) => new RegExp(`^${m.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`).test(`https://${hostname}/`)));
+    const site = siteFor(hostname);
     return { id: "generic", name: site?.name || hostname, ...generic_exports, diagnose: (doc) => diagnose2(doc, site?.name || hostname), hasPeople: false };
   }
 
@@ -557,6 +570,7 @@
       if (!alive()) return shutdown();
       await load();
       render();
+      if (app.id === "generic" && S.otherSites === false) return;
       reportMute();
       checkEnded();
       sampleMeeting();
