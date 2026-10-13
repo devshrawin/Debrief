@@ -1,5 +1,8 @@
 import { marked } from 'marked';
-import { getSettings, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, saveSettings, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord } from './dictionary.js';
+import { writeMinutes } from './minutes.js';
+import { matchPeople } from './attendance.js';
 import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
@@ -18,6 +21,11 @@ const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&l
 marked.use({ gfm: true, renderer: { html: ({ text }) => escapeHtml(text) } });
 
 const renderMd = (md) => marked.parse(md || '');
+
+// Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
+const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
+const nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList() });
+const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
 function renderMom() {
   $('mom').innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
@@ -39,6 +47,7 @@ function renderTranscript() {
     return;
   }
   const me = settings.myName || 'Me';
+  const ctx = nameCtx();
   $('transcript').replaceChildren(
     ...segs.map((s) => {
       const row = document.createElement('div');
@@ -46,7 +55,7 @@ function renderTranscript() {
       row.innerHTML = `<span class="t"></span><span class="who ${s.src}"></span><span class="text"></span>`;
       row.children[0].textContent = fmtTime(s.t);
       row.children[1].textContent = s.src === 'me' ? me : 'Others';
-      row.children[2].textContent = s.text;
+      row.children[2].textContent = applyDictionary(s.text, ctx.entries, ctx.attendees);
       return row;
     })
   );
@@ -80,43 +89,50 @@ async function runGenerate() {
     queued = false;
     $('mom').innerHTML = renderMd(buf);
   };
-  const attempt = () => {
-    buf = '';
-    return generate({
-      settings,
-      system: buildSystemPrompt(settings.momLanguage),
-      user: buildUserPrompt(meeting, settings, $('notes').value),
-      signal: abortCtl.signal,
-      onText: (d) => {
-        buf += d;
-        if (!queued) {
-          queued = true;
-          requestAnimationFrame(paint);
-        }
-      },
-    });
-  };
-  try {
-    let text;
+  // One model call with the same retry-on-rate-limit behaviour as before.
+  const gen = async (system, user, onText) => {
     for (let i = 0; ; i++) {
       try {
-        text = await attempt();
-        break;
+        return await generate({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {}) });
       } catch (e) {
         if (i >= 3 || !isRetryable(e)) throw e;
         const wait = [5, 15, 30][i];
         $('genStatus').textContent = `Attempt ${i + 1} failed (${e.message.slice(0, 80)}). Retrying in ${wait} s…`;
         await sleep(wait * 1000, abortCtl.signal);
-        $('genStatus').textContent = `Writing with ${modelLabel(settings)} (attempt ${i + 2})…`;
       }
     }
-    meeting.mom = text;
+  };
+  try {
     meeting.notes = $('notes').value;
+    const pending = await listPending(id);
+    const ctx = nameCtx();
+    const absent = matchPeople(meeting.invited, meeting.presence, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+    const { mom: text, stats } = await writeMinutes({
+      meeting,
+      settings,
+      notes: meeting.notes,
+      ctx: { ...ctx, absent, captions: meeting.captions },
+      gen: (system, user, onText) =>
+        gen(system, user, onText && ((d) => {
+          buf += d;
+          if (!queued) {
+            queued = true;
+            requestAnimationFrame(paint);
+          }
+        })),
+      onText: () => {},
+      onStatus: (t) => {
+        buf = '';
+        $('genStatus').textContent = t;
+      },
+      coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length },
+    });
+    meeting.mom = text;
     meeting.model = modelLabel(settings);
     await saveMeeting(meeting);
     renderMom();
-    $('genStatus').textContent = `Done · ${meeting.model}`;
-    // First time only: regenerating or editing never re-sends on its own.
+    $('genStatus').textContent = `Done · ${meeting.model}${stats.calls > 1 ? ` · ${stats.items} items found, ${stats.missed} added by the check` : ''}`;
+    // First time only: regenerating or editing never re-sends by itself.
     if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt) emailMom(true);
   } catch (e) {
     $('genStatus').textContent = abortCtl.signal.aborted ? 'Stopped.' : `Failed: ${e.message}`;
@@ -141,7 +157,7 @@ async function emailMom(auto) {
   $('mail').disabled = true;
   $('mailStatus').textContent = auto ? 'Emailing the minutes…' : 'Sending…';
   try {
-    const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName) : '');
+    const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
     const r = await sendMail(mail, settings);
     meeting.emailedAt = Date.now();
     meeting.emailedTo = r.to;
@@ -241,7 +257,7 @@ $('copy').onclick = async () => {
   $('copy').textContent = 'Copied ✓';
   setTimeout(() => ($('copy').textContent = 'Copy'), 1500);
 };
-$('dlTxt').onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, 'text/plain', formatTranscript(meeting, settings.myName));
+$('dlTxt').onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, 'text/plain', formatTranscript(meeting, settings.myName, nameCtx()));
 $('del').onclick = async () => {
   if (!confirm('Delete this meeting, its transcript and MOM? This cannot be undone.')) return;
   await deleteMeeting(id);
@@ -252,6 +268,53 @@ $('title').onchange = async () => {
   meeting.title = $('title').value.trim() || 'Meeting';
   await saveMeeting(meeting);
   renderMeta();
+};
+
+function renderSuggestions() {
+  const box = $('suggest');
+  const text = meeting.segments.map((x) => x.text).join(' ');
+  const list = suggestNames(text, attendeeList(), parseDictionary(settings.dictionary));
+  box.classList.toggle('hidden', !list.length);
+  box.replaceChildren(
+    Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Possible misheard names: ' }),
+    ...list.map((x) => {
+      const b = document.createElement('button');
+      b.textContent = `${x.found} → ${x.suggest} (${x.count}×)`;
+      b.style.margin = '0 6px 4px 0';
+      b.onclick = () => fixName(x.found, x.suggest, true);
+      return b;
+    })
+  );
+}
+
+async function fixName(wrong, right, remember) {
+  wrong = wrong.trim();
+  right = right.trim();
+  if (!wrong || !right) {
+    $('fixMsg').textContent = 'Enter both names.';
+    return;
+  }
+  for (const seg of meeting.segments) seg.text = replaceWord(seg.text, wrong, right);
+  if (meeting.mom) meeting.mom = replaceWord(meeting.mom, wrong, right);
+  await saveMeeting(meeting);
+  if (remember) {
+    settings.dictionary = learnAlias(settings.dictionary, right, wrong);
+    await saveSettings(settings);
+  }
+  $('fixMsg').textContent = `Replaced "${wrong}" with "${right}"${remember ? ' and remembered it' : ''}.`;
+  $('fixWrong').value = '';
+  $('fixRight').value = '';
+  renderTranscript();
+  renderMom();
+  renderSuggestions();
+}
+
+$('fixApply').onclick = () => fixName($('fixWrong').value, $('fixRight').value, $('fixRemember').checked);
+$('attendees').onchange = async () => {
+  meeting.attendees = parseAttendees($('attendees').value);
+  await saveMeeting(meeting);
+  renderTranscript();
+  renderSuggestions();
 };
 
 document.querySelectorAll('.tabs button').forEach((b) => {
@@ -270,9 +333,11 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     return;
   }
   $('notes').value = meeting.notes || '';
+  $('attendees').value = (meeting.attendees || []).join('\n');
   renderMeta();
   renderErrors();
   renderTranscript();
+  renderSuggestions();
   renderMom();
   $('retry').onclick = async () => {
     const left = await retryPending();

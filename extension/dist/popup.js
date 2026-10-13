@@ -66,6 +66,10 @@
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictionary: "",
+    // names and terms, one per line: Right | misheard, as, this
+    minutesMode: "thorough",
+    // thorough = extract, write, then check; quick = one pass
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",

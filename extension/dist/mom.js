@@ -2501,6 +2501,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictionary: "",
+    // names and terms, one per line: Right | misheard, as, this
+    minutesMode: "thorough",
+    // thorough = extract, write, then check; quick = one pass
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -2534,6 +2538,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   async function getSettings() {
     const { settings: settings2 } = await chrome.storage.local.get("settings");
     return { ...DEFAULTS, ...settings2 || {} };
+  }
+  async function saveSettings(s) {
+    await chrome.storage.local.set({ settings: s });
   }
   function llmReady(s) {
     if (s.llmProvider === "anthropic") return !!s.anthropicKey && !!s.anthropicModel;
@@ -2570,6 +2577,420 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     } catch {
       return text;
     }
+  }
+
+  // src/dictionary.js
+  var WORD = "\\p{L}\\p{N}_";
+  var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
+  function parseDictionary(text) {
+    const entries = [];
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const [name, rest = ""] = line.split("|");
+      const canonical = name.trim();
+      if (!canonical) continue;
+      const aliases = rest.split(",").map((a) => a.trim()).filter((a) => a && norm(a) !== norm(canonical));
+      entries.push({ name: canonical, aliases });
+    }
+    return entries;
+  }
+  function serializeDictionary(entries) {
+    return entries.map((e) => e.aliases.length ? `${e.name} | ${e.aliases.join(", ")}` : e.name).join("\n");
+  }
+  function learnAlias(text, right, wrong) {
+    const entries = parseDictionary(text);
+    let e = entries.find((x2) => norm(x2.name) === norm(right));
+    if (!e) entries.push(e = { name: right.trim(), aliases: [] });
+    if (wrong && !e.aliases.some((a) => norm(a) === norm(wrong)) && norm(wrong) !== norm(right)) e.aliases.push(wrong.trim());
+    return serializeDictionary(entries);
+  }
+  function attendeeKeys(attendees) {
+    const keys = /* @__PURE__ */ new Set();
+    for (const a of attendees || []) {
+      const full = norm(a);
+      if (!full) continue;
+      keys.add(full);
+      keys.add(full.split(/\s+/)[0]);
+    }
+    return keys;
+  }
+  function applyDictionary(text, entries, attendees = []) {
+    if (!text || !entries?.length) return text;
+    const present = attendeeKeys(attendees);
+    let out = text;
+    for (const e of entries) {
+      for (const alias of e.aliases) {
+        if (present.has(norm(alias))) continue;
+        const re2 = new RegExp(`(?<![${WORD}])${esc(alias)}(?![${WORD}])`, "giu");
+        out = out.replace(re2, e.name);
+      }
+    }
+    return out;
+  }
+  function hintTerms(entries, attendees = []) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const t of [...attendees || [], ...entries.map((e) => e.name)]) {
+      const k2 = norm(t);
+      if (k2 && !seen.has(k2)) {
+        seen.add(k2);
+        out.push(t.trim());
+      }
+    }
+    return out;
+  }
+  function distance(a, b) {
+    const m = a.length;
+    const n = b.length;
+    const d = Array.from({ length: m + 1 }, (_2, i) => [i, ...Array(n).fill(0)]);
+    for (let j2 = 1; j2 <= n; j2++) d[0][j2] = j2;
+    for (let i = 1; i <= m; i++) {
+      for (let j2 = 1; j2 <= n; j2++) {
+        d[i][j2] = Math.min(d[i - 1][j2] + 1, d[i][j2 - 1] + 1, d[i - 1][j2 - 1] + (a[i - 1] === b[j2 - 1] ? 0 : 1));
+      }
+    }
+    return d[m][n];
+  }
+  var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
+  function suggestNames(text, attendees, entries = []) {
+    const first = [...new Set((attendees || []).map((a) => norm(a).split(/\s+/)[0]).filter((f) => f.length >= 3))];
+    if (!first.length) return [];
+    const known = /* @__PURE__ */ new Set([...first, ...entries.flatMap((e) => [norm(e.name), ...e.aliases.map(norm)])]);
+    const counts = /* @__PURE__ */ new Map();
+    for (const m of String(text || "").matchAll(new RegExp("(?<![\\p{L}\\p{N}_])\\p{Lu}[\\p{L}]{2,}(?![\\p{L}\\p{N}_])", "gu"))) {
+      const w = m[0];
+      const k2 = norm(w);
+      if (known.has(k2) || COMMON.has(k2)) continue;
+      counts.set(w, (counts.get(w) || 0) + 1);
+    }
+    const out = [];
+    for (const [w, count] of counts) {
+      const k2 = norm(w);
+      const close = first.filter((f) => Math.abs(f.length - k2.length) <= 1 && distance(k2, f) === 1);
+      if (close.length === 1) out.push({ found: w, suggest: attendees.find((a) => norm(a).split(/\s+/)[0] === close[0]).split(/\s+/)[0], count });
+    }
+    return out.sort((a, b) => b.count - a.count);
+  }
+  function glossaryLine(entries, attendees) {
+    const terms = hintTerms(entries, attendees);
+    return terms.length ? terms.join(", ") : "";
+  }
+  function replaceWord(text, wrong, right) {
+    if (!wrong) return text;
+    return String(text).replace(new RegExp(`(?<![${WORD}])${esc(wrong)}(?![${WORD}])`, "giu"), right);
+  }
+
+  // src/prompt.js
+  function buildSystemPrompt(language, { evidence = true } = {}) {
+    return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, Malayalam, or a mix of them (Hinglish, Manglish).
+
+About the transcript:
+- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi or Malayalam written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
+- Lines tagged ME come from the note-taker's own microphone. Lines tagged OTHERS are all remote participants mixed together, so you usually cannot tell which remote person spoke. Attribute statements to a named person only when the transcript itself makes it clear (someone is addressed by name, introduces themselves, or is assigned a task by name), or when a speaker timeline is provided below the transcript.
+- If the note-taker's microphone picked up speaker audio, the same sentence may appear under both ME and OTHERS. Count it once.
+
+Names:
+- If a "Names" list or an attendee list is given, it is authoritative: write every name exactly as spelled there, even if the transcript spelled it differently (for example a common name that sounds similar). Never invent a surname.
+- Only name someone as an action owner when the transcript or the attendee list supports it. If the named owner is listed as not present in the meeting, say so in the action row.
+
+Completeness:
+- Capture EVERY decision, action item, commitment, deadline, open question and risk that was mentioned, however briefly. When a checklist of extracted items is supplied, each item must end up in Decisions, Action Items or Open Questions (merge true duplicates only).
+- Do not drop an item because it seems minor. Do not add anything the transcript does not support.
+
+Write the MOM in ${language}. Keep names, product names, numbers, dates, and technical terms exactly as said. Record only what the transcript supports. When something is ambiguous, keep it and mark it "(unclear)" rather than guessing, and never invent owners or deadlines.
+
+Output GitHub-flavored Markdown in this structure, leaving out any section that has no content except Action Items:
+
+# <meeting title>
+**Date:** \u2026 \xB7 **Duration:** \u2026 \xB7 **Participants (as identified):** \u2026
+
+## Summary
+3\u20136 bullets covering the purpose and main outcomes.
+
+## Discussion
+One ### sub-heading per topic, with concise bullets for the key points, figures, and viewpoints raised.
+
+## Decisions
+Bulleted list of what was agreed${evidence ? ", each ending with the time it was said in brackets, e.g. [12:40]" : ""}.
+
+## Action Items
+${evidence ? '| # | Action | Owner | Due | Source |\n|---|--------|-------|-----|--------|\nIn Source put the timestamp and a quote of at most 12 words from the transcript, e.g. [12:40] "kal tak deploy kar denge". ' : "| # | Action | Owner | Due |\n|---|--------|-------|-----|\n"}Use "\u2014" for an unknown owner or due date. If there are none, write "None recorded."
+
+## Open Questions / Follow-ups
+
+## Next Meeting
+Only if a date, time, or agenda for the next meeting was mentioned.
+
+Do not write an Attendance section or notes about the recording: they are added automatically. Output only the Markdown MOM, with no preamble.`;
+  }
+  function formatTranscript(meeting2, myName, ctx = {}) {
+    const me2 = myName ? `ME (${myName})` : "ME";
+    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? me2 : "OTHERS"}: ${applyDictionary(s.text, ctx.entries, ctx.attendees)}`).join("\n");
+  }
+  function speakerTimeline(captions, ctx = {}) {
+    if (!captions?.length) return "";
+    const runs = [];
+    for (const c of [...captions].sort((a, b) => a.t - b.t)) {
+      const last = runs[runs.length - 1];
+      const name = applyDictionary(c.name, ctx.entries, ctx.attendees);
+      if (last && last.name === name && c.t - last.end < 20) {
+        last.end = c.t;
+        if (last.text.length < 160) last.text += ` ${c.text}`;
+      } else runs.push({ name, start: c.t, end: c.t, text: c.text });
+    }
+    return runs.map((r) => `[${fmtTime(r.start)}\u2013${fmtTime(r.end)}] ${r.name}: ${r.text.slice(0, 160)}`).join("\n");
+  }
+  function header(meeting2, settings2) {
+    const start = new Date(meeting2.startedAt);
+    const durationMin = meeting2.endedAt ? Math.round((meeting2.endedAt - meeting2.startedAt) / 6e4) : null;
+    return [
+      `Meeting title: ${meeting2.title || "Untitled meeting"}`,
+      `Date: ${start.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}`,
+      durationMin != null ? `Duration: ${durationMin} min` : null,
+      settings2.myName ? `Note-taker (ME): ${settings2.myName}` : null
+    ].filter(Boolean);
+  }
+  function buildUserPrompt(meeting2, settings2, notes, ctx = {}) {
+    const lines = header(meeting2, settings2);
+    const names = glossaryLine(ctx.entries || [], ctx.attendees || []);
+    if (names) lines.push("", `Names and terms (spell exactly like this): ${names}`);
+    if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(", ")}`);
+    if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
+    if (notes?.trim()) lines.push("", "Context from the note-taker (attendees, agenda, spellings):", notes.trim());
+    const timeline = speakerTimeline(ctx.captions, ctx);
+    lines.push("", "<transcript>", formatTranscript(meeting2, settings2.myName, ctx), "</transcript>");
+    if (timeline) lines.push("", "Speaker timeline from Meet live captions (who was talking when; the caption wording may be wrong, so use it only to attribute speakers):", "<speakers>", timeline, "</speakers>");
+    if (ctx.checklist) lines.push("", "Checklist of items extracted from the transcript. Every one must appear in the minutes:", "<checklist>", ctx.checklist, "</checklist>");
+    return lines.join("\n");
+  }
+  var EXTRACT_SYSTEM = `You extract facts from one part of a meeting transcript (Hindi, English, Malayalam or a mix). The transcript is machine speech-to-text, so names and numbers may be garbled. If a Names list is given, use exactly those spellings.
+
+List EVERY decision, action item, commitment, deadline, open question, risk, number or date that was stated, however briefly. One per line, in exactly this format:
+TYPE | owner or - | due or - | [mm:ss] | short description | quote of at most 12 words
+TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. Use "-" when owner or due is not stated; never guess an owner. If there is nothing, output NONE. Output only the lines.`;
+  function buildExtractPrompt(meeting2, settings2, windowText, ctx = {}) {
+    const lines = header(meeting2, settings2);
+    const names = glossaryLine(ctx.entries || [], ctx.attendees || []);
+    if (names) lines.push(`Names and terms (spell exactly like this): ${names}`);
+    lines.push("", "<transcript>", windowText, "</transcript>");
+    return lines.join("\n");
+  }
+  var CHECK_SYSTEM = `You audit meeting minutes against the transcript they were written from. Find anything stated in the transcript that is MISSING from the minutes: decisions, action items (with owner or deadline), commitments, open questions, risks, important numbers or dates. Ignore small talk and anything already covered, even if worded differently.
+Output one line per missing item as: [mm:ss] description | quote of at most 12 words. If nothing is missing, output exactly NONE. Output only those lines.`;
+  function buildCheckPrompt(transcriptText, mom) {
+    return ["<transcript>", transcriptText, "</transcript>", "", "<minutes>", mom, "</minutes>"].join("\n");
+  }
+  function splitWindows(lines, maxWords = 3200) {
+    const windows = [];
+    let cur = [];
+    let words = 0;
+    for (const line of lines) {
+      const w = line.split(/\s+/).length;
+      if (cur.length && words + w > maxWords) {
+        windows.push(cur);
+        cur = [cur[cur.length - 1]];
+        words = cur[0].split(/\s+/).length;
+      }
+      cur.push(line);
+      words += w;
+    }
+    if (cur.length) windows.push(cur);
+    return windows;
+  }
+  function parseItems(text) {
+    const items = [];
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      const line = raw.replace(/^[-*\d.)\s]+/, "").trim();
+      if (!line || /^NONE\b/i.test(line)) continue;
+      const parts = line.split("|").map((p) => p.trim());
+      const type = (parts[0] || "").toUpperCase();
+      if (!["ACTION", "DECISION", "QUESTION", "RISK", "FACT"].includes(type) || parts.length < 5) continue;
+      items.push({ type, owner: parts[1], due: parts[2], at: parts[3], text: parts[4], quote: parts[5] || "" });
+    }
+    return items;
+  }
+  function itemsToChecklist(items) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const it2 of items) {
+      const key2 = `${it2.type}|${it2.text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()}`;
+      if (seen.has(key2)) continue;
+      seen.add(key2);
+      out.push(`${it2.type} ${it2.at} ${it2.text}${it2.owner && it2.owner !== "-" ? ` (owner: ${it2.owner})` : ""}${it2.due && it2.due !== "-" ? ` (due: ${it2.due})` : ""}${it2.quote ? ` "${it2.quote}"` : ""}`);
+    }
+    return out.join("\n");
+  }
+
+  // src/attendance.js
+  var norm2 = (s) => String(s || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  var tokens = (s) => norm2(s).split(" ").filter(Boolean);
+  function lev1(a, b) {
+    if (a === b) return true;
+    if (Math.abs(a.length - b.length) > 1 || a.length < 4) return false;
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1);
+    const [s, l3] = a.length < b.length ? [a, b] : [b, a];
+    return s.slice(i) === l3.slice(i + 1);
+  }
+  function identities(p, entries = []) {
+    const ids = /* @__PURE__ */ new Set();
+    const add = (v) => {
+      const t = tokens(v);
+      if (t.length) ids.add(t.join(" "));
+    };
+    add(p.name);
+    if (p.email) add(String(p.email).split("@")[0].replace(/[._-]+/g, " "));
+    for (const e of entries) {
+      const names = [e.name, ...e.aliases].map((x2) => tokens(x2).join(" "));
+      for (const id2 of [...ids]) if (names.includes(id2)) names.forEach((n) => ids.add(n));
+    }
+    return [...ids];
+  }
+  function score(a, b) {
+    if (a === b) return 1;
+    const ta = a.split(" ");
+    const tb = b.split(" ");
+    const fa = ta[0];
+    const fb = tb[0];
+    const sameFirst = fa === fb || lev1(fa, fb);
+    if (!sameFirst) return 0;
+    if (ta.length === 1 || tb.length === 1) return fa === fb ? 0.7 : 0.55;
+    const rest = (x2, y2) => x2.slice(1).every((w) => y2.slice(1).some((v) => v === w || v.startsWith(w) || w.startsWith(v)));
+    return rest(ta, tb) || rest(tb, ta) ? 0.9 : 0.6;
+  }
+  function matchPeople(invited, presence, { entries = [], myName = "" } = {}) {
+    const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && myName ? myName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
+    const rows = (invited || []).map((p) => ({ ...p, ids: identities(p, entries), match: null }));
+    const pairs = [];
+    rows.forEach((r, ri) => here.forEach((h2, hi) => {
+      const hid = identities({ name: h2.name }, entries);
+      const best = Math.max(0, ...r.ids.flatMap((a) => hid.map((b) => score(a, b))));
+      if (best >= 0.55) pairs.push({ ri, hi, best });
+    }));
+    pairs.sort((a, b) => b.best - a.best);
+    const usedR = /* @__PURE__ */ new Set();
+    const usedH = /* @__PURE__ */ new Set();
+    for (const p of pairs) {
+      if (usedR.has(p.ri) || usedH.has(p.hi)) continue;
+      usedR.add(p.ri);
+      usedH.add(p.hi);
+      rows[p.ri].match = here[p.hi];
+    }
+    return {
+      rows: rows.map((r) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null })),
+      uninvited: here.filter((_2, i) => !usedH.has(i))
+    };
+  }
+  var mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+  var RSVP = { yes: "Accepted", no: "Declined", maybe: "Maybe", invited: "No reply", owner: "Organiser" };
+  function attendanceMarkdown({ invited, presence, durationSec, entries, myName }) {
+    const hasInvited = (invited || []).length > 0;
+    const hasPresence = Object.keys(presence || {}).length > 0;
+    if (!hasInvited && !hasPresence) return "";
+    const { rows, uninvited } = matchPeople(invited, presence, { entries, myName });
+    const lateAfter = 180;
+    const earlyBefore = 180;
+    const when = (p) => {
+      const notes = [];
+      if (p.first > lateAfter && durationSec > 600) notes.push("joined late");
+      if (durationSec && p.last < durationSec - earlyBefore && durationSec > 600) notes.push("left early");
+      return notes.join(", ");
+    };
+    const lines = ["## Attendance"];
+    if (hasInvited && hasPresence) {
+      const came = rows.filter((r) => r.present).length;
+      lines.push(`${came} of ${rows.length} invited people were seen in the meeting${uninvited.length ? `, plus ${uninvited.length} who were not on the invite` : ""}.`, "");
+      lines.push("| Person | Invite | In the meeting | Joined | Left | Note |", "|---|---|---|---|---|---|");
+      for (const r of rows) {
+        const p = r.present;
+        lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when(p) : ""} |`);
+      }
+      for (const p of uninvited) lines.push(`| ${p.name} | Not invited | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${when(p)} |`);
+      const absent = rows.filter((r) => !r.present).map((r) => r.name);
+      if (absent.length) lines.push("", `Not seen in the meeting: ${absent.join(", ")}. Action items for them need to be passed on.`);
+    } else if (hasPresence) {
+      lines.push("People seen in the meeting (no calendar invite was available to compare):", "", "| Person | Joined | Left | Note |", "|---|---|---|---|");
+      for (const [name, v] of Object.entries(presence)) lines.push(`| ${/^you$/i.test(name) && myName ? myName : name} | ${mmss(v[0])} | ${mmss(v[1])} | ${when({ first: v[0], last: v[1] })} |`);
+    } else {
+      lines.push("Invited:", "", ...rows.map((r) => `- ${r.name} (${RSVP[r.status] || r.status || "invited"})`), "", "_Who actually attended could not be read from the meeting page._");
+    }
+    lines.push("", "_Attendance is read from the meeting page and may miss people whose video tile was not on screen._");
+    return lines.join("\n");
+  }
+
+  // src/minutes.js
+  var wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
+  function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
+    if (pendingCount > 0) {
+      return `**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? "s" : ""}) could not be transcribed, so some points may be missing from these minutes.`;
+    }
+    if (errors > 0) return `Note: ${errors} transcription problem${errors > 1 ? "s" : ""} occurred during the recording; the audio was retried and recovered where possible.`;
+    return "";
+  }
+  async function writeMinutes({ meeting: meeting2, settings: settings2, notes, ctx = {}, gen, onText = () => {
+  }, onStatus = () => {
+  }, coverage = {} }) {
+    const lines = formatTranscript(meeting2, settings2.myName, ctx).split("\n").filter(Boolean);
+    const transcript = lines.join("\n");
+    const words = wordCount(transcript);
+    const thorough = settings2.minutesMode !== "quick" && words >= 400;
+    const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0 };
+    let checklist = "";
+    if (thorough) {
+      const windows = splitWindows(lines);
+      const items = [];
+      for (let i = 0; i < windows.length; i++) {
+        onStatus(`Reading the transcript carefully (part ${i + 1} of ${windows.length})\u2026`);
+        try {
+          stats.calls++;
+          const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting2, settings2, windows[i].join("\n"), ctx));
+          items.push(...parseItems(out));
+          stats.extractWindows++;
+        } catch (e) {
+          if (e?.name === "AbortError") throw e;
+          stats.extractFailed++;
+        }
+      }
+      stats.items = items.length;
+      checklist = itemsToChecklist(items);
+    }
+    onStatus("Writing the minutes\u2026");
+    stats.calls++;
+    let mom = (await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText)).trim();
+    if (thorough && words <= 24e3) {
+      onStatus("Checking nothing was left out\u2026");
+      try {
+        stats.calls++;
+        const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom));
+        const missing = out.split(/\r?\n/).map((l3) => l3.replace(/^[-*\s]+/, "").trim()).filter((l3) => l3 && !/^NONE\b/i.test(l3));
+        stats.missed = missing.length;
+        if (missing.length) {
+          mom += `
+
+## Added by the completeness check
+_These points were in the transcript but missing from the minutes above. Please review them._
+
+${missing.map((m) => `- ${m}`).join("\n")}`;
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") throw e;
+      }
+    }
+    const durationSec = meeting2.endedAt ? (meeting2.endedAt - meeting2.startedAt) / 1e3 : 0;
+    const attendance = attendanceMarkdown({ invited: meeting2.invited, presence: meeting2.presence, durationSec, entries: ctx.entries, myName: settings2.myName });
+    const cov = coverageMarkdown(coverage);
+    const foot = [];
+    if (attendance) foot.push(attendance);
+    if (cov) foot.push(cov);
+    foot.push(`_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ""})` : "a single pass"}._`);
+    return { mom: `${mom}
+
+---
+
+${foot.join("\n\n")}`, stats, checklist };
   }
 
   // node_modules/@anthropic-ai/sdk/internal/tslib.mjs
@@ -5037,12 +5458,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var clearSentinel = /* @__PURE__ */ Symbol("clear");
   var APPEND_HEADERS = /* @__PURE__ */ new Set(["x-stainless-helper"]);
   var appendHeaderValue = (existing, addition) => {
-    const tokens = existing ? existing.split(",").map((t) => t.trim()).filter(Boolean) : [];
+    const tokens2 = existing ? existing.split(",").map((t) => t.trim()).filter(Boolean) : [];
     for (const tok of addition.split(",").map((t) => t.trim())) {
-      if (tok && !tokens.includes(tok))
-        tokens.push(tok);
+      if (tok && !tokens2.includes(tok))
+        tokens2.push(tok);
     }
-    return tokens.join(", ");
+    return tokens2.join(", ");
   };
   var buildHeaders = (newHeaders) => {
     const targetHeaders = new Headers();
@@ -8556,7 +8977,7 @@ ${underline}`);
   // node_modules/@anthropic-ai/sdk/_vendor/partial-json-parser/parser.mjs
   var tokenize = (input) => {
     let current = 0;
-    let tokens = [];
+    let tokens2 = [];
     while (current < input.length) {
       let char = input[current];
       if (char === "\\") {
@@ -8564,7 +8985,7 @@ ${underline}`);
         continue;
       }
       if (char === "{") {
-        tokens.push({
+        tokens2.push({
           type: "brace",
           value: "{"
         });
@@ -8572,7 +8993,7 @@ ${underline}`);
         continue;
       }
       if (char === "}") {
-        tokens.push({
+        tokens2.push({
           type: "brace",
           value: "}"
         });
@@ -8580,7 +9001,7 @@ ${underline}`);
         continue;
       }
       if (char === "[") {
-        tokens.push({
+        tokens2.push({
           type: "paren",
           value: "["
         });
@@ -8588,7 +9009,7 @@ ${underline}`);
         continue;
       }
       if (char === "]") {
-        tokens.push({
+        tokens2.push({
           type: "paren",
           value: "]"
         });
@@ -8596,7 +9017,7 @@ ${underline}`);
         continue;
       }
       if (char === ":") {
-        tokens.push({
+        tokens2.push({
           type: "separator",
           value: ":"
         });
@@ -8604,7 +9025,7 @@ ${underline}`);
         continue;
       }
       if (char === ",") {
-        tokens.push({
+        tokens2.push({
           type: "delimiter",
           value: ","
         });
@@ -8634,7 +9055,7 @@ ${underline}`);
         if (danglingQuote) {
           current = input.length;
         } else {
-          tokens.push({
+          tokens2.push({
             type: "string",
             value: input.slice(start, end)
           });
@@ -8660,7 +9081,7 @@ ${underline}`);
           value += char;
           char = input[++current];
         }
-        tokens.push({
+        tokens2.push({
           type: "number",
           value,
           unterminated: current === input.length
@@ -8678,7 +9099,7 @@ ${underline}`);
           char = input[++current];
         }
         if (value == "true" || value == "false" || value === "null") {
-          tokens.push({
+          tokens2.push({
             type: "name",
             value
           });
@@ -8690,11 +9111,11 @@ ${underline}`);
       }
       current++;
     }
-    return tokens;
+    return tokens2;
   };
-  var strip = (tokens) => {
+  var strip = (tokens2) => {
     let open2 = [];
-    for (const token of tokens) {
+    for (const token of tokens2) {
       if (token.type === "brace" || token.type === "paren") {
         if (token.value === "{" || token.value === "[") {
           open2.push(token.value);
@@ -8704,10 +9125,10 @@ ${underline}`);
       }
     }
     let innermostOpenBracket = open2[open2.length - 1];
-    let length = tokens.length;
+    let length = tokens2.length;
     let JSON_NUMBER = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$/;
     while (length > 0) {
-      let lastToken = tokens[length - 1];
+      let lastToken = tokens2[length - 1];
       switch (lastToken.type) {
         case "separator":
           length--;
@@ -8719,7 +9140,7 @@ ${underline}`);
           }
           break;
         case "string":
-          let tokenBeforeTheLastToken = tokens[length - 2];
+          let tokenBeforeTheLastToken = tokens2[length - 2];
           if (innermostOpenBracket === "{" && (tokenBeforeTheLastToken?.type === "delimiter" || tokenBeforeTheLastToken?.type === "brace" && tokenBeforeTheLastToken.value === "{")) {
             length--;
             continue;
@@ -8731,11 +9152,11 @@ ${underline}`);
       }
       break;
     }
-    return tokens.slice(0, length);
+    return tokens2.slice(0, length);
   };
-  var unstrip = (tokens) => {
+  var unstrip = (tokens2) => {
     let tail = [];
-    tokens.map((token) => {
+    tokens2.map((token) => {
       if (token.type === "brace") {
         if (token.value === "{") {
           tail.push("}");
@@ -8754,23 +9175,23 @@ ${underline}`);
     if (tail.length > 0) {
       tail.reverse().map((item) => {
         if (item === "}") {
-          tokens.push({
+          tokens2.push({
             type: "brace",
             value: "}"
           });
         } else if (item === "]") {
-          tokens.push({
+          tokens2.push({
             type: "paren",
             value: "]"
           });
         }
       });
     }
-    return tokens;
+    return tokens2;
   };
-  var generate = (tokens) => {
+  var generate = (tokens2) => {
     let output = "";
-    tokens.map((token) => {
+    tokens2.map((token) => {
       switch (token.type) {
         case "string":
           output += '"' + token.value + '"';
@@ -15886,6 +16307,7 @@ _(Output hit the length limit and was cut off.)_`;
       hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
     }
   };
+  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary)).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {
@@ -15910,6 +16332,7 @@ _(Output hit the length limit and was cut off.)_`;
       smart_format: "true",
       punctuate: "true"
     });
+    for (const t of sttTerms(s).slice(0, 50)) q2.append("keyterm", t);
     const res = await fetch(`https://api.deepgram.com/v1/listen?${q2}`, {
       method: "POST",
       headers: { Authorization: `Token ${s.deepgramKey}`, "Content-Type": "audio/wav" },
@@ -15924,7 +16347,8 @@ _(Output hit the length limit and was cut off.)_`;
     fd.append("model", s.sttModel);
     fd.append("response_format", "json");
     if (s.meetingLanguage === "malayalam") fd.append("language", "ml");
-    const prompt = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    const base = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(", ")}.` : ""].filter(Boolean).join(" ");
     if (prompt) fd.append("prompt", prompt);
     const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
     const res = await fetch(`${s.sttBase.replace(/\/+$/, "")}/audio/transcriptions`, {
@@ -15965,7 +16389,7 @@ _(Output hit the length limit and was cut off.)_`;
       j2 = await post({
         contents: [{
           role: "user",
-          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts]
+          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} ${sttTerms(s).length ? `These names and terms may be spoken, spell them exactly like this: ${sttTerms(s).join(", ")}. ` : ""}Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts]
         }]
       });
     }
@@ -16045,61 +16469,6 @@ _(Output hit the length limit and was cut off.)_`;
   var deletePending = (id2) => run("readwrite", (s) => s.delete(id2));
   async function deleteAllPending(meetingId) {
     for (const p of await listPending(meetingId)) await deletePending(p.id);
-  }
-
-  // src/prompt.js
-  function buildSystemPrompt(language) {
-    return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, Malayalam, or a mix of them (Hinglish, Manglish).
-
-About the transcript:
-- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi or Malayalam written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
-- Lines tagged ME come from the note-taker's own microphone. Lines tagged OTHERS are all remote participants mixed together, so you usually cannot tell which remote person spoke. Attribute statements to a named person only when the transcript itself makes it clear (someone is addressed by name, introduces themselves, or is assigned a task by name).
-- If the note-taker's microphone picked up speaker audio, the same sentence may appear under both ME and OTHERS. Count it once.
-
-Write the MOM in ${language}. Keep names, product names, numbers, dates, and technical terms exactly as said. Record only what the transcript supports. When something is ambiguous, keep it and mark it "(unclear)" rather than guessing, and never invent owners or deadlines.
-
-Output GitHub-flavored Markdown in this structure, leaving out any section that has no content except Action Items:
-
-# <meeting title>
-**Date:** \u2026 \xB7 **Duration:** \u2026 \xB7 **Participants (as identified):** \u2026
-
-## Summary
-3\u20136 bullets covering the purpose and main outcomes.
-
-## Discussion
-One ### sub-heading per topic, with concise bullets for the key points, figures, and viewpoints raised.
-
-## Decisions
-Bulleted list of what was agreed.
-
-## Action Items
-| # | Action | Owner | Due |
-|---|--------|-------|-----|
-Use "\u2014" for an unknown owner or due date. If there are none, write "None recorded."
-
-## Open Questions / Follow-ups
-
-## Next Meeting
-Only if a date, time, or agenda for the next meeting was mentioned.
-
-Output only the Markdown MOM, with no preamble.`;
-  }
-  function formatTranscript(meeting2, myName) {
-    const me2 = myName ? `ME (${myName})` : "ME";
-    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? me2 : "OTHERS"}: ${s.text}`).join("\n");
-  }
-  function buildUserPrompt(meeting2, settings2, notes) {
-    const start = new Date(meeting2.startedAt);
-    const durationMin = meeting2.endedAt ? Math.round((meeting2.endedAt - meeting2.startedAt) / 6e4) : null;
-    const lines = [
-      `Meeting title: ${meeting2.title || "Untitled meeting"}`,
-      `Date: ${start.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}`,
-      durationMin != null ? `Duration: ${durationMin} min` : null,
-      settings2.myName ? `Note-taker (ME): ${settings2.myName}` : null
-    ].filter(Boolean);
-    if (notes?.trim()) lines.push("", "Context from the note-taker (attendees, agenda, spellings):", notes.trim());
-    lines.push("", "<transcript>", formatTranscript(meeting2, settings2.myName), "</transcript>");
-    return lines.join("\n");
   }
 
   // src/mailer.js
@@ -16187,6 +16556,9 @@ ${meeting2.mom || ""}
   var escapeHtml2 = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   k.use({ gfm: true, renderer: { html: ({ text }) => escapeHtml2(text) } });
   var renderMd = (md) => k.parse(md || "");
+  var attendeeList = () => (meeting?.attendees || []).filter(Boolean);
+  var nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList() });
+  var parseAttendees = (text) => text.split(/[\n,]+/).map((x2) => x2.trim()).filter(Boolean);
   function renderMom() {
     $2("mom").innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
   }
@@ -16205,6 +16577,7 @@ ${meeting2.mom || ""}
       return;
     }
     const me2 = settings.myName || "Me";
+    const ctx = nameCtx();
     $2("transcript").replaceChildren(
       ...segs.map((s) => {
         const row = document.createElement("div");
@@ -16212,7 +16585,7 @@ ${meeting2.mom || ""}
         row.innerHTML = `<span class="t"></span><span class="who ${s.src}"></span><span class="text"></span>`;
         row.children[0].textContent = fmtTime(s.t);
         row.children[1].textContent = s.src === "me" ? me2 : "Others";
-        row.children[2].textContent = s.text;
+        row.children[2].textContent = applyDictionary(s.text, ctx.entries, ctx.attendees);
         return row;
       })
     );
@@ -16244,42 +16617,49 @@ ${meeting2.mom || ""}
       queued = false;
       $2("mom").innerHTML = renderMd(buf);
     };
-    const attempt = () => {
-      buf = "";
-      return generate2({
-        settings,
-        system: buildSystemPrompt(settings.momLanguage),
-        user: buildUserPrompt(meeting, settings, $2("notes").value),
-        signal: abortCtl.signal,
-        onText: (d) => {
-          buf += d;
-          if (!queued) {
-            queued = true;
-            requestAnimationFrame(paint);
-          }
-        }
-      });
-    };
-    try {
-      let text;
+    const gen = async (system, user, onText) => {
       for (let i = 0; ; i++) {
         try {
-          text = await attempt();
-          break;
+          return await generate2({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {
+          }) });
         } catch (e) {
           if (i >= 3 || !isRetryable(e)) throw e;
           const wait = [5, 15, 30][i];
           $2("genStatus").textContent = `Attempt ${i + 1} failed (${e.message.slice(0, 80)}). Retrying in ${wait} s\u2026`;
           await sleep2(wait * 1e3, abortCtl.signal);
-          $2("genStatus").textContent = `Writing with ${modelLabel(settings)} (attempt ${i + 2})\u2026`;
         }
       }
-      meeting.mom = text;
+    };
+    try {
       meeting.notes = $2("notes").value;
+      const pending = await listPending(id);
+      const ctx = nameCtx();
+      const absent = matchPeople(meeting.invited, meeting.presence, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+      const { mom: text, stats } = await writeMinutes({
+        meeting,
+        settings,
+        notes: meeting.notes,
+        ctx: { ...ctx, absent, captions: meeting.captions },
+        gen: (system, user, onText) => gen(system, user, onText && ((d) => {
+          buf += d;
+          if (!queued) {
+            queued = true;
+            requestAnimationFrame(paint);
+          }
+        })),
+        onText: () => {
+        },
+        onStatus: (t) => {
+          buf = "";
+          $2("genStatus").textContent = t;
+        },
+        coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting.errors || []).length }
+      });
+      meeting.mom = text;
       meeting.model = modelLabel(settings);
       await saveMeeting(meeting);
       renderMom();
-      $2("genStatus").textContent = `Done \xB7 ${meeting.model}`;
+      $2("genStatus").textContent = `Done \xB7 ${meeting.model}${stats.calls > 1 ? ` \xB7 ${stats.items} items found, ${stats.missed} added by the check` : ""}`;
       if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt) emailMom(true);
     } catch (e) {
       $2("genStatus").textContent = abortCtl.signal.aborted ? "Stopped." : `Failed: ${e.message}`;
@@ -16303,7 +16683,7 @@ ${meeting2.mom || ""}
     $2("mail").disabled = true;
     $2("mailStatus").textContent = auto ? "Emailing the minutes\u2026" : "Sending\u2026";
     try {
-      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName) : "");
+      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
       const r = await sendMail(mail, settings);
       meeting.emailedAt = Date.now();
       meeting.emailedTo = r.to;
@@ -16394,7 +16774,7 @@ ${meeting2.mom || ""}
     $2("copy").textContent = "Copied \u2713";
     setTimeout(() => $2("copy").textContent = "Copy", 1500);
   };
-  $2("dlTxt").onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, "text/plain", formatTranscript(meeting, settings.myName));
+  $2("dlTxt").onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, "text/plain", formatTranscript(meeting, settings.myName, nameCtx()));
   $2("del").onclick = async () => {
     if (!confirm("Delete this meeting, its transcript and MOM? This cannot be undone.")) return;
     await deleteMeeting(id);
@@ -16405,6 +16785,50 @@ ${meeting2.mom || ""}
     meeting.title = $2("title").value.trim() || "Meeting";
     await saveMeeting(meeting);
     renderMeta();
+  };
+  function renderSuggestions() {
+    const box = $2("suggest");
+    const text = meeting.segments.map((x2) => x2.text).join(" ");
+    const list = suggestNames(text, attendeeList(), parseDictionary(settings.dictionary));
+    box.classList.toggle("hidden", !list.length);
+    box.replaceChildren(
+      Object.assign(document.createElement("span"), { className: "hint", textContent: "Possible misheard names: " }),
+      ...list.map((x2) => {
+        const b = document.createElement("button");
+        b.textContent = `${x2.found} \u2192 ${x2.suggest} (${x2.count}\xD7)`;
+        b.style.margin = "0 6px 4px 0";
+        b.onclick = () => fixName(x2.found, x2.suggest, true);
+        return b;
+      })
+    );
+  }
+  async function fixName(wrong, right, remember) {
+    wrong = wrong.trim();
+    right = right.trim();
+    if (!wrong || !right) {
+      $2("fixMsg").textContent = "Enter both names.";
+      return;
+    }
+    for (const seg of meeting.segments) seg.text = replaceWord(seg.text, wrong, right);
+    if (meeting.mom) meeting.mom = replaceWord(meeting.mom, wrong, right);
+    await saveMeeting(meeting);
+    if (remember) {
+      settings.dictionary = learnAlias(settings.dictionary, right, wrong);
+      await saveSettings(settings);
+    }
+    $2("fixMsg").textContent = `Replaced "${wrong}" with "${right}"${remember ? " and remembered it" : ""}.`;
+    $2("fixWrong").value = "";
+    $2("fixRight").value = "";
+    renderTranscript();
+    renderMom();
+    renderSuggestions();
+  }
+  $2("fixApply").onclick = () => fixName($2("fixWrong").value, $2("fixRight").value, $2("fixRemember").checked);
+  $2("attendees").onchange = async () => {
+    meeting.attendees = parseAttendees($2("attendees").value);
+    await saveMeeting(meeting);
+    renderTranscript();
+    renderSuggestions();
   };
   document.querySelectorAll(".tabs button").forEach((b) => {
     b.onclick = () => {
@@ -16421,9 +16845,11 @@ ${meeting2.mom || ""}
       return;
     }
     $2("notes").value = meeting.notes || "";
+    $2("attendees").value = (meeting.attendees || []).join("\n");
     renderMeta();
     renderErrors();
     renderTranscript();
+    renderSuggestions();
     renderMom();
     $2("retry").onclick = async () => {
       const left = await retryPending();
