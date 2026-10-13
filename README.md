@@ -31,7 +31,7 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 
 | | |
 |---|---|
-| **One-click recording** | Start from the popup or press `Alt+Shift+M`. An amber dot on the icon reminds you when a Meet is open and not being recorded. |
+| **One-click recording** | Start from the popup or press `Alt+Shift+M`. The toolbar icon glows amber during a call as a reminder to record (Google Meet, and Zoom, Teams, Webex, Whereby, Jitsi, GoTo, BlueJeans, Chime, Zoho Meeting and Skype in the browser). |
 | **Hinglish and Malayalam aware** | Hindi comes out in Devanagari, Malayalam in Malayalam script, English words stay in English. Pick *Auto*, *Hindi + English* or *Malayalam + English* in Settings. Works with Gemini and Sarvam; Whisper-compatible servers get a Malayalam hint too. |
 | **Mic on your terms** | Switch your own voice in or out of the transcript from the popup, with `Alt+Shift+K`, or from an optional compact pill on the Meet page. |
 | **Follows Meet's mute** | While Meet itself is muted, Debrief ignores your mic, so side conversations stay out of the transcript. |

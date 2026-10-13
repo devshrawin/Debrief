@@ -38,12 +38,26 @@
 
   // src/adapters/index.js
   var OTHER_SITES = [
-    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*"] },
-    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*"] },
+    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*", "https://zoom.us/wc/*"] },
+    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*", "https://teams.cloud.microsoft/*"] },
     { name: "Webex", matches: ["https://*.webex.com/*"] },
     { name: "Whereby", matches: ["https://whereby.com/*"] },
-    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
+    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*", "https://8x8.vc/*"] },
+    { name: "GoTo Meeting", matches: ["https://app.goto.com/*", "https://app.gotomeeting.com/*"] },
+    { name: "BlueJeans", matches: ["https://app.bluejeans.com/*"] },
+    { name: "Amazon Chime", matches: ["https://app.chime.aws/*"] },
+    { name: "Zoho Meeting", matches: ["https://meeting.zoho.com/*", "https://meeting.zoho.in/*", "https://meeting.zoho.eu/*"] },
+    { name: "Skype for Web", matches: ["https://web.skype.com/*"] }
   ];
+  var hostOf = (pattern) => pattern.replace(/^https:\/\//, "").split("/")[0];
+  var hostMatches = (pattern, hostname) => {
+    const h = hostOf(pattern);
+    return h.startsWith("*.") ? hostname === h.slice(2) || hostname.endsWith(h.slice(1)) : hostname === h;
+  };
+  function siteFor(hostname) {
+    return OTHER_SITES.find((s) => s.matches.some((m) => hostMatches(m, hostname))) || null;
+  }
+  var isMeetingSite = (hostname) => hostname === "meet.google.com" || !!siteFor(hostname);
 
   // src/store.js
   var DEFAULTS = {
@@ -95,8 +109,8 @@
     // ask the relay who was invited (needs the calendar permission)
     meetCaptions: "read",
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
-    otherSites: false,
-    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
+    otherSites: true,
+    // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -221,30 +235,6 @@
       const errs = m?.errors.length || 0;
       $("segInfo").textContent = `${n} transcript segment${n === 1 ? "" : "s"} so far${errs ? ` \xB7 ${errs} failed chunk${errs === 1 ? "" : "s"} (kept, see MOM page)` : ""}. First one lands after ~2\u20133 min.`;
     }
-  }
-  async function siteOffer() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    let host = "";
-    try {
-      host = new URL(tab?.url || "").hostname;
-    } catch {
-    }
-    const probe = tab?.url ? new URL(tab.url).origin + "/" : "";
-    const site = OTHER_SITES.find((s) => s.matches.some((m) => new RegExp(`^${m.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`).test(probe || `https://${host}/`)));
-    if (!site) return;
-    const granted = await chrome.permissions.contains({ origins: site.matches });
-    if (granted) return;
-    $("siteOffer").classList.remove("hidden");
-    $("siteOfferTitle").textContent = `${site.name} detected`;
-    $("siteOn").onclick = async () => {
-      const all = OTHER_SITES.flatMap((s) => s.matches);
-      const ok = await chrome.permissions.request({ origins: all });
-      if (!ok) return;
-      await send({ type: "sites", on: true, matches: all });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["dist/pill.js"] }).catch(() => {
-      });
-      $("siteOffer").classList.add("hidden");
-    };
   }
   async function usageWarning() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
@@ -388,13 +378,16 @@
     $("setup").classList.toggle("hidden", ready);
     $("start").disabled = !sttReady(s);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!/^https:\/\/meet\.google\.com\//.test(tab?.url || "")) $("start").textContent = "Record this tab (not a Meet tab)";
+    let host = "";
+    try {
+      host = new URL(tab?.url || "").hostname;
+    } catch {
+    }
+    if (!isMeetingSite(host)) $("start").textContent = "Record this tab (not a known meeting site)";
     const cmd = (await chrome.commands.getAll()).find((c) => c.name === "toggle-recording");
     $("shortcutHint").innerHTML = cmd?.shortcut ? `Shortcut: <kbd>${cmd.shortcut.split("+").join("</kbd>+<kbd>")}</kbd> starts/stops \xB7 <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mic on/off` : "Set a start/stop shortcut at chrome://extensions/shortcuts.";
     await refresh();
     usageWarning();
-    siteOffer().catch(() => {
-    });
     await renderRecent();
     setInterval(refresh, 1e3);
   })();

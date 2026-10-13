@@ -99,8 +99,8 @@
     // ask the relay who was invited (needs the calendar permission)
     meetCaptions: "read",
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
-    otherSites: false,
-    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
+    otherSites: true,
+    // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -378,16 +378,6 @@
         });
         return { ok: true };
       },
-      // Switch the page script on for other meeting sites (Teams, Zoom web, ...) once the user grants access.
-      sites: async () => {
-        const id = "debrief-sites";
-        const have = await chrome.scripting.getRegisteredContentScripts({ ids: [id] }).catch(() => []);
-        if (have.length) await chrome.scripting.unregisterContentScripts({ ids: [id] });
-        if (msg.on) {
-          await chrome.scripting.registerContentScripts([{ id, matches: msg.matches, js: ["dist/pill.js"], runAt: "document_idle", persistAcrossSessions: true }]);
-        }
-        return { ok: true };
-      },
       // A page script saw a live call (or the call ended): glow the icon amber unless we are already recording it.
       "in-call": async () => {
         const tabId = sender.tab?.id;
@@ -412,7 +402,7 @@
         const rec = await getState();
         const { levels } = await chrome.storage.session.get("levels");
         const m = rec.meetingId ? await getMeeting(rec.meetingId) : null;
-        return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || "read" };
+        return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || "read", otherSites: (await getSettings()).otherSites !== false };
       }
     };
     const h = handlers[msg.type];

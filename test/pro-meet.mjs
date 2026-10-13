@@ -119,4 +119,25 @@ await test('in-call detection: Zoom-like page, Meet lobby vs call, and the end s
   assert.match(meet.diagnose(page('<button data-is-muted="false" aria-label="Turn off microphone"></button><button aria-label="Leave call"></button>')).inCall, /yes/);
 });
 
+
+await test('popular meeting apps are covered by the page script from install', async () => {
+  const fsx = await import('node:fs');
+  const manifest = JSON.parse(fsx.readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
+  const matches = manifest.content_scripts[0].matches;
+  for (const m of ['https://meet.google.com/*', 'https://app.zoom.us/*', 'https://*.zoom.us/wc/*', 'https://teams.microsoft.com/*', 'https://teams.live.com/*', 'https://*.webex.com/*', 'https://whereby.com/*', 'https://meet.jit.si/*', 'https://app.goto.com/*', 'https://app.bluejeans.com/*', 'https://app.chime.aws/*', 'https://meeting.zoho.in/*', 'https://web.skype.com/*']) {
+    assert.ok(matches.includes(m), `${m} missing from the manifest`);
+  }
+  for (const site of OTHER_SITES) for (const m of site.matches) assert.ok(matches.includes(m), `${site.name}: ${m} is not in the manifest`);
+  const { adapterFor: af, isMeetingSite, siteFor } = await import('../src/adapters/index.js');
+  assert.equal(af('us02web.zoom.us').name, 'Zoom (web client)');
+  assert.equal(af('app.zoom.us').name, 'Zoom (web client)');
+  assert.equal(af('acme.webex.com').name, 'Webex');
+  assert.equal(af('meeting.zoho.in').name, 'Zoho Meeting');
+  assert.equal(isMeetingSite('meet.google.com'), true);
+  assert.equal(isMeetingSite('teams.microsoft.com'), true);
+  assert.equal(isMeetingSite('example.com'), false);
+  assert.equal(siteFor('notzoom.us'), null);
+  assert.equal(generic.inCall(page('<button data-tid="toggle-mute" aria-label="Mute mic"></button><button data-tid="hangup-button" aria-label="Leave"></button>')), true, 'Teams-like call');
+});
+
 console.log(`\n${passed} passed`);

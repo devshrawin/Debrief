@@ -1198,8 +1198,8 @@
     // ask the relay who was invited (needs the calendar permission)
     meetCaptions: "read",
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
-    otherSites: false,
-    // experimental: generic detection on Teams, Zoom web, Webex, Whereby, Jitsi
+    otherSites: true,
+    // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -14769,15 +14769,6 @@ function out(o) {
     return `Context length is ${ctx.configured ? ctx.configured : "Ollama's default (about 4096)"} tokens, enough for roughly ${wordsForContext(have)} words. A one-hour meeting can reach ${transcriptWords} words, and Ollama silently cuts off what does not fit. Set OLLAMA_CONTEXT_LENGTH=16384 (or more) and restart Ollama.`;
   }
 
-  // src/adapters/index.js
-  var OTHER_SITES = [
-    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*"] },
-    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*"] },
-    { name: "Webex", matches: ["https://*.webex.com/*"] },
-    { name: "Whereby", matches: ["https://whereby.com/*"] },
-    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
-  ];
-
   // src/dictionary.js
   var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
   function parseDictionary(text) {
@@ -14980,28 +14971,6 @@ function out(o) {
     }
     micStatus();
   };
-  var SITE_ORIGINS = OTHER_SITES.flatMap((s) => s.matches);
-  async function siteStatus() {
-    const granted = await chrome.permissions.contains({ origins: SITE_ORIGINS }).catch(() => false);
-    $("siteStatus").textContent = granted ? "Enabled for " + OTHER_SITES.map((s) => s.name).join(", ") : "Off";
-    $("enableSites").disabled = granted;
-    $("disableSites").disabled = !granted;
-  }
-  $("enableSites").onclick = async () => {
-    const ok = await chrome.permissions.request({ origins: SITE_ORIGINS });
-    if (!ok) {
-      $("siteStatus").textContent = "Chrome permission was not granted.";
-      return;
-    }
-    await chrome.runtime.sendMessage({ target: "bg", type: "sites", on: true, matches: SITE_ORIGINS });
-    siteStatus();
-  };
-  $("disableSites").onclick = async () => {
-    await chrome.runtime.sendMessage({ target: "bg", type: "sites", on: false });
-    await chrome.permissions.remove({ origins: SITE_ORIGINS }).catch(() => {
-    });
-    siteStatus();
-  };
   $("useOllama").onclick = () => {
     $("llmProvider").value = "openai";
     showProviderFields();
@@ -15131,7 +15100,6 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     updateGuide();
     renderUsage();
     renderLearned();
-    siteStatus();
     showTab(location.hash.slice(1) || "start");
   })();
 })();

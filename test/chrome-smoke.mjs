@@ -263,7 +263,7 @@ try {
     await new Promise((r) => setTimeout(r, 400));
     const rows = [...document.querySelectorAll('#usageTable tbody tr')].map((r) => r.textContent);
     return { rows, totals: document.getElementById('usageTotals').textContent, active: document.getElementById('page-usage').classList.contains('active'),
-      dict: !!document.getElementById('dictionary'), share: !!document.getElementById('shareList') && !!document.getElementById('copyScriptAllow'), local: !!document.getElementById('useOllama') && !!document.getElementById('useWhisper'), sites: !!document.getElementById('enableSites'), mode: !!document.getElementById('minutesMode') };
+      dict: !!document.getElementById('dictionary'), share: !!document.getElementById('shareList') && !!document.getElementById('copyScriptAllow'), local: !!document.getElementById('useOllama') && !!document.getElementById('useWhisper'), sites: !!document.getElementById('otherSites'), mode: !!document.getElementById('minutesMode') };
   })()`);
   check('usage page shows counted requests and the learned limit', proOpts.active && proOpts.rows.some((r) => /gemini . gemini-3.8-flash/.test(r) && /Minutes/.test(r) && /of 20/.test(r)) && /[0-9]+ requests/.test(proOpts.totals), JSON.stringify(proOpts));
   if (process.env.SHOTS) {

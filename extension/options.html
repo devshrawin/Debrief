@@ -190,11 +190,7 @@
           </select>
           <p class="hint">Meet's live captions say who is speaking. Debrief uses that to put names to the minutes (your own transcript text is still used). Turning captions on shows subtitles on your screen. Who joined and left is read from the participant tiles either way.</p>
         </div>
-        <div class="row2">
-          <span class="lab">Other meeting sites (experimental)</span>
-          <div class="btnrow" style="margin-top:0"><button id="enableSites" class="btn">Enable Teams, Zoom web, Webex, Whereby, Jitsi</button><button id="disableSites" class="btn">Disable</button><span id="siteStatus" class="status"></span></div>
-          <p class="hint">Recording, transcription, minutes and email already work on any web meeting tab. Enabling these sites also lets Debrief follow the mute button and notice when the call ends, using generic detection that may not fit every app. It asks Chrome for permission to read those sites. Desktop apps (the installed Zoom or Teams) cannot be recorded by a browser extension.</p>
-        </div>
+        <label class="toggle"><span class="t"><b>Work with other meeting apps</b><span>Zoom (in the browser), Microsoft Teams, Webex, Whereby, Jitsi, GoTo Meeting, BlueJeans, Amazon Chime, Zoho Meeting and Skype for Web. Debrief's toolbar icon glows amber during a call as a reminder to record, follows your mute button and stops when the call ends. Recording itself works on any tab. These apps use generic detection that may not fit every layout; "Check page detection" in the popup shows what it can read. The installed desktop apps cannot be recorded by a browser extension.</span></span><input type="checkbox" id="otherSites"></label>
       </div>
 
       <div class="card">
