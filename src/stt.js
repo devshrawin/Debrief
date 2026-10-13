@@ -11,6 +11,7 @@ import { geminiFetch, modelChain } from './gemini.js';
 import { isLoopNoise } from './noise.js';
 import { errorDetail, DEFAULTS } from './store.js';
 import { record } from './usage.js';
+import { parseDictionary, hintTerms } from './dictionary.js';
 
 const DEFAULT_STT_PROMPT = DEFAULTS.sttPrompt;
 
@@ -38,6 +39,8 @@ export const LANGUAGES = {
     hint: 'It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (മലയാളം) and English words in English.',
   },
 };
+// Names and terms from the personal dictionary, as spelling hints for the speech models.
+const sttTerms = (s) => hintTerms(parseDictionary(s.dictionary)).slice(0, 80);
 const audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32000);
 const lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
 
@@ -64,6 +67,7 @@ async function deepgram(wav, s) {
     smart_format: 'true',
     punctuate: 'true',
   });
+  for (const t of sttTerms(s).slice(0, 50)) q.append('keyterm', t);
   const res = await fetch(`https://api.deepgram.com/v1/listen?${q}`, {
     method: 'POST',
     headers: { Authorization: `Token ${s.deepgramKey}`, 'Content-Type': 'audio/wav' },
@@ -80,7 +84,8 @@ async function openaiCompat(wav, s) {
   fd.append('model', s.sttModel);
   fd.append('response_format', 'json');
   if (s.meetingLanguage === 'malayalam') fd.append('language', 'ml');
-  const prompt = s.meetingLanguage === 'malayalam' && s.sttPrompt === DEFAULT_STT_PROMPT ? 'Malayalam office meeting. Malayalam in Malayalam script, English words in English.' : s.sttPrompt;
+  const base = s.meetingLanguage === 'malayalam' && s.sttPrompt === DEFAULT_STT_PROMPT ? 'Malayalam office meeting. Malayalam in Malayalam script, English words in English.' : s.sttPrompt;
+  const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(', ')}.` : ''].filter(Boolean).join(' ');
   if (prompt) fd.append('prompt', prompt);
   const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
   const res = await fetch(`${s.sttBase.replace(/\/+$/, '')}/audio/transcriptions`, {
@@ -126,7 +131,7 @@ async function geminiCall(wav, s, model) {
     j = await post({
       contents: [{
         role: 'user',
-        parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts],
+        parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} ${sttTerms(s).length ? `These names and terms may be spoken, spell them exactly like this: ${sttTerms(s).join(', ')}. ` : ''}Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts],
       }],
     });
   }

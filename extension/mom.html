@@ -45,8 +45,21 @@
   <div id="pendingBox" class="warn row hidden no-print" style="margin-top:8px"><span id="pendingText" style="flex:1"></span><button id="retry">Retry transcription</button></div>
 
   <details class="no-print" id="notesBox">
-    <summary>Context for the MOM (attendees, agenda, correct spellings) — optional</summary>
-    <textarea id="notes" placeholder="e.g. Attendees: Rahul (PM), Priya (Dev). Project name is spelled 'UR Masters'."></textarea>
+    <summary>People, names and context (optional, improves the minutes)</summary>
+    <label for="attendees">Who was in the meeting (one name per line)</label>
+    <textarea id="attendees" rows="3" placeholder="Amal Raj&#10;Priya Nair"></textarea>
+    <p class="hint">Used to fix misheard names (Aman becomes Amal when Amal is here and Aman is not) and to spell names exactly in the minutes.</p>
+    <div id="suggest" class="hidden" style="margin:8px 0"></div>
+    <label>Fix a name everywhere</label>
+    <div class="row">
+      <input id="fixWrong" placeholder="Heard as" style="max-width:180px">
+      <input id="fixRight" placeholder="Should be" style="max-width:180px">
+      <button id="fixApply">Fix</button>
+      <label style="margin:0;font-weight:400;display:flex;gap:6px;align-items:center;width:auto"><input type="checkbox" id="fixRemember" checked style="width:auto"> remember for next time</label>
+      <span id="fixMsg" class="hint"></span>
+    </div>
+    <label for="notes">Other context for the minutes</label>
+    <textarea id="notes" placeholder="e.g. Agenda, project name is spelled 'UR Masters'."></textarea>
   </details>
 
   <div class="tabs no-print">

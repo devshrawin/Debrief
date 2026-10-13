@@ -102,6 +102,10 @@
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictionary: "",
+    // names and terms, one per line: Right | misheard, as, this
+    minutesMode: "thorough",
+    // thorough = extract, write, then check; quick = one pass
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -142,6 +146,35 @@
     }
   }
 
+  // src/dictionary.js
+  var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
+  function parseDictionary(text) {
+    const entries = [];
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const [name, rest = ""] = line.split("|");
+      const canonical = name.trim();
+      if (!canonical) continue;
+      const aliases = rest.split(",").map((a) => a.trim()).filter((a) => a && norm(a) !== norm(canonical));
+      entries.push({ name: canonical, aliases });
+    }
+    return entries;
+  }
+  function hintTerms(entries, attendees = []) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const t of [...attendees || [], ...entries.map((e) => e.name)]) {
+      const k = norm(t);
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        out.push(t.trim());
+      }
+    }
+    return out;
+  }
+  var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
+
   // src/stt.js
   var SttError = class extends Error {
     constructor(message, status) {
@@ -173,6 +206,7 @@
       hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
     }
   };
+  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary)).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {
@@ -197,6 +231,7 @@
       smart_format: "true",
       punctuate: "true"
     });
+    for (const t of sttTerms(s).slice(0, 50)) q.append("keyterm", t);
     const res = await fetch(`https://api.deepgram.com/v1/listen?${q}`, {
       method: "POST",
       headers: { Authorization: `Token ${s.deepgramKey}`, "Content-Type": "audio/wav" },
@@ -211,7 +246,8 @@
     fd.append("model", s.sttModel);
     fd.append("response_format", "json");
     if (s.meetingLanguage === "malayalam") fd.append("language", "ml");
-    const prompt = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    const base = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(", ")}.` : ""].filter(Boolean).join(" ");
     if (prompt) fd.append("prompt", prompt);
     const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
     const res = await fetch(`${s.sttBase.replace(/\/+$/, "")}/audio/transcriptions`, {
@@ -252,7 +288,7 @@
       j = await post({
         contents: [{
           role: "user",
-          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts]
+          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} ${sttTerms(s).length ? `These names and terms may be spoken, spell them exactly like this: ${sttTerms(s).join(", ")}. ` : ""}Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts]
         }]
       });
     }

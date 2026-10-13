@@ -4,7 +4,8 @@
   "description": "Chrome extension: Google Meet -> Hindi/English transcript -> MOM",
   "scripts": {
     "build": "node build.mjs",
-    "watch": "node build.mjs --watch"
+    "watch": "node build.mjs --watch",
+    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs"
   },
   "keywords": [],
   "author": "",

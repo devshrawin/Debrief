@@ -196,6 +196,15 @@
       </div>
 
       <div class="card">
+        <h2>Names and terms</h2>
+        <div class="row2">
+          <label for="dictionary">Your dictionary</label>
+          <textarea id="dictionary" class="mono" style="max-width:none;min-height:130px" placeholder="Amal | Aman, Amaal&#10;Unified Registry&#10;DSM"></textarea>
+          <p class="hint">One per line. <code>Right spelling | misheard as, another</code> fixes recurring mistakes (Amal | Aman). A plain line is a term to spell exactly. Used as a hint to the speech model, as a find-and-replace on transcripts, and by the minutes writer. If you list who was in a meeting on the minutes page, an alias that is really one of those people is left alone.</p>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Language</h2>
         <div class="row2">
           <label for="meetingLanguage">Language spoken in meetings</label>
@@ -321,6 +330,14 @@
           </div>
         </div>
 
+        <div class="row2">
+          <label for="minutesMode">How carefully to write the minutes</label>
+          <select id="minutesMode">
+            <option value="thorough">Thorough: find every item first, write, then check nothing was missed</option>
+            <option value="quick">Quick: one pass</option>
+          </select>
+          <p class="hint">Thorough uses 3 or more model requests per meeting (more for long ones), so it costs more of a free quota. Short meetings always use one pass.</p>
+        </div>
         <div class="row2">
           <div class="btnrow" style="margin-top:0"><button id="testLlm" class="btn">Test connection</button><span id="llmStatus" class="status"></span></div>
         </div>
