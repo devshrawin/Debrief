@@ -1,7 +1,46 @@
 (() => {
+  // src/usage.js
+  function learnLimit(text) {
+    const s = String(text || "");
+    const limit = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
+    const model = (s.match(/model:\s*([\w.-]+)/i) || [])[1];
+    return limit && model ? { model, limit } : null;
+  }
+  var sink = { fn: null };
+  function record(entry) {
+    try {
+      if (sink.fn) return sink.fn(entry);
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ target: "bg", type: "usage", entry }).catch(() => {
+        });
+      }
+    } catch {
+    }
+  }
+
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
-  async function geminiFetch(url, init, settings) {
+  function note(url, res, meta) {
+    const model = (url.match(/models\/([^:/?]+)/) || [])[1] || "-";
+    const e = { provider: "gemini", model, kind: meta.kind || (/stream/i.test(url) ? "llm" : "stt"), req: 1 };
+    if (res && res.ok) return record(e);
+    e.fail = true;
+    e.rl = res?.status === 429;
+    if (!res) return record(e);
+    res.clone().text().then((t) => record({ ...e, learned: learnLimit(t) }), () => record(e));
+  }
+  async function geminiFetch(url, init, settings, meta = {}) {
+    let res;
+    try {
+      res = await geminiFetchInner(url, init, settings);
+    } catch (e) {
+      note(url, null, meta);
+      throw e;
+    }
+    note(url, res, meta);
+    return res;
+  }
+  async function geminiFetchInner(url, init, settings) {
     const call = (key) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key } });
     const res = await call(settings.geminiKey).catch((e) => {
       if (!settings.geminiKey2 || e.name === "AbortError") throw e;
@@ -59,6 +98,10 @@
     // stop recording by itself when the meeting is over
     autoStopQuietMin: 10,
     // ...or after this many silent minutes (0 = never)
+    usageLimits: "",
+    // one "model=daily requests" per line; learned from 429s too
+    usagePrices: "",
+    // one "model=USD per 1M input,USD per 1M output" per line
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -130,6 +173,7 @@
       hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
     }
   };
+  var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {
     const fd = new FormData();
@@ -212,6 +256,7 @@
         }]
       });
     }
+    record({ provider: "gemini", model, kind: "stt", tin: j.usageMetadata?.promptTokenCount, tout: j.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });
     return (j.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join("");
   }
   async function gemini(wav, s) {
@@ -238,15 +283,19 @@
     return "";
   }
   var PROVIDERS = { gemini, sarvam, deepgram, openai: openaiCompat };
+  var sttModelName = (s) => ({ sarvam: s.sarvamModel, deepgram: s.deepgramModel, openai: s.sttModel })[s.sttProvider];
   async function transcribe(wav, settings) {
     const fn = PROVIDERS[settings.sttProvider];
     if (!fn) throw new Error(`Unknown STT provider ${settings.sttProvider}`);
     let delay = 1500;
     for (let attempt = 0; ; attempt++) {
       try {
-        const text = (await fn(wav, settings)).trim();
+        const raw = await fn(wav, settings);
+        if (settings.sttProvider !== "gemini") record({ provider: settings.sttProvider, model: sttModelName(settings), kind: "stt", req: 1, audioSec: audioSeconds(wav) });
+        const text = raw.trim();
         return isLoopNoise(text) ? "" : text;
       } catch (e) {
+        if (settings.sttProvider !== "gemini") record({ provider: settings.sttProvider, model: sttModelName(settings), kind: "stt", req: 1, fail: true, rl: e.status === 429 });
         const retryable = !(e instanceof SttError) || e.status === 429 || e.status >= 500;
         if (!retryable || attempt >= 3) throw e;
         await new Promise((r) => setTimeout(r, e.status === 429 ? Math.max(delay, 2e4) : delay));
@@ -450,8 +499,8 @@
           saved = true;
         } catch {
         }
-        const note = saved ? "audio kept, will retry after the meeting" : "audio could not be kept";
-        chrome.runtime.sendMessage({ target: "bg", type: "stt-error", meetingId, error: `[${Math.round(t)}s ${src}] ${e.message} (${note})` });
+        const note2 = saved ? "audio kept, will retry after the meeting" : "audio could not be kept";
+        chrome.runtime.sendMessage({ target: "bg", type: "stt-error", meetingId, error: `[${Math.round(t)}s ${src}] ${e.message} (${note2})` });
       }
     });
     const onSkip = (src, t, peak) => chrome.runtime.sendMessage({
@@ -478,7 +527,7 @@
         ctx: rec.ctx.state
       });
     }, 1e3);
-    const dbg = (note) => chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note });
+    const dbg = (note2) => chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: note2 });
     const trk = (s) => s?.getAudioTracks().map((t) => `${t.readyState}${t.muted ? " MUTED" : ""}${t.enabled ? "" : " disabled"}`).join("|") || "none";
     dbg(`start: ctx=${ctx.state} play=${playCtx.state} tab=${trk(tabStream)} mic=${trk(micStream)}`);
     let n = 0;

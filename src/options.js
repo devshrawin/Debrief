@@ -2,6 +2,7 @@ import { DEFAULTS, getSettings, saveSettings } from './store.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
+import { summarize, parseLimits, parsePrices, estimateCost, dayKey } from './usage.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -26,6 +27,71 @@ function showTab(name) {
 }
 document.querySelectorAll('#nav button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 document.querySelectorAll('[data-go]').forEach((a) => (a.onclick = () => showTab(a.dataset.go)));
+
+// ---- usage page ----
+let usageDays = 1;
+const fmtN = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
+const KIND = { stt: 'Speech to text', llm: 'Minutes' };
+
+async function renderUsage() {
+  const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);
+  const settings = await getSettings();
+  const typed = parseLimits($('usageLimits').value || settings.usageLimits);
+  const limits = { ...learnedLimits, ...typed };
+  const rows = summarize(usage, usageDays);
+  const today = summarize(usage, 1);
+  const table = $('usageTable');
+  table.replaceChildren();
+  const head = table.createTHead().insertRow();
+  ['Service', 'Used for', 'Requests', 'Failed', 'Tokens in / out', 'Audio', usageDays === 1 ? 'Left today (estimate)' : ''].forEach((h) => head.append(Object.assign(document.createElement('th'), { textContent: h })));
+  const body = table.createTBody();
+  if (!rows.length) {
+    const r = body.insertRow();
+    const c = r.insertCell();
+    c.colSpan = 7;
+    c.textContent = 'Nothing yet. Counts start with your next recording.';
+    c.style.color = 'var(--muted)';
+  }
+  for (const r of rows) {
+    const tr = body.insertRow();
+    const cell = (t, cls) => Object.assign(tr.insertCell(), { textContent: t, className: cls || '' });
+    cell(`${r.provider}${r.model && r.model !== '-' ? ` · ${r.model}` : ''}`);
+    cell(KIND[r.kind] || r.kind);
+    cell(String(r.req), 'num');
+    cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ''}` : '0', 'num');
+    cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '-', 'num');
+    cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '-', 'num');
+    const left = tr.insertCell();
+    const limit = limits[r.model];
+    if (usageDays === 1 && limit) {
+      const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
+      const pct = Math.min(100, Math.round((used / limit) * 100));
+      left.innerHTML = `<div>${Math.max(0, limit - used)} of ${limit}</div><div class="meterbar"><i class="${pct >= 100 ? 'full' : pct >= 80 ? 'warn' : ''}" style="width:${pct}%"></i></div>`;
+    }
+  }
+  const reqs = rows.reduce((a, r) => a + r.req, 0);
+  const audio = rows.filter((r) => r.kind === 'stt').reduce((a, r) => a + r.audioSec, 0);
+  const cost = estimateCost(rows, parsePrices($('usagePrices').value || settings.usagePrices));
+  $('usageTotals').textContent = `${reqs} requests · ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` · about $${cost.toFixed(2)} at your prices` : ''} · quota day ${dayKey()} (Pacific)`;
+}
+
+document.querySelectorAll('#usageRange button').forEach((b) => {
+  b.onclick = () => {
+    usageDays = Number(b.dataset.days);
+    document.querySelectorAll('#usageRange button').forEach((x) => x.classList.toggle('active', x === b));
+    renderUsage();
+  };
+});
+$('usageReset').onclick = async () => {
+  if (!confirm("Reset all usage counters? This only clears Debrief's own tally.")) return;
+  await chrome.storage.local.remove(['usage', 'learnedLimits']);
+  renderUsage();
+};
+$('usageLimits').oninput = renderUsage;
+$('usagePrices').oninput = renderUsage;
+chrome.storage.onChanged.addListener((c) => {
+  if (c.usage || c.learnedLimits) renderUsage();
+});
 
 function showProviderFields() {
   document.querySelectorAll('[data-stt]').forEach((el) => el.classList.toggle('hidden', el.dataset.stt !== $('sttProvider').value));
@@ -157,5 +223,6 @@ $('testMail').onclick = async () => {
   showProviderFields();
   micStatus();
   updateGuide();
+  renderUsage();
   showTab(location.hash.slice(1) || 'start');
 })();

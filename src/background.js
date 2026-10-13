@@ -1,5 +1,6 @@
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
+import { addEntry } from './usage.js';
 import { getSettings, saveSettings, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
@@ -191,6 +192,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await updateMeeting(msg.meetingId, (m) => m.errors.push(msg.error));
       await raiseAlert(msg.meetingId, msg.error);
     },
+    usage: () =>
+      serial(async () => {
+        const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);
+        const next = { usage: addEntry(usage, msg.entry) };
+        if (msg.entry?.learned) next.learnedLimits = { ...learnedLimits, [msg.entry.learned.model]: msg.entry.learned.limit };
+        await chrome.storage.local.set(next);
+      }),
     'dismiss-alert': () => clearAlert(),
     'set-follow': async () => {
       await saveSettings({ ...(await getSettings()), followMeetMute: !!msg.on });

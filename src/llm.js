@@ -2,6 +2,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { geminiChainFetch, modelChain } from './gemini.js';
 import { errorDetail } from './store.js';
+import { record } from './usage.js';
 
 // Models that support adaptive thinking, effort and server-side refusal fallbacks.
 const MODERN_CLAUDE = /^claude-(opus-5|fable-5|sonnet-5-5)/;
@@ -25,7 +26,14 @@ async function anthropic({ settings, system, user, onText, signal }) {
   }
   const stream = client.beta.messages.stream(params, { signal });
   stream.on('text', onText);
-  const msg = await stream.finalMessage();
+  let msg;
+  try {
+    msg = await stream.finalMessage();
+  } catch (e) {
+    record({ provider: 'anthropic', model, kind: 'llm', req: 1, fail: true, rl: e?.status === 429 });
+    throw e;
+  }
+  record({ provider: 'anthropic', model, kind: 'llm', req: 1, tin: msg.usage?.input_tokens, tout: msg.usage?.output_tokens });
   if (msg.stop_reason === 'refusal') {
     throw new Error(`Claude declined this request${msg.stop_details?.category ? ` (${msg.stop_details.category})` : ''}.`);
   }
@@ -88,6 +96,7 @@ async function openaiCompat({ settings, system, user, onText, signal }) {
       ],
     }),
   });
+  record({ provider: 'openai', model: settings.oaModel, kind: 'llm', req: 1, fail: !res.ok, rl: res.status === 429 });
   if (!res.ok) throw await httpError(res, 'LLM');
   let text = '';
   await readSse(res, (ev) => {
@@ -102,7 +111,7 @@ async function openaiCompat({ settings, system, user, onText, signal }) {
 
 async function gemini({ settings, system, user, onText, signal }) {
   const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
-  const { res } = await geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
+  const { res, model } = await geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
@@ -110,10 +119,12 @@ async function gemini({ settings, system, user, onText, signal }) {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: user }] }],
     }),
-  }, settings);
+  }, settings, { kind: 'llm' });
   if (!res.ok) throw await httpError(res, 'Gemini');
   let text = '';
+  let usage = null;
   await readSse(res, (ev) => {
+    if (ev.usageMetadata) usage = ev.usageMetadata;
     for (const p of ev.candidates?.[0]?.content?.parts || []) {
       if (p.text && !p.thought) {
         text += p.text;
@@ -121,6 +132,7 @@ async function gemini({ settings, system, user, onText, signal }) {
       }
     }
   });
+  if (usage) record({ provider: 'gemini', model, kind: 'llm', tin: usage.promptTokenCount, tout: (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0) });
   return text;
 }
 

@@ -25,6 +25,30 @@
   // src/meetend.js
   var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
 
+  // src/usage.js
+  function dayKey(date = /* @__PURE__ */ new Date()) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(date);
+  }
+  var rowKey = (e) => `${e.provider}|${e.model || "-"}|${e.kind}`;
+  function addEntry(usage, e, now = /* @__PURE__ */ new Date()) {
+    const next = { ...usage || {} };
+    const day = dayKey(now);
+    const rows = { ...next[day] || {} };
+    const key2 = rowKey(e);
+    const row = { req: 0, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0, ...rows[key2] || {} };
+    row.req += e.req || 0;
+    row.fail += e.fail ? 1 : 0;
+    row.rl += e.rl ? 1 : 0;
+    row.tin += e.tin || 0;
+    row.tout += e.tout || 0;
+    row.audioSec += e.audioSec || 0;
+    rows[key2] = row;
+    next[day] = rows;
+    const keep = new Date(now.getTime() - 62 * 864e5);
+    for (const d of Object.keys(next)) if (d < dayKey(keep)) delete next[d];
+    return next;
+  }
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -51,6 +75,10 @@
     // stop recording by itself when the meeting is over
     autoStopQuietMin: 10,
     // ...or after this many silent minutes (0 = never)
+    usageLimits: "",
+    // one "model=daily requests" per line; learned from 429s too
+    usagePrices: "",
+    // one "model=USD per 1M input,USD per 1M output" per line
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -286,6 +314,12 @@
         await updateMeeting(msg.meetingId, (m) => m.errors.push(msg.error));
         await raiseAlert(msg.meetingId, msg.error);
       },
+      usage: () => serial(async () => {
+        const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
+        const next = { usage: addEntry(usage, msg.entry) };
+        if (msg.entry?.learned) next.learnedLimits = { ...learnedLimits, [msg.entry.learned.model]: msg.entry.learned.limit };
+        await chrome.storage.local.set(next);
+      }),
       "dismiss-alert": () => clearAlert(),
       "set-follow": async () => {
         await saveSettings({ ...await getSettings(), followMeetMute: !!msg.on });

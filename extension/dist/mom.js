@@ -2497,6 +2497,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // stop recording by itself when the meeting is over
     autoStopQuietMin: 10,
     // ...or after this many silent minutes (0 = never)
+    usageLimits: "",
+    // one "model=daily requests" per line; learned from 429s too
+    usagePrices: "",
+    // one "model=USD per 1M input,USD per 1M output" per line
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -15624,9 +15628,48 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     return Anthropic2;
   })();
 
+  // src/usage.js
+  function learnLimit(text) {
+    const s = String(text || "");
+    const limit2 = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
+    const model = (s.match(/model:\s*([\w.-]+)/i) || [])[1];
+    return limit2 && model ? { model, limit: limit2 } : null;
+  }
+  var sink = { fn: null };
+  function record(entry) {
+    try {
+      if (sink.fn) return sink.fn(entry);
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ target: "bg", type: "usage", entry }).catch(() => {
+        });
+      }
+    } catch {
+    }
+  }
+
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
-  async function geminiFetch(url, init, settings2) {
+  function note(url, res, meta2) {
+    const model = (url.match(/models\/([^:/?]+)/) || [])[1] || "-";
+    const e = { provider: "gemini", model, kind: meta2.kind || (/stream/i.test(url) ? "llm" : "stt"), req: 1 };
+    if (res && res.ok) return record(e);
+    e.fail = true;
+    e.rl = res?.status === 429;
+    if (!res) return record(e);
+    res.clone().text().then((t) => record({ ...e, learned: learnLimit(t) }), () => record(e));
+  }
+  async function geminiFetch(url, init, settings2, meta2 = {}) {
+    let res;
+    try {
+      res = await geminiFetchInner(url, init, settings2);
+    } catch (e) {
+      note(url, null, meta2);
+      throw e;
+    }
+    note(url, res, meta2);
+    return res;
+  }
+  async function geminiFetchInner(url, init, settings2) {
     const call = (key2) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key2 } });
     const res = await call(settings2.geminiKey).catch((e) => {
       if (!settings2.geminiKey2 || e.name === "AbortError") throw e;
@@ -15638,11 +15681,11 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
   var GENERAL_FALLBACKS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"];
   var MODEL_STATUS = (s) => s === 404 || s === 429 || s >= 500;
   var modelChain = (primary) => [...new Set([primary, ...GENERAL_FALLBACKS].filter(Boolean))];
-  async function geminiChainFetch(models, urlFor, init, settings2) {
+  async function geminiChainFetch(models, urlFor, init, settings2, meta2 = {}) {
     let last, lastErr;
     for (const m of models) {
       try {
-        const res = await geminiFetch(urlFor(m), init, settings2);
+        const res = await geminiFetch(urlFor(m), init, settings2, meta2);
         if (res.ok || !MODEL_STATUS(res.status)) return { res, model: m };
         last = { res, model: m };
       } catch (e) {
@@ -15675,7 +15718,14 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     }
     const stream2 = client.beta.messages.stream(params, { signal });
     stream2.on("text", onText);
-    const msg = await stream2.finalMessage();
+    let msg;
+    try {
+      msg = await stream2.finalMessage();
+    } catch (e) {
+      record({ provider: "anthropic", model, kind: "llm", req: 1, fail: true, rl: e?.status === 429 });
+      throw e;
+    }
+    record({ provider: "anthropic", model, kind: "llm", req: 1, tin: msg.usage?.input_tokens, tout: msg.usage?.output_tokens });
     if (msg.stop_reason === "refusal") {
       throw new Error(`Claude declined this request${msg.stop_details?.category ? ` (${msg.stop_details.category})` : ""}.`);
     }
@@ -15735,6 +15785,7 @@ _(Output hit the length limit and was cut off.)_`;
         ]
       })
     });
+    record({ provider: "openai", model: settings2.oaModel, kind: "llm", req: 1, fail: !res.ok, rl: res.status === 429 });
     if (!res.ok) throw await httpError(res, "LLM");
     let text = "";
     await readSse(res, (ev) => {
@@ -15748,7 +15799,7 @@ _(Output hit the length limit and was cut off.)_`;
   }
   async function gemini({ settings: settings2, system, user, onText, signal }) {
     const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
-    const { res } = await geminiChainFetch(modelChain(settings2.geminiModel), urlFor, {
+    const { res, model } = await geminiChainFetch(modelChain(settings2.geminiModel), urlFor, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal,
@@ -15756,10 +15807,12 @@ _(Output hit the length limit and was cut off.)_`;
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }]
       })
-    }, settings2);
+    }, settings2, { kind: "llm" });
     if (!res.ok) throw await httpError(res, "Gemini");
     let text = "";
+    let usage = null;
     await readSse(res, (ev) => {
+      if (ev.usageMetadata) usage = ev.usageMetadata;
       for (const p of ev.candidates?.[0]?.content?.parts || []) {
         if (p.text && !p.thought) {
           text += p.text;
@@ -15767,6 +15820,7 @@ _(Output hit the length limit and was cut off.)_`;
         }
       }
     });
+    if (usage) record({ provider: "gemini", model, kind: "llm", tin: usage.promptTokenCount, tout: (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0) });
     return text;
   }
   var PROVIDERS = { anthropic, openai: openaiCompat, gemini };
@@ -15832,6 +15886,7 @@ _(Output hit the length limit and was cut off.)_`;
       hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
     }
   };
+  var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
   async function sarvam(wav, s) {
     const fd = new FormData();
@@ -15914,6 +15969,7 @@ _(Output hit the length limit and was cut off.)_`;
         }]
       });
     }
+    record({ provider: "gemini", model, kind: "stt", tin: j2.usageMetadata?.promptTokenCount, tout: j2.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });
     return (j2.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join("");
   }
   async function gemini2(wav, s) {
@@ -15940,15 +15996,19 @@ _(Output hit the length limit and was cut off.)_`;
     return "";
   }
   var PROVIDERS2 = { gemini: gemini2, sarvam, deepgram, openai: openaiCompat2 };
+  var sttModelName = (s) => ({ sarvam: s.sarvamModel, deepgram: s.deepgramModel, openai: s.sttModel })[s.sttProvider];
   async function transcribe(wav, settings2) {
     const fn2 = PROVIDERS2[settings2.sttProvider];
     if (!fn2) throw new Error(`Unknown STT provider ${settings2.sttProvider}`);
     let delay = 1500;
     for (let attempt = 0; ; attempt++) {
       try {
-        const text = (await fn2(wav, settings2)).trim();
+        const raw = await fn2(wav, settings2);
+        if (settings2.sttProvider !== "gemini") record({ provider: settings2.sttProvider, model: sttModelName(settings2), kind: "stt", req: 1, audioSec: audioSeconds(wav) });
+        const text = raw.trim();
         return isLoopNoise(text) ? "" : text;
       } catch (e) {
+        if (settings2.sttProvider !== "gemini") record({ provider: settings2.sttProvider, model: sttModelName(settings2), kind: "stt", req: 1, fail: true, rl: e.status === 429 });
         const retryable = !(e instanceof SttError) || e.status === 429 || e.status >= 500;
         if (!retryable || attempt >= 3) throw e;
         await new Promise((r) => setTimeout(r, e.status === 429 ? Math.max(delay, 2e4) : delay));
