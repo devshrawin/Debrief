@@ -36,6 +36,15 @@
     return hits;
   }
 
+  // src/adapters/index.js
+  var OTHER_SITES = [
+    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*"] },
+    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*"] },
+    { name: "Webex", matches: ["https://*.webex.com/*"] },
+    { name: "Whereby", matches: ["https://whereby.com/*"] },
+    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*"] }
+  ];
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -213,6 +222,30 @@
       $("segInfo").textContent = `${n} transcript segment${n === 1 ? "" : "s"} so far${errs ? ` \xB7 ${errs} failed chunk${errs === 1 ? "" : "s"} (kept, see MOM page)` : ""}. First one lands after ~2\u20133 min.`;
     }
   }
+  async function siteOffer() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    let host = "";
+    try {
+      host = new URL(tab?.url || "").hostname;
+    } catch {
+    }
+    const probe = tab?.url ? new URL(tab.url).origin + "/" : "";
+    const site = OTHER_SITES.find((s) => s.matches.some((m) => new RegExp(`^${m.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`).test(probe || `https://${host}/`)));
+    if (!site) return;
+    const granted = await chrome.permissions.contains({ origins: site.matches });
+    if (granted) return;
+    $("siteOffer").classList.remove("hidden");
+    $("siteOfferTitle").textContent = `${site.name} detected`;
+    $("siteOn").onclick = async () => {
+      const all = OTHER_SITES.flatMap((s) => s.matches);
+      const ok = await chrome.permissions.request({ origins: all });
+      if (!ok) return;
+      await send({ type: "sites", on: true, matches: all });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["dist/pill.js"] }).catch(() => {
+      });
+      $("siteOffer").classList.add("hidden");
+    };
+  }
   async function usageWarning() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
@@ -360,6 +393,8 @@
     $("shortcutHint").innerHTML = cmd?.shortcut ? `Shortcut: <kbd>${cmd.shortcut.split("+").join("</kbd>+<kbd>")}</kbd> starts/stops \xB7 <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mic on/off` : "Set a start/stop shortcut at chrome://extensions/shortcuts.";
     await refresh();
     usageWarning();
+    siteOffer().catch(() => {
+    });
     await renderRecent();
     setInterval(refresh, 1e3);
   })();

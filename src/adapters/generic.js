@@ -23,13 +23,22 @@ export function micButton(doc) {
   return null;
 }
 
+// A call is on when there is a mic button and a leave/end button and no end screen.
+export function leaveButton(doc) {
+  return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
+}
+
+export function inCall(doc) {
+  return !!(micButton(doc) && leaveButton(doc) && !endScreen(doc));
+}
+
 export function endScreen(doc) {
   const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"]')].slice(0, 300).map(text);
   return meetingEnded(texts) || texts.some((t) => /^(this )?(meeting|call) (has )?(been )?ended( by (the )?host)?\.?$/i.test(t.trim()));
 }
 
 export function snapshot(doc) {
-  return { mic: micButton(doc), participants: [], captions: [], ended: endScreen(doc) };
+  return { mic: micButton(doc), participants: [], captions: [], ended: endScreen(doc), inCall: inCall(doc) };
 }
 
 export function diagnose(doc, name = 'This meeting app') {
@@ -39,6 +48,7 @@ export function diagnose(doc, name = 'This meeting app') {
     micButton: s.mic ? `found, ${s.mic.muted ? 'muted' : 'unmuted'}` : 'NOT found: use the manual mic switch',
     participants: 'not read for this app',
     captions: 'not read for this app',
+    inCall: s.inCall ? 'yes, a call is on' : 'no call detected',
     endScreen: s.ended ? 'the end-of-meeting screen is showing' : 'no (normal while in a call)',
   };
 }

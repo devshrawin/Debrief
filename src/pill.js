@@ -396,6 +396,16 @@ import { adapterFor } from './adapters/index.js';
     }
   });
 
+  // Tells the extension when this tab has a live call, so its icon can glow amber as a reminder to record.
+  let lastInCall;
+  function reportCall() {
+    const on = !!app.inCall(document);
+    if (on !== lastInCall) {
+      lastInCall = on;
+      send({ type: 'in-call', on, site: app.name });
+    }
+  }
+
   async function tick() {
     if (!alive()) return shutdown();
     await load();
@@ -403,6 +413,7 @@ import { adapterFor } from './adapters/index.js';
     reportMute();
     checkEnded();
     sampleMeeting();
+    reportCall();
   }
 
   async function init() {

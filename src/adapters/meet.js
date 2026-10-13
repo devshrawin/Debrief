@@ -79,6 +79,11 @@ export function endScreen(doc) {
   return meetingEnded(texts);
 }
 
+export function inCall(doc) {
+  const leave = [...doc.querySelectorAll('button[aria-label]')].some((b) => /leave call/i.test(b.getAttribute('aria-label')));
+  return !!(micButton(doc) && leave && !endScreen(doc));
+}
+
 export function snapshot(doc) {
   return { mic: micButton(doc), participants: readParticipants(doc), captions: readCaptions(doc), ended: endScreen(doc) };
 }
@@ -91,6 +96,7 @@ export function diagnose(doc) {
     participants: s.participants.length ? `${s.participants.length} found: ${s.participants.slice(0, 6).join(', ')}` : 'none found (open the People panel, or join the call first)',
     captions: captionsRegion(doc) ? `region found, ${s.captions.length} caption block(s) now${s.captions[0] ? `, e.g. "${s.captions[0].name}"` : ''}` : 'captions are not showing (turn them on with the CC button)',
     captionsButton: captionsButton(doc) ? 'found' : 'not found (captions may already be on)',
+    inCall: inCall(doc) ? 'yes, a call is on' : 'no call detected (lobby or not joined yet)',
     endScreen: s.ended ? 'the end-of-meeting screen is showing' : 'no (normal while in a call)',
   };
 }

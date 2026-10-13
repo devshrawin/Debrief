@@ -1,4 +1,5 @@
 import { nearLimit, parseLimits } from './usage.js';
+import { OTHER_SITES } from './adapters/index.js';
 import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -53,6 +54,31 @@ async function refresh() {
     const errs = m?.errors.length || 0;
     $('segInfo').textContent = `${n} transcript segment${n === 1 ? '' : 's'} so far${errs ? ` · ${errs} failed chunk${errs === 1 ? '' : 's'} (kept, see MOM page)` : ''}. First one lands after ~2–3 min.`;
   }
+}
+
+// On Zoom, Teams, Webex, Whereby or Jitsi the page features are off until Chrome is allowed to read that site.
+async function siteOffer() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let host = '';
+  try {
+    host = new URL(tab?.url || '').hostname;
+  } catch {}
+  const probe = tab?.url ? new URL(tab.url).origin + '/' : '';
+  const site = OTHER_SITES.find((s) => s.matches.some((m) => new RegExp(`^${m.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`).test(probe || `https://${host}/`)));
+  if (!site) return;
+  const granted = await chrome.permissions.contains({ origins: site.matches });
+  if (granted) return;
+  $('siteOffer').classList.remove('hidden');
+  $('siteOfferTitle').textContent = `${site.name} detected`;
+  $('siteOn').onclick = async () => {
+    const all = OTHER_SITES.flatMap((s) => s.matches);
+    const ok = await chrome.permissions.request({ origins: all });
+    if (!ok) return;
+    await send({ type: 'sites', on: true, matches: all });
+    // Load the page script into the tab that is already open, so it works without a reload.
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['dist/pill.js'] }).catch(() => {});
+    $('siteOffer').classList.add('hidden');
+  };
 }
 
 async function usageWarning() {
@@ -215,6 +241,7 @@ for (const id of ['openSettings', 'openSettings1']) {
     : 'Set a start/stop shortcut at chrome://extensions/shortcuts.';
   await refresh();
   usageWarning();
+  siteOffer().catch(() => {});
   await renderRecent();
   setInterval(refresh, 1000);
 })();
