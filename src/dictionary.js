@@ -126,3 +126,49 @@ export function replaceWord(text, wrong, right) {
   if (!wrong) return text;
   return String(text).replace(new RegExp(`(?<![${WORD}])${esc(wrong)}(?![${WORD}])`, 'giu'), right);
 }
+
+// ---- learning from meetings -------------------------------------------------------------------
+
+const titleCase = (s) => s.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+function cleanLearned(n) {
+  const c = String(n || '').replace(/\s+/g, ' ').trim();
+  return c && c.length <= 40 && /^\p{L}[\p{L}\p{M} .'-]*$/u.test(c) && !/^(you|guest|unknown|presentation|presenting)$/i.test(c) ? c : '';
+}
+
+// Names this meeting shows are real (attendees, people seen in the call, the invite, caption speakers),
+// plus transcript words that look like a one-letter mishearing of one of them, seen at least twice.
+export function learnFromMeeting(meeting, { entries = [], myName = '' } = {}) {
+  const names = new Set();
+  const add = (n) => {
+    const c = cleanLearned(n);
+    if (c) names.add(c);
+  };
+  (meeting.attendees || []).forEach(add);
+  Object.keys(meeting.presence || {}).forEach((n) => add(/^you$/i.test(n) ? myName : n));
+  (meeting.invited || []).filter((p) => p.status !== 'no').forEach((p) => add(p.name || titleCase(String(p.email || '').split('@')[0].replace(/[._-]+/g, ' '))));
+  (meeting.captions || []).forEach((c) => add(/^you$/i.test(c.name) ? myName : c.name));
+  const list = [...names];
+  const text = (meeting.segments || []).map((s) => s.text).join(' ');
+  return { names: list, candidates: suggestNames(text, list, entries).filter((c) => c.count >= 2) };
+}
+
+// Merges one meeting's findings into the stored "learned" record. Returns the new record and any
+// fixes that should be accepted automatically.
+export function mergeLearned(learned, found, { auto = false, title = '', now = Date.now() } = {}) {
+  const next = { names: { ...(learned?.names || {}) }, pending: [...(learned?.pending || [])], rejected: [...(learned?.rejected || [])] };
+  for (const n of found.names) next.names[n] = now;
+  const keys = Object.keys(next.names);
+  if (keys.length > 300) for (const k of keys.sort((a, b) => next.names[a] - next.names[b]).slice(0, keys.length - 300)) delete next.names[k];
+  for (const c of found.candidates) {
+    const id = `${c.found.toLowerCase()}>${c.suggest.toLowerCase()}`;
+    if (next.rejected.includes(id)) continue;
+    const have = next.pending.find((p) => p.id === id);
+    if (have) {
+      have.count += c.count;
+      have.at = now;
+    } else next.pending.push({ id, found: c.found, suggest: c.suggest, count: c.count, meeting: title, at: now });
+  }
+  const accepted = auto ? next.pending.filter((p) => p.count >= 3) : [];
+  next.pending = next.pending.filter((p) => !accepted.includes(p));
+  return { learned: next, accepted };
+}

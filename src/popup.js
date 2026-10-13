@@ -188,6 +188,13 @@ $('stop').onclick = async () => {
 
 $('micToggle').onchange = (e) => send({ type: 'mic', on: e.target.checked }).then(refresh);
 
+for (const id of ['openTour', 'openTour1']) {
+  $(id).onclick = (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html?restart=1') });
+  };
+}
+
 for (const id of ['openSettings', 'openSettings1']) {
   $(id).onclick = (e) => {
     e.preventDefault();

@@ -82,7 +82,7 @@ function header(meeting, settings) {
 // ctx: { entries, attendees, absent: [names], captions, checklist }
 export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
   const lines = header(meeting, settings);
-  const names = glossaryLine(ctx.entries || [], ctx.attendees || []);
+  const names = glossaryLine(ctx.entries || [], [...(ctx.attendees || []), ...(ctx.learned || [])]);
   if (names) lines.push('', `Names and terms (spell exactly like this): ${names}`);
   if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(', ')}`);
   if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(', ')}`);

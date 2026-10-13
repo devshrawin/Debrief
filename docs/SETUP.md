@@ -44,6 +44,8 @@ Debrief uses Google Gemini to turn speech into text and to write the minutes. Th
 
 ## 3. Configure Debrief
 
+**The quick way:** when you first install Debrief, a guided tour opens automatically. It walks you through the steps below, tests each one as you go, and teaches how to record, what happens when a meeting ends, and how email and sharing work. If you closed it, reopen it from the popup (**Take the tour**) or from the bottom of the Settings sidebar. The manual steps follow for reference.
+
 Click the Debrief icon, then **Settings** (or right-click the icon → *Options*). The settings page has five sections on the left: **Get started**, **General**, **Speech to text**, **Minutes** and **Email**. *Get started* ticks off each step as you finish it.
 
 1. **Get started:** paste the key into **API key** under *Google Gemini*.

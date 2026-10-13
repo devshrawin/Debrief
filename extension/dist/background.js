@@ -79,6 +79,8 @@
     // one "model=daily requests" per line; learned from 429s too
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
+    dictAutoAlias: false,
+    // accept clear-cut learned fixes (3+ sightings) without asking
     dictionary: "",
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
@@ -130,11 +132,13 @@
     geminiModel: "gemini-3.8-flash"
   };
   async function getSettings() {
-    const { settings } = await chrome.storage.local.get("settings");
-    return { ...DEFAULTS, ...settings || {} };
+    const { settings, learned } = await chrome.storage.local.get(["settings", "learned"]);
+    const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+    return { ...DEFAULTS, ...settings || {}, learnedNames };
   }
   async function saveSettings(s) {
-    await chrome.storage.local.set({ settings: s });
+    const { learnedNames, ...own } = s;
+    await chrome.storage.local.set({ settings: own });
   }
   function sttReady(s) {
     if (s.sttProvider === "gemini") return !!s.geminiKey && !!s.sttGeminiModel;
@@ -163,6 +167,9 @@
   }
 
   // src/background.js
+  chrome.runtime.onInstalled.addListener((d) => {
+    if (d.reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html?restart=1") });
+  });
   chrome.storage.session.setAccessOptions?.({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" });
   var chain = Promise.resolve();
   var serial = (fn) => {
