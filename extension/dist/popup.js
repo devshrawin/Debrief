@@ -1,4 +1,41 @@
 (() => {
+  // src/usage.js
+  var FIELDS = ["req", "fail", "rl", "tin", "tout", "audioSec"];
+  function dayKey(date = /* @__PURE__ */ new Date()) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(date);
+  }
+  function summarize(usage, days = 1, now = /* @__PURE__ */ new Date()) {
+    const out = {};
+    for (let i = 0; i < days; i++) {
+      const rows = (usage || {})[dayKey(new Date(now.getTime() - i * 864e5))] || {};
+      for (const [key2, r] of Object.entries(rows)) {
+        const [provider, model, kind] = key2.split("|");
+        const t = out[key2] ||= { provider, model, kind, req: 0, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0 };
+        for (const f of FIELDS) t[f] += r[f] || 0;
+      }
+    }
+    return Object.values(out).sort((a, b) => b.req - a.req);
+  }
+  function parseLimits(text) {
+    const out = {};
+    for (const line of String(text || "").split(/\n/)) {
+      const m = line.match(/^\s*([\w.:-]+)\s*[=:]\s*(\d+)\s*$/);
+      if (m) out[m[1]] = Number(m[2]);
+    }
+    return out;
+  }
+  function nearLimit(usage, limits, now = /* @__PURE__ */ new Date()) {
+    const today = summarize(usage, 1, now);
+    const hits = [];
+    for (const r of today) {
+      const limit = limits[r.model];
+      if (!limit || r.kind === "tokens") continue;
+      const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
+      if (!hits.some((h) => h.model === r.model) && used >= Math.ceil(limit * 0.8)) hits.push({ model: r.model, used, limit });
+    }
+    return hits;
+  }
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -25,6 +62,10 @@
     // stop recording by itself when the meeting is over
     autoStopQuietMin: 10,
     // ...or after this many silent minutes (0 = never)
+    usageLimits: "",
+    // one "model=daily requests" per line; learned from 429s too
+    usagePrices: "",
+    // one "model=USD per 1M input,USD per 1M output" per line
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -149,6 +190,13 @@
       $("segInfo").textContent = `${n} transcript segment${n === 1 ? "" : "s"} so far${errs ? ` \xB7 ${errs} failed chunk${errs === 1 ? "" : "s"} (kept, see MOM page)` : ""}. First one lands after ~2\u20133 min.`;
     }
   }
+  async function usageWarning() {
+    const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
+    const settings = await getSettings();
+    const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
+    $("usageWarn").classList.toggle("hidden", !hits.length);
+    $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
+  }
   var armed = null;
   async function renderRecent() {
     const items = await listMeetings();
@@ -265,6 +313,7 @@
     const cmd = (await chrome.commands.getAll()).find((c) => c.name === "toggle-recording");
     $("shortcutHint").innerHTML = cmd?.shortcut ? `Shortcut: <kbd>${cmd.shortcut.split("+").join("</kbd>+<kbd>")}</kbd> starts/stops \xB7 <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mic on/off` : "Set a start/stop shortcut at chrome://extensions/shortcuts.";
     await refresh();
+    usageWarning();
     await renderRecent();
     setInterval(refresh, 1e3);
   })();

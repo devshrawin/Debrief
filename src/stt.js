@@ -10,6 +10,7 @@ class SttError extends Error {
 import { geminiFetch, modelChain } from './gemini.js';
 import { isLoopNoise } from './noise.js';
 import { errorDetail, DEFAULTS } from './store.js';
+import { record } from './usage.js';
 
 const DEFAULT_STT_PROMPT = DEFAULTS.sttPrompt;
 
@@ -37,6 +38,7 @@ export const LANGUAGES = {
     hint: 'It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (മലയാളം) and English words in English.',
   },
 };
+const audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32000);
 const lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
 
 async function sarvam(wav, s) {
@@ -128,6 +130,7 @@ async function geminiCall(wav, s, model) {
       }],
     });
   }
+  record({ provider: 'gemini', model, kind: 'stt', tin: j.usageMetadata?.promptTokenCount, tout: j.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });
   return (j.candidates?.[0]?.content?.parts || [])
     .filter((p) => p.text && !p.thought)
     .map((p) => p.text)
@@ -165,15 +168,20 @@ async function gemini(wav, s) {
 
 const PROVIDERS = { gemini, sarvam, deepgram, openai: openaiCompat };
 
+const sttModelName = (s) => ({ sarvam: s.sarvamModel, deepgram: s.deepgramModel, openai: s.sttModel })[s.sttProvider];
+
 export async function transcribe(wav, settings) {
   const fn = PROVIDERS[settings.sttProvider];
   if (!fn) throw new Error(`Unknown STT provider ${settings.sttProvider}`);
   let delay = 1500;
   for (let attempt = 0; ; attempt++) {
     try {
-      const text = (await fn(wav, settings)).trim();
+      const raw = await fn(wav, settings);
+      if (settings.sttProvider !== 'gemini') record({ provider: settings.sttProvider, model: sttModelName(settings), kind: 'stt', req: 1, audioSec: audioSeconds(wav) });
+      const text = raw.trim();
       return isLoopNoise(text) ? '' : text;
     } catch (e) {
+      if (settings.sttProvider !== 'gemini') record({ provider: settings.sttProvider, model: sttModelName(settings), kind: 'stt', req: 1, fail: true, rl: e.status === 429 });
       const retryable = !(e instanceof SttError) || e.status === 429 || e.status >= 500;
       if (!retryable || attempt >= 3) throw e;
       // Free-tier rate limits reset per minute, so back off harder on 429.

@@ -1,3 +1,4 @@
+import { nearLimit, parseLimits } from './usage.js';
 import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -52,6 +53,14 @@ async function refresh() {
     const errs = m?.errors.length || 0;
     $('segInfo').textContent = `${n} transcript segment${n === 1 ? '' : 's'} so far${errs ? ` · ${errs} failed chunk${errs === 1 ? '' : 's'} (kept, see MOM page)` : ''}. First one lands after ~2–3 min.`;
   }
+}
+
+async function usageWarning() {
+  const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);
+  const settings = await getSettings();
+  const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
+  $('usageWarn').classList.toggle('hidden', !hits.length);
+  $('usageWarnText').textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(' · ') + '. Debrief will fall back to other models if one runs out.';
 }
 
 let armed = null;
@@ -180,6 +189,7 @@ for (const id of ['openSettings', 'openSettings1']) {
     ? `Shortcut: <kbd>${cmd.shortcut.split('+').join('</kbd>+<kbd>')}</kbd> starts/stops · <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mic on/off`
     : 'Set a start/stop shortcut at chrome://extensions/shortcuts.';
   await refresh();
+  usageWarning();
   await renderRecent();
   setInterval(refresh, 1000);
 })();

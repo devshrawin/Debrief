@@ -2,7 +2,31 @@
 // rate-limited, out of quota, rejected, or the server errors.
 const FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
 
-export async function geminiFetch(url, init, settings) {
+import { record, learnLimit } from './usage.js';
+
+function note(url, res, meta) {
+  const model = (url.match(/models\/([^:/?]+)/) || [])[1] || '-';
+  const e = { provider: 'gemini', model, kind: meta.kind || (/stream/i.test(url) ? 'llm' : 'stt'), req: 1 };
+  if (res && res.ok) return record(e);
+  e.fail = true;
+  e.rl = res?.status === 429;
+  if (!res) return record(e);
+  res.clone().text().then((t) => record({ ...e, learned: learnLimit(t) }), () => record(e));
+}
+
+export async function geminiFetch(url, init, settings, meta = {}) {
+  let res;
+  try {
+    res = await geminiFetchInner(url, init, settings);
+  } catch (e) {
+    note(url, null, meta);
+    throw e;
+  }
+  note(url, res, meta);
+  return res;
+}
+
+async function geminiFetchInner(url, init, settings) {
   const call = (key) => fetch(url, { ...init, headers: { ...init.headers, 'x-goog-api-key': key } });
   const res = await call(settings.geminiKey).catch((e) => {
     if (!settings.geminiKey2 || e.name === 'AbortError') throw e;
@@ -21,11 +45,11 @@ export const modelChain = (primary) => [...new Set([primary, ...GENERAL_FALLBACK
 
 // Runs geminiFetch against each model in turn; returns the first response that is ok or whose
 // failure is not about this model (bad request, bad key) and reports which model answered.
-export async function geminiChainFetch(models, urlFor, init, settings) {
+export async function geminiChainFetch(models, urlFor, init, settings, meta = {}) {
   let last, lastErr;
   for (const m of models) {
     try {
-      const res = await geminiFetch(urlFor(m), init, settings);
+      const res = await geminiFetch(urlFor(m), init, settings, meta);
       if (res.ok || !MODEL_STATUS(res.status)) return { res, model: m };
       last = { res, model: m };
     } catch (e) {

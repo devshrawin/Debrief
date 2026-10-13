@@ -1174,6 +1174,10 @@
     // stop recording by itself when the meeting is over
     autoStopQuietMin: 10,
     // ...or after this many silent minutes (0 = never)
+    usageLimits: "",
+    // one "model=daily requests" per line; learned from 429s too
+    usagePrices: "",
+    // one "model=USD per 1M input,USD per 1M output" per line
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -14277,9 +14281,91 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     return Anthropic2;
   })();
 
+  // src/usage.js
+  var FIELDS = ["req", "fail", "rl", "tin", "tout", "audioSec"];
+  function dayKey(date = /* @__PURE__ */ new Date()) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(date);
+  }
+  function summarize(usage, days = 1, now = /* @__PURE__ */ new Date()) {
+    const out = {};
+    for (let i = 0; i < days; i++) {
+      const rows = (usage || {})[dayKey(new Date(now.getTime() - i * 864e5))] || {};
+      for (const [key, r] of Object.entries(rows)) {
+        const [provider, model, kind] = key.split("|");
+        const t = out[key] ||= { provider, model, kind, req: 0, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0 };
+        for (const f of FIELDS) t[f] += r[f] || 0;
+      }
+    }
+    return Object.values(out).sort((a, b) => b.req - a.req);
+  }
+  function learnLimit(text) {
+    const s = String(text || "");
+    const limit2 = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
+    const model = (s.match(/model:\s*([\w.-]+)/i) || [])[1];
+    return limit2 && model ? { model, limit: limit2 } : null;
+  }
+  function parseLimits(text) {
+    const out = {};
+    for (const line of String(text || "").split(/\n/)) {
+      const m = line.match(/^\s*([\w.:-]+)\s*[=:]\s*(\d+)\s*$/);
+      if (m) out[m[1]] = Number(m[2]);
+    }
+    return out;
+  }
+  var sink = { fn: null };
+  function record(entry) {
+    try {
+      if (sink.fn) return sink.fn(entry);
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ target: "bg", type: "usage", entry }).catch(() => {
+        });
+      }
+    } catch {
+    }
+  }
+  function parsePrices(text) {
+    const out = {};
+    for (const line of String(text || "").split(/\n/)) {
+      const m = line.match(/^\s*([\w.:-]+)\s*[=:]\s*([\d.]+)\s*,\s*([\d.]+)\s*$/);
+      if (m) out[m[1]] = { in: Number(m[2]), out: Number(m[3]) };
+    }
+    return out;
+  }
+  function estimateCost(rows, prices) {
+    let total = 0;
+    let priced = false;
+    for (const r of rows) {
+      const p = prices[r.model];
+      if (!p) continue;
+      priced = true;
+      total += r.tin / 1e6 * p.in + r.tout / 1e6 * p.out;
+    }
+    return priced ? total : null;
+  }
+
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
-  async function geminiFetch(url, init, settings) {
+  function note(url, res, meta) {
+    const model = (url.match(/models\/([^:/?]+)/) || [])[1] || "-";
+    const e = { provider: "gemini", model, kind: meta.kind || (/stream/i.test(url) ? "llm" : "stt"), req: 1 };
+    if (res && res.ok) return record(e);
+    e.fail = true;
+    e.rl = res?.status === 429;
+    if (!res) return record(e);
+    res.clone().text().then((t) => record({ ...e, learned: learnLimit(t) }), () => record(e));
+  }
+  async function geminiFetch(url, init, settings, meta = {}) {
+    let res;
+    try {
+      res = await geminiFetchInner(url, init, settings);
+    } catch (e) {
+      note(url, null, meta);
+      throw e;
+    }
+    note(url, res, meta);
+    return res;
+  }
+  async function geminiFetchInner(url, init, settings) {
     const call = (key) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key } });
     const res = await call(settings.geminiKey).catch((e) => {
       if (!settings.geminiKey2 || e.name === "AbortError") throw e;
@@ -14291,11 +14377,11 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
   var GENERAL_FALLBACKS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"];
   var MODEL_STATUS = (s) => s === 404 || s === 429 || s >= 500;
   var modelChain = (primary) => [...new Set([primary, ...GENERAL_FALLBACKS].filter(Boolean))];
-  async function geminiChainFetch(models, urlFor, init, settings) {
+  async function geminiChainFetch(models, urlFor, init, settings, meta = {}) {
     let last, lastErr;
     for (const m of models) {
       try {
-        const res = await geminiFetch(urlFor(m), init, settings);
+        const res = await geminiFetch(urlFor(m), init, settings, meta);
         if (res.ok || !MODEL_STATUS(res.status)) return { res, model: m };
         last = { res, model: m };
       } catch (e) {
@@ -14328,7 +14414,14 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     }
     const stream2 = client.beta.messages.stream(params, { signal });
     stream2.on("text", onText);
-    const msg = await stream2.finalMessage();
+    let msg;
+    try {
+      msg = await stream2.finalMessage();
+    } catch (e) {
+      record({ provider: "anthropic", model, kind: "llm", req: 1, fail: true, rl: e?.status === 429 });
+      throw e;
+    }
+    record({ provider: "anthropic", model, kind: "llm", req: 1, tin: msg.usage?.input_tokens, tout: msg.usage?.output_tokens });
     if (msg.stop_reason === "refusal") {
       throw new Error(`Claude declined this request${msg.stop_details?.category ? ` (${msg.stop_details.category})` : ""}.`);
     }
@@ -14383,6 +14476,7 @@ _(Output hit the length limit and was cut off.)_`;
         ]
       })
     });
+    record({ provider: "openai", model: settings.oaModel, kind: "llm", req: 1, fail: !res.ok, rl: res.status === 429 });
     if (!res.ok) throw await httpError(res, "LLM");
     let text = "";
     await readSse(res, (ev) => {
@@ -14396,7 +14490,7 @@ _(Output hit the length limit and was cut off.)_`;
   }
   async function gemini({ settings, system, user, onText, signal }) {
     const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
-    const { res } = await geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
+    const { res, model } = await geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal,
@@ -14404,10 +14498,12 @@ _(Output hit the length limit and was cut off.)_`;
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }]
       })
-    }, settings);
+    }, settings, { kind: "llm" });
     if (!res.ok) throw await httpError(res, "Gemini");
     let text = "";
+    let usage = null;
     await readSse(res, (ev) => {
+      if (ev.usageMetadata) usage = ev.usageMetadata;
       for (const p of ev.candidates?.[0]?.content?.parts || []) {
         if (p.text && !p.thought) {
           text += p.text;
@@ -14415,6 +14511,7 @@ _(Output hit the length limit and was cut off.)_`;
         }
       }
     });
+    if (usage) record({ provider: "gemini", model, kind: "llm", tin: usage.promptTokenCount, tout: (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0) });
     return text;
   }
   var PROVIDERS = { anthropic, openai: openaiCompat, gemini };
@@ -14455,14 +14552,14 @@ _(Output hit the length limit and was cut off.)_`;
   }
 
   // apps-script/Code.gs
-  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\n//\n// Setup:  paste this whole file into a new project at script.google.com, then\n//         Deploy > New deployment > Web app > Who has access: Anyone > Deploy.\n//         Copy the Web app URL into Debrief > Settings > Email the MOM.\n//\n// Safety: mail only ever goes to YOUR address (plus anything you list in ALLOWED), whatever the\n// request says, and the web app URL is a long secret that only Debrief knows.\n\nconst ALLOWED = []; // optional extra recipients, e.g. ['team@company.com']\n\nfunction doGet() {\n  return out({ ok: true, message: 'Debrief mail relay is live.', version: 4 });\n}\n\nfunction doPost(e) {\n  try {\n    const d = JSON.parse(e.postData.contents);\n\n    const me = Session.getEffectiveUser().getEmail();\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\n    const recipients = to.length ? to.join(',') : me;\n\n    const attachments = (d.attachments || []).map(function (a) {\n      const name = a.name || 'attachment.txt';\n      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).\n      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);\n    });\n    MailApp.sendEmail({\n      to: recipients,\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\n      body: String(d.text || ''),\n      htmlBody: String(d.html || ''),\n      attachments: attachments,\n      name: 'Debrief',\n    });\n    return out({ ok: true, to: recipients });\n  } catch (err) {\n    return out({ ok: false, error: String(err) });\n  }\n}\n\nfunction out(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n";
+  var Code_default = "// Debrief mail relay: lets the Debrief extension email your MOM from your own Google account.\r\n//\r\n// Setup:  paste this whole file into a new project at script.google.com, then\r\n//         Deploy > New deployment > Web app > Who has access: Anyone > Deploy.\r\n//         Copy the Web app URL into Debrief > Settings > Email the MOM.\r\n//\r\n// Safety: mail only ever goes to YOUR address (plus anything you list in ALLOWED), whatever the\r\n// request says, and the web app URL is a long secret that only Debrief knows.\r\n\r\nconst ALLOWED = []; // optional extra recipients, e.g. ['team@company.com']\r\n\r\nfunction doGet() {\r\n  return out({ ok: true, message: 'Debrief mail relay is live.', version: 4 });\r\n}\r\n\r\nfunction doPost(e) {\r\n  try {\r\n    const d = JSON.parse(e.postData.contents);\r\n\r\n    const me = Session.getEffectiveUser().getEmail();\r\n    const allowed = [me].concat(ALLOWED).map(function (s) { return s.toLowerCase(); });\r\n    const wanted = String(d.to || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\r\n    const to = wanted.filter(function (a) { return allowed.indexOf(a.toLowerCase()) >= 0; });\r\n    const recipients = to.length ? to.join(',') : me;\r\n\r\n    const attachments = (d.attachments || []).map(function (a) {\r\n      const name = a.name || 'attachment.txt';\r\n      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).\r\n      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);\r\n      return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);\r\n    });\r\n    MailApp.sendEmail({\r\n      to: recipients,\r\n      subject: String(d.subject || 'Debrief MOM').slice(0, 250),\r\n      body: String(d.text || ''),\r\n      htmlBody: String(d.html || ''),\r\n      attachments: attachments,\r\n      name: 'Debrief',\r\n    });\r\n    return out({ ok: true, to: recipients });\r\n  } catch (err) {\r\n    return out({ ok: false, error: String(err) });\r\n  }\r\n}\r\n\r\nfunction out(o) {\r\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\r\n}\r\n";
 
   // src/options.js
   var $ = (id) => document.getElementById(id);
-  var FIELDS = Object.keys(DEFAULTS);
+  var FIELDS2 = Object.keys(DEFAULTS);
   function read() {
     const s = {};
-    for (const k of FIELDS) {
+    for (const k of FIELDS2) {
       const el = $(k);
       if (!el) continue;
       s[k] = el.type === "checkbox" ? el.checked : el.value.trim();
@@ -14478,6 +14575,67 @@ _(Output hit the length limit and was cut off.)_`;
   }
   document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
   document.querySelectorAll("[data-go]").forEach((a) => a.onclick = () => showTab(a.dataset.go));
+  var usageDays = 1;
+  var fmtN = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n);
+  var KIND = { stt: "Speech to text", llm: "Minutes" };
+  async function renderUsage() {
+    const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
+    const settings = await getSettings();
+    const typed = parseLimits($("usageLimits").value || settings.usageLimits);
+    const limits = { ...learnedLimits, ...typed };
+    const rows = summarize(usage, usageDays);
+    const today = summarize(usage, 1);
+    const table = $("usageTable");
+    table.replaceChildren();
+    const head = table.createTHead().insertRow();
+    ["Service", "Used for", "Requests", "Failed", "Tokens in / out", "Audio", usageDays === 1 ? "Left today (estimate)" : ""].forEach((h) => head.append(Object.assign(document.createElement("th"), { textContent: h })));
+    const body = table.createTBody();
+    if (!rows.length) {
+      const r = body.insertRow();
+      const c = r.insertCell();
+      c.colSpan = 7;
+      c.textContent = "Nothing yet. Counts start with your next recording.";
+      c.style.color = "var(--muted)";
+    }
+    for (const r of rows) {
+      const tr = body.insertRow();
+      const cell = (t, cls) => Object.assign(tr.insertCell(), { textContent: t, className: cls || "" });
+      cell(`${r.provider}${r.model && r.model !== "-" ? ` \xB7 ${r.model}` : ""}`);
+      cell(KIND[r.kind] || r.kind);
+      cell(String(r.req), "num");
+      cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ""}` : "0", "num");
+      cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : "-", "num");
+      cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : "-", "num");
+      const left = tr.insertCell();
+      const limit2 = limits[r.model];
+      if (usageDays === 1 && limit2) {
+        const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
+        const pct = Math.min(100, Math.round(used / limit2 * 100));
+        left.innerHTML = `<div>${Math.max(0, limit2 - used)} of ${limit2}</div><div class="meterbar"><i class="${pct >= 100 ? "full" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>`;
+      }
+    }
+    const reqs = rows.reduce((a, r) => a + r.req, 0);
+    const audio = rows.filter((r) => r.kind === "stt").reduce((a, r) => a + r.audioSec, 0);
+    const cost = estimateCost(rows, parsePrices($("usagePrices").value || settings.usagePrices));
+    $("usageTotals").textContent = `${reqs} requests \xB7 ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` \xB7 about $${cost.toFixed(2)} at your prices` : ""} \xB7 quota day ${dayKey()} (Pacific)`;
+  }
+  document.querySelectorAll("#usageRange button").forEach((b) => {
+    b.onclick = () => {
+      usageDays = Number(b.dataset.days);
+      document.querySelectorAll("#usageRange button").forEach((x) => x.classList.toggle("active", x === b));
+      renderUsage();
+    };
+  });
+  $("usageReset").onclick = async () => {
+    if (!confirm("Reset all usage counters? This only clears Debrief's own tally.")) return;
+    await chrome.storage.local.remove(["usage", "learnedLimits"]);
+    renderUsage();
+  };
+  $("usageLimits").oninput = renderUsage;
+  $("usagePrices").oninput = renderUsage;
+  chrome.storage.onChanged.addListener((c) => {
+    if (c.usage || c.learnedLimits) renderUsage();
+  });
   function showProviderFields() {
     document.querySelectorAll("[data-stt]").forEach((el) => el.classList.toggle("hidden", el.dataset.stt !== $("sttProvider").value));
     document.querySelectorAll("[data-llm]").forEach((el) => el.classList.toggle("hidden", el.dataset.llm !== $("llmProvider").value));
@@ -14587,7 +14745,7 @@ _(Output hit the length limit and was cut off.)_`;
   };
   (async () => {
     const s = await getSettings();
-    for (const k of FIELDS) {
+    for (const k of FIELDS2) {
       const el = $(k);
       if (!el) continue;
       if (el.type === "checkbox") el.checked = !!s[k];
@@ -14596,6 +14754,7 @@ _(Output hit the length limit and was cut off.)_`;
     showProviderFields();
     micStatus();
     updateGuide();
+    renderUsage();
     showTab(location.hash.slice(1) || "start");
   })();
 })();
