@@ -341,7 +341,6 @@
     let warnChip;
     let panel;
     let expanded = false;
-    let hover = false;
     let lastSentMute;
     let panelSig = "";
     async function load() {
@@ -351,7 +350,7 @@
     function mount() {
       host = document.createElement("div");
       host.setAttribute("data-debrief", "");
-      let pos = { right: 16, bottom: 92 };
+      let pos = { right: 16, bottom: Math.max(92, innerHeight - 72) };
       try {
         pos = JSON.parse(localStorage.getItem(POS_KEY)) || pos;
       } catch {
@@ -381,15 +380,24 @@
         await load();
         render();
       });
-      wrap.addEventListener("mouseenter", () => {
-        hover = true;
-        render();
-      });
-      wrap.addEventListener("mouseleave", () => {
-        hover = false;
-        render();
-      });
       drag(pill);
+      document.addEventListener("pointerdown", (e) => {
+        if (expanded && !e.composedPath().includes(host)) {
+          expanded = false;
+          render();
+        }
+      }, true);
+      document.addEventListener("keydown", (e) => {
+        if (expanded && e.key === "Escape") {
+          expanded = false;
+          render();
+        }
+      }, true);
+      document.addEventListener("fullscreenchange", () => {
+        const fs = document.fullscreenElement;
+        const home = fs && fs.tagName !== "VIDEO" && fs.tagName !== "IFRAME" ? fs : document.documentElement;
+        if (host.parentNode !== home) home.appendChild(host);
+      });
     }
     function drag(target) {
       let st = null;
@@ -458,7 +466,7 @@
       micBtn.innerHTML = (wanted && !paused ? MIC_ON : MIC_OFF) + (!rec.mic ? "No mic" : paused ? "Muted" : wanted ? "Mic on" : "Mic off");
       micBtn.disabled = !rec.mic;
       micBtn.title = !rec.mic ? "Microphone not available to Debrief" : paused ? "Meet is muted, so Debrief is ignoring your mic. Click to stop including it." : wanted ? "Your mic is in the transcript. Click to ignore it." : "Your mic is ignored. Click to include it.";
-      const open = expanded || hover;
+      const open = expanded;
       panel.classList.toggle("hidden", !open);
       if (!open) {
         panelSig = "";

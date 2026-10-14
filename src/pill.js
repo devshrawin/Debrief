@@ -142,7 +142,6 @@ import { adapterFor } from './adapters/index.js';
   let warnChip;
   let panel;
   let expanded = false;
-  let hover = false;
   let lastSentMute;
   let panelSig = '';
 
@@ -154,7 +153,7 @@ import { adapterFor } from './adapters/index.js';
   function mount() {
     host = document.createElement('div');
     host.setAttribute('data-debrief', '');
-    let pos = { right: 16, bottom: 92 };
+    let pos = { right: 16, bottom: Math.max(92, innerHeight - 72) };
     try {
       pos = JSON.parse(localStorage.getItem(POS_KEY)) || pos;
     } catch {}
@@ -185,15 +184,27 @@ import { adapterFor } from './adapters/index.js';
       await load();
       render();
     });
-    wrap.addEventListener('mouseenter', () => {
-      hover = true;
-      render();
-    });
-    wrap.addEventListener('mouseleave', () => {
-      hover = false;
-      render();
-    });
     drag(pill);
+    // The panel belongs to a click: a click elsewhere on the page, or Escape, closes it again.
+    document.addEventListener('pointerdown', (e) => {
+      if (expanded && !e.composedPath().includes(host)) {
+        expanded = false;
+        render();
+      }
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (expanded && e.key === 'Escape') {
+        expanded = false;
+        render();
+      }
+    }, true);
+    // Full screen: the pill follows the page into it (an element outside the full-screen element is not drawn),
+    // and goes back afterwards. A <video> cannot hold children, so then the pill simply stays where it was.
+    document.addEventListener('fullscreenchange', () => {
+      const fs = document.fullscreenElement;
+      const home = fs && fs.tagName !== 'VIDEO' && fs.tagName !== 'IFRAME' ? fs : document.documentElement;
+      if (host.parentNode !== home) home.appendChild(host);
+    });
   }
 
   function drag(target) {
@@ -272,7 +283,7 @@ import { adapterFor } from './adapters/index.js';
           ? 'Your mic is in the transcript. Click to ignore it.'
           : 'Your mic is ignored. Click to include it.';
 
-    const open = expanded || hover;
+    const open = expanded;
     panel.classList.toggle('hidden', !open);
     if (!open) {
       panelSig = '';
