@@ -758,7 +758,15 @@
     });
     if (micStream) {
       rec.chunkers.me = new Chunker("me", onChunk, chunkSize(settings, onSkip));
-      await tap(ctx, micStream, (b) => rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length)));
+      await tap(ctx, micStream, (b) => {
+        if (rec) {
+          let pk = 0;
+          for (let i = 0; i < b.length; i += 8) pk = Math.max(pk, Math.abs(b[i]));
+          rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
+          rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
+        }
+        rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length));
+      });
     }
     if (settings.voiceOn && (settings.voices || []).length || settings.voiceLearn) {
       rec.voice = await startVoice(meetingId).catch(() => null);
@@ -782,6 +790,11 @@
     rec.dbgTimer = setInterval(() => {
       if (!rec) return;
       n++;
+      if (rec.micStream && !rec.micWarned && rec.micRawBlocks > 400 && rec.micRawPeak < 5e-4) {
+        rec.micWarned = true;
+        dbg(`mic: the raw microphone signal has been silent for ${n * 5}s (peak ${rec.micRawPeak.toFixed(5)}): wrong device or blocked`);
+        chrome.runtime.sendMessage({ target: "bg", type: "mic-silent", meetingId });
+      }
       const c = rec.chunkers.others;
       dbg(`t+${n * 5}s ctx=${rec.ctx.state} play=${rec.playCtx.state} tab=${trk(rec.tabStream)} tabSamples=${c.total} tabPeak=${c.maxEver.toFixed(4)}` + (rec.chunkers.me ? ` micSamples=${rec.chunkers.me.total} micPeak=${rec.chunkers.me.maxEver.toFixed(4)}` : ""));
       if (n >= 24) clearInterval(rec.dbgTimer);

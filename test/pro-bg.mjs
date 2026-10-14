@@ -116,6 +116,23 @@ await test('mic switch and Meet mute arriving together both survive', async () =
   assert.equal(state.mem.session.rec.micOn, true);
 });
 
+await test('every change of Meet mute is written to the meeting log, and a silent microphone raises an alert', async () => {
+  live({ micWanted: true, meetMuted: false });
+  state.mem.local.settings = { followMeetMute: true };
+  await send({ type: 'meet-mute', muted: true }, page(7));
+  await send({ type: 'meet-mute', muted: false }, page(7));
+  await send({ type: 'meet-mute', muted: null }, page(7));
+  await new Promise((r) => setTimeout(r, 50));
+  const dbg = (state.mem.local['meeting:mt'].debug || []).filter((x) => /^Meet mic/.test(x));
+  assert.equal(dbg.length, 3, JSON.stringify(dbg));
+  assert.match(dbg[0], /muted at \+\d+s; Debrief mic off/);
+  assert.match(dbg[1], /unmuted.*Debrief mic on/);
+  assert.match(dbg[2], /not detected/);
+  live();
+  await send({ type: 'mic-silent', meetingId: 'mt' }, OFFSCREEN);
+  assert.equal(state.mem.session.rec.alert?.kind, 'mic');
+});
+
 await test('a late message during stop cannot bring a stopped recording back', async () => {
   live();
   const stopping = send({ type: 'stop' }, OWN);

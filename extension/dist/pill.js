@@ -45,6 +45,8 @@
     const withAttr = [...doc.querySelectorAll('button[data-is-muted], [role="button"][data-is-muted]')];
     const labelled = withAttr.find((b) => /microphone|mic\b/i.test(b.getAttribute("aria-label") || ""));
     if (labelled) return { el: labelled, muted: labelled.getAttribute("data-is-muted") === "true" };
+    const toggles = withAttr.filter((b) => !/camera|video|cam\b/i.test(b.getAttribute("aria-label") || ""));
+    if (!labelled && withAttr.length === 2 && toggles.length >= 1) return { el: toggles[0], muted: toggles[0].getAttribute("data-is-muted") === "true" };
     const byLabel = [...doc.querySelectorAll("button[aria-label]")].find((b) => /turn (on|off) microphone/i.test(b.getAttribute("aria-label")));
     if (byLabel) return { el: byLabel, muted: /turn on/i.test(byLabel.getAttribute("aria-label")) };
     return null;

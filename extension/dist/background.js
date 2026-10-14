@@ -284,6 +284,13 @@
         detail: "Google says the key is invalid or lacks access. Check it in Debrief settings. Audio is kept and will retry."
       };
     }
+    if (/^MIC_SILENT/.test(e)) {
+      return {
+        kind: "mic",
+        title: "Your microphone is silent",
+        detail: "Debrief has heard nothing from your microphone for a minute. Check the right microphone is chosen in Settings \u2192 General \u2192 Microphone and that Windows lets Chrome use it. Other people are still being recorded."
+      };
+    }
     if (/\b429\b|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(e)) {
       const reset = retry ? `, resets in about ${retry.replace(/\.\d+s?$/, "")}` : "";
       return {
@@ -601,14 +608,18 @@
     let eff = false;
     let changed = false;
     let cur = null;
+    let noted = "";
     await mutateState((st) => {
       if (!st.recording || st.stopping) return null;
       cur = { ...st, ...patch };
+      if ("meetMuted" in patch && patch.meetMuted !== st.meetMuted) noted = `Meet mic: ${patch.meetMuted === true ? "muted" : patch.meetMuted === false ? "unmuted" : "state not detected"} at +${Math.round((Date.now() - (st.startedAt || Date.now())) / 1e3)}s${followMeetMute ? "" : " (following Meet is off)"}`;
       eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && cur.meetMuted === true);
       changed = eff !== !!st.micOn;
       return cur;
     });
     if (!cur) return { ok: false };
+    if (noted && cur.meetingId) updateMeeting(cur.meetingId, (m) => (m.debug ||= []).push(`${noted}; Debrief mic ${eff ? "on" : "off"}`)).catch(() => {
+    });
     let micOn = cur.micOn;
     if (changed) {
       const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "mic", on: eff }).catch(() => null);
@@ -662,6 +673,7 @@
         await autoStop("The meeting ended.");
         return { ok: true };
       },
+      "mic-silent": () => raiseAlert(msg.meetingId, "MIC_SILENT"),
       dbg: () => updateMeeting(msg.meetingId, (m) => (m.debug ||= []).push(msg.note)),
       segment: async () => {
         await updateMeeting(msg.meetingId, (m) => m.segments.push(msg.seg));

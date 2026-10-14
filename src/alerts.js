@@ -10,6 +10,13 @@ export function classifyError(err) {
       detail: 'Google says the key is invalid or lacks access. Check it in Debrief settings. Audio is kept and will retry.',
     };
   }
+  if (/^MIC_SILENT/.test(e)) {
+    return {
+      kind: 'mic',
+      title: 'Your microphone is silent',
+      detail: 'Debrief has heard nothing from your microphone for a minute. Check the right microphone is chosen in Settings \u2192 General \u2192 Microphone and that Windows lets Chrome use it. Other people are still being recorded.',
+    };
+  }
   if (/\b429\b|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(e)) {
     const reset = retry ? `, resets in about ${retry.replace(/\.\d+s?$/, '')}` : '';
     return {
