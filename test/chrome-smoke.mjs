@@ -457,7 +457,7 @@ try {
     const off = await chrome.action.getBadgeText({ tabId });
     return { on, off, title };
   })()`);
-  check('amber reminder dot shows during a call on any supported site and clears after', dot.on === '\u25cf' && dot.off === '' && /Zoom/.test(dot.title), JSON.stringify(dot));
+  check('amber reminder dot shows during a call on any supported site and clears after', dot.on === '\u25cf' && dot.off === '' && dot.title === 'A call is on. Click to record.', JSON.stringify(dot));
 
   // ---- ask about the minutes ----
   const askPage = await openPage(`chrome-extension://${id}/ask.html`);
