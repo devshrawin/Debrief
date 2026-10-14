@@ -88,7 +88,7 @@ async function patchMeeting(fields) {
   await saveMeeting(latest);
 }
 
-async function runGenerate() {
+async function runGenerate({ reread = false } = {}) {
   if (!llmReady(settings)) {
     $('genStatus').textContent = 'Set up an LLM in Settings first.';
     return;
@@ -100,6 +100,7 @@ async function runGenerate() {
   setEditing(false);
   abortCtl = new AbortController();
   $('gen').disabled = true;
+  $('reread').disabled = true;
   $('abort').classList.remove('hidden');
   $('genStatus').textContent = `Writing with ${modelLabel(settings)}…`;
   let buf = '';
@@ -109,10 +110,10 @@ async function runGenerate() {
     $('mom').innerHTML = renderMd(buf);
   };
   // One model call with the same retry-on-rate-limit behaviour as before.
-  const gen = async (system, user, onText) => {
+  const gen = async (system, user, onText, opts = {}) => {
     for (let i = 0; ; i++) {
       try {
-        return await generate({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {}) });
+        return await generate({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {}), temperature: opts.temperature });
       } catch (e) {
         if (i >= 3 || !isRetryable(e)) throw e;
         const wait = [5, 15, 30][i];
@@ -126,19 +127,19 @@ async function runGenerate() {
     const pending = await listPending(id);
     const ctx = nameCtx();
     const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
-    const { mom: text, stats } = await writeMinutes({
+    const { mom: text, stats, extract } = await writeMinutes({
       meeting,
       settings,
       notes: meeting.notes,
-      ctx: { ...ctx, absent, captions: meeting.captions },
-      gen: (system, user, onText) =>
+      ctx: { ...ctx, absent, captions: meeting.captions, reread },
+      gen: (system, user, onText, opts) =>
         gen(system, user, onText && ((d) => {
           buf += d;
           if (!queued) {
             queued = true;
             requestAnimationFrame(paint);
           }
-        })),
+        }), opts),
       onText: () => {},
       onStatus: (t) => {
         buf = '';
@@ -146,9 +147,9 @@ async function runGenerate() {
       },
       coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length },
     });
-    await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees });
+    await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
     renderMom();
-    $('genStatus').textContent = `Done · ${meeting.model}${stats.calls > 1 ? ` · ${stats.items} items found, ${stats.missed} added by the check` : ''}`;
+    $('genStatus').textContent = `Done · ${meeting.model}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
     // First time only: regenerating or editing never re-sends by itself.
     if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
   } catch (e) {
@@ -157,6 +158,8 @@ async function runGenerate() {
   } finally {
     abortCtl = null;
     $('gen').disabled = false;
+    $('reread').disabled = false;
+    $('reread').classList.toggle('hidden', !meeting.extract);
     $('gen').textContent = 'Regenerate';
     $('abort').classList.add('hidden');
   }
@@ -360,7 +363,8 @@ function download(name, type, content) {
 
 const fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
-$('gen').onclick = runGenerate;
+$('gen').onclick = () => runGenerate();
+$('reread').onclick = () => runGenerate({ reread: true });
 $('mail').onclick = () => emailMom(false);
 $('abort').onclick = () => abortCtl?.abort();
 $('edit').onclick = () => setEditing($('mdEdit').classList.contains('hidden'));
@@ -500,6 +504,7 @@ document.querySelectorAll('.tabs button').forEach((b) => {
   }
   if (meeting.mom) {
     $('gen').textContent = 'Regenerate';
+    $('reread').classList.toggle('hidden', !meeting.extract);
     if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Regenerate to include it in the minutes.';
   } else if (!meeting.endedAt) {
     $('genStatus').textContent = 'This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.';

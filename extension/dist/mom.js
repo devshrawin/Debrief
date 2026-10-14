@@ -15829,7 +15829,7 @@ _(Output hit the length limit and was cut off.)_`;
     if (e?.status == null) return true;
     return e.status === 408 || e.status === 429 || e.status >= 500;
   }
-  async function openaiCompat({ settings: settings2, system, user, onText, signal }) {
+  async function openaiCompat({ settings: settings2, system, user, onText, signal, temperature }) {
     const headers = { "Content-Type": "application/json" };
     if (settings2.oaKey) headers.Authorization = `Bearer ${settings2.oaKey}`;
     const res = await fetch(`${settings2.oaBase.replace(/\/+$/, "")}/chat/completions`, {
@@ -15839,6 +15839,7 @@ _(Output hit the length limit and was cut off.)_`;
       body: JSON.stringify({
         model: settings2.oaModel,
         stream: true,
+        ...temperature != null ? { temperature } : {},
         messages: [
           { role: "system", content: system },
           { role: "user", content: user }
@@ -15857,7 +15858,7 @@ _(Output hit the length limit and was cut off.)_`;
     });
     return text;
   }
-  async function gemini({ settings: settings2, system, user, onText, signal }) {
+  async function gemini({ settings: settings2, system, user, onText, signal, temperature }) {
     const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
     const { res, model } = await geminiChainFetch(modelChain(settings2.geminiModel), urlFor, {
       method: "POST",
@@ -15865,7 +15866,8 @@ _(Output hit the length limit and was cut off.)_`;
       signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }]
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        ...temperature != null ? { generationConfig: { temperature } } : {}
       })
     }, settings2, { kind: "llm" });
     if (!res.ok) throw await httpError(res, "Gemini");
@@ -16660,6 +16662,17 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     if (errors > 0) return `Note: ${errors} transcription problem${errors > 1 ? "s" : ""} occurred during the recording; the audio was retried and recovered where possible.`;
     return "";
   }
+  function textKey(text) {
+    let h1 = 5381;
+    let h22 = 52711;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      h1 = (h1 << 5) + h1 ^ c;
+      h22 = (h22 << 5) + h22 + c | 0;
+    }
+    return `${text.length}.${(h1 >>> 0).toString(36)}${(h22 >>> 0).toString(36)}`;
+  }
+  var TEMPERATURE = { extract: 0, write: 0.2, check: 0 };
   async function writeMinutes({ meeting: meeting2, settings: settings2, notes, ctx = {}, gen, onText = () => {
   }, onStatus = () => {
   }, coverage = {} }) {
@@ -16670,14 +16683,22 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     const thorough = settings2.minutesMode !== "quick" && words >= 400;
     const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0 };
     let checklist = "";
+    let extract = null;
     if (thorough) {
       const windows = splitWindows(lines, local ? 1500 : 3200);
       const items = [];
-      for (let i = 0; i < windows.length; i++) {
+      const key2 = textKey(`${local ? "l" : "c"}|${transcript}|${(ctx.entries || []).length}|${(ctx.attendees || []).join(",")}`);
+      const cached = !ctx.reread && meeting2.extract?.key === key2 && Array.isArray(meeting2.extract.items) ? meeting2.extract.items : null;
+      if (cached) {
+        items.push(...cached);
+        stats.reused = true;
+        stats.extractWindows = windows.length;
+      }
+      for (let i = 0; !cached && i < windows.length; i++) {
         onStatus(`Reading the transcript carefully (part ${i + 1} of ${windows.length})\u2026`);
         try {
           stats.calls++;
-          const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting2, settings2, windows[i].join("\n"), ctx));
+          const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting2, settings2, windows[i].join("\n"), ctx), void 0, { temperature: TEMPERATURE.extract });
           items.push(...guardOwners(parseItems(out), windows[i].join("\n")));
           stats.extractWindows++;
         } catch (e) {
@@ -16687,16 +16708,17 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
       }
       stats.items = items.length;
       checklist = itemsToChecklist(items);
+      if (!cached && !stats.extractFailed) extract = { key: key2, items };
     }
     onStatus("Writing the minutes\u2026");
     stats.calls++;
-    let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true, languages: names(languagesOf(settings2)) }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText));
+    let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true, languages: names(languagesOf(settings2)) }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText, { temperature: TEMPERATURE.write }));
     if (!mom) throw new Error("The model returned an empty reply. Try again, or choose another model in Settings.");
     if (thorough && words <= (local ? 6e3 : 24e3)) {
       onStatus("Checking nothing was left out\u2026");
       try {
         stats.calls++;
-        const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom));
+        const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom), void 0, { temperature: TEMPERATURE.check });
         const missing = sanitizeMinutes(out).split(/\r?\n/).map((l3) => l3.replace(/^[-*\s]+/, "").trim()).filter((l3) => /^\[?\d{1,2}:\d{2}/.test(l3));
         stats.missed = missing.length;
         if (missing.length) {
@@ -16722,7 +16744,7 @@ ${missing.map((m) => `- ${m}`).join("\n")}`;
 
 ---
 
-${foot.join("\n\n")}`, stats, checklist };
+${foot.join("\n\n")}`, stats, checklist, extract };
   }
 
   // src/voice/match.js
@@ -17294,7 +17316,7 @@ ${meeting2.mom || ""}
     Object.assign(meeting, fields);
     await saveMeeting(latest);
   }
-  async function runGenerate() {
+  async function runGenerate({ reread = false } = {}) {
     if (!llmReady(settings)) {
       $2("genStatus").textContent = "Set up an LLM in Settings first.";
       return;
@@ -17306,6 +17328,7 @@ ${meeting2.mom || ""}
     setEditing(false);
     abortCtl = new AbortController();
     $2("gen").disabled = true;
+    $2("reread").disabled = true;
     $2("abort").classList.remove("hidden");
     $2("genStatus").textContent = `Writing with ${modelLabel(settings)}\u2026`;
     let buf = "";
@@ -17314,11 +17337,11 @@ ${meeting2.mom || ""}
       queued = false;
       $2("mom").innerHTML = renderMd(buf);
     };
-    const gen = async (system, user, onText) => {
+    const gen = async (system, user, onText, opts = {}) => {
       for (let i = 0; ; i++) {
         try {
           return await generate2({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {
-          }) });
+          }), temperature: opts.temperature });
         } catch (e) {
           if (i >= 3 || !isRetryable(e)) throw e;
           const wait = [5, 15, 30][i];
@@ -17332,18 +17355,18 @@ ${meeting2.mom || ""}
       const pending = await listPending(id);
       const ctx = nameCtx();
       const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
-      const { mom: text, stats } = await writeMinutes({
+      const { mom: text, stats, extract } = await writeMinutes({
         meeting,
         settings,
         notes: meeting.notes,
-        ctx: { ...ctx, absent, captions: meeting.captions },
-        gen: (system, user, onText) => gen(system, user, onText && ((d) => {
+        ctx: { ...ctx, absent, captions: meeting.captions, reread },
+        gen: (system, user, onText, opts) => gen(system, user, onText && ((d) => {
           buf += d;
           if (!queued) {
             queued = true;
             requestAnimationFrame(paint);
           }
-        })),
+        }), opts),
         onText: () => {
         },
         onStatus: (t) => {
@@ -17352,9 +17375,9 @@ ${meeting2.mom || ""}
         },
         coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting.errors || []).length }
       });
-      await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees });
+      await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...extract ? { extract } : {} });
       renderMom();
-      $2("genStatus").textContent = `Done \xB7 ${meeting.model}${stats.calls > 1 ? ` \xB7 ${stats.items} items found, ${stats.missed} added by the check` : ""}`;
+      $2("genStatus").textContent = `Done \xB7 ${meeting.model}${stats.calls > 1 ? ` \xB7 ${stats.items} items ${stats.reused ? "reused from the earlier read of this transcript (press Re-read transcript for a fresh read)" : "found"}, ${stats.missed} added by the check` : ""}`;
       if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
     } catch (e) {
       $2("genStatus").textContent = abortCtl.signal.aborted ? "Stopped." : `Failed: ${e.message}`;
@@ -17362,6 +17385,8 @@ ${meeting2.mom || ""}
     } finally {
       abortCtl = null;
       $2("gen").disabled = false;
+      $2("reread").disabled = false;
+      $2("reread").classList.toggle("hidden", !meeting.extract);
       $2("gen").textContent = "Regenerate";
       $2("abort").classList.add("hidden");
     }
@@ -17541,7 +17566,8 @@ ${meeting2.mom || ""}
     setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
   var fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, "-");
-  $2("gen").onclick = runGenerate;
+  $2("gen").onclick = () => runGenerate();
+  $2("reread").onclick = () => runGenerate({ reread: true });
   $2("mail").onclick = () => emailMom(false);
   $2("abort").onclick = () => abortCtl?.abort();
   $2("edit").onclick = () => setEditing($2("mdEdit").classList.contains("hidden"));
@@ -17675,6 +17701,7 @@ ${meeting2.mom || ""}
     }
     if (meeting.mom) {
       $2("gen").textContent = "Regenerate";
+      $2("reread").classList.toggle("hidden", !meeting.extract);
       if (hadPending) $2("genStatus").textContent = "Missing audio was recovered. Press Regenerate to include it in the minutes.";
     } else if (!meeting.endedAt) {
       $2("genStatus").textContent = "This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.";

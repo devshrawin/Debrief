@@ -14537,7 +14537,7 @@ _(Output hit the length limit and was cut off.)_`;
     if (e?.status == null) return true;
     return e.status === 408 || e.status === 429 || e.status >= 500;
   }
-  async function openaiCompat({ settings, system, user, onText, signal }) {
+  async function openaiCompat({ settings, system, user, onText, signal, temperature }) {
     const headers = { "Content-Type": "application/json" };
     if (settings.oaKey) headers.Authorization = `Bearer ${settings.oaKey}`;
     const res = await fetch(`${settings.oaBase.replace(/\/+$/, "")}/chat/completions`, {
@@ -14547,6 +14547,7 @@ _(Output hit the length limit and was cut off.)_`;
       body: JSON.stringify({
         model: settings.oaModel,
         stream: true,
+        ...temperature != null ? { temperature } : {},
         messages: [
           { role: "system", content: system },
           { role: "user", content: user }
@@ -14565,7 +14566,7 @@ _(Output hit the length limit and was cut off.)_`;
     });
     return text;
   }
-  async function gemini({ settings, system, user, onText, signal }) {
+  async function gemini({ settings, system, user, onText, signal, temperature }) {
     const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
     const { res, model } = await geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
       method: "POST",
@@ -14573,7 +14574,8 @@ _(Output hit the length limit and was cut off.)_`;
       signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }]
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        ...temperature != null ? { generationConfig: { temperature } } : {}
       })
     }, settings, { kind: "llm" });
     if (!res.ok) throw await httpError(res, "Gemini");
