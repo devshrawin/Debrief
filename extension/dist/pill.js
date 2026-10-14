@@ -215,83 +215,76 @@
     const POS_KEY = "debrief.pill.pos";
     const CSS = `
     :host { all: initial; }
-    * { box-sizing: border-box; font-family: "Google Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .wrap { --ink:#f5f4ff; --dim:#aeaad6; --line:rgba(255,255,255,.12); --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --saffron:#ffb347;
-      display:flex; flex-direction:column; align-items:flex-end; gap:8px; color:var(--ink); }
+    * { box-sizing: border-box; font-family: "Google Sans", "Segoe UI", system-ui, "Nirmala UI", "Kartika", sans-serif; }
+    .wrap { position:relative; color:#eceef2; font-size:13px; line-height:1.4; pointer-events:none; }
+    .wrap > * { pointer-events:auto; }
+    button { font:inherit; }
+    :focus-visible { outline:2px solid #b9b4ff; outline-offset:2px; }
+    .sr { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; padding:0; }
+    .hidden { display:none !important; }
 
     /* Capsule */
-    .pill { position:relative; display:flex; align-items:center; gap:10px; padding:6px 6px 6px 12px; border-radius:999px;
-      background:linear-gradient(135deg,#2f2a8f 0%,#1e1b6b 55%,#17154f 100%);
-      border:1px solid rgba(255,255,255,.14);
-      box-shadow:0 10px 28px -8px rgba(20,16,90,.65), 0 2px 6px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.18);
-      font-size:12px; font-weight:500; line-height:1; cursor:grab; user-select:none; white-space:nowrap; touch-action:none; }
-    .pill::before { content:""; position:absolute; left:14px; right:14px; top:2px; height:40%; border-radius:999px;
-      background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,0)); pointer-events:none; }
-    .pill:active { cursor:grabbing; }
-    .pill.alert { border-color:rgba(251,113,133,.7); box-shadow:0 10px 28px -8px rgba(251,113,133,.5), 0 2px 6px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.18); }
-
-    .eq { display:flex; align-items:center; gap:2px; height:16px; }
-    .eq i { display:block; width:3px; height:4px; border-radius:2px; background:linear-gradient(180deg,#ffd08a,var(--saffron)); }
-    .eq.live i { animation:eq 900ms ease-in-out infinite; }
+    .pill { display:flex; align-items:center; gap:10px; height:36px; padding:0 4px 0 12px; border-radius:999px;
+      background:#16171c; border:1px solid rgba(255,255,255,.16); box-shadow:0 6px 20px -6px rgba(0,0,0,.55);
+      color:#fff; font-size:13px; font-weight:600; line-height:1; cursor:grab; user-select:none; white-space:nowrap; touch-action:none; }
+    .pill.dragging { cursor:grabbing; transform:rotate(-2deg) scale(1.04); box-shadow:0 16px 30px -8px rgba(0,0,0,.8); outline:2px solid #b9b4ff; outline-offset:2px; }
+    .pill.alert { border-color:#ff9a4d; }
+    .rd { width:9px; height:9px; border-radius:50%; background:#ff5a4e; flex:none; animation:rd 1.6s ease-out infinite; }
+    .pill.silent .rd { animation:none; }
+    @keyframes rd { 0% { box-shadow:0 0 0 0 rgba(255,90,78,.6); } 70% { box-shadow:0 0 0 6px rgba(255,90,78,0); } 100% { box-shadow:0 0 0 0 rgba(255,90,78,0); } }
+    .eq { display:flex; gap:2px; align-items:center; height:16px; }
+    .eq i { display:block; width:3px; height:5px; border-radius:2px; background:#cfccff; }
+    .eq.live i { animation:eq .9s ease-in-out infinite; }
     .eq.live i:nth-child(2) { animation-delay:-.3s; } .eq.live i:nth-child(3) { animation-delay:-.6s; } .eq.live i:nth-child(4) { animation-delay:-.15s; }
-    .eq.dead i { background:var(--warn); }
     @keyframes eq { 0%,100% { height:4px; } 50% { height:15px; } }
-    .rec { width:7px; height:7px; border-radius:50%; background:var(--bad); box-shadow:0 0 0 0 rgba(251,113,133,.7); animation:ring 1.6s infinite; }
-    @keyframes ring { 70% { box-shadow:0 0 0 7px rgba(251,113,133,0); } 100% { box-shadow:0 0 0 0 rgba(251,113,133,0); } }
-    .time { font-variant-numeric:tabular-nums; font-weight:650; letter-spacing:.01em; }
+    .silentmsg { font-size:12.5px; color:#ffd3a3; }
+    .time { font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+    .warn-chip { display:none; padding:0 8px; border-radius:999px; background:#5a3610; color:#ffd3a3; font-size:11.5px; line-height:20px; }
+    .warn-chip.show { display:inline-block; }
 
-    .warn-chip { display:none; align-items:center; gap:4px; padding:5px 9px; border-radius:999px; font-weight:650; font-size:11px;
-      background:rgba(251,113,133,.18); color:#ffc2cb; border:1px solid rgba(251,113,133,.5); }
-    .warn-chip.show { display:inline-flex; }
-
-    .mic { display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12px; font-weight:650; cursor:pointer; color:#fff;
-      border:1px solid transparent; border-radius:999px; padding:7px 12px 7px 9px; transition:transform .1s, filter .15s, background .2s; }
-    .mic:hover { filter:brightness(1.12); } .mic:active { transform:scale(.95); }
-    .mic:disabled { opacity:.5; cursor:default; }
+    .mic { height:28px; padding:0 10px 0 8px; border-radius:999px; border:0; display:inline-flex; align-items:center; gap:6px;
+      font-size:12.5px; font-weight:700; cursor:pointer; }
     .mic svg { width:14px; height:14px; flex:none; }
-    .mic.on { background:linear-gradient(180deg,#34d399,#10b981); color:#052e22; }
-    .mic.off { background:rgba(255,255,255,.1); border-color:var(--line); color:var(--dim); }
-    .mic.paused { background:linear-gradient(180deg,#fcd34d,#f59e0b); color:#3b2600; }
+    .mic:active { transform:scale(.97); }
+    .mic:disabled { opacity:.55; cursor:default; transform:none; }
+    .mic.on { background:#1f5a37; color:#c9f3d8; }
+    .mic.off { background:#33353c; color:#d3d6dc; }
+    .mic.muted { background:#5a3610; color:#ffd3a3; }
 
-    /* Detail card */
-    .panel { width:276px; padding:14px 15px 15px; border-radius:18px; color:var(--ink);
-      background:linear-gradient(160deg,rgba(40,35,125,.96),rgba(22,20,82,.97)); backdrop-filter:blur(16px) saturate(1.4);
-      border:1px solid rgba(255,255,255,.14); box-shadow:0 20px 50px -14px rgba(10,8,60,.75), 0 3px 8px rgba(0,0,0,.3); font-size:12px; }
-    .panel h4 { margin:0 0 10px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:7px; }
-    .panel h4 b { color:var(--saffron); }
-    .meter { margin:7px 0 9px; }
-    .meter .top { display:flex; justify-content:space-between; color:var(--dim); margin-bottom:4px; }
-    .meter .top span:last-child { color:var(--ink); font-weight:600; }
-    .bar { height:6px; border-radius:4px; background:rgba(255,255,255,.1); overflow:hidden; }
-    .fill { height:100%; border-radius:4px; background:linear-gradient(90deg,#34d399,#6ee7b7); transition:width .3s; }
-    .fill.low { background:linear-gradient(90deg,#f59e0b,#fcd34d); } .fill.dead { background:var(--bad); }
-    .stats { display:flex; gap:8px; margin:10px 0; }
-    .stat { flex:1; padding:8px 10px; border-radius:11px; background:rgba(255,255,255,.07); border:1px solid var(--line); }
-    .stat b { display:block; font-size:17px; font-weight:700; margin-bottom:2px; }
-    .stat span { color:var(--dim); font-size:11px; }
-    .stat.err b { color:var(--bad); }
+    /* Panel: floats beside the capsule so opening it never moves the capsule */
+    .panel { position:absolute; right:0; top:calc(100% + 8px); width:260px; padding:14px; border-radius:14px;
+      background:#16171c; border:1px solid rgba(255,255,255,.16); box-shadow:0 18px 40px -12px rgba(0,0,0,.7);
+      display:flex; flex-direction:column; gap:12px; color:#eceef2; font-size:13px; font-weight:400; }
+    .wrap.up .panel { top:auto; bottom:calc(100% + 8px); }
+    .top { display:flex; justify-content:space-between; gap:8px; margin-bottom:3px; }
+    .top .w { font-weight:700; }
+    .m { height:6px; border-radius:9px; background:#2b2d34; overflow:hidden; }
+    .m > i { display:block; height:100%; border-radius:9px; background:#6fd49a; transition:width .3s; }
+    .m > i.q { background:#ff9a4d; }
+    .line { margin:0; color:#b8bcc6; }
+    .note { position:relative; padding:10px 12px; border-radius:10px; background:#3a2610; border:1px solid #6b4a1c; color:#ffd3a3; line-height:1.45; }
+    .note strong { display:block; padding-right:18px; }
+    .x { position:absolute; top:4px; right:4px; width:22px; height:22px; border:0; border-radius:6px; background:transparent; color:#ffd3a3; font-size:16px; line-height:1; cursor:pointer; }
+    .x:hover { background:rgba(255,255,255,.1); }
+    .row { display:flex; align-items:center; gap:10px; }
+    .grow { flex:1; font-weight:600; }
+    .psw { width:40px; height:24px; border-radius:999px; border:0; padding:0; background:#4a4f58; position:relative; cursor:pointer; flex:none; }
+    .psw::after { content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform .15s; }
+    .psw[aria-checked="true"] { background:#9d97ff; }
+    .psw[aria-checked="true"]::after { transform:translateX(16px); }
+    .psw:disabled { opacity:.5; cursor:default; }
+    .stop { min-height:40px; width:100%; border-radius:10px; border:0; background:#ff5a4e; color:#2a0705; font-weight:700;
+      display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+    .stop:hover { background:#ff7066; }
 
-    .alertbox { margin:10px 0; padding:10px 11px; border-radius:12px; background:rgba(251,113,133,.14); border:1px solid rgba(251,113,133,.5); }
-    .alertbox.key { background:rgba(251,191,36,.12); border-color:rgba(251,191,36,.5); }
-    .alertbox strong { display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:4px; color:#ffd0d6; }
-    .alertbox.key strong { color:#fde68a; }
-    .alertbox p { margin:0; color:#e9e6ff; font-size:11.5px; line-height:1.45; }
-    .alertbox button { all:unset; cursor:pointer; color:var(--dim); font-size:15px; line-height:1; padding:0 2px; }
-
-    .switch { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:12px 0 2px; cursor:pointer; color:#e9e6ff; }
-    .switch input { display:none; }
-    .track { position:relative; flex:none; width:34px; height:19px; border-radius:999px; background:rgba(255,255,255,.18); transition:background .2s; }
-    .track::after { content:""; position:absolute; left:2px; top:2px; width:15px; height:15px; border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.4); }
-    .switch input:checked + .track { background:var(--ok); } .switch input:checked + .track::after { transform:translateX(15px); }
-
-    .stop { width:100%; margin-top:13px; padding:9px; border-radius:11px; border:0; font:inherit; font-weight:700; font-size:12.5px; cursor:pointer; color:#fff;
-      background:linear-gradient(180deg,#fb7185,#e11d48); box-shadow:0 6px 14px -6px rgba(225,29,72,.7); }
-    .stop:hover { filter:brightness(1.08); }
-    .hint { color:var(--dim); font-size:11px; margin-top:8px; line-height:1.4; }
-    .hidden { display:none !important; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; }
+      .eq i { height:9px; }
+      .pill.dragging { transform:none; }
+    }
   `;
-    const MIC_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
-    const MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg>';
+    const MIC_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+    const MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg>';
     let timer = null;
     const alive = () => {
       try {
@@ -334,43 +327,81 @@
     let myTab = null;
     let S = { rec: { recording: false }, levels: null, counts: { segs: 0, errs: 0 }, follow: true };
     let host;
+    let wrap;
     let pill;
     let eq;
+    let silentMsg;
     let timeEl;
     let micBtn;
     let warnChip;
     let panel;
+    let status;
     let expanded = false;
     let lastSentMute;
     let panelSig = "";
+    let lastStatus = "";
     async function load() {
       const r = await send({ type: "pill-state" });
       if (r?.ok) S = r;
     }
+    function flip() {
+      if (!host || !wrap) return;
+      const r = host.getBoundingClientRect();
+      wrap.classList.toggle("up", r.top + r.height / 2 > innerHeight / 2);
+    }
+    function clampIn() {
+      if (!host || host.style.display === "none") return;
+      const r = host.getBoundingClientRect();
+      if (!r.width) return;
+      if (r.right > innerWidth || r.left < 0) host.style.right = Math.max(0, Math.min(innerWidth - r.width, innerWidth - r.right)) + "px";
+      if (r.bottom > innerHeight || r.top < 0) host.style.bottom = Math.max(0, Math.min(innerHeight - r.height, innerHeight - r.bottom)) + "px";
+      flip();
+    }
+    function setExpanded(v) {
+      if (expanded === v) return;
+      expanded = v;
+      panelSig = "";
+      render();
+    }
     function mount() {
       host = document.createElement("div");
       host.setAttribute("data-debrief", "");
-      let pos = { right: 16, bottom: Math.max(92, innerHeight - 72) };
+      let pos = { right: 18, bottom: Math.max(92, innerHeight - 18 - 36) };
       try {
-        pos = JSON.parse(localStorage.getItem(POS_KEY)) || pos;
+        const p = JSON.parse(localStorage.getItem(POS_KEY));
+        if (p && Number.isFinite(p.right) && Number.isFinite(p.bottom)) pos = p;
       } catch {
       }
-      host.style.cssText = `position:fixed;right:${pos.right}px;bottom:${pos.bottom}px;z-index:2147483646;display:none;`;
+      host.style.cssText = `position:fixed;right:${pos.right}px;bottom:${pos.bottom}px;z-index:2147483646;display:none;pointer-events:none;`;
       const root = host.attachShadow({ mode: "closed" });
       host.__debriefRoot = root;
       const style = el("style");
       style.textContent = CSS;
-      const wrap = el("div", "wrap");
+      wrap = el("div", "wrap");
       panel = el("div", "panel hidden");
+      panel.id = "dbPanel";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-label", "Recording details");
+      panel.tabIndex = -1;
       pill = el("div", "pill");
+      pill.setAttribute("role", "button");
+      pill.tabIndex = 0;
+      pill.setAttribute("aria-expanded", "false");
+      pill.setAttribute("aria-controls", "dbPanel");
+      status = el("span", "sr");
+      status.setAttribute("role", "status");
+      const dot = el("span", "rd");
+      dot.setAttribute("aria-hidden", "true");
       eq = el("span", "eq");
+      eq.setAttribute("aria-hidden", "true");
       eq.append(el("i"), el("i"), el("i"), el("i"));
+      silentMsg = el("span", "silentmsg hidden", "No audio is arriving");
       timeEl = el("span", "time", "00:00");
-      warnChip = el("span", "warn-chip", "\u26A0 Limit");
+      warnChip = el("span", "warn-chip");
       micBtn = el("button", "mic");
       micBtn.type = "button";
-      pill.append(el("span", "rec"), eq, timeEl, warnChip, micBtn);
-      wrap.append(panel, pill);
+      pill.append(dot, eq, silentMsg, timeEl, warnChip, micBtn);
+      wrap.append(status, panel, pill);
       root.append(style, wrap);
       document.documentElement.appendChild(host);
       micBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -380,28 +411,36 @@
         await load();
         render();
       });
+      pill.addEventListener("keydown", (e) => {
+        if (e.target !== pill) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setExpanded(!expanded);
+        }
+      });
       drag(pill);
       document.addEventListener("pointerdown", (e) => {
-        if (expanded && !e.composedPath().includes(host)) {
-          expanded = false;
-          render();
-        }
+        if (expanded && !e.composedPath().includes(host)) setExpanded(false);
       }, true);
       document.addEventListener("keydown", (e) => {
         if (expanded && e.key === "Escape") {
-          expanded = false;
-          render();
+          setExpanded(false);
+          pill.focus();
         }
       }, true);
       document.addEventListener("fullscreenchange", () => {
         const fs = document.fullscreenElement;
         const home = fs && fs.tagName !== "VIDEO" && fs.tagName !== "IFRAME" ? fs : document.documentElement;
         if (host.parentNode !== home) home.appendChild(host);
+        clampIn();
       });
+      addEventListener("resize", clampIn);
+      flip();
     }
     function drag(target) {
       let st = null;
       target.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
         const r = host.getBoundingClientRect();
         st = { x: e.clientX, y: e.clientY, right: innerWidth - r.right, bottom: innerHeight - r.bottom, moved: false };
         try {
@@ -414,36 +453,51 @@
         const dx = e.clientX - st.x;
         const dy = e.clientY - st.y;
         if (!st.moved && Math.hypot(dx, dy) < 4) return;
+        if (!st.moved) pill.classList.add("dragging");
         st.moved = true;
         host.style.right = Math.max(0, Math.min(innerWidth - 60, st.right - dx)) + "px";
-        host.style.bottom = Math.max(0, Math.min(innerHeight - 30, st.bottom - dy)) + "px";
+        host.style.bottom = Math.max(0, Math.min(innerHeight - 36, st.bottom - dy)) + "px";
+        flip();
       });
       target.addEventListener("pointerup", () => {
         if (!st) return;
+        pill.classList.remove("dragging");
         if (st.moved) {
           try {
             localStorage.setItem(POS_KEY, JSON.stringify({ right: parseInt(host.style.right, 10), bottom: parseInt(host.style.bottom, 10) }));
           } catch {
           }
         } else {
-          expanded = !expanded;
-          render();
+          setExpanded(!expanded);
         }
         st = null;
       });
+      target.addEventListener("pointercancel", () => {
+        pill.classList.remove("dragging");
+        st = null;
+      });
     }
-    const label = (v) => v == null ? "off" : v < 3e-3 ? "silent" : v < 0.012 ? "very quiet" : "good";
-    function meter(name, v) {
+    const label = (v) => v == null ? "Off" : v < 3e-3 ? "Silent" : v < 0.012 ? "Very quiet" : "Good";
+    function meter(name, v, text3) {
       const box = el("div", "meter");
       const top = el("div", "top");
-      top.append(el("span", null, name), el("span", null, label(v)));
-      const b = el("div", "bar");
-      const f = el("div", "fill" + (v != null && v < 3e-3 ? " dead" : v != null && v < 0.012 ? " low" : ""));
-      f.style.width = (v == null ? 0 : Math.min(100, Math.round(Math.sqrt(v) * 160))) + "%";
+      const word = text3 || label(v);
+      top.append(el("span", null, name), el("span", "w", word));
+      const b = el("div", "m");
+      const pct = v == null ? 0 : Math.min(100, Math.round(Math.sqrt(v) * 160));
+      b.setAttribute("role", "meter");
+      b.setAttribute("aria-label", name);
+      b.setAttribute("aria-valuemin", "0");
+      b.setAttribute("aria-valuemax", "100");
+      b.setAttribute("aria-valuenow", String(pct));
+      b.setAttribute("aria-valuetext", word);
+      const f = el("i", v != null && v < 0.012 ? "q" : "");
+      f.style.width = pct + "%";
       b.append(f);
       box.append(top, b);
       return box;
     }
+    const STOP_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect width="12" height="12" rx="2.5" fill="currentColor"></rect></svg>';
     function render() {
       if (!host) return;
       const rec = S.rec;
@@ -455,71 +509,92 @@
       const fresh = lv && Date.now() - lv.at < 4e3;
       const peak = fresh ? Math.max(lv.tab || 0, lv.mic || 0) : 0;
       eq.classList.toggle("live", peak >= 0.012);
-      eq.classList.toggle("dead", !fresh);
+      eq.classList.toggle("hidden", !fresh);
+      silentMsg.classList.toggle("hidden", !!fresh);
+      pill.classList.toggle("silent", !fresh);
       const alert = rec.alert;
-      pill.classList.toggle("alert", !!alert);
       warnChip.classList.toggle("show", !!alert);
-      warnChip.textContent = alert?.kind === "key" ? "\u26A0 API key" : "\u26A0 Limit";
+      warnChip.textContent = alert?.kind === "key" ? "API key" : "Limit";
       const wanted = rec.micWanted ?? rec.micOn;
       const paused = wanted && !rec.micOn;
-      micBtn.className = "mic " + (!rec.mic ? "off" : paused ? "paused" : wanted ? "on" : "off");
-      micBtn.innerHTML = (wanted && !paused ? MIC_ON : MIC_OFF) + (!rec.mic ? "No mic" : paused ? "Muted" : wanted ? "Mic on" : "Mic off");
+      micBtn.className = "mic " + (!rec.mic ? "off" : paused ? "muted" : wanted ? "on" : "off");
+      micBtn.innerHTML = (wanted && !paused ? MIC_ON : MIC_OFF) + (!rec.mic ? "No mic" : paused ? "Muted in call" : wanted ? "Mic on" : "Mic off");
       micBtn.disabled = !rec.mic;
-      micBtn.title = !rec.mic ? "Microphone not available to Debrief" : paused ? "Meet is muted, so Debrief is ignoring your mic. Click to stop including it." : wanted ? "Your mic is in the transcript. Click to ignore it." : "Your mic is ignored. Click to include it.";
-      const open = expanded;
-      panel.classList.toggle("hidden", !open);
-      if (!open) {
+      const micTitle = !rec.mic ? "Microphone not available to Debrief" : paused ? "You are muted in the call, so Debrief is ignoring your mic. Click to stop including it." : wanted ? "Your mic is in the transcript. Click to ignore it." : "Your mic is ignored. Click to include it.";
+      micBtn.title = micTitle;
+      micBtn.setAttribute("aria-label", "Microphone: " + micBtn.textContent.trim() + ". " + (rec.mic ? "Click to change" : "Not available"));
+      pill.setAttribute("aria-expanded", String(expanded));
+      pill.classList.toggle("open", expanded);
+      pill.setAttribute("aria-label", `Debrief recording, ${timeEl.textContent}. ${expanded ? "Hide" : "Show"} details`);
+      const say = alert ? alert.title : !fresh ? "No audio is arriving" : paused ? "You are muted in the call" : "Debrief is recording";
+      if (say !== lastStatus) {
+        lastStatus = say;
+        status.textContent = say;
+      }
+      pill.classList.toggle("alert", !fresh);
+      panel.classList.toggle("hidden", !expanded);
+      if (!expanded) {
         panelSig = "";
         return;
       }
-      const sig = JSON.stringify([peak > 0 ? Math.round(lv.tab * 1e3) : 0, fresh && rec.micOn ? Math.round((lv.mic || 0) * 1e3) : -1, S.counts, S.follow, alert?.at, !!fresh]);
+      const sig = JSON.stringify([peak > 0 ? Math.round(lv.tab * 1e3) : 0, fresh && rec.micOn ? Math.round((lv.mic || 0) * 1e3) : -1, S.counts, alert?.at, !!fresh, !!rec.mic, !!wanted, !!paused]);
       if (sig === panelSig) return;
       panelSig = sig;
+      const active = panel.getRootNode().activeElement;
+      const keep = active && panel.contains(active) ? active.dataset.k : null;
       panel.replaceChildren();
-      const h = el("h4");
-      h.append("Debrief ", el("b", null, "is recording"));
-      panel.append(h);
+      panel.append(meter("Meeting audio", fresh ? lv.tab : null));
+      if (!rec.mic) panel.append(meter("Your mic", null, "Unavailable"));
+      else if (paused) panel.append(meter("Your mic", 1e-3, "Paused"));
+      else if (!wanted) panel.append(meter("Your mic", null, "Ignored"));
+      else panel.append(meter("Your mic", fresh ? lv.mic : null));
+      const line = !rec.mic ? "Debrief can't reach your microphone. The call is still recorded." : paused ? "You are muted in the call, so Debrief pauses your mic." : wanted ? "Your voice is going into the transcript." : "Your mic is not recorded. The call still is.";
+      panel.append(el("p", "line", line));
+      panel.append(el("p", "line", `${S.counts.segs} pieces transcribed \xB7 ${S.counts.errs} ${S.counts.errs === 1 ? "error" : "errors"}`));
+      if (!fresh) {
+        const box = el("div", "note");
+        box.setAttribute("role", "alert");
+        box.append(el("strong", null, "No audio is arriving"), "If this stays, stop and start the recording again.");
+        panel.append(box);
+      }
       if (alert) {
-        const box = el("div", "alertbox " + alert.kind);
-        const strong = el("strong");
-        strong.append(el("span", null, `\u26A0 ${alert.title}`));
-        const x = el("button", null, "\xD7");
+        const box = el("div", "note");
+        box.setAttribute("role", "alert");
+        const x = el("button", "x", "\xD7");
+        x.type = "button";
+        x.dataset.k = "dismiss";
         x.title = "Dismiss";
+        x.setAttribute("aria-label", "Dismiss alert");
         x.onclick = async () => {
           await send({ type: "dismiss-alert" });
           await load();
           render();
         };
-        strong.append(x);
-        box.append(strong, el("p", null, alert.detail));
+        box.append(x, el("strong", null, alert.title), alert.detail || "");
         panel.append(box);
       }
-      panel.append(meter("Meeting audio", fresh ? lv.tab : null), meter("Your mic", fresh && rec.micOn ? lv.mic : null));
-      const stats = el("div", "stats");
-      const a = el("div", "stat");
-      a.append(el("b", null, String(S.counts.segs)), el("span", null, "transcript segments"));
-      stats.append(a);
-      if (S.counts.errs) {
-        const b = el("div", "stat err");
-        b.append(el("b", null, String(S.counts.errs)), el("span", null, "chunks failed"));
-        stats.append(b);
-      }
-      panel.append(stats);
-      const sw = el("label", "switch");
-      const cb = el("input");
-      cb.type = "checkbox";
-      cb.checked = S.follow;
-      cb.onchange = async () => {
-        await send({ type: "set-follow", on: cb.checked });
+      const row = el("div", "row");
+      const sw = el("button", "psw");
+      sw.type = "button";
+      sw.dataset.k = "mic";
+      sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-checked", String(!!wanted));
+      sw.setAttribute("aria-label", "Include my microphone");
+      sw.disabled = !rec.mic;
+      sw.onclick = async () => {
+        await send({ type: "mic", on: !(S.rec.micWanted ?? S.rec.micOn) });
         await load();
         render();
       };
-      sw.append(el("span", null, "Ignore my mic while Meet is muted"), cb, el("span", "track"));
-      panel.append(sw);
-      if (!fresh) panel.append(el("div", "hint", "No audio data is arriving. If this stays, stop and start the recording again."));
-      const stop = el("button", "stop", "Stop & write MOM");
+      row.append(el("span", "grow", "Include my microphone"), sw);
+      panel.append(row);
+      const stop = el("button", "stop");
+      stop.type = "button";
+      stop.dataset.k = "stop";
+      stop.innerHTML = STOP_ICON + "Stop and write minutes";
       stop.onclick = () => send({ type: "stop" });
       panel.append(stop);
+      if (keep) panel.querySelector(`[data-k="${keep}"]`)?.focus();
     }
     function reportMute() {
       if (!S.rec.recording || S.rec.tabId !== myTab) {

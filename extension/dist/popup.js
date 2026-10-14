@@ -199,38 +199,52 @@
   // src/popup.js
   var $ = (id) => document.getElementById(id);
   var send = (msg) => chrome.runtime.sendMessage({ target: "bg", ...msg });
-  var levelWord = (v) => v == null ? "off" : v < 3e-3 ? "silent" : v < 0.012 ? "very quiet" : "good";
+  var show = (id, on) => $(id).classList.toggle("hidden", !on);
+  var levelWord = (v) => v == null ? "Off" : v < 3e-3 ? "Silent" : v < 0.012 ? "Quiet" : "Good";
   function setMeter(barId, textId, v) {
     const bar = $(barId);
     bar.style.width = v == null ? "0%" : `${Math.min(100, Math.round(Math.sqrt(v) * 160))}%`;
-    bar.className = v != null && v < 3e-3 ? "dead" : v != null && v < 0.012 ? "low" : "";
+    bar.className = v != null && v < 3e-3 ? "s" : v != null && v < 0.012 ? "q" : "";
     $(textId).textContent = levelWord(v);
   }
+  var pieces = (n) => `${n} transcript piece${n === 1 ? "" : "s"}`;
+  function whenOf(m) {
+    const d = new Date(m.startedAt);
+    const day0 = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((day0(/* @__PURE__ */ new Date()) - day0(d)) / 864e5);
+    const day = diff === 0 ? "Today" : diff === 1 ? "Yesterday" : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    if (!m.endedAt) return day;
+    const min = Math.max(1, Math.round((m.endedAt - m.startedAt) / 6e4));
+    return `${day} \xB7 ${min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} min` : `${min} min`}`;
+  }
+  var openMinutes = (id) => chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${id}`) });
   async function refresh() {
     const st = await getState();
     const recording = st.recording && !st.stopping;
-    $("dot").classList.toggle("rec", !!st.recording);
+    show("idleView", !st.recording);
+    show("recView", !!recording);
+    show("finView", !!st.stopping);
     $("statusText").textContent = st.stopping ? "Finishing transcription\u2026" : st.recording ? "Recording" : "Idle";
     $("timer").textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1e3) : "";
-    $("start").classList.toggle("hidden", !!st.recording);
-    $("stop").classList.toggle("hidden", !recording);
-    $("live").classList.toggle("hidden", !st.recording);
-    $("micRow").classList.toggle("hidden", !(recording && st.mic));
+    show("start", !st.recording);
+    show("stop", !!recording);
+    show("live", !!recording);
+    show("micRow", !!(recording && st.mic));
     const wanted = !!(st.micWanted ?? st.micOn);
-    $("micToggle").checked = wanted;
-    $("micState").textContent = wanted && !st.micOn ? "Paused: you are muted in the call" : wanted ? st.meetMuted === false ? "Your voice goes into the transcript (unmuted in the call)" : st.meetMuted == null ? "Your voice goes into the transcript (the mute button in the call was not found, so your mic is always on)" : "Your voice goes into the transcript" : "Your voice is ignored";
-    $("micWarn").classList.toggle("hidden", !(st.recording && st.micError));
+    $("micToggle").setAttribute("aria-checked", String(wanted));
+    $("micStateT").textContent = wanted && !st.micOn ? "Paused: you are muted in the call" : wanted ? st.meetMuted === false ? "Your voice goes into the transcript (unmuted in the call)" : st.meetMuted == null ? "Your voice goes into the transcript (the mute button in the call was not found, so your mic is always on)" : "Your voice goes into the transcript" : "Your voice is ignored";
+    $("micState").className = `hint ${!wanted ? "off" : !st.micOn ? "paused" : st.meetMuted == null ? "unknown" : ""}`;
+    show("micWarn", !!(recording && st.micError));
     $("micWarn").textContent = st.micError ? `Only other participants are being recorded. ${st.micError}` : "";
-    const a = st.recording ? st.alert : null;
-    $("alert").classList.toggle("hidden", !a);
+    const a = recording ? st.alert : null;
+    show("alert", !!a);
     if (a) {
-      $("alert").className = `alert ${a.kind}`;
-      $("alertTitle").textContent = `\u26A0 ${a.title}`;
+      $("alertTitle").textContent = a.title;
       $("alertText").textContent = a.detail;
+      show("alertActionRow", a.kind === "key" || a.kind === "quota");
     }
     const { levels } = await chrome.storage.session.get("levels");
     const fresh = st.recording && levels && Date.now() - levels.at < 4e3;
-    $("eq").classList.toggle("live", !!fresh && Math.max(levels.tab || 0, levels.mic || 0) >= 0.012);
     if (st.recording) {
       if (fresh) {
         setMeter("lvTab", "lvTabT", levels.tab);
@@ -238,88 +252,161 @@
       } else {
         setMeter("lvTab", "lvTabT", null);
         setMeter("lvMic", "lvMicT", null);
-        $("lvTabT").textContent = "no data: recorder not running, stop and restart";
+        $("lvTabT").textContent = "No sound data: stop and restart";
       }
       const m = await getMeeting(st.meetingId);
       const n = m?.segments.length || 0;
       const errs = m?.errors.length || 0;
-      $("segInfo").textContent = `${n} transcript segment${n === 1 ? "" : "s"} so far${errs ? ` \xB7 ${errs} failed chunk${errs === 1 ? "" : "s"} (kept, see MOM page)` : ""}. First one lands after ~2\u20133 min.`;
+      const info = $("segInfo");
+      const spans = [pieces(n), `${errs} error${errs === 1 ? "" : "s"}`];
+      if (!n) spans.push("First one lands after about 2 to 3 min.");
+      info.replaceChildren(...spans.map((t) => Object.assign(document.createElement("span"), { textContent: t })));
+      info.title = errs ? "Failed chunks are kept and can be retried from the minutes page." : "";
+      if (st.stopping) $("finInfo").textContent = `${pieces(n)} so far. Then the minutes are written, about 30 s. You can close this popup.`;
+      $("finOpen").onclick = (e) => {
+        e.preventDefault();
+        openMinutes(st.meetingId);
+      };
     }
   }
   async function usageWarning() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
     const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
-    $("usageWarn").classList.toggle("hidden", !hits.length);
+    show("usageWarn", !!hits.length);
     $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
   }
   var armed = null;
+  var allMeetings = [];
+  var TRASH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>';
+  function emptyState(title, hint) {
+    const d = document.createElement("div");
+    d.className = "empty";
+    const t = document.createElement("strong");
+    t.textContent = title;
+    const h = document.createElement("p");
+    h.className = "hint";
+    h.style.margin = "0";
+    h.textContent = hint;
+    d.append(t, h);
+    return d;
+  }
   async function renderRecent() {
-    const items = await listMeetings();
-    $("clearAll").classList.toggle("hidden", !items.length);
-    $("meetCount").textContent = items.length;
+    allMeetings = await listMeetings();
+    show("clearAll", !!allMeetings.length);
+    $("meetCount").textContent = allMeetings.length;
+    const last = allMeetings[0];
+    show("lastBox", !!last);
+    if (last) {
+      $("lastTitle").textContent = last.title;
+      $("lastTitle").title = last.title;
+      $("lastWhen").textContent = whenOf(last);
+      show("lastMail", !!last.emailedAt);
+      $("lastOpen").onclick = (e) => {
+        e.preventDefault();
+        openMinutes(last.id);
+      };
+    }
+    await drawList();
+  }
+  async function drawList() {
+    const q = $("q").value.trim().toLowerCase();
+    const items = allMeetings.filter((m) => !q || `${m.title} ${(m.attendees || []).join(" ")}`.toLowerCase().includes(q));
+    if (!allMeetings.length) {
+      $("recent").replaceChildren(emptyState("No meetings yet", "Recorded meetings and their minutes appear here."));
+      return;
+    }
     if (!items.length) {
-      $("recent").replaceChildren(Object.assign(document.createElement("p"), { className: "empty", textContent: "No meetings yet. Start a recording and it will show up here." }));
+      $("recent").replaceChildren(emptyState("No match", "No meeting has that in its title or people."));
       return;
     }
     const st = await getState();
     $("recent").replaceChildren(
       ...items.map((m) => {
         const row = document.createElement("div");
-        row.className = "item";
+        row.className = `item${armed === m.id ? " armed" : ""}`;
         const a = document.createElement("a");
+        a.className = "open";
         a.href = "#";
-        a.textContent = m.title;
-        const small = document.createElement("small");
-        small.textContent = ` \xB7 ${new Date(m.startedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}`;
-        a.append(small);
+        const t = document.createElement("div");
+        t.className = "t trunc";
+        t.textContent = m.title;
+        t.title = m.title;
+        const meta = document.createElement("div");
+        meta.className = "m";
+        meta.append(Object.assign(document.createElement("span"), { textContent: whenOf(m) }));
+        if (m.emailedAt) meta.append(Object.assign(document.createElement("span"), { className: "chip brand", textContent: "Emailed" }));
+        a.append(t, meta);
         a.onclick = (e) => {
           e.preventDefault();
-          chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${m.id}`) });
+          openMinutes(m.id);
         };
-        const del = document.createElement("button");
-        del.className = "del";
-        del.textContent = "\u2715";
-        del.title = "Delete this meeting";
+        row.append(a);
         const live = st.recording && st.meetingId === m.id;
-        del.disabled = live;
-        if (live) del.style.display = "none";
-        del.onclick = async () => {
-          if (armed !== m.id) {
-            armed = m.id;
-            del.className = "del armed";
+        if (!live) {
+          const del = document.createElement("button");
+          if (armed === m.id) {
+            del.className = "confirm";
             del.textContent = "Delete?";
-            setTimeout(() => {
-              if (armed === m.id) {
-                armed = null;
-                del.className = "del";
-                del.textContent = "\u2715";
-              }
-            }, 3e3);
-            return;
+            del.setAttribute("aria-label", `Confirm: delete ${m.title}`);
+          } else {
+            del.className = "del";
+            del.innerHTML = TRASH;
+            del.title = "Delete this meeting";
+            del.setAttribute("aria-label", `Delete ${m.title}`);
           }
-          armed = null;
-          await deleteMeeting(m.id);
-          renderRecent();
-        };
-        row.append(a, del);
+          del.onclick = async () => {
+            if (armed !== m.id) {
+              armed = m.id;
+              await drawList();
+              $("recent").querySelector(".confirm")?.focus();
+              setTimeout(() => {
+                if (armed === m.id) {
+                  armed = null;
+                  drawList();
+                }
+              }, 3e3);
+              return;
+            }
+            armed = null;
+            await deleteMeeting(m.id);
+            await renderRecent();
+            $("q").focus();
+          };
+          row.append(del);
+        }
         return row;
       })
     );
   }
-  document.querySelectorAll("#tabs button").forEach((b) => {
-    b.onclick = () => {
-      document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
-      document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", p.id === b.dataset.pane));
+  $("q").oninput = drawList;
+  function selectTab(b) {
+    document.querySelectorAll("#tabs [role=tab]").forEach((x) => {
+      x.setAttribute("aria-selected", String(x === b));
+      x.tabIndex = x === b ? 0 : -1;
+    });
+    document.querySelectorAll("[role=tabpanel]").forEach((p) => p.hidden = p.id !== b.dataset.pane);
+  }
+  document.querySelectorAll("#tabs [role=tab]").forEach((b) => {
+    b.onclick = () => selectTab(b);
+    b.onkeydown = (e) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+      e.preventDefault();
+      const tabs = [...document.querySelectorAll("#tabs [role=tab]")];
+      const i = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (tabs.indexOf(b) + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      selectTab(tabs[i]);
+      tabs[i].focus();
     };
   });
   $("clearAll").onclick = async () => {
     const b = $("clearAll");
     if (b.dataset.armed !== "1") {
       b.dataset.armed = "1";
+      b.classList.add("armed");
       b.textContent = "Click again to delete all";
       setTimeout(() => {
         b.dataset.armed = "";
+        b.classList.remove("armed");
         b.textContent = "Clear all";
       }, 3e3);
       return;
@@ -327,39 +414,75 @@
     const st = await getState();
     for (const m of await listMeetings()) if (!(st.recording && st.meetingId === m.id)) await deleteMeeting(m.id);
     b.dataset.armed = "";
+    b.classList.remove("armed");
     b.textContent = "Clear all";
     renderRecent();
   };
+  async function readPage() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const r = await chrome.tabs.sendMessage(tab.id, { target: "page", type: "diagnose" });
+      return r?.ok ? r : null;
+    } catch {
+      return null;
+    }
+  }
+  function renderDiag(r) {
+    const box = $("diagResult");
+    box.replaceChildren();
+    const span = (cls, text) => Object.assign(document.createElement("span"), { className: cls, textContent: text });
+    if (!r) {
+      box.append(span("full", "Open a Meet (or enabled meeting site) tab and reload it once, then try again."));
+      return;
+    }
+    const d = r.diag || {};
+    const row = (label, text, ok) => box.append(span("", label), span(`chip ${ok ? "ok" : "warn"}`, text));
+    const mic = String(d.micButton || "");
+    const micFound = /^found/i.test(mic);
+    row("Mute button", micFound ? `Found \xB7 ${/unmuted/i.test(mic) ? "unmuted" : "muted"}` : "Not found", micFound);
+    const ppl = String(d.participants || "");
+    const n = ppl.match(/^(\d+) found/);
+    if (!/not read/i.test(ppl)) row("People list", n ? `${n[1]} name${n[1] === "1" ? "" : "s"}` : "None found \xB7 open People", !!n);
+    const capOn = /^region found/i.test(String(d.captions || ""));
+    if (!/not read/i.test(String(d.captions || ""))) row("Captions", capOn ? "On" : "Off \xB7 turn on for names", capOn);
+    box.append(span("hint full", `${r.site || "This page"} \xB7 ${String(d.inCall || "")}`));
+  }
   $("diagnose").onclick = async (e) => {
     e.preventDefault();
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const open = $("diagnose").getAttribute("aria-expanded") !== "true";
+    $("diagnose").setAttribute("aria-expanded", String(open));
+    show("diagResult", open);
+    if (!open) return;
     $("diagResult").textContent = "Checking\u2026";
-    try {
-      const r = await chrome.tabs.sendMessage(tab.id, { target: "page", type: "diagnose" });
-      if (!r?.ok) throw new Error(r?.error || "no answer");
-      $("diagResult").innerHTML = "";
-      const ul = document.createElement("div");
-      ul.style.cssText = "margin-top:6px;line-height:1.5";
-      ul.textContent = Object.entries({ Site: r.site, ...r.diag }).map(([k, v]) => `${k}: ${v}`).join("\n");
-      ul.style.whiteSpace = "pre-wrap";
-      $("diagResult").append(ul);
-    } catch {
-      $("diagResult").textContent = "Open a Meet (or enabled meeting site) tab and reload it once, then try again.";
-    }
+    renderDiag(await readPage());
   };
-  $("askAll").onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL("ask.html") });
+  async function detectCall() {
+    const r = await readPage();
+    const inCall = /^yes/i.test(String(r?.diag?.inCall || ""));
+    show("callBanner", inCall);
+    if (inCall) $("callSite").textContent = `${r.site || "Meeting"} \xB7 this tab`;
+  }
+  $("askAll").onclick = (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL("ask.html") });
+  };
+  $("askHome").onclick = $("askAll").onclick;
   $("alertX").onclick = () => send({ type: "dismiss-alert" }).then(refresh);
+  $("alertAction").onclick = (e) => {
+    e.preventDefault();
+    chrome.runtime.openOptionsPage();
+  };
   $("start").onclick = async () => {
     $("start").disabled = true;
     try {
-      $("error").classList.add("hidden");
+      show("error", false);
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
       const r = await send({ type: "start", streamId, tabId: tab.id, title: tab.title, url: tab.url });
       if (!r?.ok) throw new Error(r?.error || "unknown error");
     } catch (e) {
       $("error").textContent = `Could not start: ${e.message}`;
-      $("error").classList.remove("hidden");
+      show("error", true);
     } finally {
       $("start").disabled = false;
       refresh();
@@ -370,7 +493,11 @@
     await send({ type: "stop" });
     window.close();
   };
-  $("micToggle").onchange = (e) => send({ type: "mic", on: e.target.checked }).then(refresh);
+  $("micToggle").onclick = () => {
+    const on = $("micToggle").getAttribute("aria-checked") !== "true";
+    $("micToggle").setAttribute("aria-checked", String(on));
+    send({ type: "mic", on }).then(refresh);
+  };
   for (const id of ["openTour", "openTour1"]) {
     $(id).onclick = (e) => {
       e.preventDefault();
@@ -386,22 +513,29 @@
   (async () => {
     const s = await getSettings();
     const ready = sttReady(s) && llmReady(s);
-    $("setup").classList.toggle("hidden", ready);
+    show("setup", !ready);
     const needGemini = (s.sttProvider === "gemini" || s.llmProvider === "gemini") && !s.geminiKey;
     $("setupMsg").textContent = needGemini ? "Add your free Gemini key first." : !sttReady(s) ? "Add your speech-to-text key in Settings." : "Add your minutes writer key in Settings.";
-    $("start").disabled = !sttReady(s);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || "");
+    show("cantRecord", blocked);
+    $("start").disabled = !sttReady(s) || blocked;
     let host = "";
     try {
       host = new URL(tab?.url || "").hostname;
     } catch {
     }
-    if (!isMeetingSite(host)) $("start").textContent = "Record this tab (not a known meeting site)";
+    if (!isMeetingSite(host)) $("startLabel").textContent = "Record this tab (not a known meeting site)";
+    const syncOnline = () => show("offline", !navigator.onLine);
+    syncOnline();
+    addEventListener("online", syncOnline);
+    addEventListener("offline", syncOnline);
     const cmd = (await chrome.commands.getAll()).find((c) => c.name === "toggle-recording");
-    $("shortcutHint").innerHTML = cmd?.shortcut ? `Shortcut: <kbd>${cmd.shortcut.split("+").join("</kbd>+<kbd>")}</kbd> starts/stops \xB7 <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mic on/off` : "Set a start/stop shortcut at chrome://extensions/shortcuts.";
+    $("shortcutHint").innerHTML = cmd?.shortcut ? `Tell people you are recording. <kbd>${cmd.shortcut.split("+").join("</kbd>+<kbd>")}</kbd> also starts and stops, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mutes your mic.` : "Tell people you are recording. Set a start/stop shortcut at chrome://extensions/shortcuts.";
     await refresh();
     usageWarning();
     await renderRecent();
+    if (isMeetingSite(host)) detectCall();
     setInterval(refresh, 1e3);
   })();
 })();
