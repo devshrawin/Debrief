@@ -167,4 +167,18 @@ await test('meet: the mic button is found when Meet is in another language, and 
   assert.equal(meet.micButton(cameraOnly), null);
 });
 
+await test('meet: Meet control text (Pin ... to your main screen, Reframe, Zoom in, presentations) is never read as a participant', async () => {
+  const doc = page(`
+    <div data-participant-id="a"><div>Akash Behera</div><div>Pin Akash Behera to your main screen</div><div>Reframe</div><div>Zoom in</div></div>
+    <div data-participant-id="b"><div>Akash Behera's presentation</div><div>Unpin Akash Behera's presentation from your main screen</div></div>
+    <div data-participant-id="c"><div>Pin Pratul Shah to your main screen</div><div>Pratul Shah</div></div>
+    <div data-participant-id="d"><div>Shrawin Sisodia</div><div>Pin Shrawin Sisodia to your main screen</div></div>`);
+  assert.deepEqual(meet.readParticipants(doc).sort(), ['Akash Behera', 'Pratul Shah', 'Shrawin Sisodia']);
+  const { cleanPresence, isMenuText } = await import('../src/iconText.js');
+  assert.ok(['Pin Deep Patel to your main screen', 'Unpin Akash Behera\'s presentation from your main screen', 'Reframe', 'Zoom in', 'Pin'].every(isMenuText));
+  assert.ok(!isMenuText('Deep Patel') && !isMenuText('Pinaki Sen') && !isMenuText('Keeran Joshi'));
+  const clean = Object.keys(cleanPresence({ 'Deep Patel': [0], 'Pin Deep Patel to your main screen': [0], Reframe: [0], 'Zoom in': [0] }));
+  assert.deepEqual(clean, ['Deep Patel']);
+});
+
 console.log(`\n${passed} passed`);

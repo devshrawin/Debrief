@@ -31,14 +31,21 @@
 
   // src/iconText.js
   var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+  var MENU = /^(?:(?:un)?pin|spotlight|remove|mute|unmute|reframe|zoom (?:in|out)|minimi[sz]e|maximi[sz]e|full screen|more actions|add (?:a )?(?:person|people)|keep|send a message)\b.*$/i;
+  var isMenuText = (s) => {
+    const t = String(s || "").trim();
+    return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
+  };
+  var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").trim();
 
   // src/adapters/meet.js
   var text = (el) => (el?.innerText ?? el?.textContent ?? "").replace(/ /g, " ").trim();
   var lines = (el) => text(el).split(/\n+/).map((l) => l.trim()).filter(Boolean);
   var NOT_A_NAME = /^(you|your|presenting|pinned|unpin|pin|mute|unmute|muted|more options|more|host|co-host|\d+|\d+ more|\+\d+|raised hand|lower hand|audio|video|camera|microphone|remove|admit|deny|in the meeting|contributors|people|participants|visible|backgrounds?)$/i;
   function cleanName(raw) {
-    const n = String(raw || "").replace(/\s*\((you|host|presenting|co-host)\)\s*$/i, "").replace(/\s+/g, " ").trim();
-    if (!n || n.length > 60 || isIconText(n) || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return "";
+    if (isMenuText(raw)) return "";
+    const n = personOfTile(String(raw || "").replace(/\s*\((you|host|presenting|co-host)\)\s*$/i, "").replace(/\s+/g, " ")).trim();
+    if (!n || n.length > 60 || isIconText(n) || isMenuText(n) || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return "";
     return n;
   }
   function micButton(doc) {

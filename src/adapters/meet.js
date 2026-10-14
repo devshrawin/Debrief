@@ -2,15 +2,16 @@
 // on ARIA labels, roles and text structure, with several fallbacks. `diagnose()` reports what was found
 // so a detection problem can be seen (and fixed) instead of failing silently.
 import { meetingEnded } from '../meetend.js';
-import { isIconText } from '../iconText.js';
+import { isIconText, isMenuText, personOfTile } from '../iconText.js';
 
 const text = (el) => (el?.innerText ?? el?.textContent ?? '').replace(/ /g, ' ').trim();
 const lines = (el) => text(el).split(/\n+/).map((l) => l.trim()).filter(Boolean);
 const NOT_A_NAME = /^(you|your|presenting|pinned|unpin|pin|mute|unmute|muted|more options|more|host|co-host|\d+|\d+ more|\+\d+|raised hand|lower hand|audio|video|camera|microphone|remove|admit|deny|in the meeting|contributors|people|participants|visible|backgrounds?)$/i;
 
 function cleanName(raw) {
-  const n = String(raw || '').replace(/\s*\((you|host|presenting|co-host)\)\s*$/i, '').replace(/\s+/g, ' ').trim();
-  if (!n || n.length > 60 || isIconText(n) || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return '';
+  if (isMenuText(raw)) return '';
+  const n = personOfTile(String(raw || '').replace(/\s*\((you|host|presenting|co-host)\)\s*$/i, '').replace(/\s+/g, ' ')).trim();
+  if (!n || n.length > 60 || isIconText(n) || isMenuText(n) || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return '';
   return n;
 }
 
