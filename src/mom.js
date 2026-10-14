@@ -1,5 +1,6 @@
-import { renderMd } from './md.js';
+import { renderMd, decorateMinutes } from './md.js';
 import { mountAsk } from './askui.js';
+import { modal } from './modal.js';
 import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
@@ -17,6 +18,7 @@ const id = new URLSearchParams(location.search).get('id');
 let meeting = null;
 let settings = null;
 let abortCtl = null;
+let genFail = ''; // why the last attempt to write the minutes failed, shown in the red box
 
 // Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
 const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
@@ -37,14 +39,47 @@ const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filte
 
 function renderMom() {
   $('mom').innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
+  if (meeting.mom) decorateMinutes($('mom'));
+  $('mom').classList.remove('streaming');
+  syncState();
+}
+
+// Shows one of: the minutes, the "no minutes yet" card, the generating skeleton; plus the red failure box.
+function syncState() {
+  const busy = !!abortCtl;
+  const empty = !meeting.mom && !busy && !genFail;
+  $('failBox').classList.toggle('hidden', !genFail || busy);
+  $('failText').textContent = genFail ? `${genFail} Your transcript is safe.` : '';
+  $('emptyBox').classList.toggle('hidden', !empty);
+  $('mom').hidden = !meeting.mom && !busy;
+  $('emptyText').textContent = !meeting.segments.length ? 'No speech was transcribed, so there is nothing to summarise yet.' : !meeting.endedAt ? 'This meeting is still being recorded. The minutes are written when it ends.' : 'The transcript is ready. Generate the minutes when you are.';
+}
+
+function showSkeleton() {
+  $('mom').innerHTML = '<div class="skel" aria-hidden="true"><div class="busy"><span class="spin"></span>Writing the minutes…</div><div class="sk h"></div><div class="sk" style="width:96%"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:92%"></div><div class="sk h"></div><div class="sk" style="width:70%"></div><div class="sk" style="width:82%"></div></div>';
+  $('mom').hidden = false;
 }
 
 function renderMeta() {
   const start = new Date(meeting.startedAt);
   const dur = meeting.endedAt ? `${Math.max(1, Math.round((meeting.endedAt - meeting.startedAt) / 60000))} min` : 'in progress';
-  $('meta').textContent = `${start.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })} · ${dur} · STT: ${meeting.stt}`;
+  const bits = [start.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }), dur];
+  if (attendeeList().length) bits.push(attendeeList().join(', '));
+  $('meta').replaceChildren(...bits.map((b, i) => Object.assign(document.createElement('span'), { textContent: b, className: i === 2 ? 'who-list' : '' })));
+  renderChips();
   $('title').value = meeting.title;
   document.title = `${meeting.title} · Debrief`;
+}
+
+// Status chips under the title: emailed, the model that wrote the minutes, speech-to-text, completeness check.
+function renderChips() {
+  const chip = (text, cls = '') => Object.assign(document.createElement('span'), { className: `chip ${cls}`.trim(), textContent: text });
+  const list = [];
+  if (meeting.emailedAt) list.push(chip(`Emailed ${new Date(meeting.emailedAt).toLocaleTimeString('en-IN', { timeStyle: 'short' })}`, 'brand'));
+  if (meeting.mom && meeting.model) list.push(chip(meeting.model));
+  if (meeting.stt) list.push(chip(`STT: ${meeting.stt}`));
+  if (meeting.mom && meeting.extract) list.push(chip('Checked for completeness', 'ok'));
+  $('chips').replaceChildren(...list);
 }
 
 function renderTranscript() {
@@ -53,8 +88,9 @@ function renderTranscript() {
     ? ctx.labeled.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
     : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? settings.myName || 'Me' : 'Others', text: s.text, flag: '' }));
   $('trInfo').textContent = `${rows.length} ${ctx.labeled ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
+  $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
   if (!rows.length) {
-    $('transcript').innerHTML = '<p class="muted">No speech was transcribed.</p>';
+    $('transcript').innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
     return;
   }
   $('transcript').replaceChildren(
@@ -64,7 +100,7 @@ function renderTranscript() {
       row.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
       row.children[0].textContent = fmtTime(r.t);
       row.children[1].textContent = r.who;
-      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ''}`;
+      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ctx.labeled ? ' named' : ''}`;
       row.children[2].textContent = r.src === 'me' && !ctx.labeled ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
       return row;
     })
@@ -99,15 +135,21 @@ async function runGenerate({ reread = false } = {}) {
   }
   setEditing(false);
   abortCtl = new AbortController();
+  genFail = '';
   $('gen').disabled = true;
   $('reread').disabled = true;
   $('abort').classList.remove('hidden');
+  $('genStatus').classList.add('busy');
   $('genStatus').textContent = `Writing with ${modelLabel(settings)}…`;
+  showSkeleton();
+  syncState();
   let buf = '';
   let queued = false;
   const paint = () => {
     queued = false;
     $('mom').innerHTML = renderMd(buf);
+    decorateMinutes($('mom'));
+    $('mom').classList.add('streaming');
   };
   // One model call with the same retry-on-rate-limit behaviour as before.
   const gen = async (system, user, onText, opts = {}) => {
@@ -149,14 +191,19 @@ async function runGenerate({ reread = false } = {}) {
     });
     await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
     renderMom();
+    renderChips();
     $('genStatus').textContent = `Done · ${meeting.model}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
     // First time only: regenerating or editing never re-sends by itself.
     if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
   } catch (e) {
+    genFail = abortCtl.signal.aborted ? '' : e.message;
     $('genStatus').textContent = abortCtl.signal.aborted ? 'Stopped.' : `Failed: ${e.message}`;
+    abortCtl = null;
     renderMom();
   } finally {
     abortCtl = null;
+    syncState();
+    $('genStatus').classList.remove('busy');
     $('gen').disabled = false;
     $('reread').disabled = false;
     $('reread').classList.toggle('hidden', !meeting.extract);
@@ -192,6 +239,7 @@ async function emailMom(auto) {
       const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
       const r = await sendMail(mail, settings);
       await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
+      renderChips();
       $('mailStatus').textContent = `Emailed to ${r.to} ✓`;
       $('mail').textContent = 'Email again';
       chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Debrief: minutes emailed', message: 'The minutes were sent.' });
@@ -392,7 +440,8 @@ $('copy').onclick = async () => {
 };
 $('dlTxt').onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, 'text/plain', formatTranscript(meeting, settings.myName, nameCtx()));
 $('del').onclick = async () => {
-  if (!confirm('Delete this meeting, its transcript and MOM? This cannot be undone.')) return;
+  const ok = await modal({ title: 'Delete this meeting?', text: 'Its transcript and minutes are removed from this computer. This cannot be undone.', buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Delete meeting', value: 'yes', danger: true }] });
+  if (ok?.value !== 'yes') return;
   await deleteMeeting(id);
   await deleteAllPending(id);
   window.close();
@@ -412,8 +461,8 @@ function renderSuggestions() {
     Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Possible misheard names: ' }),
     ...list.map((x) => {
       const b = document.createElement('button');
+      b.className = 'chip';
       b.textContent = `${x.found} → ${x.suggest} (${x.count}×)`;
-      b.style.margin = '0 6px 4px 0';
       b.onclick = () => fixName(x.found, x.suggest, true);
       return b;
     })
@@ -459,16 +508,34 @@ async function fixName(wrong, right, remember) {
 $('fixApply').onclick = () => fixName($('fixWrong').value, $('fixRight').value, $('fixRemember').checked);
 $('attendees').onchange = async () => {
   await patchMeeting({ attendees: parseAttendees($('attendees').value) });
+  renderMeta();
   renderTranscript();
   renderSuggestions();
   learn().catch(() => {});
 };
 
-document.querySelectorAll('.tabs button').forEach((b) => {
-  b.onclick = () => {
-    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
-    $('momTab').classList.toggle('hidden', b.dataset.tab !== 'momTab');
-    $('trTab').classList.toggle('hidden', b.dataset.tab !== 'trTab');
+$('genEmpty').onclick = () => runGenerate();
+$('failRetry').onclick = () => runGenerate();
+
+// Tabs: click, or arrow keys / Home / End on the tab list (roving tabindex).
+const tabBtns = [...document.querySelectorAll('.tabs button')];
+const showTab = (b, focus) => {
+  tabBtns.forEach((x) => {
+    x.classList.toggle('active', x === b);
+    x.setAttribute('aria-selected', String(x === b));
+    x.tabIndex = x === b ? 0 : -1;
+  });
+  $('momTab').classList.toggle('hidden', b.dataset.tab !== 'momTab');
+  $('trTab').classList.toggle('hidden', b.dataset.tab !== 'trTab');
+  if (focus) b.focus();
+};
+tabBtns.forEach((b, i) => {
+  b.onclick = () => showTab(b);
+  b.onkeydown = (e) => {
+    const to = { ArrowRight: (i + 1) % tabBtns.length, ArrowLeft: (i + tabBtns.length - 1) % tabBtns.length, Home: 0, End: tabBtns.length - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    showTab(tabBtns[to], true);
   };
 });
 
