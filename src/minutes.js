@@ -79,7 +79,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   }
 
   const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
-  const attendance = attendanceMarkdown({ invited: meeting.invited, presence: meeting.presence, durationSec, entries: ctx.entries, myName: settings.myName });
+  const attendance = attendanceMarkdown({ invited: meeting.invited, presence: { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, durationSec, entries: ctx.entries, myName: settings.myName });
   const cov = coverageMarkdown(coverage);
   const foot = [];
   if (attendance) foot.push(attendance);

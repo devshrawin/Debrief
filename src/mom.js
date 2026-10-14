@@ -4,6 +4,7 @@ import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeti
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople } from './attendance.js';
+import { labelTranscript, voicePresence, clusterVoices, unpack, pack, mean } from './voice/match.js';
 import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
@@ -18,7 +19,18 @@ let abortCtl = null;
 
 // Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
 const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
-const nameCtx = () => ({ entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40) });
+// Voice-labelled lines of the remote speech, or null. Cheap enough to recompute, but cached while nothing changes.
+let labelCache = { key: '', lines: null };
+function labeledLines() {
+  if (!settings.voiceOn || !meeting?.voiceSegs?.length || !settings.voices?.length) return null;
+  const key = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${settings.voices.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
+  if (labelCache.key !== key) labelCache = { key, lines: labelTranscript(meeting, settings.voices, { captions: meeting.captions, myName: settings.myName }) };
+  return labelCache.lines;
+}
+const nameCtx = () => {
+  const labeled = labeledLines();
+  return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, voicePresence: labeled ? voicePresence(labeled) : null };
+};
 const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
 function renderMom() {
@@ -34,22 +46,24 @@ function renderMeta() {
 }
 
 function renderTranscript() {
-  const segs = [...meeting.segments].sort((a, b) => a.t - b.t);
-  $('trInfo').textContent = `${segs.length} segments`;
-  if (!segs.length) {
+  const ctx = nameCtx();
+  const rows = ctx.labeled
+    ? ctx.labeled.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? settings.myName || 'Me' : 'Others', text: s.text, flag: '' }));
+  $('trInfo').textContent = `${rows.length} ${ctx.labeled ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
+  if (!rows.length) {
     $('transcript').innerHTML = '<p class="muted">No speech was transcribed.</p>';
     return;
   }
-  const me = settings.myName || 'Me';
-  const ctx = nameCtx();
   $('transcript').replaceChildren(
-    ...segs.map((s) => {
+    ...rows.map((r) => {
       const row = document.createElement('div');
       row.className = 'seg';
-      row.innerHTML = `<span class="t"></span><span class="who ${s.src}"></span><span class="text"></span>`;
-      row.children[0].textContent = fmtTime(s.t);
-      row.children[1].textContent = s.src === 'me' ? me : 'Others';
-      row.children[2].textContent = applyDictionary(s.text, ctx.entries, ctx.attendees);
+      row.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
+      row.children[0].textContent = fmtTime(r.t);
+      row.children[1].textContent = r.who;
+      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ''}`;
+      row.children[2].textContent = r.src === 'me' && !ctx.labeled ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
       return row;
     })
   );
@@ -109,7 +123,7 @@ async function runGenerate() {
     meeting.notes = $('notes').value;
     const pending = await listPending(id);
     const ctx = nameCtx();
-    const absent = matchPeople(meeting.invited, meeting.presence, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+    const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
     const { mom: text, stats } = await writeMinutes({
       meeting,
       settings,
@@ -200,7 +214,7 @@ function mountAskBox() {
 
 // ---- sharing with other people ----
 function absentNames() {
-  return matchPeople(meeting.invited, meeting.presence, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name || r.email);
+  return matchPeople(meeting.invited, { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name || r.email);
 }
 
 function initShare() {
@@ -268,10 +282,11 @@ async function ensureInvited() {
 function ensureAttendees() {
   if (meeting.attendees?.length) return;
   const entries = parseDictionary(settings.dictionary);
-  const presence = Object.entries(meeting.presence || {}).map(([name]) => (/^you$/i.test(name) && settings.myName ? settings.myName : name));
+  const seen = { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) };
+  const presence = Object.entries(seen).map(([name]) => (/^you$/i.test(name) && settings.myName ? settings.myName : name));
   let names = [];
   if (presence.length) {
-    const m = matchPeople(meeting.invited, meeting.presence, { entries, myName: settings.myName });
+    const m = matchPeople(meeting.invited, seen, { entries, myName: settings.myName });
     names = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
   } else if (meeting.invited?.length) {
     names = meeting.invited.filter((p) => p.status !== 'no').map((p) => p.name || p.email.split('@')[0]);

@@ -14627,8 +14627,9 @@ _(Output hit the length limit and was cut off.)_`;
       cur = [];
       words = 0;
     };
-    for (const s of [...meeting.segments || []].sort((a, b) => a.t - b.t)) {
-      const speaker = s.src === "me" ? ctx.myName || "Me" : "Others";
+    const source = ctx.labeled?.length ? ctx.labeled.map((l3) => ({ t: l3.t, text: l3.text, src: l3.src, label: l3.label })) : [...meeting.segments || []].sort((a, b) => a.t - b.t);
+    for (const s of source) {
+      const speaker = s.label || (s.src === "me" ? ctx.myName || "Me" : "Others");
       const sentences = applyDictionary(s.text || "", ctx.entries, ctx.attendees).split(/(?<=[.!?।])\s+/).filter((x2) => x2.trim());
       for (const [i, sentence] of sentences.entries()) {
         if (!cur.length) start = s.t + 0;

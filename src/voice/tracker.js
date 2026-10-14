@@ -11,6 +11,7 @@ export class VoiceTracker {
   constructor(onSegment) {
     this.onSegment = onSegment;
     this.floor = -60; // running estimate of the room's quiet level, in dB
+    this.recent = []; // loudness of the last ~15 seconds of blocks
     this.samples = 0; // samples seen so far: the recording clock
     this.cur = []; // blocks of the piece being collected
     this.curStart = 0;
@@ -22,8 +23,14 @@ export class VoiceTracker {
     let sum = 0;
     for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
     const db = 10 * Math.log10(sum / block.length + 1e-12);
-    // The floor follows quiet stretches down quickly and creeps up slowly, so speech never raises it much.
-    this.floor = db < this.floor ? db : db < this.floor + 6 ? this.floor * 0.98 + db * 0.02 : this.floor;
+    // The room's quiet level is the 20th percentile of the last ~15 s, so a steady noisy room settles quickly
+    // (it is never mistaken for speech) while a meeting full of talk still has its pauses as the floor.
+    this.recent.push(db);
+    if (this.recent.length > 117) this.recent.shift();
+    const target = [...this.recent].sort((x, y) => x - y)[Math.floor((this.recent.length - 1) * 0.2)];
+    // It starts from the first block heard, falls at once and rises at most ~2 dB a second, so a long stretch of
+    // talking cannot lift it up to the speech level.
+    this.floor = this.recent.length === 1 ? db : Math.min(target, this.floor + 0.3);
     const speech = db > Math.max(this.floor + 9, -52);
     const at = this.samples;
     this.samples += block.length;
