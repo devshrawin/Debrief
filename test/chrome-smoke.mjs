@@ -272,6 +272,39 @@ try {
     fs.writeFileSync(`${process.env.SHOTS}/usage.png`, Buffer.from((await send('Page.captureScreenshot', {}, opts.sessionId)).data, 'base64'));
   }
   check('settings has dictionary, sharing, local presets, other sites, minutes mode', proOpts.dict && proOpts.share && proOpts.local && proOpts.sites && proOpts.mode);
+  check('usage table has a cost-if-paid column and total', proOpts.rows.length > 0 && /if this were paid: about \$[0-9.]+/.test(proOpts.totals), proOpts.totals);
+
+  // ---- Pro: the Voices page (no microphone in headless Chrome, so recording itself is not driven here) ----
+  const vui = await opts.evaluate(`(async () => {
+    const fp = 'A'.repeat(344);
+    const people = [{ id: 'v1', name: 'Amal Raj', lang: 'en', centroid: fp, windows: [fp], secs: 21, created: Date.now() }, { id: 'v2', name: 'Priya Nair', lang: 'ml', langs: ['ml'], centroid: fp, windows: [fp], secs: 19, created: Date.now() }];
+    await chrome.storage.local.set({ voices: people, 'meeting:vtest': { id: 'vtest', segments: [], voiceSegs: [{ t0: 0, t1: 2, e: fp }], voiceModel: 'x' }, meetingIds: ['vtest'] });
+    document.querySelector('#nav button[data-tab=voices]').click();
+    await new Promise((r) => setTimeout(r, 500));
+    const out = {
+      page: document.getElementById('page-voices').classList.contains('active'),
+      rows: [...document.querySelectorAll('#voiceList .voice-row')].map((r) => r.textContent),
+      toggle: !!document.getElementById('voiceOn'), privacy: /never saved or uploaded/.test(document.getElementById('page-voices').textContent) && /256 numbers/.test(document.getElementById('page-voices').textContent),
+      promptEn: document.getElementById('enrolPrompt').textContent.length > 100,
+    };
+    document.querySelector('#enrolLang button[data-lang=ml]').click();
+    out.promptMl = /[\u0D00-\u0D7F]/.test(document.getElementById('enrolPrompt').textContent);
+    out.emptyHidden = document.getElementById('voiceEmpty').hidden;
+    // recording without a name is refused with a message, not a crash
+    document.getElementById('enrolRec').click();
+    await new Promise((r) => setTimeout(r, 300));
+    out.needName = /name first/i.test(document.getElementById('enrolMsg').textContent);
+    window.confirm = () => true;
+    document.getElementById('voiceForget').click();
+    await new Promise((r) => setTimeout(r, 600));
+    const after = await chrome.storage.local.get(['voices', 'meeting:vtest']);
+    out.forgot = after.voices === undefined && after['meeting:vtest'].voiceSegs === undefined;
+    out.listEmpty = document.querySelectorAll('#voiceList .voice-row').length === 0;
+    await chrome.storage.local.remove(['meeting:vtest']);
+    await chrome.storage.local.set({ meetingIds: [] });
+    return out;
+  })()`);
+  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.forgot && vui.listEmpty, JSON.stringify(vui));
 
   const popupWarn = await popup.evaluate(`(async () => { await new Promise((r) => setTimeout(r, 300)); location.reload(); })()`);
   await sleep(1500);

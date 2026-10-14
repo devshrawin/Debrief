@@ -109,3 +109,32 @@ export function estimateCost(rows, prices) {
   }
   return priced ? total : null;
 }
+
+// "What would this cost if it were paid?" Your own prices win; otherwise Gemini Flash list prices are assumed
+// (USD per million tokens: audio in 1.00, text in 0.30, out 2.50 - Gemini 2.5 Flash's published prices, used
+// as a rough stand-in because Google does not publish prices for every model name). Local models cost nothing.
+// Only successful requests carry tokens, so failed (rate-limited) requests add nothing.
+export const PAID_DEFAULTS = { stt: { in: 1.0, out: 2.5 }, llm: { in: 0.3, out: 2.5 } };
+
+export function paidCost(row, prices = {}) {
+  if (row.provider === 'ollama' || row.provider === 'whisper' || row.provider === 'local') return { usd: 0, assumed: false };
+  const own = prices[row.model];
+  const p = own || (row.provider === 'gemini' ? PAID_DEFAULTS[row.kind] : null);
+  if (!p) return { usd: null, assumed: false };
+  return { usd: ((row.tin || 0) / 1e6) * p.in + ((row.tout || 0) / 1e6) * p.out, assumed: !own };
+}
+
+export function paidTotal(rows, prices = {}) {
+  let usd = 0;
+  let assumed = false;
+  let unknown = 0;
+  for (const r of rows) {
+    const c = paidCost(r, prices);
+    if (c.usd == null) unknown++;
+    else {
+      usd += c.usd;
+      assumed ||= c.assumed;
+    }
+  }
+  return { usd, assumed, unknown };
+}

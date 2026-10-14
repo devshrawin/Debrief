@@ -158,3 +158,30 @@ export async function ensureEmailSecret() {
   await chrome.storage.local.set({ settings: { ...(settings || {}), emailSecret: secret } });
   return secret;
 }
+
+// ---- enrolled voices: fingerprints only (numbers), never audio ----
+export async function getVoices() {
+  const { voices } = await chrome.storage.local.get('voices');
+  return voices || [];
+}
+
+export async function saveVoices(list) {
+  await chrome.storage.local.set({ voices: list });
+}
+
+// Deletes every enrolled voice, and the voice fingerprints kept inside saved meetings.
+export async function forgetAllVoices() {
+  await chrome.storage.local.remove('voices');
+  const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
+  const r = await chrome.storage.local.get(meetingIds.map(key));
+  const changed = {};
+  for (const id of meetingIds) {
+    const m = r[key(id)];
+    if (m && (m.voiceSegs || m.voiceModel)) {
+      const { voiceSegs, voiceModel, ...rest } = m;
+      changed[key(id)] = rest;
+    }
+  }
+  if (Object.keys(changed).length) await chrome.storage.local.set(changed);
+  return Object.keys(changed).length;
+}

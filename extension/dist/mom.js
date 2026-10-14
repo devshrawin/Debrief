@@ -17304,7 +17304,7 @@ ${meeting2.mom || ""}
       meeting.notes = $2("notes").value;
       const pending = await listPending(id);
       const ctx = nameCtx();
-      const absent = matchPeople(meeting.invited, meeting.presence, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+      const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
       const { mom: text, stats } = await writeMinutes({
         meeting,
         settings,

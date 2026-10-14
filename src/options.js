@@ -6,7 +6,8 @@ import scriptText from '../apps-script/Code.gs';
 import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvice, explain } from './local.js';
 import { learnAlias } from './dictionary.js';
 import { LANGUAGES, chosenLanguages, minutesLanguageOptions, joinNames } from './languages.js';
-import { summarize, parseLimits, parsePrices, estimateCost, dayKey } from './usage.js';
+import { initVoices } from './voices-ui.js';
+import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, dayKey } from './usage.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -85,16 +86,17 @@ async function renderUsage() {
   const typed = parseLimits($('usageLimits').value || settings.usageLimits);
   const limits = { ...learnedLimits, ...typed };
   const rows = summarize(usage, usageDays);
+  const prices = parsePrices($('usagePrices').value || settings.usagePrices);
   const today = summarize(usage, 1);
   const table = $('usageTable');
   table.replaceChildren();
   const head = table.createTHead().insertRow();
-  ['Service', 'Used for', 'Requests', 'Failed', 'Tokens in / out', 'Audio', usageDays === 1 ? 'Left today (estimate)' : ''].forEach((h) => head.append(Object.assign(document.createElement('th'), { textContent: h })));
+  ['Service', 'Used for', 'Requests', 'Failed', 'Tokens in / out', 'Audio', 'Cost if paid', usageDays === 1 ? 'Left today (estimate)' : ''].forEach((h) => head.append(Object.assign(document.createElement('th'), { textContent: h })));
   const body = table.createTBody();
   if (!rows.length) {
     const r = body.insertRow();
     const c = r.insertCell();
-    c.colSpan = 7;
+    c.colSpan = 8;
     c.textContent = 'Nothing yet. Counts start with your next recording.';
     c.style.color = 'var(--muted)';
   }
@@ -107,6 +109,8 @@ async function renderUsage() {
     cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ''}` : '0', 'num');
     cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '-', 'num');
     cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '-', 'num');
+    const paid = paidCost(r, prices);
+    cell(paid.usd == null ? '-' : r.fail && !r.tin && !r.tout ? '$0.00' : `${paid.assumed ? '~' : ''}$${paid.usd < 0.01 && paid.usd > 0 ? paid.usd.toFixed(4) : paid.usd.toFixed(2)}`, 'num');
     const left = tr.insertCell();
     const limit = limits[r.model];
     if (usageDays === 1 && limit) {
@@ -117,8 +121,9 @@ async function renderUsage() {
   }
   const reqs = rows.reduce((a, r) => a + r.req, 0);
   const audio = rows.filter((r) => r.kind === 'stt').reduce((a, r) => a + r.audioSec, 0);
-  const cost = estimateCost(rows, parsePrices($('usagePrices').value || settings.usagePrices));
-  $('usageTotals').textContent = `${reqs} requests · ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` · about $${cost.toFixed(2)} at your prices` : ''} · quota day ${dayKey()} (Pacific)`;
+  const cost = estimateCost(rows, prices);
+  const paid = paidTotal(rows, prices);
+  $('usageTotals').textContent = `${reqs} requests · ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` · about $${cost.toFixed(2)} at your prices` : ''} · if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''} · quota day ${dayKey()} (Pacific)`;
 }
 
 document.querySelectorAll('#usageRange button').forEach((b) => {
@@ -383,6 +388,7 @@ $('testMail').onclick = async () => {
   updateGuide();
   renderUsage();
   renderLearned();
+  initVoices();
   showTab(location.hash.slice(1) || 'start');
 })();
 
