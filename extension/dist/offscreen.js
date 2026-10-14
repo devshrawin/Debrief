@@ -1,5 +1,8 @@
 (() => {
   // src/usage.js
+  function dayKey(date = /* @__PURE__ */ new Date()) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(date);
+  }
   function learnLimit(text) {
     const s = String(text || "");
     const limit = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
@@ -20,6 +23,52 @@
 
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
+  var cool = /* @__PURE__ */ new Map();
+  var coolLoaded = 0;
+  async function loadCool() {
+    if (Date.now() - coolLoaded < 5e3) return;
+    coolLoaded = Date.now();
+    try {
+      const { modelCooldown } = await chrome.storage.local.get("modelCooldown");
+      for (const [m, until] of Object.entries(modelCooldown || {})) if (until > (cool.get(m) || 0)) cool.set(m, until);
+    } catch {
+    }
+  }
+  function untilPacificMidnight(now = Date.now()) {
+    const today = dayKey(new Date(now));
+    for (let t = now + 5 * 6e4; t < now + 26 * 36e5; t += 5 * 6e4) if (dayKey(new Date(t)) !== today) return t;
+    return now + 6 * 36e5;
+  }
+  function cooldownFor(text, now = Date.now()) {
+    const t = String(text || "");
+    if (/PerDay|per day|daily/i.test(t)) return untilPacificMidnight(now);
+    const secs = Number((t.match(/retry in\s*([\d.]+)\s*s/i) || [])[1]);
+    return now + Math.min(15 * 6e4, (secs > 0 ? secs + 2 : 60) * 1e3);
+  }
+  function coolDown(model, until) {
+    cool.set(model, until);
+    try {
+      chrome.storage.local.get("modelCooldown").then(({ modelCooldown }) => {
+        const keep = Object.fromEntries(Object.entries({ ...modelCooldown || {}, [model]: until }).filter(([, u]) => u > Date.now()));
+        chrome.storage.local.set({ modelCooldown: keep });
+      });
+    } catch {
+    }
+  }
+  async function isCooling(model) {
+    await loadCool();
+    return coolingNow(model);
+  }
+  var coolingNow = (model, now = Date.now()) => (cool.get(model) || 0) > now;
+  async function usable(models) {
+    await loadCool();
+    const ok = models.filter((m) => !coolingNow(m));
+    return ok.length ? ok : models;
+  }
+  async function allExhausted(models, now = Date.now()) {
+    await loadCool();
+    return models.length > 0 && models.every((m) => (cool.get(m) || 0) > now + 5 * 6e4);
+  }
   function note(url, res, meta) {
     const model = (url.match(/models\/([^:/?]+)/) || [])[1] || "-";
     const e = { provider: "gemini", model, kind: meta.kind || (/stream/i.test(url) ? "llm" : "stt"), req: 1 };
@@ -27,7 +76,10 @@
     e.fail = true;
     e.rl = res?.status === 429;
     if (!res) return record(e);
-    res.clone().text().then((t) => record({ ...e, learned: learnLimit(t) }), () => record(e));
+    res.clone().text().then((t) => {
+      if (e.rl && model !== "-") coolDown(model, cooldownFor(t));
+      record({ ...e, learned: learnLimit(t) });
+    }, () => record(e));
   }
   async function geminiFetch(url, init, settings, meta = {}) {
     let res;
@@ -360,7 +412,7 @@
     let first = "";
     let err;
     try {
-      first = await geminiCall(wav, s, s.sttGeminiModel);
+      if (!await isCooling(s.sttGeminiModel)) first = await geminiCall(wav, s, s.sttGeminiModel);
     } catch (e) {
       err = e;
     }
@@ -369,7 +421,7 @@
       return first;
     }
     let lastErr = err;
-    for (const m of modelChain(s.geminiModel)) {
+    for (const m of await usable(modelChain(s.geminiModel))) {
       try {
         return await geminiCall(wav, s, m);
       } catch (e) {
@@ -381,6 +433,12 @@
   }
   var PROVIDERS = { gemini, sarvam, deepgram, openai: openaiCompat };
   var sttModelName = (s) => ({ sarvam: s.sarvamModel, deepgram: s.deepgramModel, openai: s.sttModel })[s.sttProvider];
+  function stripTimestamps(text) {
+    const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const stamp = /^[\[(]?\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?[\])]?\s*[-–:]?\s*/;
+    if (lines.length < 3 || lines.filter((l) => stamp.test(l)).length < lines.length * 0.6) return String(text || "");
+    return lines.map((l) => l.replace(stamp, "")).filter(Boolean).join(" ");
+  }
   async function transcribe(wav, settings) {
     const fn = PROVIDERS[settings.sttProvider];
     if (!fn) throw new Error(`Unknown STT provider ${settings.sttProvider}`);
@@ -389,12 +447,13 @@
       try {
         const raw = await fn(wav, settings);
         if (settings.sttProvider !== "gemini") record({ provider: settings.sttProvider, model: sttModelName(settings), kind: "stt", req: 1, audioSec: audioSeconds(wav) });
-        const text = raw.trim();
+        const text = stripTimestamps(raw).trim();
         return isLoopNoise(text) ? "" : text;
       } catch (e) {
         if (settings.sttProvider !== "gemini") record({ provider: settings.sttProvider, model: sttModelName(settings), kind: "stt", req: 1, fail: true, rl: e.status === 429 });
         const retryable = !(e instanceof SttError) || e.status === 429 || e.status >= 500;
         if (!retryable || attempt >= 3) throw e;
+        if (settings.sttProvider === "gemini" && e.status === 429 && await allExhausted([settings.sttGeminiModel, ...modelChain(settings.geminiModel)])) throw e;
         await new Promise((r) => setTimeout(r, e.status === 429 ? Math.max(delay, 2e4) : delay));
         delay *= 2;
       }
