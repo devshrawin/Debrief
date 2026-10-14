@@ -7,6 +7,7 @@ import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './vo
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
 import { modal } from './modal.js';
+import { getSample, deleteSample, hasSample } from './voice/samples.js';
 
 const OKBTN = [{ label: 'OK', value: 'ok', primary: true }];
 const tell = (text) => modal({ text, buttons: OKBTN });
@@ -71,6 +72,7 @@ function renderList() {
       };
       row.append(
         who,
+        ...(p.auto && isAnon(p) ? [sampleButton(p)] : []),
         btn('Rename', () => rename(p)),
         btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)),
         btn('Add recording', () => begin({ kind: 'add', id: p.id }, p)),
@@ -81,6 +83,25 @@ function renderList() {
       return row;
     })
   );
+}
+
+// "Play sample": a short clip of an unnamed voice, only when sample keeping is on and a clip exists.
+let playing = null;
+function sampleButton(p) {
+  const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: '▶ Play sample', hidden: true });
+  hasSample(p.id).then((yes) => (b.hidden = !yes)).catch(() => {});
+  b.onclick = async () => {
+    try {
+      playing?.pause();
+      const blob = await getSample(p.id);
+      if (!blob) return (b.hidden = true);
+      const url = URL.createObjectURL(blob);
+      playing = new Audio(url);
+      playing.onended = () => URL.revokeObjectURL(url);
+      await playing.play();
+    } catch {}
+  };
+  return b;
 }
 
 async function refresh() {
@@ -132,6 +153,7 @@ async function rename(p) {
     if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
     people = people.map((x) => (x.id === p.id ? { ...x, name: clean } : x));
     await saveVoices(people);
+    deleteSample(p.id).catch(() => {}); // named now: the clip is no longer kept
     renderList();
   } catch (e) {
     tell(e.message);
@@ -150,6 +172,7 @@ async function remove(p) {
     }
     people = people.filter((x) => x.id !== p.id);
     await saveVoices(people);
+    deleteSample(p.id).catch(() => {});
     renderList();
   } catch (e) {
     tell(`Could not delete: ${e.message}`);
@@ -164,6 +187,7 @@ async function mergeInto(p) {
   try {
     people = mergePeople(people, p.id, r.select);
     await saveVoices(people);
+    deleteSample(p.id).catch(() => {});
     renderList();
   } catch (e) {
     tell(e.message);

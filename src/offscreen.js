@@ -7,6 +7,7 @@ import { savePending } from './audiostore.js';
 import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
 import { pack } from './voice/match.js';
+import { putPiece, pieceKey, toInt16, MAX_PIECES } from './voice/samples.js';
 
 const CONCURRENCY = 3;
 
@@ -53,7 +54,7 @@ async function tap(ctx, stream, onBlock) {
   src.connect(node).connect(mute).connect(ctx.destination);
 }
 
-async function startVoice(meetingId) {
+async function startVoice(meetingId, keepAudio = false) {
   const client = createVoiceClient({
     workerUrl: chrome.runtime.getURL('dist/worker.js'),
     modelUrl: chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx'),
@@ -65,7 +66,13 @@ async function startVoice(meetingId) {
     if (!out.length) return;
     chrome.runtime.sendMessage({ target: 'bg', type: 'voice-seg', meetingId, segs: out.splice(0) }).catch(() => {});
   };
+  let kept = 0;
   const tracker = new VoiceTracker((seg) => {
+    // Optional: a copy of this piece waits in this browser (not uploaded) so an unnamed voice can later be played back.
+    if (keepAudio && kept < MAX_PIECES && seg.t1 - seg.t0 >= 2) {
+      kept++;
+      putPiece(pieceKey(meetingId, seg.t0), toInt16(seg.pcm)).catch(() => {});
+    }
     // A slow computer drops pieces here (the client queue is bounded) instead of slowing the recording.
     client
       .embed(seg.pcm)
@@ -160,7 +167,7 @@ async function start({ streamId, settings, meetingId }) {
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
   // Only the fingerprints leave this document; the audio is never stored and never sent anywhere.
   if ((settings.voiceOn && (settings.voices || []).length) || settings.voiceLearn) {
-    rec.voice = await startVoice(meetingId).catch(() => null);
+    rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples)).catch(() => null);
     chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: rec.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
   }
 

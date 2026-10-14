@@ -124,6 +124,64 @@
     return false;
   }
 
+  // src/wav.js
+  function encodeWav(samples, sampleRate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const str = (off2, s) => [...s].forEach((c, i) => v.setUint8(off2 + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + samples.length * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2) {
+      const x = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  // src/voice/samples.js
+  var DB = "debrief-voice";
+  var MAX_PIECES = 200;
+  function open() {
+    return new Promise((resolve, reject) => {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore("pieces");
+        r.result.createObjectStore("samples");
+      };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function tx(store, mode, fn) {
+    const db = await open();
+    try {
+      return await new Promise((resolve, reject) => {
+        const t = db.transaction(store, mode);
+        const out = fn(t.objectStore(store));
+        t.oncomplete = () => resolve(out?.result ?? out);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var toInt16 = (f32) => Int16Array.from(f32, (x) => Math.max(-32768, Math.min(32767, Math.round(x * 32767))));
+  var pieceKey = (meetingId, t0) => `${meetingId}|${Math.round(t0 * 100)}`;
+  var putPiece = (key, i16) => tx("pieces", "readwrite", (s) => s.put(i16, key));
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -182,6 +240,8 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceSamples: false,
+    // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
     voiceLearn: false,
     // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
@@ -460,32 +520,6 @@
     }
   }
 
-  // src/wav.js
-  function encodeWav(samples, sampleRate) {
-    const buf = new ArrayBuffer(44 + samples.length * 2);
-    const v = new DataView(buf);
-    const str = (off2, s) => [...s].forEach((c, i) => v.setUint8(off2 + i, c.charCodeAt(0)));
-    str(0, "RIFF");
-    v.setUint32(4, 36 + samples.length * 2, true);
-    str(8, "WAVE");
-    str(12, "fmt ");
-    v.setUint32(16, 16, true);
-    v.setUint16(20, 1, true);
-    v.setUint16(22, 1, true);
-    v.setUint32(24, sampleRate, true);
-    v.setUint32(28, sampleRate * 2, true);
-    v.setUint16(32, 2, true);
-    v.setUint16(34, 16, true);
-    str(36, "data");
-    v.setUint32(40, samples.length * 2, true);
-    let off = 44;
-    for (let i = 0; i < samples.length; i++, off += 2) {
-      const x = Math.max(-1, Math.min(1, samples[i]));
-      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
-    }
-    return new Blob([buf], { type: "audio/wav" });
-  }
-
   // src/chunker.js
   var SR = 16e3;
   var PAUSE = 0.35 * SR;
@@ -554,24 +588,24 @@
   };
 
   // src/audiostore.js
-  var DB = "debrief";
+  var DB2 = "debrief";
   var STORE = "pending";
-  function open() {
+  function open2() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB, 1);
+      const req = indexedDB.open(DB2, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
   async function run(mode, fn) {
-    const db = await open();
+    const db = await open2();
     try {
       return await new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, mode);
-        const req = fn(tx.objectStore(STORE));
-        tx.oncomplete = () => resolve(req?.result);
-        tx.onerror = () => reject(tx.error);
+        const tx2 = db.transaction(STORE, mode);
+        const req = fn(tx2.objectStore(STORE));
+        tx2.oncomplete = () => resolve(req?.result);
+        tx2.onerror = () => reject(tx2.error);
       });
     } finally {
       db.close();
@@ -741,7 +775,7 @@
     mute.gain.value = 0;
     src.connect(node).connect(mute).connect(ctx.destination);
   }
-  async function startVoice(meetingId) {
+  async function startVoice(meetingId, keepAudio = false) {
     const client = createVoiceClient({
       workerUrl: chrome.runtime.getURL("dist/worker.js"),
       modelUrl: chrome.runtime.getURL("models/wespeaker_resnet34_lm.onnx"),
@@ -754,7 +788,13 @@
       chrome.runtime.sendMessage({ target: "bg", type: "voice-seg", meetingId, segs: out.splice(0) }).catch(() => {
       });
     };
+    let kept = 0;
     const tracker = new VoiceTracker((seg) => {
+      if (keepAudio && kept < MAX_PIECES && seg.t1 - seg.t0 >= 2) {
+        kept++;
+        putPiece(pieceKey(meetingId, seg.t0), toInt16(seg.pcm)).catch(() => {
+        });
+      }
       client.embed(seg.pcm).then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e) })).catch(() => {
       });
     });
@@ -828,7 +868,7 @@
       });
     }
     if (settings.voiceOn && (settings.voices || []).length || settings.voiceLearn) {
-      rec.voice = await startVoice(meetingId).catch(() => null);
+      rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples)).catch(() => null);
       chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: rec.voice ? "voice recognition: on" : "voice recognition: could not start (recording continues without it)" });
     }
     tabStream.getAudioTracks()[0].addEventListener("ended", () => chrome.runtime.sendMessage({ target: "bg", type: "stop" }));

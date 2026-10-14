@@ -1,4 +1,65 @@
 (() => {
+  // src/wav.js
+  function encodeWav(samples, sampleRate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const str = (off2, s) => [...s].forEach((c, i) => v.setUint8(off2 + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + samples.length * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2) {
+      const x = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  // src/voice/samples.js
+  var DB = "debrief-voice";
+  function open() {
+    return new Promise((resolve, reject) => {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore("pieces");
+        r.result.createObjectStore("samples");
+      };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function tx(store, mode2, fn) {
+    const db = await open();
+    try {
+      return await new Promise((resolve, reject) => {
+        const t = db.transaction(store, mode2);
+        const out = fn(t.objectStore(store));
+        t.oncomplete = () => resolve(out?.result ?? out);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
+  var hasSample = async (personId) => !!await getSample(personId);
+  var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
+  async function clearAllAudio() {
+    await tx("pieces", "readwrite", (s) => s.clear());
+    await tx("samples", "readwrite", (s) => s.clear());
+  }
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -57,6 +118,8 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceSamples: false,
+    // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
     voiceLearn: false,
     // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
@@ -139,6 +202,8 @@
   }
   async function forgetAllVoices() {
     await chrome.storage.local.remove("voices");
+    await clearAllAudio().catch(() => {
+    });
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     const r = await chrome.storage.local.get(meetingIds.map(key));
     const changed = {};
@@ -1252,32 +1317,6 @@ function out(o) {
     return { list: next, added, replaced, skipped };
   }
 
-  // src/wav.js
-  function encodeWav(samples, sampleRate) {
-    const buf = new ArrayBuffer(44 + samples.length * 2);
-    const v = new DataView(buf);
-    const str = (off2, s) => [...s].forEach((c, i) => v.setUint8(off2 + i, c.charCodeAt(0)));
-    str(0, "RIFF");
-    v.setUint32(4, 36 + samples.length * 2, true);
-    str(8, "WAVE");
-    str(12, "fmt ");
-    v.setUint32(16, 16, true);
-    v.setUint16(20, 1, true);
-    v.setUint16(22, 1, true);
-    v.setUint32(24, sampleRate, true);
-    v.setUint32(28, sampleRate * 2, true);
-    v.setUint16(32, 2, true);
-    v.setUint16(34, 16, true);
-    str(36, "data");
-    v.setUint32(40, samples.length * 2, true);
-    let off = 44;
-    for (let i = 0; i < samples.length; i++, off += 2) {
-      const x = Math.max(-1, Math.min(1, samples[i]));
-      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
-    }
-    return new Blob([buf], { type: "audio/wav" });
-  }
-
   // src/modal.js
   function modal({ title = "", text = "", input = null, select = null, buttons = [{ label: "OK", value: "ok", primary: true }] } = {}) {
     return new Promise((resolve) => {
@@ -1383,6 +1422,7 @@ function out(o) {
         };
         row.append(
           who,
+          ...p.auto && isAnon(p) ? [sampleButton(p)] : [],
           btn("Rename", () => rename(p)),
           btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)),
           btn("Add recording", () => begin({ kind: "add", id: p.id }, p)),
@@ -1393,6 +1433,25 @@ function out(o) {
         return row;
       })
     );
+  }
+  var playing = null;
+  function sampleButton(p) {
+    const b = Object.assign(document.createElement("button"), { className: "btn", textContent: "\u25B6 Play sample", hidden: true });
+    hasSample(p.id).then((yes) => b.hidden = !yes).catch(() => {
+    });
+    b.onclick = async () => {
+      try {
+        playing?.pause();
+        const blob = await getSample(p.id);
+        if (!blob) return b.hidden = true;
+        const url = URL.createObjectURL(blob);
+        playing = new Audio(url);
+        playing.onended = () => URL.revokeObjectURL(url);
+        await playing.play();
+      } catch {
+      }
+    };
+    return b;
   }
   async function refresh() {
     people = await getVoices();
@@ -1441,6 +1500,8 @@ function out(o) {
       if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
       people = people.map((x) => x.id === p.id ? { ...x, name: clean } : x);
       await saveVoices(people);
+      deleteSample(p.id).catch(() => {
+      });
       renderList();
     } catch (e) {
       tell(e.message);
@@ -1458,6 +1519,8 @@ function out(o) {
       }
       people = people.filter((x) => x.id !== p.id);
       await saveVoices(people);
+      deleteSample(p.id).catch(() => {
+      });
       renderList();
     } catch (e) {
       tell(`Could not delete: ${e.message}`);
@@ -1470,6 +1533,8 @@ function out(o) {
     try {
       people = mergePeople(people, p.id, r.select);
       await saveVoices(people);
+      deleteSample(p.id).catch(() => {
+      });
       renderList();
     } catch (e) {
       tell(e.message);
