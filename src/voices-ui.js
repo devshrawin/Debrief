@@ -6,6 +6,10 @@ import { createVoiceClient } from './voice/client.js';
 import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './voice/enrol.js';
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
+import { modal } from './modal.js';
+
+const OKBTN = [{ label: 'OK', value: 'ok', primary: true }];
+const tell = (text) => modal({ text, buttons: OKBTN });
 
 const $ = (id) => document.getElementById(id);
 const MAX_SEC = 40;
@@ -110,7 +114,7 @@ async function renderUnnamed() {
           renderList();
           renderUnnamed();
         } catch (e) {
-          alert(e.message);
+          tell(e.message);
         }
       };
       row.append(label, input, save);
@@ -120,44 +124,49 @@ async function renderUnnamed() {
 }
 
 async function rename(p) {
-  const name = prompt('New name', p.name);
-  if (name == null) return;
+  const r = await modal({ text: `New name for ${p.name}`, input: { value: isAnon(p) ? '' : p.name, placeholder: 'Their name', maxLength: 60 }, buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Rename', value: 'ok', primary: true }] });
+  if (!r || r.value !== 'ok') return;
   try {
-    const clean = name.trim().replace(/\s+/g, ' ').slice(0, 60);
+    const clean = r.input.trim().replace(/\s+/g, ' ').slice(0, 60);
     if (!clean) throw new Error('A name cannot be empty.');
     if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
     people = people.map((x) => (x.id === p.id ? { ...x, name: clean } : x));
     await saveVoices(people);
     renderList();
   } catch (e) {
-    alert(e.message);
+    tell(e.message);
   }
 }
 
 async function remove(p) {
-  if (!confirm(`Delete the voice of ${p.name}? Their fingerprint is removed from this browser.`)) return;
-  if (p.auto && confirm(`${p.name} was learned from your meetings and would be learned again.\n\nOK = also never learn this voice again.\nCancel = just delete it for now.`)) {
-    await saveBlockedVoices([...(await getBlockedVoices()), blockEntry(p)]);
-    renderBlocked();
+  const buttons = [{ label: 'Cancel', value: 'no' }, { label: 'Delete', value: 'del', danger: true }];
+  if (p.auto) buttons.push({ label: 'Delete and never learn it again', value: 'block', danger: true });
+  const r = await modal({ text: `Delete the voice of ${p.name}? Their fingerprint is removed from this browser.${p.auto ? '\n\nThis voice was learned from your meetings, so Debrief may learn it again after another meeting unless you choose "never learn it again".' : ''}`, buttons });
+  if (!r || r.value === 'no') return;
+  try {
+    if (r.value === 'block') {
+      await saveBlockedVoices([...(await getBlockedVoices()), blockEntry(p)]);
+      renderBlocked();
+    }
+    people = people.filter((x) => x.id !== p.id);
+    await saveVoices(people);
+    renderList();
+  } catch (e) {
+    tell(`Could not delete: ${e.message}`);
   }
-  people = people.filter((x) => x.id !== p.id);
-  await saveVoices(people);
-  renderList();
 }
 
 // Two learned voices that are really one person (for example a laptop and a headset): fold one into the other.
 async function mergeInto(p) {
   const others = people.filter((x) => x.id !== p.id);
-  const pick = prompt(`Merge ${p.name} into which voice? Type the number:\n\n${others.map((x, i) => `${i + 1}. ${x.name}`).join('\n')}`);
-  const target = others[Number(pick) - 1];
-  if (!target) return;
-  if (!confirm(`Merge ${p.name} into ${target.name}? The result is called ${target.name}.`)) return;
+  const r = await modal({ text: `Merge ${p.name} into which voice? The result keeps that voice's name.`, select: others.map((x) => ({ value: x.id, label: x.name })), buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Merge', value: 'ok', primary: true }] });
+  if (!r || r.value !== 'ok') return;
   try {
-    people = mergePeople(people, p.id, target.id);
+    people = mergePeople(people, p.id, r.select);
     await saveVoices(people);
     renderList();
   } catch (e) {
-    alert(e.message);
+    tell(e.message);
   }
 }
 
@@ -325,7 +334,8 @@ async function importFile(file) {
       return;
     }
     const clash = incoming.filter((p) => people.some((x) => x.name.toLowerCase() === p.name.toLowerCase())).map((p) => p.name);
-    const replace = clash.length > 0 && confirm(`${clash.join(', ')} already enrolled here. Replace with the imported voice?\n\nOK = replace, Cancel = keep what you have.`);
+    const ans = clash.length ? await modal({ text: `${clash.join(', ')} ${clash.length === 1 ? 'is' : 'are'} already enrolled here. Replace with the imported voice?`, buttons: [{ label: 'Keep mine', value: 'keep' }, { label: 'Replace', value: 'replace', primary: true }] }) : null;
+    const replace = ans?.value === 'replace';
     const r = mergeImport(people, incoming, { replace });
     people = r.list;
     await saveVoices(people);
@@ -385,7 +395,8 @@ export async function initVoices() {
     renderBlocked();
   };
   $('voiceForget').onclick = async () => {
-    if (!confirm('Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.')) return;
+    const ok = await modal({ text: 'Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.', buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Forget all voices', value: 'yes', danger: true }] });
+    if (ok?.value !== 'yes') return;
     const n = await forgetAllVoices();
     people = [];
     renderList();
