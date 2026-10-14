@@ -5,7 +5,9 @@ import { ensureEmailSecret } from './store.js';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-export const mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || '');
+// Personal accounts: /macros/s/ID/exec. Google Workspace (company) accounts: /a/macros/DOMAIN/s/ID/exec (or /a/DOMAIN/macros/s/ID/exec).
+export const WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
+export const mailReady = (s) => WEBAPP_URL.test(String(s.emailWebhook || '').trim());
 
 // Email clients drop <style> blocks, so give tables and headings inline styles.
 function inlineStyles(html) {

@@ -17091,7 +17091,8 @@ ${foot.join("\n\n")}`, stats, checklist };
 
   // src/mailer.js
   var escapeHtml2 = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
+  var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
+  var mailReady = (s) => WEBAPP_URL.test(String(s.emailWebhook || "").trim());
   function inlineStyles(html) {
     const add = (tag, style) => (h3) => h3.replace(new RegExp(`<${tag}(?=[\\s>])(?![^>]*\\sstyle=)`, "g"), `<${tag} style="${style}"`);
     const th = "border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left";

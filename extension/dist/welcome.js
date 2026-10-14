@@ -14520,7 +14520,8 @@ _(Output hit the length limit and was cut off.)_`;
   }
 
   // src/mailer.js
-  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
+  var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
+  var mailReady = (s) => WEBAPP_URL.test(String(s.emailWebhook || "").trim());
   async function callRelay(payload, settings) {
     if (!mailReady(settings)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
     const secret = settings.emailSecret || (typeof chrome !== "undefined" && chrome.storage?.local ? await ensureEmailSecret() : "");
