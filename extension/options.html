@@ -482,6 +482,20 @@
       </div>
 
       <div class="card">
+        <h2>Learn voices on its own</h2>
+        <label class="toggle"><span class="t"><b>Learn who is who from my meetings (best guess)</b><span>Off by default. Uses Meet's captions, so captions must be read (General &rarr; Speaker names from Meet). Click Save changes after switching.</span></span><input type="checkbox" id="voiceLearn"></label>
+        <div class="row2">
+          <p class="hint" style="margin-top:0">While you record, Debrief notes which voice is speaking whenever Meet's captions name exactly one person, and builds that person's fingerprint over several meetings. A learned voice is <b>not used</b> until it has about 45 seconds of clean speech from at least two meetings, and it is dropped if two names sound the same or the captions disagree. Voices you record yourself are never changed. It works only in Meet with captions, and a wrong caption can teach a wrong voice, so check the names and delete anything that looks off. Learned people appear in the list below, marked as learned. This builds a voice profile of the people on your calls, so tell your colleagues, and you can delete anyone, or everyone, at any time.</p>
+        </div>
+      </div>
+
+      <div class="card" id="unnamedCard" hidden>
+        <h2>Unnamed voices in your latest meeting</h2>
+        <div id="unnamedList"></div>
+        <p class="hint">These voices matched nobody enrolled. The times are positions in the recording (also shown in the transcript on the minutes page): check who was speaking there, type the name, and save. Nothing is stored until you save.</p>
+      </div>
+
+      <div class="card">
         <h2>Privacy</h2>
         <div class="row2">
           <p class="hint" style="margin-top:0">Everything happens inside your browser. The recording you make here is kept in memory only while this page is open, so you can play it back, and is never saved or uploaded. Only a fingerprint (a list of 256 numbers) is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>

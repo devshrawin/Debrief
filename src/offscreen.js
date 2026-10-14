@@ -151,7 +151,7 @@ async function start({ streamId, settings, meetingId }) {
 
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
   // Only the fingerprints leave this document; the audio is never stored and never sent anywhere.
-  if (settings.voiceOn && (settings.voices || []).length) {
+  if ((settings.voiceOn && (settings.voices || []).length) || settings.voiceLearn) {
     rec.voice = await startVoice(meetingId).catch(() => null);
     chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: rec.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
   }

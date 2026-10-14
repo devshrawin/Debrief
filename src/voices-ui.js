@@ -1,6 +1,7 @@
 // The Voices page in Settings: add people, record about 20 seconds, play it back, save only the fingerprint,
 // rename, re-record, delete, and forget everything. The recording lives in memory until saved or cancelled.
-import { getVoices, saveVoices, forgetAllVoices } from './store.js';
+import { getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime } from './store.js';
+import { unnamedGroups, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
 import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './voice/enrol.js';
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
@@ -55,7 +56,9 @@ function renderList() {
       const langs = (p.langs || [p.lang || 'en']).map((l) => LANG_NAME[l] || l).join(' + ');
       who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
       who.querySelector('.vn').textContent = p.name;
-      who.querySelector('.vm').textContent = `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
+      who.querySelector('.vm').textContent = p.auto
+        ? `Learned from meetings · ${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech · ${p.ready ? 'in use' : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}`
+        : `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
       const btn = (label, fn, danger) => {
         const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: label });
         if (danger) b.style.color = '#b91c1c';
@@ -78,6 +81,41 @@ function renderList() {
 async function refresh() {
   people = await getVoices();
   renderList();
+  renderUnnamed().catch(() => {});
+}
+
+// Voices in the latest meeting that match nobody: name them in one step.
+async function renderUnnamed() {
+  const meetings = (await listMeetings()).filter((m) => (m.voiceSegs || []).length >= 20).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  const m = meetings[0];
+  const groups = m ? unnamedGroups(m, people) : [];
+  $('unnamedCard').hidden = !groups.length;
+  $('unnamedList').replaceChildren(
+    ...groups.map((g, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)';
+      const label = document.createElement('div');
+      label.style.cssText = 'flex:1;min-width:200px';
+      label.innerHTML = '<b></b><div class="hint" style="margin:2px 0 0"></div>';
+      label.querySelector('b').textContent = `Voice ${i + 1}`;
+      label.querySelector('.hint').textContent = `${g.seconds} s of speech · for example at ${g.at.map(fmtTime).join(', ')}`;
+      const input = Object.assign(document.createElement('input'), { placeholder: 'Who is this?', maxLength: 60 });
+      input.style.cssText = 'padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--field);width:200px';
+      const save = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Save this voice' });
+      save.onclick = async () => {
+        try {
+          people = upsertPerson(people, { name: input.value, lang: 'free', print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
+          await saveVoices(people);
+          renderList();
+          renderUnnamed();
+        } catch (e) {
+          alert(e.message);
+        }
+      };
+      row.append(label, input, save);
+      return row;
+    })
+  );
 }
 
 async function rename(p) {

@@ -4,7 +4,8 @@ import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeti
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople } from './attendance.js';
-import { labelTranscript, voicePresence, clusterVoices, unpack, pack, mean } from './voice/match.js';
+import { labelTranscript, voicePresence } from './voice/match.js';
+import { usableVoices } from './voice/learn.js';
 import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
@@ -22,9 +23,10 @@ const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
 // Voice-labelled lines of the remote speech, or null. Cheap enough to recompute, but cached while nothing changes.
 let labelCache = { key: '', lines: null };
 function labeledLines() {
-  if (!settings.voiceOn || !meeting?.voiceSegs?.length || !settings.voices?.length) return null;
-  const key = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${settings.voices.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
-  if (labelCache.key !== key) labelCache = { key, lines: labelTranscript(meeting, settings.voices, { captions: meeting.captions, myName: settings.myName }) };
+  const people = usableVoices(settings.voices);
+  if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
+  const key = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
+  if (labelCache.key !== key) labelCache = { key, lines: labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }) };
   return labelCache.lines;
 }
 const nameCtx = () => {

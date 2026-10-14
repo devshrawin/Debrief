@@ -2545,6 +2545,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceLearn: false,
+    // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -16880,6 +16882,9 @@ ${foot.join("\n\n")}`, stats, checklist };
     return out;
   }
 
+  // src/voice/learn.js
+  var usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready);
+
   // src/noise.js
   function isLoopNoise(text) {
     const words = (text || "").toLowerCase().split(/[\s,.;:!?।|-]+/).filter(Boolean);
@@ -17221,9 +17226,10 @@ ${meeting2.mom || ""}
   var attendeeList = () => (meeting?.attendees || []).filter(Boolean);
   var labelCache = { key: "", lines: null };
   function labeledLines() {
-    if (!settings.voiceOn || !meeting?.voiceSegs?.length || !settings.voices?.length) return null;
-    const key2 = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${settings.voices.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
-    if (labelCache.key !== key2) labelCache = { key: key2, lines: labelTranscript(meeting, settings.voices, { captions: meeting.captions, myName: settings.myName }) };
+    const people = usableVoices(settings.voices);
+    if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
+    const key2 = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
+    if (labelCache.key !== key2) labelCache = { key: key2, lines: labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }) };
     return labelCache.lines;
   }
   var nameCtx = () => {
