@@ -216,7 +216,7 @@
     $("micRow").classList.toggle("hidden", !(recording && st.mic));
     const wanted = !!(st.micWanted ?? st.micOn);
     $("micToggle").checked = wanted;
-    $("micState").textContent = wanted && !st.micOn ? "Paused: Meet is muted" : wanted ? "Your voice goes into the transcript" : "Your voice is ignored";
+    $("micState").textContent = wanted && !st.micOn ? "Paused: you are muted in the call" : wanted ? st.meetMuted === false ? "Your voice goes into the transcript (unmuted in the call)" : st.meetMuted == null ? "Your voice goes into the transcript (the mute button in the call was not found, so your mic is always on)" : "Your voice goes into the transcript" : "Your voice is ignored";
     $("micWarn").classList.toggle("hidden", !(st.recording && st.micError));
     $("micWarn").textContent = st.micError ? `Only other participants are being recorded. ${st.micError}` : "";
     const a = st.recording ? st.alert : null;
