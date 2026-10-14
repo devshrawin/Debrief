@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,278 +7,392 @@
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
   <style>
-    :root { --brand: #3a33a8; --brand-soft: #eceafc; --saffron: #ff7a1a; --card: #ffffff; --field: #f6f7f9; --ring: rgba(58,51,168,.28); }
-    @media (prefers-color-scheme: dark) { :root { --brand: #9d97ff; --brand-soft: #25234a; --card: #202328; --field: #1b1d21; --ring: rgba(157,151,255,.35); } }
-    body { background: var(--field); }
-    .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); max-width: 1040px; margin: 0 auto; min-height: 100vh; }
+    /* Settings shell. Tokens, buttons, fields, chips, meters, tables and dialogs all come from style.css. */
+    .shell { display: flex; align-items: flex-start; max-width: 1240px; margin: 0 auto; min-height: 100vh; }
 
-    /* Sidebar */
-    .side { position: sticky; top: 0; align-self: start; height: 100vh; padding: 26px 14px; display: flex; flex-direction: column; gap: 4px; }
-    .logo { display: flex; align-items: center; gap: 10px; padding: 0 10px 18px; }
-    .logo img { width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 4px 12px -4px rgba(30,27,107,.5); }
-    .logo b { display: block; font-size: 16px; letter-spacing: -.01em; line-height: 1.1; }
-    .logo span { font-size: 12px; color: var(--muted); }
+    /* ---- sidebar ---- */
+    .side { position: sticky; top: 0; flex: 0 0 248px; height: 100vh; overflow-y: auto; padding: 28px 16px; display: flex; flex-direction: column; gap: 2px; }
+    .side .brand { padding: 0 10px 18px; }
+    .side .brand strong { font-size: 16px; }
     .nav { display: flex; flex-direction: column; gap: 2px; }
-    .nav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 9px 12px; border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 13.5px; cursor: pointer; }
-    .nav button:hover { background: var(--card); color: var(--text); }
-    .nav button.active { background: var(--brand-soft); color: var(--brand); }
-    .nav .num { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--border); color: var(--text); }
-    .nav button.active .num { background: var(--brand); color: #fff; }
-    .side .foot { margin-top: auto; padding: 0 10px; font-size: 12px; }
+    .nav button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 4px 10px; border: 0; border-radius: 9px; background: none; color: var(--text); font-weight: 500; text-align: left; justify-content: flex-start; }
+    .nav button:hover { background: var(--sunk); }
+    .nav .n { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--sunk); color: var(--muted); }
+    .nav button:hover .n { background: var(--card); }
+    .nav button.active { background: var(--tint); color: var(--tint-ink); font-weight: 700; }
+    .nav button.active .n { background: var(--brand); color: var(--on-brand); }
+    .side .foot { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; }
+    .side .foot a { display: flex; align-items: center; min-height: 34px; padding: 0 10px; border-radius: 9px; color: var(--muted); font-size: 13px; text-decoration: none; }
+    .side .foot a:hover { background: var(--sunk); color: var(--text); }
 
-    /* Content */
-    .content { padding: 30px 30px 110px; min-width: 0; }
-    .page { display: none; }
-    .page.active { display: block; }
-    .page h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.015em; }
-    .lede { color: var(--muted); margin: 0 0 22px; max-width: 60ch; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 6px 20px; margin: 0 0 18px; box-shadow: 0 1px 2px rgba(20,16,60,.04); }
-    .card > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 2px; font-weight: 700; }
-    .row2 { padding: 14px 0; border-top: 1px solid var(--border); }
-    .card > h2 + .row2, .card > .row2:first-child { border-top: 0; }
-    .row2 > label, .row2 .lab { display: block; font-weight: 600; margin: 0 0 6px; font-size: 13.5px; }
-    .row2 .hint, .card .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; font-weight: 400; line-height: 1.5; }
-    .row2 input:not([type=checkbox]), .row2 select, .row2 textarea { width: 100%; max-width: 460px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--field); }
-    .row2 input:focus, .row2 select:focus { outline: 2px solid var(--ring); border-color: var(--brand); }
+    /* ---- content column ---- */
+    .content { flex: 1 1 0; min-width: 0; min-height: 100vh; padding: 36px 32px 0; display: flex; flex-direction: column; }
+    .page { display: none; width: 100%; max-width: 900px; }
+    .page.active { display: flex; flex-direction: column; gap: 20px; }
+    #page-usage { max-width: 1000px; }
+    .page > header h1 { margin: 0; font-size: 28px; letter-spacing: -0.015em; }
+    .page > header .lede { margin: 4px 0 0; color: var(--muted); font-size: 15px; max-width: 70ch; }
+    .page > header.split { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+    .page > .card, .page > .grid2 > .card { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+    .page > .card > h2, .page > .grid2 > .card > h2 { margin: 0; }
+    .card h3 { margin: 0; font-size: 16px; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 20px; }
+    .card.danger-zone { border-color: var(--rec-line); flex-direction: row; align-items: center; flex-wrap: wrap; }
+    .card.danger-zone .lbl { color: var(--rec-ink); }
+    .card p { overflow-wrap: anywhere; }
+    .card .hint code, .card p code { font: 12px ui-monospace, Consolas, monospace; background: var(--sunk); border-radius: 4px; padding: 0 4px; }
+    .card p { margin: 0; }
+    .card .hint { margin: 0; }
+    .card p.body { font-size: 13.5px; }
 
-    /* Toggle rows */
-    .toggle { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 0; border-top: 1px solid var(--border); cursor: pointer; }
-    .card > .toggle:first-of-type, .card > h2 + .toggle { border-top: 0; }
-    .toggle .t b { display: block; font-weight: 600; font-size: 13.5px; }
-    .toggle .t span { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; line-height: 1.45; }
-    .toggle input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 38px; height: 22px; padding: 0; margin: 0; border: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .2s; }
-    .toggle input::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
-    .toggle input:checked { background: #10b981; }
-    .toggle input:checked::after { transform: translateX(16px); }
-    .toggle input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    /* ---- rows and fields ---- */
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .rows { display: flex; flex-direction: column; }
+    .rows > * + * { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+    .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .fld > label, .fld > .flabel, .trow label, .lbl-l { margin: 0; font-weight: 600; }
+    .fld .opt { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+    .fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; align-items: start; }
+    .trow { display: flex; gap: 16px; align-items: center; }
+    .trow .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .trow .hint { font-size: 13px; line-height: 1.5; }
+    .btnrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .status { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .status.ok { color: var(--ok); font-weight: 600; }
+    textarea.mono { font: 13px/1.6 ui-monospace, Consolas, monospace; min-height: 76px; }
+    .localbox { padding: 14px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 
-    .btnrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
-    [hidden] { display: none !important; }
-    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
-    .btn { padding: 8px 14px; border-radius: 9px; font-weight: 600; font-size: 13px; background: var(--card); border: 1px solid var(--border); }
-    .btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
-    .status { font-size: 12.5px; color: var(--muted); }
+    /* switches: a real checkbox, drawn as the shared .sw */
+    input.sw[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 40px; height: 24px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 999px; background: var(--line-strong); }
+    input.sw:checked { background: var(--brand); }
+    input.sw:checked::after { transform: translateX(16px); }
+    input.sw:hover:not(:disabled) { background: var(--line-strong); }
+    input.sw:checked:hover:not(:disabled) { background: var(--brand-hover); }
 
-    /* Get started checklist */
-    .steps { margin: 4px 0 6px; }
-    .steps li { margin: 0; padding: 16px 0 16px 42px; border-top: 1px solid var(--border); }
-    .steps li:first-child { border-top: 0; }
-    .steps li::before { top: 15px; width: 26px; height: 26px; font-size: 13px; }
-    .steps li > b { display: block; font-size: 14px; margin-bottom: 2px; }
-    .steps li > span { color: var(--muted); font-size: 13px; }
-    .steps li a.go { cursor: pointer; font-weight: 600; }
-    .callout { display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--brand-soft); color: var(--text); font-size: 13px; line-height: 1.5; margin: 0 0 18px; }
-    .callout.warnc { background: var(--warn-bg); color: var(--warn-text); }
+    /* secret fields: once saved, shown as dots with Replace, never rendered */
+    .secret { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .secret > input { flex: 1 1 200px; width: auto; min-width: 0; }
+    .secret-mask { flex: 1 1 160px; min-width: 0; min-height: 38px; padding: 8px 12px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); letter-spacing: 0.2em; color: var(--muted); }
+    .secret-note { flex: 1 1 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
 
-    details.guide { margin: 6px 0 4px; }
-    details.guide summary { cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--brand); padding: 6px 0; }
-    details.guide ol { margin: 8px 0 10px; padding-left: 20px; line-height: 1.7; font-size: 13px; color: var(--text); }
-    pre#scriptText { max-height: 170px; overflow: auto; white-space: pre-wrap; background: var(--field); padding: 10px; border-radius: 9px; border: 1px solid var(--border); font-size: 11.5px; margin: 8px 0 0; }
+    /* callouts: icon drawn from the text colour */
+    .callout::before, .callout.warnc::before { content: ""; flex: none; width: 18px; height: 18px; margin-top: 2px; background: var(--brand); -webkit-mask: var(--ico-info) center / contain no-repeat; mask: var(--ico-info) center / contain no-repeat; }
+    .callout.warnc::before { background: currentColor; -webkit-mask-image: var(--ico-warn); mask-image: var(--ico-warn); }
+    :root {
+      --ico-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v6M12 7.5v.5'/%3E%3C/svg%3E");
+      --ico-warn: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M12 3l9.5 17h-19z'/%3E%3Cpath d='M12 10v4M12 17v.5'/%3E%3C/svg%3E");
+    }
+    .callout p { margin: 0; font-size: 13.5px; }
+
+    .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    .btn.sm, button.sm { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+
+    /* code block with Copy */
+    .code { border-radius: 10px; border: 1px solid var(--line); background: var(--sunk); overflow: hidden; }
+    .code > .code-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); }
+    .code pre { margin: 0; padding: 12px; font: 12.5px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 190px; overflow: auto; }
+    details.guide > summary { cursor: pointer; font-weight: 600; color: var(--brand); padding: 4px 0; }
+    details.guide > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+    details.guide[open] > summary { margin-bottom: 8px; }
+    details.guide .steps li { margin: 10px 0; }
+
+    /* chip multi-select (languages) */
+    .picks { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pick { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; margin: 0; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--card); color: var(--text); font-weight: 600; cursor: pointer; user-select: none; }
+    .pick:hover { background: var(--sunk); }
+    .pick input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+    .pick:has(input:checked) { background: var(--tint); border-color: var(--brand); color: var(--tint-ink); }
+    .pick:has(input:checked)::before { content: ""; width: 14px; height: 14px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat; }
+    .pick:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+    /* segmented controls (style.css .seg-ctl) used on this page */
+    .seg-ctl > button { padding: 0 10px; white-space: nowrap; }
+    .seg-ctl.wide { display: flex; }
+
+    /* Get started */
+    .setup { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+    .srow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 44px; }
+    .srow .ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; flex: none; background: var(--sunk); color: var(--muted); border: 1px dashed var(--line-strong); }
+    .srow.done .ic { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-line); }
+    .srow .st { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+    .srow .st .hint { display: inline; }
+    .srow.done .act { display: none; }
+    .checks { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .checks[hidden] { display: none; }
+    .checks li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; }
+    .checks li + li { border-top: 1px solid var(--line); }
+    .checks .ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; flex: none; margin-top: 1px; }
+    .checks .ic.ok { background: var(--ok-bg); color: var(--ok); }
+    .checks .ic.warn { background: var(--amber-bg); color: var(--amber-ink); }
+    .checks .ic.bad { background: var(--rec-bg); color: var(--rec-ink); }
+    .checks .ck { flex: 1; min-width: 0; }
+    .checks .ck b { display: block; }
+    .checks .ck .hint { overflow-wrap: anywhere; }
+
+    /* learned names */
+    .prow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; }
+    .prow + .prow { border-top: 1px solid var(--line); }
+    .prow .who { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 
     /* Usage */
-    table.usage { width: 100%; border-collapse: collapse; font-size: 13px; }
-    table.usage th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 10px 8px; border-bottom: 1px solid var(--border); }
-    table.usage td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    table.usage td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    table.usage tr:last-child td { border-bottom: 0; }
-    .meterbar { height: 6px; border-radius: 4px; background: var(--border); overflow: hidden; min-width: 90px; margin-top: 4px; }
-    .meterbar i { display: block; height: 100%; background: #10b981; border-radius: 4px; }
-    .meterbar i.warn { background: #f59e0b; } .meterbar i.full { background: #ef4444; }
-    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
-    .seg button { border: 0; background: var(--card); padding: 6px 12px; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
-    .seg button.active { background: var(--brand-soft); color: var(--brand); }
-    textarea.mono { width: 100%; max-width: 460px; min-height: 76px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--field); }
+    .page > .card.usage-card { padding: 6px 0 0; gap: 0; }
+    .usage-scroll { overflow-x: auto; }
+    #usageTable { min-width: 820px; }
+    #usageTable th { white-space: nowrap; font-size: 12.5px; vertical-align: bottom; }
+    #usageTable td { vertical-align: top; }
+    #usageTable th:first-child, #usageTable td:first-child { padding-left: 22px; }
+    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 160px; }
+    #usageTable .svc { font-weight: 700; text-transform: capitalize; }
+    #usageTable .hint { margin: 0; }
+    #usageTable .fail { color: var(--amber-ink); }
+    #usageTable .cost { font-weight: 600; white-space: nowrap; }
+    #usageTable td.num, #usageTable th.num { white-space: nowrap; }
+    .usage-left .hint { margin-top: 4px; }
+    .usage-left .hint.low { color: var(--amber-ink); }
+    #usageTotals { display: flex; gap: 8px 24px; flex-wrap: wrap; align-items: baseline; padding: 14px 22px; background: var(--sunk); border-radius: 0 0 14px 14px; }
+    #usageTotals .paid { font-weight: 700; }
+    .tilde { display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 6px; background: var(--tint); color: var(--tint-ink); font-weight: 800; flex: none; }
 
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
-    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 13px; cursor: pointer; user-select: none; }
-    .chip input { appearance: none; -webkit-appearance: none; width: 0; height: 0; margin: 0; padding: 0; border: 0; position: absolute; opacity: 0; max-width: none; }
-    .chip:has(input:checked) { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
-    .chip:has(input:checked)::before { content: "\2713"; font-size: 11px; }
-    .chip:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+    /* Voices */
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 14px; }
+    .tile { padding: 14px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 6px; }
+    .tile span { font-size: 13.5px; color: var(--muted); }
+    .voices { list-style: none; margin: 0; padding: 0; }
+    .voice-row { position: relative; display: flex; gap: 14px; align-items: center; padding: 12px 0; flex-wrap: wrap; }
+    .voice-row + .voice-row { border-top: 1px solid var(--line); }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; flex: none; background: var(--tint); color: var(--tint-ink); }
+    .avatar.anon { background: var(--sunk); color: var(--muted); border: 1px dashed var(--line-strong); }
+    .vwho { flex: 1 1 220px; min-width: 0; }
+    .vwho .vtop { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .vwho .vn { overflow-wrap: anywhere; }
+    .vacts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .menu { position: absolute; right: 0; top: calc(100% - 8px); z-index: 5; width: 230px; padding: 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 12px 30px -10px rgba(20, 22, 40, 0.35); }
+    .menu button { width: 100%; justify-content: flex-start; text-align: left; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; font-weight: 500; }
+    .menu button:hover, .menu button:focus-visible { background: var(--sunk); }
+    .menu button.danger { color: var(--rec-ink); font-weight: 600; }
+    .tri { width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 9px; border-color: transparent transparent transparent currentColor; flex: none; }
+    .prompt { padding: 22px 24px; border-radius: 14px; background: var(--tint); color: var(--tint-ink); font-size: 19px; line-height: 1.8; text-wrap: pretty; overflow-wrap: anywhere; }
+    .recbtn { min-height: 44px; border-color: var(--rec-line); color: var(--rec-ink); }
+    .recbtn::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--rec); }
+    #enrolStop, #enrolPlay, #enrolRec { min-height: 44px; }
+    #enrolPlay::before { content: ""; border-style: solid; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent currentColor; }
+    #enrolStop::before { content: ""; width: 12px; height: 12px; border-radius: 2.5px; background: currentColor; }
+    .levelbox { flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px; }
+    .levelbox .lh { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+    .levelbox .lh .l { display: flex; gap: 8px; align-items: center; }
+    #enrolTime { font-variant-numeric: tabular-nums; font-weight: 600; }
+    #enrolLevel { width: 0; transition: width 0.08s; }
+    .msgbox { padding: 10px 14px; border-radius: 10px; font-size: 13.5px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
+    .msgbox.info { background: var(--info-bg); border-color: var(--info-line); }
+    .msgbox.warn { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber-ink); }
+    .msgbox.bad { background: var(--rec-bg); border-color: var(--rec-line); color: var(--rec-ink); }
+    .msgbox.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+    .ulist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .ulist li { padding: 14px; border-radius: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+    .ulist .ut { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .ulist .name-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ulist .name-row input { flex: 1 1 200px; width: auto; }
 
-    /* Save bar */
-    .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--border); }
-    .savebar .in { display: flex; align-items: center; gap: 14px; max-width: 1040px; margin: 0 auto; padding: 12px 30px 12px calc(232px + 30px); }
-    .savebar .primary { padding: 9px 22px; border-radius: 9px; font-weight: 700; font-size: 13.5px; background: var(--brand); border-color: var(--brand); color: #fff; }
-    .savebar .primary:hover { filter: brightness(1.08); }
-    #msg { font-size: 13px; color: var(--muted); }
+    /* ---- sticky save bar ---- */
+    .savebar { position: sticky; bottom: 0; z-index: 10; margin: auto -32px 0; padding: 14px 32px; background: var(--card); border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .content > .page + .savebar, .content > .page.active ~ .savebar { margin-top: auto; }
+    .page.active { margin-bottom: 28px; }
+    .savebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
+    .savebar.dirty .dot { background: var(--amber); }
+    .savebar.saved .dot { background: var(--ok); }
+    .savebar.bad .dot { background: var(--rec); }
+    #msg { flex: 1 1 160px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+    .savebar:not(.dirty):not(.saved):not(.bad) #msg { font-weight: 400; color: var(--muted); }
+    .savebar.saved #msg { color: var(--ok); }
+    .savebar.bad #msg { color: var(--rec-ink); }
 
     @media (max-width: 760px) {
-      .shell { grid-template-columns: 1fr; }
-      .side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; padding: 14px; align-items: center; }
-      .logo { padding: 0 8px 0 0; }
-      .nav { flex-direction: row; flex-wrap: wrap; } .nav button { width: auto; } .side .foot { display: none; }
-      .content { padding: 18px 16px 110px; }
-      .savebar .in { padding: 12px 16px; }
+      .shell { flex-direction: column; align-items: stretch; }
+      .side { position: static; flex: none; width: 100%; height: auto; overflow: visible; padding: 14px 16px 6px; }
+      .nav { flex-direction: row; flex-wrap: wrap; }
+      .nav button { width: auto; }
+      .side .foot { flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
+      .content { min-height: 0; padding: 20px 16px 0; }
+      .savebar { margin: auto -16px 0; padding: 12px 16px; }
+      .page > header h1 { font-size: 24px; }
+      .page > .card, .page > .grid2 > .card { padding: 16px; }
+      .prompt { font-size: 18px; padding: 16px; }
+      .menu { right: 0; }
     }
   </style>
 </head>
 <body>
 <div class="shell">
   <aside class="side">
-    <div class="logo"><img src="icons/icon48.png" alt=""><div><b>Debrief</b><span>Settings</span></div></div>
-    <nav class="nav" id="nav">
-      <button data-tab="start" class="active"><span class="num">1</span>Get started</button>
-      <button data-tab="general"><span class="num">2</span>General</button>
-      <button data-tab="speech"><span class="num">3</span>Speech to text</button>
-      <button data-tab="minutes"><span class="num">4</span>Minutes</button>
-      <button data-tab="email"><span class="num">5</span>Email</button>
-      <button data-tab="voices"><span class="num">6</span>Voices</button>
-      <button data-tab="usage"><span class="num">7</span>Usage</button>
+    <div class="brand"><img src="icons/icon48.png" alt=""><strong>Debrief settings</strong></div>
+    <nav class="nav" id="nav" aria-label="Settings">
+      <button type="button" data-tab="start" class="active" aria-current="page"><span class="n">1</span>Get started</button>
+      <button type="button" data-tab="general"><span class="n">2</span>General</button>
+      <button type="button" data-tab="speech"><span class="n">3</span>Speech to text</button>
+      <button type="button" data-tab="minutes"><span class="n">4</span>Minutes</button>
+      <button type="button" data-tab="email"><span class="n">5</span>Email</button>
+      <button type="button" data-tab="voices"><span class="n">6</span>Voices</button>
+      <button type="button" data-tab="usage"><span class="n">7</span>Usage</button>
     </nav>
-    <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a><br><a href="https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md" target="_blank">Setup guide</a></div>
+    <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a><a href="https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md" target="_blank" rel="noopener">Setup guide</a></div>
   </aside>
 
   <main class="content">
 
     <!-- ============ Get started ============ -->
     <section class="page active" id="page-start">
-      <h1>Get started</h1>
-      <p class="lede">Debrief records a Google Meet tab, transcribes it, and writes the minutes. Set it up once in a few minutes. Ticks appear as each step is done.</p>
+      <header><h1>Get started</h1><p class="lede" id="startLede">Debrief records a Google Meet tab, transcribes it, and writes the minutes. Four things make it work.</p></header>
 
-      <div class="card">
-        <ol class="steps" style="list-style:none;padding:0">
-          <li id="g1"><b>Add a Gemini API key</b><span>Free, no card needed. Create one at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>, then paste it below.</span></li>
-          <li id="g2"><b>Allow your microphone</b><span>Optional. Lets Debrief include your own voice. <a class="go" data-go="general">Open General</a></span></li>
-          <li id="g3"><b>Set your name and language</b><span>Tags your lines and tunes transcription. <a class="go" data-go="general">Open General</a></span></li>
-          <li id="g4"><b>Email the minutes to yourself</b><span>Optional. Takes about two minutes. <a class="go" data-go="email">Open Email</a></span></li>
+      <section class="card" aria-labelledby="hSetup">
+        <h2 id="hSetup" class="lbl">Your setup</h2>
+        <ol class="setup">
+          <li id="g1" class="srow"><span class="ic" aria-hidden="true">1</span><span class="st"><span class="sr-only" data-state>Not done. </span><span data-text>Add your Gemini key</span></span><button type="button" class="btn act" id="g1go">Add key</button></li>
+          <li id="g2" class="srow"><span class="ic" aria-hidden="true">2</span><span class="st"><span class="sr-only" data-state>Not done. </span><span data-text>Allow your microphone</span> <span class="hint" data-opt>optional</span></span><button type="button" class="btn act" data-go="general">Open General</button></li>
+          <li id="g3" class="srow"><span class="ic" aria-hidden="true">3</span><span class="st"><span class="sr-only" data-state>Not done. </span><span data-text>Set your name and languages</span></span><button type="button" class="btn act" data-go="general">Open General</button></li>
+          <li id="g4" class="srow"><span class="ic" aria-hidden="true">4</span><span class="st"><span class="sr-only" data-state>Not done. </span><span data-text>Email the minutes to yourself</span> <span class="hint" data-opt>optional</span></span><button type="button" class="btn act" data-go="email">Set up email</button></li>
         </ol>
-      </div>
+      </section>
 
-      <div class="card" id="geminiSection">
-        <h2>Google Gemini</h2>
-        <div class="row2">
-          <label for="geminiKey">API key</label>
-          <input id="geminiKey" type="password" autocomplete="off" placeholder="Paste your key">
-          <p class="hint">Used for transcription and for writing the minutes. Only needed if you choose Gemini on the next pages (the default).</p>
-        </div>
-        <div class="row2">
-          <label for="geminiKey2">Backup key (optional)</label>
-          <input id="geminiKey2" type="password" autocomplete="off" placeholder="A key from a different Google Cloud project">
-          <p class="hint">Used automatically when the main key runs out. Google counts limits per project, not per key, so this only helps if the backup comes from a different project.</p>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Check my setup</h2>
-        <div class="row2">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-            <button class="btn" id="checkup">Check my setup</button>
-            <button class="btn" id="checkupCopy" hidden>Copy the result</button>
-            <span id="checkupMsg" class="hint" style="margin:0"></span>
+      <section class="card" id="geminiSection" aria-labelledby="hGem">
+        <h2 id="hGem" class="lbl">Google Gemini</h2>
+        <div class="fgrid">
+          <div class="fld">
+            <label for="geminiKey">Main key</label>
+            <div class="secret"><input id="geminiKey" type="password" autocomplete="new-password" placeholder="Paste your key" spellcheck="false"></div>
+            <p class="hint">Create one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. No card needed. Used for transcription and for writing the minutes when you choose Gemini (the default).</p>
           </div>
-          <pre id="checkupOut" style="margin:12px 0 0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Consolas,monospace;max-width:760px" hidden></pre>
-          <p class="hint">Lists what is ready and what is not: keys, today's quota, microphone, the mute button, email relay, voices and what happened in your last meeting. Nothing secret is shown, so it is safe to paste when asking for help.</p>
+          <div class="fld">
+            <label for="geminiKey2">Backup key <span class="opt">optional</span></label>
+            <div class="secret"><input id="geminiKey2" type="password" autocomplete="new-password" placeholder="A key from a second Google project" spellcheck="false"></div>
+            <p class="hint">Used automatically when the main key hits its daily limit.</p>
+          </div>
         </div>
-      </div>
+        <div class="callout"><p>Limits are counted per Google project, not per key. A backup key only helps if it comes from a different project.</p></div>
+        <div class="callout warnc"><p><strong>Google's free tier may use your audio and text to improve its products</strong>, and reviewers may read them. For confidential meetings, use a paid key (billing on) or a local model in Speech to text and Minutes.</p></div>
+        <p class="hint">Keys stay in this browser profile. Audio and transcripts go directly from Chrome to the providers you choose; there is no Debrief server.</p>
+      </section>
 
-      <div class="callout warnc">On Google's free tier, audio and transcripts may be used to improve Google's products and read by reviewers. For confidential meetings, enable billing on the key or choose another provider.</div>
-      <p class="hint" style="color:var(--muted);font-size:12.5px">Keys stay in this browser profile. Audio and transcripts go directly from Chrome to the providers you choose; there is no Debrief server.</p>
+      <section class="card" aria-labelledby="hCheck">
+        <div class="btnrow" style="justify-content:space-between">
+          <div><h2 id="hCheck" class="lbl">Check my setup</h2><p class="hint" style="margin-top:4px">Lists what is ready and what is not: keys, today's quota, microphone, the mute button, email relay, voices and your last meeting.</p></div>
+          <div class="btnrow"><button type="button" class="btn" id="checkupCopy" hidden>Copy the result</button><button type="button" class="btn primary" id="checkup">Check my setup</button></div>
+        </div>
+        <ul id="checkupOut" class="checks" hidden></ul>
+        <p id="checkupMsg" class="hint" role="status">Nothing secret is shown, so the result is safe to paste into a chat or email when you ask for help.</p>
+      </section>
     </section>
 
     <!-- ============ General ============ -->
     <section class="page" id="page-general">
-      <h1>General</h1>
-      <p class="lede">Who you are, how your microphone is handled, and which languages to expect.</p>
+      <header><h1>General</h1><p class="lede">Who you are, how your microphone is handled, and which languages to expect.</p></header>
 
-      <div class="card">
-        <h2>Profile</h2>
-        <div class="row2">
+      <section class="card" aria-labelledby="hProfile">
+        <h2 id="hProfile" class="lbl">Profile</h2>
+        <div class="fld">
           <label for="myName">Your name</label>
-          <input id="myName" placeholder="e.g. Shrawin Sisodiya">
+          <input id="myName" placeholder="e.g. Shrawin Sisodiya" autocomplete="name">
           <p class="hint">Lines from your microphone are labelled with this name in the transcript.</p>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Microphone</h2>
-        <label class="toggle"><span class="t"><b>Include my microphone</b><span>Records your own voice as well as the other participants.</span></span><input type="checkbox" id="captureMic"></label>
-        <label class="toggle"><span class="t"><b>Pause my mic while muted in Meet</b><span>When you mute yourself in Google Meet, Debrief stops transcribing your side as well.</span></span><input type="checkbox" id="followMeetMute"></label>
-        <label class="toggle"><span class="t"><b>Show a recording pill on the Meet page</b><span>A small draggable control with the timer, a mic switch and alerts. Off by default so nothing covers the call.</span></span><input type="checkbox" id="pillOnPage"></label>
-        <div class="row2">
-          <span class="lab">Browser permission</span>
-          <div class="btnrow" style="margin-top:0"><button id="grantMic" class="btn">Allow microphone</button><span id="micStatus" class="status"></span></div>
-          <p class="hint">Chrome asks once. Without it, only the other participants are recorded.</p>
+      <section class="card" aria-labelledby="hMic">
+        <h2 id="hMic" class="lbl">Microphone</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="captureMic">Include my microphone</label><p class="hint" id="captureMic-d">Records your own voice as well as the other participants.</p></div><input type="checkbox" class="sw" role="switch" id="captureMic" aria-describedby="captureMic-d"></div>
+          <div class="trow"><div class="tx"><label for="followMeetMute">Pause my mic while muted in Meet</label><p class="hint" id="followMeetMute-d">When you mute yourself in Google Meet, Debrief stops transcribing your side as well.</p></div><input type="checkbox" class="sw" role="switch" id="followMeetMute" aria-describedby="followMeetMute-d"></div>
+          <div class="trow"><div class="tx"><label for="pillOnPage">Show a recording pill on the Meet page</label><p class="hint" id="pillOnPage-d">A small draggable control with the timer, a mic switch and alerts. Off by default so nothing covers the call.</p></div><input type="checkbox" class="sw" role="switch" id="pillOnPage" aria-describedby="pillOnPage-d"></div>
+          <div class="fld">
+            <span class="flabel">Browser permission</span>
+            <div class="btnrow"><button type="button" id="grantMic" class="btn">Allow microphone</button><span id="micStatus" class="status" role="status"></span></div>
+            <p class="hint">Chrome asks once. Without it, only the other participants are recorded.</p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Meeting pages</h2>
-        <div class="row2">
-          <label for="meetCaptions">Speaker names from Meet</label>
-          <select id="meetCaptions">
-            <option value="read">Use Meet's captions when I have them on</option>
-            <option value="auto">Turn captions on for me while recording</option>
-            <option value="off">Don't read captions</option>
-          </select>
-          <p class="hint">Meet's live captions say who is speaking. Debrief uses that to put names to the minutes (your own transcript text is still used). Turning captions on shows subtitles on your screen. Who joined and left is read from the participant tiles either way.</p>
+      <section class="card" aria-labelledby="hMeet">
+        <h2 id="hMeet" class="lbl">Meeting pages</h2>
+        <div class="rows">
+          <div class="fld">
+            <label for="meetCaptions">Speaker names from Meet</label>
+            <select id="meetCaptions">
+              <option value="read">Use Meet's captions when I have them on</option>
+              <option value="auto">Turn captions on for me while recording</option>
+              <option value="off">Don't read captions</option>
+            </select>
+            <p class="hint">Meet's live captions say who is speaking. Debrief uses that to put names to the minutes (your own transcript text is still used). Turning captions on shows subtitles on your screen. Who joined and left is read from the participant tiles either way.</p>
+          </div>
+          <div class="trow"><div class="tx"><label for="otherSites">Work with other meeting apps</label><p class="hint" id="otherSites-d">Zoom (in the browser), Microsoft Teams, Webex, Whereby, Jitsi, GoTo Meeting, BlueJeans, Amazon Chime, Zoho Meeting and Skype for Web. Debrief's toolbar icon glows amber during a call as a reminder to record, follows your mute button and stops when the call ends. Recording itself works on any tab. These apps use generic detection that may not fit every layout; "Check page detection" in the popup shows what it can read. The installed desktop apps cannot be recorded by a browser extension.</p></div><input type="checkbox" class="sw" role="switch" id="otherSites" aria-describedby="otherSites-d"></div>
         </div>
-        <label class="toggle"><span class="t"><b>Work with other meeting apps</b><span>Zoom (in the browser), Microsoft Teams, Webex, Whereby, Jitsi, GoTo Meeting, BlueJeans, Amazon Chime, Zoho Meeting and Skype for Web. Debrief's toolbar icon glows amber during a call as a reminder to record, follows your mute button and stops when the call ends. Recording itself works on any tab. These apps use generic detection that may not fit every layout; "Check page detection" in the popup shows what it can read. The installed desktop apps cannot be recorded by a browser extension.</span></span><input type="checkbox" id="otherSites"></label>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Recording</h2>
-        <label class="toggle"><span class="t"><b>Stop automatically when the meeting ends</b><span>Detects Google Meet's "you left" and "meeting ended" screens, and leaving the call page. The minutes are then written (and emailed) without you doing anything.</span></span><input type="checkbox" id="autoStop"></label>
-        <div class="row2">
-          <label for="autoStopQuietMin">Also stop after silence</label>
-          <select id="autoStopQuietMin">
-            <option value="0">Never</option>
-            <option value="5">After 5 quiet minutes</option>
-            <option value="10">After 10 quiet minutes</option>
-            <option value="15">After 15 quiet minutes</option>
-            <option value="30">After 30 quiet minutes</option>
-          </select>
-          <p class="hint">A safety net for when nobody (including you) has made a sound for that long, for example if Meet never shows an end screen.</p>
+      <section class="card" aria-labelledby="hRec">
+        <h2 id="hRec" class="lbl">Recording</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="autoStop">Stop automatically when the meeting ends</label><p class="hint" id="autoStop-d">Detects Google Meet's "you left" and "meeting ended" screens, and leaving the call page. The minutes are then written (and emailed) without you doing anything.</p></div><input type="checkbox" class="sw" role="switch" id="autoStop" aria-describedby="autoStop-d"></div>
+          <div class="fld">
+            <label for="autoStopQuietMin">Also stop after silence</label>
+            <select id="autoStopQuietMin">
+              <option value="0">Never</option>
+              <option value="5">After 5 quiet minutes</option>
+              <option value="10">After 10 quiet minutes</option>
+              <option value="15">After 15 quiet minutes</option>
+              <option value="30">After 30 quiet minutes</option>
+            </select>
+            <p class="hint">A safety net for when nobody (including you) has made a sound for that long, for example if Meet never shows an end screen.</p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Names and terms</h2>
-        <div class="row2">
+      <section class="card" aria-labelledby="hDict">
+        <h2 id="hDict" class="lbl">Names and terms</h2>
+        <div class="fld">
           <label for="dictionary">Your dictionary</label>
-          <textarea id="dictionary" class="mono" style="max-width:none;min-height:130px" placeholder="Amal | Aman, Amaal&#10;Unified Registry&#10;DSM"></textarea>
-          <p class="hint" style="margin-top:8px"><b>Debrief also learns on its own.</b> After each meeting it remembers the names it saw (people in the call, the invite, the attendee list) as spelling hints, and it notices likely mishearings (a word that keeps appearing one letter off a real attendee's name) and offers them below.</p>
-          <p class="hint">One per line. <code>Right spelling | misheard as, another</code> fixes recurring mistakes (Amal | Aman). A plain line is a term to spell exactly. Used as a hint to the speech model, as a find-and-replace on transcripts, and by the minutes writer. If you list who was in a meeting on the minutes page, an alias that is really one of those people is left alone.</p>
+          <textarea id="dictionary" class="mono" style="min-height:130px" placeholder="Amal | Aman, Amaal&#10;Unified Registry&#10;DSM" aria-describedby="dictionary-d"></textarea>
+          <p class="hint" id="dictionary-d">One per line. <code>Right spelling | misheard as, another</code> fixes recurring mistakes (Amal | Aman). A plain line is a term to spell exactly. Used as a hint to the speech model, as a find-and-replace on transcripts, and by the minutes writer. If you list who was in a meeting on the minutes page, an alias that is really one of those people is left alone.</p>
+          <p class="hint"><b>Debrief also learns on its own.</b> After each meeting it remembers the names it saw (people in the call, the invite, the attendee list) as spelling hints, and it notices likely mishearings (a word that keeps appearing one letter off a real attendee's name) and offers them below.</p>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Learned automatically</h2>
-        <div class="row2" id="pendingBox">
-          <span class="lab">Suggested fixes</span>
-          <div id="pendingList"></div>
-          <p class="hint" id="pendingEmpty">Nothing to review yet. Suggestions appear after meetings where a name was heard wrongly more than once.</p>
+      <section class="card" aria-labelledby="hLearn">
+        <h2 id="hLearn" class="lbl">Learned automatically</h2>
+        <div class="rows">
+          <div class="fld" id="pendingBox">
+            <span class="flabel">Suggested fixes</span>
+            <div id="pendingList"></div>
+            <p class="hint" id="pendingEmpty">Nothing to review yet. Suggestions appear after meetings where a name was heard wrongly more than once.</p>
+          </div>
+          <div class="trow"><div class="tx"><label for="dictAutoAlias">Accept clear-cut fixes automatically</label><p class="hint" id="dictAutoAlias-d">A suggestion seen three or more times is added to your dictionary without asking. Off by default, because a wrong rule would change future transcripts.</p></div><input type="checkbox" class="sw" role="switch" id="dictAutoAlias" aria-describedby="dictAutoAlias-d"></div>
+          <div class="fld">
+            <span class="flabel">Names Debrief has learned</span>
+            <p class="hint" id="learnedNames"></p>
+            <div><button type="button" id="clearLearned" class="btn">Forget learned names</button></div>
+          </div>
         </div>
-        <label class="toggle"><span class="t"><b>Accept clear-cut fixes automatically</b><span>A suggestion seen three or more times is added to your dictionary without asking. Off by default, because a wrong rule would change future transcripts.</span></span><input type="checkbox" id="dictAutoAlias"></label>
-        <div class="row2">
-          <span class="lab">Names Debrief has learned</span>
-          <p class="hint" id="learnedNames" style="margin:4px 0 8px"></p>
-          <button id="clearLearned" class="btn">Forget learned names</button>
-        </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Language</h2>
-        <div class="row2">
-          <span class="lab">Languages spoken in your meetings</span>
-          <div id="langChips" class="chips"></div>
-          <p class="hint" id="langHint"></p>
+      <section class="card" aria-labelledby="hLang">
+        <h2 id="hLang" class="lbl">Language</h2>
+        <div class="stack">
+          <div class="fld">
+            <span class="flabel" id="langLbl">Languages spoken in your meetings</span>
+            <div id="langChips" class="picks" role="group" aria-labelledby="langLbl"></div>
+            <p class="hint" id="langHint"></p>
+          </div>
+          <div class="fld">
+            <label for="momLanguage">Language of the minutes</label>
+            <select id="momLanguage"></select>
+          </div>
         </div>
-        <div class="row2">
-          <label for="momLanguage">Language of the minutes</label>
-          <select id="momLanguage"></select>
-        </div>
-      </div>
+      </section>
     </section>
 
     <!-- ============ Speech to text ============ -->
     <section class="page" id="page-speech">
-      <h1>Speech to text</h1>
-      <p class="lede">The service that turns the meeting audio into text.</p>
+      <header><h1>Speech to text</h1><p class="lede">The service that turns the meeting audio into text.</p></header>
 
-      <div class="card">
-        <h2>Provider</h2>
-        <div class="row2">
+      <section class="card" aria-labelledby="hStt">
+        <h2 id="hStt" class="lbl">Provider</h2>
+        <div class="fld">
           <label for="sttProvider">Service</label>
           <select id="sttProvider">
             <option value="gemini">Google Gemini (free tier)</option>
@@ -288,18 +402,29 @@
           </select>
         </div>
 
-        <div data-stt="gemini">
-          <div class="row2">
+        <div class="stack" data-stt="gemini">
+          <div class="fld">
             <label for="sttGeminiModel">Model</label>
             <input id="sttGeminiModel" placeholder="gemini-3.5-transcribe">
             <p class="hint">gemini-3.5-transcribe handles Hindi and English switching. If your key has no quota for it, Debrief falls back to general Gemini models automatically. The key is set on the Get started page.</p>
           </div>
         </div>
 
-        <div data-stt="sarvam">
-          <div class="row2"><label for="sarvamKey">API key</label><input id="sarvamKey" type="password" autocomplete="off"><p class="hint">From dashboard.sarvam.ai.</p></div>
-          <div class="row2"><label for="sarvamModel">Model</label><input id="sarvamModel"></div>
-          <div class="row2">
+        <div class="stack" data-stt="sarvam">
+          <div class="fld"><label for="sarvamKey">API key</label><div class="secret"><input id="sarvamKey" type="password" autocomplete="new-password" spellcheck="false"></div><p class="hint">From dashboard.sarvam.ai.</p></div>
+          <div class="fgrid">
+            <div class="fld"><label for="sarvamModel">Model</label><input id="sarvamModel"></div>
+            <div class="fld">
+              <label for="sarvamLanguage">Spoken language</label>
+              <select id="sarvamLanguage">
+                <option value="unknown">Detect automatically</option>
+                <option value="hi-IN">Hindi (hi-IN)</option>
+                <option value="en-IN">English (en-IN)</option>
+                <option value="ml-IN">Malayalam (ml-IN)</option>
+              </select>
+            </div>
+          </div>
+          <div class="fld">
             <label for="sarvamMode">Output style</label>
             <select id="sarvamMode">
               <option value="codemix">Code-mix: Hindi in Devanagari, English words in English</option>
@@ -307,44 +432,36 @@
               <option value="translate">Translate: everything into English</option>
             </select>
           </div>
-          <div class="row2">
-            <label for="sarvamLanguage">Spoken language</label>
-            <select id="sarvamLanguage">
-              <option value="unknown">Detect automatically</option>
-              <option value="hi-IN">Hindi (hi-IN)</option>
-              <option value="en-IN">English (en-IN)</option>
-              <option value="ml-IN">Malayalam (ml-IN)</option>
-            </select>
-          </div>
         </div>
 
-        <div data-stt="deepgram">
-          <div class="row2"><label for="deepgramKey">API key</label><input id="deepgramKey" type="password" autocomplete="off"></div>
-          <div class="row2"><label for="deepgramModel">Model</label><input id="deepgramModel"><p class="hint">Sent with <code>language=multi</code> for Hindi and English switching.</p></div>
+        <div class="stack" data-stt="deepgram">
+          <div class="fld"><label for="deepgramKey">API key</label><div class="secret"><input id="deepgramKey" type="password" autocomplete="new-password" spellcheck="false"></div></div>
+          <div class="fld"><label for="deepgramModel">Model</label><input id="deepgramModel"><p class="hint">Sent with <code>language=multi</code> for Hindi and English switching.</p></div>
         </div>
 
-        <div data-stt="openai">
-          <div class="row2">
-            <span class="lab">Run it on this computer</span>
-            <div class="btnrow" style="margin-top:0"><button id="useWhisper" class="btn">Use a local Whisper server</button><button id="testWhisper" class="btn">Test it</button><span id="whisperStatus" class="status"></span></div>
-            <p class="hint">Any server that offers <code>/v1/audio/transcriptions</code> works (faster-whisper based servers, whisper.cpp server, LocalAI). Good for English and Hindi; for Malayalam use a Malayalam fine-tuned model. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank">Setup guide</a>.</p>
+        <div class="stack" data-stt="openai">
+          <div class="localbox">
+            <span class="flabel lbl-l">Run it on this computer</span>
+            <div class="btnrow"><button type="button" id="useWhisper" class="btn">Use a local Whisper server</button><button type="button" id="testWhisper" class="btn">Test it</button><span id="whisperStatus" class="status" role="status"></span></div>
+            <p class="hint">Any server that offers <code>/v1/audio/transcriptions</code> works (faster-whisper based servers, whisper.cpp server, LocalAI). Good for English and Hindi; for Malayalam use a Malayalam fine-tuned model. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank" rel="noopener">Setup guide</a>.</p>
           </div>
-          <div class="row2"><label for="sttBase">Base URL</label><input id="sttBase" placeholder="https://api.groq.com/openai/v1"><p class="hint">Groq: https://api.groq.com/openai/v1 · OpenAI: https://api.openai.com/v1 · local: http://localhost:8000/v1</p></div>
-          <div class="row2"><label for="sttKey">API key</label><input id="sttKey" type="password" autocomplete="off" placeholder="Leave blank for local servers"></div>
-          <div class="row2"><label for="sttModel">Model</label><input id="sttModel" placeholder="whisper-large-v3"></div>
-          <div class="row2"><label for="sttPrompt">Hint prompt</label><input id="sttPrompt"></div>
+          <div class="fld"><label for="sttBase">Base URL</label><input id="sttBase" placeholder="https://api.groq.com/openai/v1" autocomplete="off" spellcheck="false"><p class="hint">Groq: https://api.groq.com/openai/v1 · OpenAI: https://api.openai.com/v1 · local: http://localhost:8000/v1</p></div>
+          <div class="fgrid">
+            <div class="fld"><label for="sttKey">API key</label><div class="secret"><input id="sttKey" type="password" autocomplete="new-password" placeholder="Leave blank for local servers" spellcheck="false"></div></div>
+            <div class="fld"><label for="sttModel">Model</label><input id="sttModel" placeholder="whisper-large-v3"></div>
+          </div>
+          <div class="fld"><label for="sttPrompt">Hint prompt</label><input id="sttPrompt"></div>
         </div>
-      </div>
+      </section>
     </section>
 
     <!-- ============ Minutes ============ -->
     <section class="page" id="page-minutes">
-      <h1>Minutes</h1>
-      <p class="lede">The model that reads the transcript and writes the minutes of the meeting.</p>
+      <header><h1>Minutes</h1><p class="lede">The model that reads the transcript and writes the minutes of the meeting.</p></header>
 
-      <div class="card">
-        <h2>Provider</h2>
-        <div class="row2">
+      <section class="card" aria-labelledby="hLlm">
+        <h2 id="hLlm" class="lbl">Provider</h2>
+        <div class="fld">
           <label for="llmProvider">Service</label>
           <select id="llmProvider">
             <option value="gemini">Google Gemini (free tier)</option>
@@ -353,9 +470,9 @@
           </select>
         </div>
 
-        <div data-llm="anthropic">
-          <div class="row2"><label for="anthropicKey">API key</label><input id="anthropicKey" type="password" autocomplete="off"><p class="hint">From console.anthropic.com.</p></div>
-          <div class="row2">
+        <div class="stack" data-llm="anthropic">
+          <div class="fld"><label for="anthropicKey">API key</label><div class="secret"><input id="anthropicKey" type="password" autocomplete="new-password" spellcheck="false"></div><p class="hint">From console.anthropic.com.</p></div>
+          <div class="fld">
             <label for="anthropicModel">Model</label>
             <select id="anthropicModel">
               <option value="claude-opus-5-5">Claude Opus 5.5 (best quality)</option>
@@ -365,260 +482,254 @@
           </div>
         </div>
 
-        <div data-llm="openai">
-          <div class="row2">
-            <span class="lab">Run it on this computer</span>
-            <div class="btnrow" style="margin-top:0"><button id="useOllama" class="btn">Use Ollama on this PC</button><button id="findOllama" class="btn">Find my installed models</button></div>
-            <div id="ollamaPick" class="hidden" style="margin-top:8px"><select id="ollamaModels"></select></div>
-            <p class="hint" id="localStatus"></p>
-            <p class="hint">Nothing leaves your computer, and there are no quotas. Quality is lower than Gemini or Claude on messy Hindi, Hinglish or Malayalam, and a CPU-only PC takes a few minutes per meeting. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank">Setup guide for local models</a>.</p>
+        <div class="stack" data-llm="openai">
+          <div class="localbox">
+            <span class="flabel lbl-l">Run it on this computer</span>
+            <div class="btnrow"><button type="button" id="useOllama" class="btn">Use Ollama on this PC</button><button type="button" id="findOllama" class="btn">Find my installed models</button></div>
+            <div id="ollamaPick" class="hidden"><label for="ollamaModels" class="sr-only">Installed models</label><select id="ollamaModels"></select></div>
+            <p class="hint" id="localStatus" role="status"></p>
+            <p class="hint">Nothing leaves your computer, and there are no quotas. Quality is lower than Gemini or Claude on messy Hindi, Hinglish or Malayalam, and a CPU-only PC takes a few minutes per meeting. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank" rel="noopener">Setup guide for local models</a>.</p>
           </div>
-          <div class="row2"><label for="oaBase">Base URL</label><input id="oaBase" placeholder="https://api.openai.com/v1"><p class="hint">Ollama: http://localhost:11434/v1 · OpenRouter: https://openrouter.ai/api/v1 · Groq: https://api.groq.com/openai/v1</p></div>
-          <div class="row2"><label for="oaKey">API key</label><input id="oaKey" type="password" autocomplete="off" placeholder="Leave blank for Ollama"></div>
-          <div class="row2"><label for="oaModel">Model</label><input id="oaModel" placeholder="The model id exactly as the provider names it"></div>
+          <div class="fld"><label for="oaBase">Base URL</label><input id="oaBase" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false"><p class="hint">Ollama: http://localhost:11434/v1 · OpenRouter: https://openrouter.ai/api/v1 · Groq: https://api.groq.com/openai/v1</p></div>
+          <div class="fgrid">
+            <div class="fld"><label for="oaKey">API key</label><div class="secret"><input id="oaKey" type="password" autocomplete="new-password" placeholder="Leave blank for Ollama" spellcheck="false"></div></div>
+            <div class="fld"><label for="oaModel">Model</label><input id="oaModel" placeholder="The model id exactly as the provider names it"></div>
+          </div>
         </div>
 
-        <div data-llm="gemini">
-          <div class="row2">
+        <div class="stack" data-llm="gemini">
+          <div class="fld">
             <label for="geminiModel">Model</label>
             <input id="geminiModel" placeholder="gemini-3.8-flash">
             <p class="hint">Uses the Gemini key from the Get started page. If this model's daily quota runs out, Debrief tries other Gemini models.</p>
           </div>
         </div>
 
-        <div class="row2">
-          <label for="minutesMode">How carefully to write the minutes</label>
-          <select id="minutesMode">
+        <div class="btnrow"><button type="button" id="testLlm" class="btn">Test connection</button><span id="llmStatus" class="status" role="status"></span></div>
+      </section>
+
+      <section class="card" aria-labelledby="hCare">
+        <h2 id="hCare" class="lbl">How carefully to write</h2>
+        <div class="fld">
+          <div class="seg-ctl" role="radiogroup" aria-label="How carefully to write the minutes" data-seg-for="minutesMode">
+            <button type="button" role="radio" data-v="thorough">Thorough</button>
+            <button type="button" role="radio" data-v="quick">Quick</button>
+          </div>
+          <select id="minutesMode" hidden aria-hidden="true" tabindex="-1">
             <option value="thorough">Thorough: find every item first, write, then check nothing was missed</option>
             <option value="quick">Quick: one pass</option>
           </select>
+          <p class="hint" id="minutesModeNote"></p>
           <p class="hint">Thorough uses 3 or more model requests per meeting (more for long ones), so it costs more of a free quota. Short meetings always use one pass.</p>
         </div>
-        <div class="row2">
-          <div class="btnrow" style="margin-top:0"><button id="testLlm" class="btn">Test connection</button><span id="llmStatus" class="status"></span></div>
-        </div>
-      </div>
+      </section>
+      <!-- Extension point: add further Minutes cards here, as <section class="card"> with an <h2 class="lbl">. -->
     </section>
 
     <!-- ============ Email ============ -->
     <section class="page" id="page-email">
-      <h1>Email</h1>
-      <p class="lede">Get the minutes in your inbox the moment they are written. The email is sent from your own Google account through a small script you control. No Debrief server is involved.</p>
+      <header><h1>Email</h1><p class="lede">Get the minutes in your inbox the moment they are written. The email is sent from your own Google account through a small script you control. No Debrief server is involved.</p></header>
 
-      <div class="card">
-        <h2>Connect</h2>
-        <div class="row2">
-          <details class="guide">
-            <summary>How to set it up (2 minutes)</summary>
-            <ol>
-              <li>Press <b>Copy the script</b> below.</li>
-              <li>Open <a href="https://script.google.com/home/start" target="_blank">script.google.com</a> and click <b>New project</b>. Select all the text there, paste, and press <b>Save</b>.</li>
-              <li>Click <b>Deploy → New deployment</b>, choose <b>Web app</b>, set <b>Who has access</b> to <b>Anyone</b>, and click <b>Deploy</b>. Allow access when Google asks.</li>
-              <li>Copy the <b>Web app URL</b>, paste it into the box below and press <b>Send test email</b>.</li>
-            </ol>
-            <div class="btnrow" style="margin-top:0"><button id="copyScript" class="btn">Copy the script</button><span id="copyMsg" class="status"></span></div>
-            <pre id="scriptText"></pre>
-          </details>
-        </div>
-        <div class="row2">
+      <section class="card" aria-labelledby="hConn">
+        <h2 id="hConn" class="lbl">Connect</h2>
+        <details class="guide">
+          <summary>How to set it up (2 minutes)</summary>
+          <ol class="steps">
+            <li>Press <b>Copy</b> on the script below.</li>
+            <li>Open <a href="https://script.google.com/home/start" target="_blank" rel="noopener">script.google.com</a> and click <b>New project</b>. Select all the text there, paste, and press <b>Save</b>.</li>
+            <li>Click <b>Deploy → New deployment</b>, choose <b>Web app</b>, set <b>Who has access</b> to <b>Anyone</b>, and click <b>Deploy</b>. Allow access when Google asks.</li>
+            <li>Copy the <b>Web app URL</b>, paste it into the box below and press <b>Send test email</b>.</li>
+          </ol>
+          <div class="code">
+            <div class="code-h"><span class="hint">Code.gs</span><span class="btnrow"><span id="copyMsg" class="status" role="status"></span><button type="button" id="copyScript" class="btn ghost sm">Copy</button></span></div>
+            <pre id="scriptText" tabindex="0" aria-label="Relay script"></pre>
+          </div>
+        </details>
+        <div class="fld">
           <label for="emailWebhook">Web app URL</label>
-          <input id="emailWebhook" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" style="max-width:none">
+          <input id="emailWebhook" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
         </div>
-        <div class="row2">
+        <div class="fld">
           <label for="emailTo">Send to</label>
-          <input id="emailTo" placeholder="Leave blank to email yourself">
+          <input id="emailTo" placeholder="Leave blank to email yourself" autocomplete="off">
           <p class="hint">The script only ever sends to your own address, plus any you list in its <code>ALLOWED</code> setting.</p>
         </div>
-        <div class="row2">
-          <div class="btnrow" style="margin-top:0"><button id="testMail" class="btn">Send test email</button><span id="mailMsg" class="status"></span></div>
-        </div>
-      </div>
+        <div class="btnrow"><button type="button" id="testMail" class="btn">Send test email</button><span id="mailMsg" class="status" role="status"></span></div>
+      </section>
 
-      <div class="card">
-        <h2>Delivery</h2>
-        <label class="toggle"><span class="t"><b>Send automatically</b><span>Email the minutes as soon as they are written. You can always send again from the minutes page.</span></span><input type="checkbox" id="emailAuto"></label>
-      </div>
+      <section class="card" aria-labelledby="hDeliv">
+        <h2 id="hDeliv" class="lbl">Delivery</h2>
+        <div class="trow"><div class="tx"><label for="emailAuto">Send automatically</label><p class="hint" id="emailAuto-d">Email the minutes as soon as they are written. You can always send again from the minutes page.</p></div><input type="checkbox" class="sw" role="switch" id="emailAuto" aria-describedby="emailAuto-d"></div>
+      </section>
 
-      <div class="card">
-        <h2>Sharing with others</h2>
-        <p class="hint" style="margin-top:8px">You always get the email. People listed here can get a copy as well: after you review the minutes and press <b>Share</b> on the minutes page, or automatically.</p>
-        <div class="row2">
-          <label for="shareList">Default people</label>
-          <textarea id="shareList" class="mono" style="max-width:none;min-height:60px" placeholder="priya@company.com, ravi@company.com"></textarea>
+      <section class="card" aria-labelledby="hShare">
+        <h2 id="hShare" class="lbl">Sharing with others</h2>
+        <p class="hint">You always get the email. People listed here can get a copy as well: after you review the minutes and press <b>Share</b> on the minutes page, or automatically.</p>
+        <div class="rows">
+          <div class="fld">
+            <label for="shareList">Default people</label>
+            <textarea id="shareList" class="mono" style="min-height:60px" placeholder="priya@company.com, ravi@company.com"></textarea>
+          </div>
+          <div class="fld">
+            <label for="shareGroups">Recurring meetings</label>
+            <textarea id="shareGroups" class="mono" style="min-height:70px" placeholder="Cadence Call | priya@company.com, ravi@company.com&#10;Data Discussion | amal@company.com"></textarea>
+            <p class="hint">One per line: words from the meeting title, then who gets it. A matching meeting uses its own list instead of the default.</p>
+          </div>
+          <div class="trow"><div class="tx"><label for="shareAuto">Send to them automatically</label><p class="hint" id="shareAuto-d">Off (recommended): you get the minutes first and press Share after checking names and numbers. On: they get a copy the moment it is written.</p></div><input type="checkbox" class="sw" role="switch" id="shareAuto" aria-describedby="shareAuto-d"></div>
+          <div class="fld">
+            <label for="shareHow">Address them as</label>
+            <select id="shareHow"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc (hidden from each other)</option></select>
+            <p class="hint">Replies come to you.</p>
+          </div>
+          <div class="stack">
+            <div class="fld">
+              <span class="flabel">Allow them in your script</span>
+              <p class="hint">Your relay script only mails people you allow, so a leaked URL cannot be used for spam. After adding people, copy the updated script, replace the one in script.google.com, and deploy a <b>new version</b>.</p>
+            </div>
+            <div class="trow"><div class="tx"><label for="shareDomains">Allow everyone at their company</label><p class="hint" id="shareDomains-d">Uses the part after the @ instead of single addresses, so new colleagues work without editing the script.</p></div><input type="checkbox" class="sw" role="switch" id="shareDomains" aria-describedby="shareDomains-d"></div>
+            <div class="code"><div class="code-h"><span class="hint">Lines changed in the script</span></div><pre id="allowLines"></pre></div>
+            <div class="btnrow"><button type="button" id="copyScriptAllow" class="btn">Copy script with these people allowed</button><span id="copyAllowMsg" class="status" role="status"></span></div>
+          </div>
         </div>
-        <div class="row2">
-          <label for="shareGroups">Recurring meetings</label>
-          <textarea id="shareGroups" class="mono" style="max-width:none;min-height:70px" placeholder="Cadence Call | priya@company.com, ravi@company.com&#10;Data Discussion | amal@company.com"></textarea>
-          <p class="hint">One per line: words from the meeting title, then who gets it. A matching meeting uses its own list instead of the default.</p>
-        </div>
-        <label class="toggle"><span class="t"><b>Send to them automatically</b><span>Off (recommended): you get the minutes first and press Share after checking names and numbers. On: they get a copy the moment it is written.</span></span><input type="checkbox" id="shareAuto"></label>
-        <div class="row2">
-          <label for="shareHow">Address them as</label>
-          <select id="shareHow"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc (hidden from each other)</option></select>
-          <p class="hint">Replies come to you.</p>
-        </div>
-        <div class="row2">
-          <span class="lab">Allow them in your script</span>
-          <p class="hint" style="margin:0 0 8px">Your relay script only mails people you allow, so a leaked URL cannot be used for spam. After adding people, copy the updated script, replace the one in script.google.com, and deploy a <b>new version</b>.</p>
-          <label class="toggle" style="border-top:0;padding-top:0"><span class="t"><b>Allow everyone at their company</b><span>Uses the part after the @ instead of single addresses, so new colleagues work without editing the script.</span></span><input type="checkbox" id="shareDomains"></label>
-          <pre id="allowLines" style="margin:0 0 8px"></pre>
-          <div class="btnrow" style="margin-top:0"><button id="copyScriptAllow" class="btn">Copy script with these people allowed</button><span id="copyAllowMsg" class="status"></span></div>
-        </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Calendar</h2>
-        <label class="toggle"><span class="t"><b>Look up who was invited</b><span>Reads the invite for each meeting from your Google Calendar, through your script, to fill in the attendance table and name hints. Needs the calendar permission: in the script editor choose <code>authorize</code> and press Run once.</span></span><input type="checkbox" id="calendarLookup"></label>
-      </div>
+      <section class="card" aria-labelledby="hCal">
+        <h2 id="hCal" class="lbl">Calendar</h2>
+        <div class="trow"><div class="tx"><label for="calendarLookup">Look up who was invited</label><p class="hint" id="calendarLookup-d">Reads the invite for each meeting from your Google Calendar, through your script, to fill in the attendance table and name hints. Needs the calendar permission: in the script editor choose <code>authorize</code> and press Run once.</p></div><input type="checkbox" class="sw" role="switch" id="calendarLookup" aria-describedby="calendarLookup-d"></div>
+      </section>
 
-      <div class="card">
-        <h2>Attachments</h2>
-        <p class="hint" style="margin-top:8px">The email body always contains the full minutes. Attach copies if you want them.</p>
-        <label class="toggle"><span class="t"><b>PDF</b><span>A formatted A4 document.</span></span><input type="checkbox" id="emailPdf"></label>
-        <label class="toggle"><span class="t"><b>Word (.doc)</b><span>Opens in Word with tables intact.</span></span><input type="checkbox" id="emailWord"></label>
-        <label class="toggle"><span class="t"><b>Markdown (.md)</b><span>Plain text with formatting marks.</span></span><input type="checkbox" id="emailMd"></label>
-        <label class="toggle"><span class="t"><b>Transcript (.txt)</b><span>The full transcript of the meeting.</span></span><input type="checkbox" id="emailTranscript"></label>
-      </div>
+      <section class="card" aria-labelledby="hAtt">
+        <h2 id="hAtt" class="lbl">Attachments</h2>
+        <p class="hint">The email body always contains the full minutes. Attach copies if you want them.</p>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="emailPdf">PDF</label><p class="hint" id="emailPdf-d">A formatted A4 document.</p></div><input type="checkbox" class="sw" role="switch" id="emailPdf" aria-describedby="emailPdf-d"></div>
+          <div class="trow"><div class="tx"><label for="emailWord">Word (.doc)</label><p class="hint" id="emailWord-d">Opens in Word with tables intact.</p></div><input type="checkbox" class="sw" role="switch" id="emailWord" aria-describedby="emailWord-d"></div>
+          <div class="trow"><div class="tx"><label for="emailMd">Markdown (.md)</label><p class="hint" id="emailMd-d">Plain text with formatting marks.</p></div><input type="checkbox" class="sw" role="switch" id="emailMd" aria-describedby="emailMd-d"></div>
+          <div class="trow"><div class="tx"><label for="emailTranscript">Transcript (.txt)</label><p class="hint" id="emailTranscript-d">The full transcript of the meeting.</p></div><input type="checkbox" class="sw" role="switch" id="emailTranscript" aria-describedby="emailTranscript-d"></div>
+        </div>
+      </section>
     </section>
 
     <!-- ============ Voices ============ -->
     <section class="page" id="page-voices">
-      <h1>Voices</h1>
-      <p class="lede">Teach Debrief what your regular colleagues sound like, so the transcript and minutes can say who spoke. This is a best guess, not a certainty.</p>
+      <header><h1>Voices</h1><p class="lede">Put names next to what people said, by recognising their voice. Off until you turn it on. Everything here stays on this computer.</p></header>
 
-      <div class="card">
-        <h2>Recognise who is speaking</h2>
-        <label class="toggle"><span class="t"><b>Name speakers by their voice (best guess)</b><span>Off by default. Click Save changes after switching.</span></span><input type="checkbox" id="voiceOn"></label>
-        <div class="row2">
-          <p class="hint" style="margin-top:0">When on, Debrief makes a small numeric fingerprint of each stretch of the other participants' speech, on this computer, and compares it with the voices below. Where it is unsure, or people talk over each other, the line says <b>Unknown speaker</b> rather than guessing. When Meet's own captions name a different person, both names are shown.</p>
+      <section class="card" aria-labelledby="hRecog">
+        <h2 id="hRecog" class="lbl">Recognise who is speaking</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="voiceOn">Name speakers by their voice</label><p class="hint" id="voiceOn-d">A best guess. When Debrief is not sure, or people talk over each other, the line says "Unknown speaker". When Meet's own captions name a different person, both names are shown. Debrief makes a small numeric fingerprint of each stretch of the other participants' speech, on this computer, and compares it with the voices below. Applies when you press Save changes.</p></div><input type="checkbox" class="sw" role="switch" id="voiceOn" aria-describedby="voiceOn-d"></div>
+          <div class="trow" style="align-items:flex-start"><div class="tx"><label for="voiceLearn">Learn voices on its own</label><p class="hint" id="voiceLearn-d">Debrief fingerprints the other participants' speech and groups voices that keep coming back. A voice heard enough in two or more meetings shows up below as <b>Unnamed voice 1, 2&hellip;</b>: you name it once and from then on it is named in every meeting, in any language. If Meet's captions are on and name exactly one speaker, Debrief also uses that to name the voice for you, but captions are optional. A voice is <b>not used</b> until it has about 45 seconds of clean speech from at least two meetings, and a group that sounds like two people or like someone already known is left out. Voices you record yourself are never changed. It can mix up people who sound alike, such as relatives or people on the same poor line, so check the names and delete anything that looks off. This builds a voice profile of the people on your calls: tell your colleagues, and you can delete anyone, or everyone, at any time. Applies when you press Save changes.</p></div><input type="checkbox" class="sw" role="switch" id="voiceLearn" aria-describedby="voiceLearn-d"></div>
+          <div class="trow" style="align-items:flex-start"><div class="tx"><label for="voiceSamples">Keep short samples of unnamed voices</label><p class="hint" id="voiceSamples-d">So you can press play and hear who it is before naming them. These clips are <b>the only audio Debrief keeps</b>. While you record with learning on, short pieces of the other participants' speech wait in this browser (never uploaded); after the meeting one clip of about 8 seconds is kept for each <b>unnamed</b> voice and everything else is deleted. A clip is deleted when you name the voice, delete it, or press <b>Forget all voices</b>. People on your calls have not agreed to be recorded in this way by you alone: tell them, or leave this off. Applies when you press Save changes.</p></div><input type="checkbox" class="sw" role="switch" id="voiceSamples" aria-describedby="voiceSamples-d"></div>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Learn voices on its own</h2>
-        <label class="toggle"><span class="t"><b>Learn who is who from my meetings (best guess)</b><span>Off by default. Works without captions or any particular language. Click Save changes after switching.</span></span><input type="checkbox" id="voiceLearn"></label>
-        <div class="row2">
-          <p class="hint" style="margin-top:0">While you record, Debrief fingerprints the other participants' speech and groups voices that keep coming back. A voice heard enough in two or more meetings shows up in the list below as <b>Unnamed voice 1, 2&hellip;</b>: you rename it once (check the transcript at the times shown to see who it is) and from then on it is named in every meeting, in any language. If Meet's captions are on and name exactly one speaker, Debrief also uses that to name the voice for you, but captions are optional. A voice is <b>not used</b> until it has about 45 seconds of clean speech from at least two meetings, and a group that sounds like two people or like someone already known is left out. Voices you record yourself are never changed. Similar voices can be merged or split wrongly, so check the names and delete anything that looks off. This builds a voice profile of the people on your calls: tell your colleagues, and you can delete anyone, or everyone, at any time.</p>
+      <section class="card" id="voiceBlockedRow" hidden aria-label="Voices never to be learned">
+        <div class="btnrow"><span id="voiceBlockedMsg" class="hint" role="status"></span><button type="button" class="btn sm" id="voiceAllowAgain">Allow learning them again</button></div>
+      </section>
+
+      <section class="card" aria-labelledby="hPriv">
+        <h2 id="hPriv" class="lbl">Privacy, in three facts</h2>
+        <div class="tiles">
+          <div class="tile"><strong>Stays in this browser</strong><span>Recognition runs on your computer. No voice is sent to Google, Claude or anyone else.</span></div>
+          <div class="tile"><strong>256 numbers per person</strong><span>A voiceprint is a list of numbers. It can't be played back as speech.</span></div>
+          <div class="tile"><strong>Gone in one click</strong><span>Delete one person below, or everyone at the bottom of this page.</span></div>
         </div>
-      </div>
+        <p class="hint">The recording you make here is kept in memory only while this page is open, so you can play it back, and is never saved or uploaded. Apart from the optional short samples of unnamed voices, only a fingerprint is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>
+      </section>
 
-      <div class="card">
-        <h2>Short samples of unnamed voices</h2>
-        <label class="toggle"><span class="t"><b>Keep a short sample of each unnamed voice</b><span>Off by default. Lets you press Play next to "Unnamed voice 1" to hear who it is. Click Save changes after switching.</span></span><input type="checkbox" id="voiceSamples"></label>
-        <div class="row2">
-          <p class="hint" style="margin-top:0">This is the one case where Debrief keeps audio. While you record with learning on, short pieces of the other participants' speech wait in this browser (never uploaded); after the meeting one clip of about 8 seconds is kept for each <b>unnamed</b> voice and everything else is deleted. A clip is deleted when you name the voice, delete it, or press <b>Forget all voices</b>. People on your calls have not agreed to be recorded in this way by you alone: tell them, or leave this off.</p>
+      <section class="card" aria-labelledby="hPeople">
+        <div class="btnrow" style="justify-content:space-between"><h2 id="hPeople" class="lbl">Enrolled people</h2><button type="button" class="btn sm" id="enrolJump">Add a person</button></div>
+        <ul id="voiceList" class="voices"></ul>
+        <p class="hint" id="voiceEmpty"><strong style="color:var(--text)">Nobody yet.</strong> Add yourself first; it takes 20 seconds. Ideally record each person on their own computer in a quiet room.</p>
+      </section>
+
+      <section class="card" id="enrol" aria-labelledby="enrolTitle">
+        <h2 id="enrolTitle" class="lbl">Add a person</h2>
+        <div class="fgrid" style="align-items:end">
+          <div class="fld"><label for="enrolName">Name</label><input id="enrolName" placeholder="e.g. Amal Raj" maxlength="60" autocomplete="off"></div>
+          <div class="fld"><span class="flabel" id="lgl">They will read in</span>
+            <div class="seg-ctl" id="enrolLang" role="radiogroup" aria-labelledby="lgl">
+              <button type="button" role="radio" data-lang="en" lang="en" aria-checked="true" class="active">English</button>
+              <button type="button" role="radio" data-lang="hi" lang="hi" aria-checked="false">हिन्दी</button>
+              <button type="button" role="radio" data-lang="ml" lang="ml" aria-checked="false">മലയാളം</button>
+              <button type="button" role="radio" data-lang="free" aria-checked="false">Speak freely</button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="card" id="voiceBlockedRow" hidden>
-        <div class="row2" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-          <span id="voiceBlockedMsg" class="hint" style="margin:0"></span>
-          <button class="btn" id="voiceAllowAgain">Allow learning them again</button>
+        <div class="prompt" id="enrolPrompt" lang="en"></div>
+        <p class="hint">Read in the language the person mostly uses in meetings, about 20 seconds. Voice fingerprints are meant to work across languages, but that is not guaranteed, so for someone who switches between languages (English, Hindi, Malayalam) add a recording in each one afterwards (Add recording). "Speak freely" is for any other language or a Hinglish mix.</p>
+        <div class="btnrow" style="gap:14px">
+          <button type="button" class="btn recbtn" id="enrolRec">Record</button>
+          <button type="button" class="btn danger-solid" id="enrolStop" hidden>Stop</button>
+          <button type="button" class="btn" id="enrolPlay" disabled>Play back</button>
+          <div class="levelbox">
+            <div class="lh"><span class="l"><span class="recdot" id="enrolDot" hidden></span>Level</span><span><span id="enrolTime"></span> <span class="hint" style="display:inline">aim for about 20 s</span></span></div>
+            <div class="meter" aria-hidden="true"><i id="enrolLevel"></i></div>
+          </div>
         </div>
-      </div>
+        <p class="msgbox" id="enrolMsg" role="status"></p>
+        <div class="btnrow" style="justify-content:flex-end"><button type="button" class="btn" id="enrolCancel">Cancel</button><button type="button" class="btn primary" id="enrolSave" disabled>Save voice</button></div>
+      </section>
 
-      <div class="card" id="unnamedCard" hidden>
-        <h2>Unnamed voices in your latest meeting</h2>
-        <div id="unnamedList"></div>
+      <section class="card" id="unnamedCard" hidden aria-labelledby="hUn">
+        <div><h2 id="hUn" class="lbl">Unnamed voices in your latest meeting</h2><p class="hint" id="unnamedSub" style="margin-top:4px">Name a voice once and it is recognised next time.</p></div>
+        <ul id="unnamedList" class="ulist"></ul>
         <p class="hint">These voices matched nobody enrolled. The times are positions in the recording (also shown in the transcript on the minutes page): check who was speaking there, type the name, and save. Nothing is stored until you save.</p>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Privacy</h2>
-        <div class="row2">
-          <p class="hint" style="margin-top:0">Everything happens inside your browser. The recording you make here is kept in memory only while this page is open, so you can play it back, and is never saved or uploaded. Apart from the optional short samples of unnamed voices below, only a fingerprint (a list of 256 numbers) is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>
-        </div>
-      </div>
+      <section class="card" aria-labelledby="hShareV">
+        <h2 id="hShareV" class="lbl">Share voices with a colleague</h2>
+        <p class="body">Export saves the voiceprints (numbers, no audio) as a file a teammate can import, so their Debrief recognises the same people. Debrief checks that the same speaker model was used. Each person also has their own export in the list above.</p>
+        <div class="callout warnc"><p>Only share a person's voice if they have agreed, and only with someone you trust. A voiceprint identifies someone, like a photo does.</p></div>
+        <div class="btnrow"><button type="button" id="voiceExport" class="btn">Export voices…</button><button type="button" id="voiceImport" class="btn">Import a file…</button><input type="file" id="voiceImportFile" accept=".json,application/json" hidden><span id="voiceShareMsg" class="hint" role="status"></span></div>
+      </section>
 
-      <div class="card">
-        <h2>Enrolled people</h2>
-        <div id="voiceList"></div>
-        <p class="hint" id="voiceEmpty">Nobody yet. Add a person below, one at a time, ideally on their own computer in a quiet room.</p>
-      </div>
-
-      <div class="card">
-        <h2 id="enrolTitle">Add a person</h2>
-        <div class="row2">
-          <label for="enrolName">Name</label>
-          <input id="enrolName" placeholder="e.g. Amal Raj" maxlength="60">
-        </div>
-        <div class="row2">
-          <label class="lab">Read this aloud (about 20 seconds)</label>
-          <div class="seg" id="enrolLang"><button data-lang="en" class="active">English</button><button data-lang="hi">हिन्दी</button><button data-lang="ml">മലയാളം</button><button data-lang="free">Speak freely</button></div>
-          <p id="enrolPrompt" style="margin:10px 0 0;padding:12px 14px;border-radius:10px;background:var(--brand-soft);line-height:1.7;max-width:640px"></p>
-          <p class="hint">Read in the language the person mostly uses in meetings. Voice fingerprints are meant to work across languages, but that is not guaranteed, so for someone who switches between languages (English, Hindi, Malayalam) add a recording in each one afterwards (Add recording). \"Speak freely\" is for any other language or a Hinglish mix.</p>
-        </div>
-        <div class="row2">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <button class="btn" id="enrolRec">Record</button>
-            <button class="btn" id="enrolStop" hidden>Stop</button>
-            <button class="btn" id="enrolPlay" hidden>Play back</button>
-            <span id="enrolTime" class="hint" style="margin:0"></span>
-          </div>
-          <div style="margin-top:10px;max-width:460px;height:10px;border-radius:6px;background:var(--border);overflow:hidden"><i id="enrolLevel" style="display:block;height:100%;width:0;background:var(--brand);transition:width .08s"></i></div>
-          <p class="hint" id="enrolMsg" role="status"></p>
-          <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
-            <button class="btn primary" id="enrolSave" hidden>Save this voice</button>
-            <button class="btn" id="enrolCancel" hidden>Cancel</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Share voices</h2>
-        <div class="row2">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-            <button class="btn" id="voiceExport">Export voices…</button>
-            <button class="btn" id="voiceImport">Import voices…</button>
-            <input type="file" id="voiceImportFile" accept=".json,application/json" hidden>
-          </div>
-          <p class="hint" id="voiceShareMsg" role="status"></p>
-          <p class="hint">Lets a colleague use the voices you already enrolled instead of recording everyone again. The file holds fingerprints only (numbers, no audio), but a fingerprint still identifies a person's voice: share it only for people who have agreed, and only with someone you trust. Debrief checks that the same speaker model was used. Each person also has their own <b>Export</b> button in the list above.</p>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Forget</h2>
-        <div class="row2">
-          <button class="btn" id="voiceForget" style="color:#b91c1c">Forget all voices</button>
-          <p class="hint">Deletes every enrolled voice and every voice fingerprint saved with past meetings. Transcripts and minutes are not touched.</p>
-        </div>
-      </div>
+      <section class="card danger-zone" aria-labelledby="hForget">
+        <div style="flex:1 1 300px"><h2 id="hForget" class="lbl">Forget</h2><p class="body" style="margin-top:4px">Deletes every enrolled voice and every voice fingerprint saved with past meetings. Transcripts and minutes are not touched.</p></div>
+        <button type="button" id="voiceForget" class="btn danger">Forget all voices…</button>
+      </section>
     </section>
 
     <!-- ============ Usage ============ -->
     <section class="page" id="page-usage">
-      <h1>Usage</h1>
-      <p class="lede">What Debrief has sent to each service from this browser. Counts are local: Google does not report your remaining free quota, so "left today" is an estimate against the limits below. Days roll over at midnight Pacific time, when Gemini's daily quota resets.</p>
-
-      <div class="card">
-        <h2>Activity</h2>
-        <div class="row2" style="padding-bottom:6px">
-          <div class="seg" id="usageRange"><button data-days="1" class="active">Today</button><button data-days="7">7 days</button><button data-days="30">30 days</button></div>
-          <button id="usageReset" class="btn" style="margin-left:10px">Reset counters</button>
+      <header class="split">
+        <div><h1>Usage</h1><p class="lede">What Debrief asked each service for, and what it would cost on a paid plan. Counted in this browser: Google does not report your remaining free quota, so "left today" is an estimate against the limits below. Days roll over at midnight Pacific time, when Gemini's daily quota resets.</p></div>
+        <div class="seg-ctl" id="usageRange" role="tablist" aria-label="Time range">
+          <button type="button" role="tab" data-days="1" class="active" aria-selected="true">Today</button>
+          <button type="button" role="tab" data-days="7" aria-selected="false">7 days</button>
+          <button type="button" role="tab" data-days="30" aria-selected="false">30 days</button>
         </div>
-        <div style="overflow-x:auto"><table class="usage" id="usageTable"></table></div>
-        <p class="hint" id="usageTotals" style="margin:10px 0 12px"></p>
-      </div>
+      </header>
 
-      <div class="card">
-        <h2>Limits and prices</h2>
-        <div class="row2">
-          <label for="usageLimits">Daily request limits</label>
-          <textarea id="usageLimits" class="mono" placeholder="gemini-3.8-flash=20"></textarea>
+      <section class="card usage-card" aria-label="Usage by service">
+        <div class="usage-scroll"><table class="data" id="usageTable"></table></div>
+        <div id="usageTotals"></div>
+      </section>
+      <p class="hint" style="display:flex;gap:8px;align-items:center"><span class="tilde" aria-hidden="true">~</span><span>"~" means an estimate from token and minute counts at the prices below. It is not a bill; your provider's console is the source of truth. Costs are in US dollars.</span></p>
+
+      <div class="grid2">
+        <section class="card">
+          <label for="usageLimits" class="lbl" style="margin:0">Daily limits</label>
+          <textarea id="usageLimits" class="mono" placeholder="gemini-3.8-flash=20" rows="5"></textarea>
           <p class="hint">One <code>model=requests per day</code> per line. Debrief also learns limits from Google's quota errors, and warns you in the popup at 80%.</p>
-        </div>
-        <div class="row2">
-          <label for="usagePrices">Prices for cost estimates (optional)</label>
-          <textarea id="usagePrices" class="mono" placeholder="claude-sonnet-5-5=3,15"></textarea>
-          <p class="hint">One <code>model=input price,output price</code> per line, in USD per million tokens. Free tiers show no cost.</p>
-        </div>
+        </section>
+        <section class="card">
+          <label for="usagePrices" class="lbl" style="margin:0">Prices for "cost if paid"</label>
+          <textarea id="usagePrices" class="mono" placeholder="claude-sonnet-5-5=3,15" rows="5"></textarea>
+          <p class="hint">One <code>model=input price,output price</code> per line, in USD per million tokens. Check your provider's price page; prices change. Free tiers show no cost.</p>
+        </section>
       </div>
+      <div class="btnrow"><button type="button" id="usageReset" class="btn danger">Reset counters…</button><span class="hint">Clears these numbers only. Meetings and settings are kept.</span></div>
     </section>
+
+    <div class="savebar" id="savebar">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="msg" role="status" aria-live="polite">All changes saved</span>
+      <button type="button" id="undo" class="btn ghost" style="color:var(--muted)" hidden>Undo</button>
+      <button type="button" id="save" class="btn primary">Save changes</button>
+    </div>
   </main>
 </div>
-
-<div class="savebar"><div class="in"><button id="save" class="primary">Save changes</button><span id="msg"></span></div></div>
 <script src="dist/options.js"></script>
 </body>
 </html>

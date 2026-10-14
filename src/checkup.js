@@ -10,12 +10,13 @@ const BAD = '✗';
 
 export async function runCheckup() {
   const rows = [];
-  const add = (level, title, detail = '') => rows.push({ level, title, detail });
+  // `go` names the settings page that fixes a row; the page shows it as a button next to the row.
+  const add = (level, title, detail = '', go = '', fixText = '') => rows.push({ level, title, detail, go, fixText });
   const s = await getSettings();
 
   // keys and quota
   if (s.sttProvider === 'gemini' || s.llmProvider === 'gemini') {
-    add(s.geminiKey ? OK : BAD, 'Gemini key', s.geminiKey ? (s.geminiKey2 ? 'main and backup key are set' : 'a key is set (no backup key)') : 'missing: add it on the Get started page');
+    add(s.geminiKey ? OK : BAD, 'Gemini key', s.geminiKey ? (s.geminiKey2 ? 'main and backup key are set' : 'a key is set (no backup key)') : 'missing: add it on the Get started page', 'start', 'Add key');
     try {
       const { usage, learnedLimits = {}, modelCooldown = {} } = await chrome.storage.local.get(['usage', 'learnedLimits', 'modelCooldown']);
       const limits = { ...learnedLimits, ...parseLimits(s.usageLimits) };
@@ -34,24 +35,24 @@ export async function runCheckup() {
   // microphone
   try {
     const p = await navigator.permissions.query({ name: 'microphone' });
-    add(p.state === 'granted' ? OK : s.captureMic === false ? OK : WARN, 'Microphone permission', p.state === 'granted' ? 'allowed' : `${p.state}: only other people will be recorded until you press "Allow microphone" on the General page`);
+    add(p.state === 'granted' ? OK : s.captureMic === false ? OK : WARN, 'Microphone permission', p.state === 'granted' ? 'allowed' : `${p.state}: only other people will be recorded until you press "Allow microphone" on the General page`, 'general', 'Allow microphone');
   } catch {}
-  add(s.followMeetMute !== false ? OK : WARN, 'Mic follows the call\'s mute button', s.followMeetMute !== false ? 'on' : 'off: your mic is recorded even when you are muted in the call');
+  add(s.followMeetMute !== false ? OK : WARN, 'Mic follows the call\'s mute button', s.followMeetMute !== false ? 'on' : 'off: your mic is recorded even when you are muted in the call', 'general', 'Turn it on');
 
   // names and captions
   add(OK, 'Speaker names from Meet captions', { read: 'used when captions are on', auto: 'Debrief turns captions on while recording', off: 'off' }[s.meetCaptions] || s.meetCaptions);
 
   // email relay
-  if (!s.emailWebhook) add(WARN, 'Email relay', 'not set up (optional)');
-  else if (!mailReady(s)) add(BAD, 'Email relay', 'the URL does not look like an Apps Script web app URL ending in /exec');
+  if (!s.emailWebhook) add(WARN, 'Email relay', 'not set up (optional)', 'email', 'Set up email');
+  else if (!mailReady(s)) add(BAD, 'Email relay', 'the URL does not look like an Apps Script web app URL ending in /exec', 'email', 'Fix email');
   else {
     try {
       const res = await fetch(s.emailWebhook, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
       const j = await res.json();
       if (j?.ok) add(Number(j.version) >= 7 ? OK : WARN, 'Email relay', `reachable, script version ${j.version}${j.locked ? ', locked to this Debrief' : ', not locked yet (send a test email)'}${Number(j.version) >= 7 ? '' : '. Attendance from the calendar needs version 7: copy the script again and deploy a new version'}`);
-      else add(BAD, 'Email relay', 'answered, but not as the Debrief script (is it set to "Anyone"?)');
+      else add(BAD, 'Email relay', 'answered, but not as the Debrief script (is it set to "Anyone"?)', 'email', 'Fix email');
     } catch (e) {
-      add(BAD, 'Email relay', `could not be reached (${e.message}). Check the deployment is set to "Anyone"`);
+      add(BAD, 'Email relay', `could not be reached (${e.message}). Check the deployment is set to "Anyone"`, 'email', 'Fix email');
     }
   }
 
@@ -75,7 +76,7 @@ export async function runCheckup() {
       const silent = dbg.find((x) => /^mic: the raw microphone/.test(x));
       add(OK, `Last meeting: ${m.title || m.id}`, `${(m.segments || []).length} transcript pieces, ${(m.errors || []).length} errors, ${Object.keys(m.presence || {}).length} people seen, ${(m.voiceSegs || []).length} voice pieces, ${(m.captions || []).length} caption lines`);
       add(muteLines.length ? OK : WARN, 'Last meeting: the call\'s mute button', muteLines.length ? `${muteLines.length} changes seen; last: ${muteLines.at(-1)}` : 'no mute changes were seen (either you never muted, or the mute button was not found on the page)');
-      if (silent) add(BAD, 'Last meeting: microphone', 'it delivered only silence: check the microphone chosen in General and Windows privacy settings');
+      if (silent) add(BAD, 'Last meeting: microphone', 'it delivered only silence: check the microphone chosen in General and Windows privacy settings', 'general', 'Open General');
       add(m.invited?.length ? OK : WARN, 'Last meeting: calendar invite', m.invited?.length ? `${m.invited.length} invitees found${m.invitedHow ? ` (by ${m.invitedHow})` : ''}` : m.invitedError ? `lookup failed: ${String(m.invitedError).slice(0, 100)}` : m.invitedNotFound ? 'no calendar event matched the Meet link or title' : 'not looked up yet');
     }
   } catch {}
