@@ -158,4 +158,13 @@ await test('meet: icon-font names (frame_person, keep_off, zoom_in...) are never
   assert.deepEqual(Object.keys(cleanPresence({ a_b: [1], Real: [1] })), ['Real']);
 });
 
+await test('meet: the mic button is found when Meet is in another language, and the camera is never taken for it', () => {
+  const hindi = page('<button data-is-muted="false" aria-label="\u092e\u093e\u0907\u0915 \u092c\u0902\u0926 \u0915\u0930\u0947\u0902"></button><button data-is-muted="true" aria-label="\u0915\u0948\u092e\u0930\u093e \u091a\u093e\u0932\u0942 \u0915\u0930\u0947\u0902"></button>');
+  assert.equal(meet.micButton(hindi).muted, false);
+  const english = page('<button data-is-muted="true" aria-label="Turn on camera"></button><button data-is-muted="false" aria-label="Turn off microphone (ctrl + d)"></button>');
+  assert.equal(meet.micButton(english).muted, false);
+  const cameraOnly = page('<button data-is-muted="true" aria-label="Turn on camera"></button><button data-is-muted="true" aria-label="Turn off video"></button>');
+  assert.equal(meet.micButton(cameraOnly), null);
+});
+
 console.log(`\n${passed} passed`);

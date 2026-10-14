@@ -19,6 +19,10 @@ export function micButton(doc) {
   const withAttr = [...doc.querySelectorAll('button[data-is-muted], [role="button"][data-is-muted]')];
   const labelled = withAttr.find((b) => /microphone|mic\b/i.test(b.getAttribute('aria-label') || ''));
   if (labelled) return { el: labelled, muted: labelled.getAttribute('data-is-muted') === 'true' };
+  // Meet shown in another language: the labels do not say "microphone", but the microphone toggle is the first
+  // of the two buttons that carry data-is-muted (camera is the second) and neither mentions a camera in English.
+  const toggles = withAttr.filter((b) => !/camera|video|cam\b/i.test(b.getAttribute('aria-label') || ''));
+  if (!labelled && withAttr.length === 2 && toggles.length >= 1) return { el: toggles[0], muted: toggles[0].getAttribute('data-is-muted') === 'true' };
   const byLabel = [...doc.querySelectorAll('button[aria-label]')].find((b) => /turn (on|off) microphone/i.test(b.getAttribute('aria-label')));
   if (byLabel) return { el: byLabel, muted: /turn on/i.test(byLabel.getAttribute('aria-label')) };
   return null;

@@ -146,7 +146,15 @@ async function start({ streamId, settings, meetingId }) {
   if (micStream) {
     rec.chunkers.me = new Chunker('me', onChunk, chunkSize(settings, onSkip));
     // While the mic is paused, feed silence so timestamps stay aligned.
-    await tap(ctx, micStream, (b) => rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length)));
+    await tap(ctx, micStream, (b) => {
+      if (rec) {
+        let pk = 0;
+        for (let i = 0; i < b.length; i += 8) pk = Math.max(pk, Math.abs(b[i]));
+        rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
+        rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
+      }
+      rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length));
+    });
   }
 
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
@@ -179,6 +187,12 @@ async function start({ streamId, settings, meetingId }) {
   rec.dbgTimer = setInterval(() => {
     if (!rec) return;
     n++;
+    // A microphone that delivers exactly nothing for a minute is the wrong device or blocked, not a quiet room.
+    if (rec.micStream && !rec.micWarned && rec.micRawBlocks > 400 && rec.micRawPeak < 0.0005) {
+      rec.micWarned = true;
+      dbg(`mic: the raw microphone signal has been silent for ${n * 5}s (peak ${rec.micRawPeak.toFixed(5)}): wrong device or blocked`);
+      chrome.runtime.sendMessage({ target: 'bg', type: 'mic-silent', meetingId });
+    }
     const c = rec.chunkers.others;
     dbg(`t+${n * 5}s ctx=${rec.ctx.state} play=${rec.playCtx.state} tab=${trk(rec.tabStream)} tabSamples=${c.total} tabPeak=${c.maxEver.toFixed(4)}` + (rec.chunkers.me ? ` micSamples=${rec.chunkers.me.total} micPeak=${rec.chunkers.me.maxEver.toFixed(4)}` : ''));
     if (n >= 24) clearInterval(rec.dbgTimer);

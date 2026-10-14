@@ -177,14 +177,17 @@ async function applyMic(patch = {}) {
   let eff = false;
   let changed = false;
   let cur = null;
+  let noted = '';
   await mutateState((st) => {
     if (!st.recording || st.stopping) return null;
     cur = { ...st, ...patch };
+    if ('meetMuted' in patch && patch.meetMuted !== st.meetMuted) noted = `Meet mic: ${patch.meetMuted === true ? 'muted' : patch.meetMuted === false ? 'unmuted' : 'state not detected'} at +${Math.round((Date.now() - (st.startedAt || Date.now())) / 1000)}s${followMeetMute ? '' : ' (following Meet is off)'}`;
     eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && cur.meetMuted === true);
     changed = eff !== !!st.micOn;
     return cur;
   });
   if (!cur) return { ok: false };
+  if (noted && cur.meetingId) updateMeeting(cur.meetingId, (m) => (m.debug ||= []).push(`${noted}; Debrief mic ${eff ? 'on' : 'off'}`)).catch(() => {});
   let micOn = cur.micOn;
   if (changed) {
     const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'mic', on: eff }).catch(() => null);
@@ -244,6 +247,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await autoStop('The meeting ended.');
       return { ok: true };
     },
+    'mic-silent': () => raiseAlert(msg.meetingId, 'MIC_SILENT'),
     dbg: () => updateMeeting(msg.meetingId, (m) => (m.debug ||= []).push(msg.note)),
     segment: async () => {
       await updateMeeting(msg.meetingId, (m) => m.segments.push(msg.seg));
