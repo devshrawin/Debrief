@@ -315,6 +315,20 @@ try {
     const st = await chrome.storage.local.get(['voices', 'voiceBlock']);
     out.autoDeleted = !st.voices.some((v) => v.id === 'au1') && (st.voiceBlock || []).length === 1;
     await chrome.storage.local.remove('voiceBlock');
+    // a sample for an unnamed voice shows a Play button, and goes when the voice is named or deleted
+    const dbOpen = () => new Promise((res, rej) => { const r = indexedDB.open('debrief-voice', 1); r.onupgradeneeded = () => { r.result.createObjectStore('pieces'); r.result.createObjectStore('samples'); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const idb = async (store, mode, fn) => { const db = await dbOpen(); return new Promise((res, rej) => { const t = db.transaction(store, mode); const q = fn(t.objectStore(store)); t.oncomplete = () => { db.close(); res(q && q.result); }; t.onerror = () => rej(t.error); }); };
+    await chrome.storage.local.set({ voices: [...(await chrome.storage.local.get('voices')).voices, { id: 'an1', name: 'Unnamed voice 7', auto: true, ready: false, centroid: real0, windows: [real0], secs: 30, meetings: 1, created: Date.now() }] });
+    await idb('samples', 'readwrite', (s) => s.put(new Blob([new Uint8Array(100)], { type: 'audio/wav' }), 'an1'));
+    await chrome.storage.local.set({ voices: (await chrome.storage.local.get('voices')).voices.map((v) => v) });
+    await new Promise((r) => setTimeout(r, 600));
+    const anRow = () => [...document.querySelectorAll('#voiceList .voice-row')].find((r) => /Unnamed voice 7/.test(r.textContent));
+    out.playShown = !![...anRow().querySelectorAll('button')].find((b) => /Play sample/.test(b.textContent) && !b.hidden);
+    [...anRow().querySelectorAll('button')].find((b) => b.textContent === 'Delete').click();
+    await press('Delete and never learn it again');
+    await new Promise((r) => setTimeout(r, 300));
+    out.sampleGone = (await idb('samples', 'readonly', (s) => s.get('an1'))) === undefined;
+    await chrome.storage.local.remove('voiceBlock');
     // importing a shared file adds the person; a broken file is refused with a reason
     const real = 'A'.repeat(342) + '==';
     const good = JSON.stringify({ format: 'debrief-voices', version: 1, model: 'wespeaker-resnet34-lm', people: [{ name: 'Imported One', lang: 'hi', centroid: real, windows: [real] }] });
@@ -333,7 +347,7 @@ try {
     await chrome.storage.local.set({ meetingIds: [] });
     return out;
   })()`);
-  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.autoRow && vui.autoDeleted && vui.imported && vui.refused && vui.forgot && vui.listEmpty, JSON.stringify(vui));
+  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.autoRow && vui.autoDeleted && vui.playShown && vui.sampleGone && vui.imported && vui.refused && vui.forgot && vui.listEmpty, JSON.stringify(vui));
 
   const popupWarn = await popup.evaluate(`(async () => { await new Promise((r) => setTimeout(r, 300)); location.reload(); })()`);
   await sleep(1500);

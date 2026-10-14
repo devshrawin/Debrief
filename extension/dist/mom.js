@@ -1396,6 +1396,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceSamples: false,
+    // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
     voiceLearn: false,
     // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,

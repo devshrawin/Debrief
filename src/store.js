@@ -1,3 +1,4 @@
+import { clearAllAudio } from './voice/samples.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
 export const DEFAULTS = {
@@ -30,6 +31,7 @@ export const DEFAULTS = {
   meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
   otherSites: true, // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
   voiceOn: false, // recognise who is speaking, using voices enrolled in Settings
+  voiceSamples: false, // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
   voiceLearn: false, // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
@@ -173,6 +175,7 @@ export async function saveVoices(list) {
 // Deletes every enrolled voice, and the voice fingerprints kept inside saved meetings.
 export async function forgetAllVoices() {
   await chrome.storage.local.remove('voices');
+  await clearAllAudio().catch(() => {});
   const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
   const r = await chrome.storage.local.get(meetingIds.map(key));
   const changed = {};

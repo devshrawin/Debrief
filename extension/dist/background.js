@@ -289,6 +289,116 @@
     return (blocked || []).some((b) => n && !isAnon({ name }) && norm(b.name) === n || centroid && b.centroid && cosine(unpack(b.centroid), centroid) >= 0.7);
   }
 
+  // src/wav.js
+  function encodeWav(samples, sampleRate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const str = (off2, s) => [...s].forEach((c, i) => v.setUint8(off2 + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + samples.length * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2) {
+      const x = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  // src/voice/samples.js
+  var DB = "debrief-voice";
+  var SR = 16e3;
+  var CLIP_SEC = 8;
+  function open() {
+    return new Promise((resolve, reject) => {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore("pieces");
+        r.result.createObjectStore("samples");
+      };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function tx(store, mode, fn) {
+    const db = await open();
+    try {
+      return await new Promise((resolve, reject) => {
+        const t = db.transaction(store, mode);
+        const out = fn(t.objectStore(store));
+        t.oncomplete = () => resolve(out?.result ?? out);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var fromInt16 = (i16) => Float32Array.from(i16, (x) => x / 32768);
+  var pieceKey = (meetingId, t0) => `${meetingId}|${Math.round(t0 * 100)}`;
+  var getPiece = (key2) => tx("pieces", "readonly", (s) => s.get(key2));
+  async function deletePieces(meetingId) {
+    await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
+  }
+  var putSample = (personId, blob) => tx("samples", "readwrite", (s) => s.put(blob, personId));
+  var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
+  var hasSample = async (personId) => !!await getSample(personId);
+  function makeClip(pieces) {
+    const gap = new Float32Array(Math.round(SR * 0.3));
+    const parts = [];
+    let len = 0;
+    for (const p of pieces) {
+      if (len + p.length > CLIP_SEC * SR && parts.length) break;
+      parts.push(p, gap);
+      len += p.length + gap.length;
+    }
+    const out = new Float32Array(len);
+    let o = 0;
+    for (const p of parts) {
+      out.set(p, o);
+      o += p.length;
+    }
+    return encodeWav(out.subarray(0, Math.min(len, CLIP_SEC * SR)), SR);
+  }
+
+  // src/voice/sampling.js
+  async function saveSamples(meetingId, meeting, people) {
+    try {
+      if (!meeting) return;
+      const todo = [];
+      for (const p of people) if (p.auto && isAnon(p) && !await hasSample(p.id)) todo.push(p);
+      if (!todo.length) return;
+      const best = new Map(todo.map((p) => [p.id, []]));
+      for (const s of meeting.voiceSegs || []) {
+        const r = classify(unpack(s.e), people);
+        if (r.id && best.has(r.id)) best.get(r.id).push({ s, score: r.score });
+      }
+      for (const p of todo) {
+        const ranked = best.get(p.id).sort((a, b) => b.score - a.score).slice(0, 6);
+        const pcms = [];
+        for (const { s } of ranked) {
+          const i16 = await getPiece(pieceKey(meetingId, s.t0));
+          if (i16) pcms.push(fromInt16(i16));
+          if (pcms.length >= 3) break;
+        }
+        if (pcms.length) await putSample(p.id, makeClip(pcms));
+      }
+    } finally {
+      await deletePieces(meetingId).catch(() => {
+      });
+    }
+  }
+
   // src/alerts.js
   function classifyError(err) {
     const e = String(err || "");
@@ -404,6 +514,8 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceSamples: false,
+    // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
     voiceLearn: false,
     // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
@@ -588,13 +700,18 @@
   }
   async function learnVoices(meetingId) {
     const s = await getSettings();
-    if (!s.voiceLearn) return;
     const m = await getMeeting(meetingId);
-    if (!m) return;
+    if (!s.voiceLearn || !m) {
+      await saveSamples(meetingId, null, []).catch(() => {
+      });
+      return;
+    }
     const blocked = await getBlockedVoices();
     const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
     const r2 = learnRecurring(m, r.list, { blocked });
     if (r.changed || r2.changed) await saveVoices(r2.list);
+    await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {
+    });
     await updateMeeting(meetingId, (mm) => {
       mm.voiceLearn = { ...r.report, recurring: r2.report };
     });

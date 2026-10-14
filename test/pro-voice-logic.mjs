@@ -261,4 +261,20 @@ await test('sharing: files that are not valid voices are refused or trimmed, wit
   assert.equal(r.problems.length, 2);
 });
 
+await test('samples: a clip is built from the best pieces, capped at 8 s, and audio converts without surprises', async () => {
+  const S = await import('../src/voice/samples.js');
+  const piece = (sec, v) => new Float32Array(sec * 16000).fill(v);
+  const clip = S.makeClip([piece(3, 0.2), piece(3, 0.2), piece(3, 0.2), piece(3, 0.2)]);
+  const bytes = new Uint8Array(await clip.arrayBuffer());
+  const seconds = (bytes.length - 44) / 32000;
+  assert.ok(seconds <= S.CLIP_SEC + 0.01 && seconds >= 5.5, `${seconds}s`);
+  assert.equal(String.fromCharCode(...bytes.slice(0, 4)), 'RIFF');
+  const f = Float32Array.from([0, 0.5, -0.5, 1, -1, 2]);
+  const back = S.fromInt16(S.toInt16(f));
+  assert.ok(Math.abs(back[1] - 0.5) < 0.001 && Math.abs(back[2] + 0.5) < 0.001);
+  assert.ok(back[5] <= 1 && back[5] > 0.99, 'out-of-range values are clipped, not wrapped');
+  assert.equal(S.pieceKey('m1', 12.345), 'm1|1235');
+  assert.equal(S.pieceKey('m1', 12.35), S.pieceKey('m1', Math.round(12.349 * 100) / 100));
+});
+
 console.log(`\n${passed} passed`);

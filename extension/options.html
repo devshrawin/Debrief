@@ -502,6 +502,14 @@
         </div>
       </div>
 
+      <div class="card">
+        <h2>Short samples of unnamed voices</h2>
+        <label class="toggle"><span class="t"><b>Keep a short sample of each unnamed voice</b><span>Off by default. Lets you press Play next to "Unnamed voice 1" to hear who it is. Click Save changes after switching.</span></span><input type="checkbox" id="voiceSamples"></label>
+        <div class="row2">
+          <p class="hint" style="margin-top:0">This is the one case where Debrief keeps audio. While you record with learning on, short pieces of the other participants' speech wait in this browser (never uploaded); after the meeting one clip of about 8 seconds is kept for each <b>unnamed</b> voice and everything else is deleted. A clip is deleted when you name the voice, delete it, or press <b>Forget all voices</b>. People on your calls have not agreed to be recorded in this way by you alone: tell them, or leave this off.</p>
+        </div>
+      </div>
+
       <div class="card" id="voiceBlockedRow" hidden>
         <div class="row2" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <span id="voiceBlockedMsg" class="hint" style="margin:0"></span>
@@ -518,7 +526,7 @@
       <div class="card">
         <h2>Privacy</h2>
         <div class="row2">
-          <p class="hint" style="margin-top:0">Everything happens inside your browser. The recording you make here is kept in memory only while this page is open, so you can play it back, and is never saved or uploaded. Only a fingerprint (a list of 256 numbers) is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>
+          <p class="hint" style="margin-top:0">Everything happens inside your browser. The recording you make here is kept in memory only while this page is open, so you can play it back, and is never saved or uploaded. Apart from the optional short samples of unnamed voices below, only a fingerprint (a list of 256 numbers) is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>
         </div>
       </div>
 

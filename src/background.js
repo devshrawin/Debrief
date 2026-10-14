@@ -1,5 +1,6 @@
 import { isIconText, isMenuText } from './iconText.js';
 import { learnFromMeeting, learnRecurring } from './voice/learn.js';
+import { saveSamples } from './voice/sampling.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
@@ -134,13 +135,17 @@ async function startInner(msg) {
 // Opt-in: learn who is who from this meeting's captions and voice fingerprints (see voice/learn.js).
 async function learnVoices(meetingId) {
   const s = await getSettings();
-  if (!s.voiceLearn) return;
   const m = await getMeeting(meetingId);
-  if (!m) return;
+  if (!s.voiceLearn || !m) {
+    await saveSamples(meetingId, null, []).catch(() => {}); // only clears waiting audio
+    return;
+  }
   const blocked = await getBlockedVoices();
   const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
   const r2 = learnRecurring(m, r.list, { blocked });
   if (r.changed || r2.changed) await saveVoices(r2.list);
+  // keep one short clip per unnamed voice (if switched on), and always delete the waiting audio
+  await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {});
   await updateMeeting(meetingId, (mm) => {
     mm.voiceLearn = { ...r.report, recurring: r2.report };
   });
