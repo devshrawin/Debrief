@@ -61,9 +61,38 @@ This branch (`pro`) adds, on top of everything above:
 | **Share with your team** | Recipient lists, per recurring meeting. You get the email first; press **Share** after checking it, or let it go to everyone automatically. To / Cc / Bcc, replies come to you, and the script only mails people you allow (single addresses or whole company domains). |
 | **Usage** | A Usage page counts requests, tokens, audio minutes and quota hits per model (today, 7 and 30 days), learns daily limits from Google's own error messages, and warns in the popup at 80%. |
 | **Local models** | One-click presets for Ollama and local Whisper servers, an installed-model picker, context-length advice, and smaller reading windows for small models. See the [local models guide](docs/LOCAL.md). |
+| **Who is speaking (voice recognition)** | Optional, off by default. Add people in Settings → Voices by recording about 20 seconds of each (English, Hindi, Malayalam or free speech), and the transcript, minutes, Ask and attendance name speakers by voice, saying *Unknown speaker* when unsure. It runs in your browser with a bundled model, stores only numeric fingerprints, can learn voices from Meet captions over several meetings, and voices can be exported and imported. See [Voice recognition](#voice-recognition). |
 | **Other meeting apps (experimental)** | Optional generic detection for Teams, Zoom web, Webex, Whereby and Jitsi: mute follow and end-of-call detection. |
 
-Not in Pro yet: voice enrolment ("recognise Amal by voice"). It needs a speaker-recognition model and finer time-stamped chunks, and cannot be checked without real recordings of your team, so it is left for a later release. Speaker names from Meet's captions cover the common case without it.
+## Voice recognition
+
+Debrief Pro can put names to voices, as a **best guess**. Everything is switched off until you turn it on in **Settings → Voices**.
+
+**How it works.** While recording, the other participants' audio is cut into 1.5 to 4 second pieces of speech. A pretrained speaker model turns each piece into a fingerprint of 256 numbers, in a web worker inside your browser. The fingerprints are compared with the people you enrolled. The transcription itself is unchanged: the same chunks go to the same speech-to-text model, and each passage is split into sentences that are matched to the pieces of speech heard at that time.
+
+**What leaves your computer.** Nothing for this feature. The model ships with the extension (no download) and runs locally. The recording you make when enrolling stays in memory until you save, then only the fingerprint is kept in `chrome.storage.local`. (Speech-to-text and the minutes are sent to the providers you chose, exactly as before.) Fingerprints saved with a meeting are deleted by **Forget all voices**, or when you delete the meeting.
+
+**The model.** [WeSpeaker](https://github.com/wenet-e2e/wespeaker) ResNet34-LM, ONNX, 26.5 MB, 256-dimension speaker embedding, run with ONNX Runtime Web (WASM, MIT). The WeSpeaker model files are licensed CC-BY-4.0 (see [NOTICE.md](NOTICE.md)). It was chosen because it is small, runs well on a CPU, and is a published, widely used speaker model that needs no training here.
+
+**Using it.**
+1. **Settings → Voices → Add a person.** Type the name, pick the language they use in meetings, press *Record*, and read the text for about 20 seconds in a quiet room. Play it back, then *Save*. Add a second recording per language for someone who switches (*Add recording*), re-record, rename or delete at any time.
+2. Turn on **Name speakers by their voice** and Save. Names then appear in the minutes page transcript, the downloaded and emailed transcript, the prompts to the minutes writer and Ask, and attendance (people heard speaking count as present).
+3. **Learn from Meet captions (optional).** Debrief notes which voice is speaking whenever Meet's captions name exactly one person, and builds that fingerprint over several meetings. A learned voice is not used until it has about 45 seconds of clean speech from two meetings. It never changes a voice you recorded yourself, and drops a name that sounds the same as another.
+4. **Name an unknown voice.** *Unnamed voices in your latest meeting* lists voices that matched nobody, with example timestamps. Check the transcript at those times, type a name, save.
+5. **Share.** *Export voices* saves a file of fingerprints; *Import voices* adds them on another computer (the same model is required). Share only for people who agreed.
+
+**Limits, honestly.**
+- It is a statistical best guess. Similar voices, poor microphones, echo, compression by the meeting app and people talking over each other all cause mistakes. Overlap and low-confidence pieces are shown as *Unknown speaker* on purpose.
+- Where Meet's captions name someone else, the line shows both ("Priya (captions say Ravi)") rather than choosing silently.
+- The transcript has no word times, so sentences are placed on the speech in proportion to their length. A sentence that crosses two speakers is left unlabelled. This can misplace a speaker change by several seconds.
+- Matching works best with at least 1.5 seconds of one clean voice per piece. Short interjections are often unknown.
+- Whether a voice enrolled in one language matches the same person speaking another is not guaranteed, so record each language people use.
+- Voice labels only cover the other participants (tab audio). Your own microphone lines carry your name.
+- The accuracy numbers on real meetings have not been established. Do not rely on names for anything important without checking.
+- Processing cost is about 16% of the speech duration on one CPU thread in a worker (measured on one laptop); a slow computer drops pieces rather than slowing the recording.
+- Learning from captions works only in Google Meet with captions on, and a wrong caption can teach a wrong voice. Check the names, and delete anyone who looks off.
+- A voice fingerprint identifies a person's voice. Tell people before you build profiles of them, and only share fingerprints with their agreement.
+
 
 ## Quick start
 
@@ -214,14 +243,16 @@ The manifest pins the extension ID (`nckojmcchehoejdfklcmllhpekagiddo`) with a `
 - Chrome allows one recording tab at a time. Closing it stops the recording and opens the MOM page.
 - Muting in Meet does not mute Debrief's own mic stream; that is why Debrief follows Meet's mute button. If Meet changes its page structure and the state can't be read, use the mic button manually.
 - Malayalam transcription quality depends on the model; Gemini and Sarvam are the two that handle it.
-- No per-person speaker names yet for remote participants.
+- Per-person speaker names for remote participants come from voice recognition (optional, best guess) and Meet's captions (Meet only).
 
 ## Roadmap
 
 - Speaker names from Meet's active-speaker indicator
 - Auto-retry of kept chunks the moment quota resets
 - Slack / Teams / WhatsApp delivery of the MOM
-- Voice enrolment for closed groups
+- Voice recognition: measure accuracy on real labelled meetings (English, Hindi, Malayalam) and tune the thresholds from that
+- Word-level timestamps from the speech model for exact speaker boundaries
+- Learning voices without captions (other meeting apps)
 - Verified selectors for Meet captions and participants on live calls
 
 ---

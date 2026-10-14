@@ -112,6 +112,18 @@ Debrief can read each meeting's invite from your Google Calendar through the sam
 
 The minutes then include an attendance table, and the attendee list on the minutes page is filled in for you.
 
+### Who is speaking: voice recognition (optional)
+Names the speakers in the transcript and minutes by their voice. It is a best guess, off by default, and everything happens in your browser.
+1. Open **Settings → Voices** and click **Allow microphone** on the General page if Chrome has not asked yet.
+2. Under **Add a person** type the name, choose the language they use in meetings (English, Hindi, Malayalam or *Speak freely* for anything else), press **Record** and read the text for about 20 seconds in a quiet room. The meter should move. Play it back. Press **Save this voice**. Only a fingerprint (256 numbers) is stored, never the recording.
+3. Do the same for each regular colleague, ideally recorded on their own computer and microphone. For someone who uses two languages, press **Add recording** and record the other one. **Re-record** replaces a voice.
+4. Turn on **Name speakers by their voice** and press **Save changes**. Record your next meeting as usual; the names appear on the minutes page, in the downloaded and emailed transcript, in the minutes, and in the attendance table.
+5. **Learn on its own (optional):** turn on *Learn who is who from my meetings*. With Meet captions read (*Settings → General → Speaker names from Meet*), Debrief learns people over several meetings. A learned voice is used only after about 45 seconds of clean speech from two meetings. Unfamiliar voices appear under *Unnamed voices in your latest meeting*, where you can name them.
+6. **Share with a colleague:** *Export voices* gives a `.json` file; they use *Import voices*. Only share fingerprints of people who have agreed.
+7. **Forget all voices** deletes every fingerprint, including those saved inside past meetings.
+
+What to expect: names are right most of the time for clear speech and wrong or *Unknown speaker* when people overlap, speak briefly or sound alike. Where Meet's captions disagree, both names are shown. Check by listening before relying on a name. Privacy and limits are in the README under *Voice recognition*.
+
 ## 6. Other speech providers (optional)
 
 | Provider | When to use it | Setup |
