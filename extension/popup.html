@@ -1,124 +1,213 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debrief</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    :root { --ind1: #3a33a8; --ind2: #1e1b6b; --saffron: #ffb347; --saffron2: #ff7a1a; --rose: #e11d48; --mint: #10b981; }
-    body { width: 360px; padding: 0; background: var(--bg); overflow-x: hidden; }
-    .wrapper { padding: 14px 14px 12px; }
-    h1.brand { margin: 0 0 12px; font-size: 18px; letter-spacing: -.01em; }
-    h1.brand img { width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 4px 12px -4px rgba(30,27,107,.5); }
-    h1.brand .tag { font-size: 11.5px; margin-top: 1px; }
+    /* Popup-only layout. Colours, buttons, chips, meters, switch and the rest come from style.css. */
+    body { width: 360px; margin: 0; background: var(--card); overflow-x: hidden; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .stack { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .stack > * { margin: 0; }
+    .stack .hint { line-height: 1.6; }
 
-    .alert { display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.4;
-      background: #fff1f3; color: #8a1230; border: 1px solid #fda4b4; }
-    .alert.key { background: #fffbeb; color: #7a4b00; border-color: #fcd34d; }
-    .alert strong { display: block; margin-bottom: 2px; }
-    .alert .x { margin-left: auto; align-self: flex-start; padding: 0 4px; border: 0; background: none; font-size: 18px; line-height: 1; color: inherit; opacity: .6; }
-    @media (prefers-color-scheme: dark) {
-      .alert { background: #3b1520; color: #ffd0d8; border-color: #7a2438; }
-      .alert.key { background: #3a2e14; color: #f5d08a; border-color: #6e5418; }
-    }
+    header.top { display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px; }
+    header.top h1 { margin: 0; flex: 1; font-size: 16px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+    header.top h1 img { width: 32px; height: 32px; border-radius: 9px; flex: none; }
+    header.top a { font-size: 13px; font-weight: 600; padding: 8px 6px; text-decoration: none; }
+    header.top a:hover { text-decoration: underline; }
 
-    .hero { position: relative; overflow: hidden; border-radius: 16px; padding: 14px 14px 14px; color: #fff;
-      background: linear-gradient(135deg, var(--ind1), var(--ind2)); box-shadow: 0 12px 28px -14px rgba(30,27,107,.8); }
-    .hero::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 45%; background: linear-gradient(180deg, rgba(255,255,255,.14), transparent); pointer-events: none; }
-    .status { display: flex; align-items: center; gap: 9px; position: relative; z-index: 1; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.4); }
-    .dot.rec { background: #fb7185; animation: ring 1.6s infinite; }
-    @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(251,113,133,.7); } 70% { box-shadow: 0 0 0 8px rgba(251,113,133,0); } 100% { box-shadow: 0 0 0 0 rgba(251,113,133,0); } }
-    #statusText { font-weight: 650; font-size: 14px; }
-    #timer { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 20px; letter-spacing: .01em; }
-    .eq { display: flex; gap: 3px; align-items: center; height: 18px; margin-left: 4px; }
-    .eq i { width: 3px; height: 4px; border-radius: 2px; background: var(--saffron); }
-    .eq.live i { animation: eq 900ms ease-in-out infinite; }
-    .eq.live i:nth-child(2) { animation-delay: -.3s; } .eq.live i:nth-child(3) { animation-delay: -.6s; } .eq.live i:nth-child(4) { animation-delay: -.15s; } .eq.live i:nth-child(5) { animation-delay: -.45s; }
-    @keyframes eq { 0%,100% { height: 4px; } 50% { height: 17px; } }
+    .tabs { display: flex; gap: 4px; margin: 0 16px; padding: 4px; border-radius: 11px; background: var(--sunk); border: 1px solid var(--line); }
+    .tabs button { flex: 1; min-height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); padding: 4px 10px; }
+    .tabs button:hover:not(:disabled) { background: transparent; color: var(--text); }
+    .tabs button[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(20, 22, 40, 0.12); }
+    .tabs .chip { margin-left: 4px; padding: 0 7px; }
 
-    .cta { position: relative; z-index: 1; display: block; width: 100%; margin-top: 13px; padding: 12px 14px; border: 0; border-radius: 12px; font-size: 14.5px; font-weight: 700; cursor: pointer; letter-spacing: .005em; }
-    .cta.go { color: #3a1d00; background: linear-gradient(180deg, #ffd08a, var(--saffron) 55%, var(--saffron2)); box-shadow: 0 8px 18px -8px rgba(255,122,26,.9), inset 0 1px 0 rgba(255,255,255,.5); }
-    .cta.stop { color: #fff; background: linear-gradient(180deg, #fb7185, var(--rose)); box-shadow: 0 8px 18px -8px rgba(225,29,72,.9), inset 0 1px 0 rgba(255,255,255,.3); }
-    .cta:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
-    .cta:disabled { opacity: .55; }
+    .banner { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); font-size: 13.5px; line-height: 1.45; }
+    .banner .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(255, 122, 26, 0.25); flex: none; }
+    .banner small { font-size: 12.5px; }
+    .banner.err { background: var(--rec-bg); border-color: var(--rec-line); color: var(--rec-ink); align-items: flex-start; }
+    .banner.plain { background: var(--sunk); border-color: var(--line); color: var(--text); }
+    .banner.plain svg { flex: none; }
+    .banner strong.blk { display: block; }
 
-    .card { margin-top: 10px; padding: 11px 13px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); }
-    .mrow { display: flex; align-items: center; gap: 10px; }
-    .mrow .grow { flex: 1; font-weight: 600; }
-    .mrow small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
-    .sw { position: relative; width: 38px; height: 22px; flex: none; }
-    .sw input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 2; }
-    .sw .tr { position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background .2s; }
-    .sw .tr::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
-    .sw input:checked ~ .tr { background: var(--mint); } .sw input:checked ~ .tr::after { transform: translateX(16px); }
+    .big { min-height: 52px; font-size: 15.5px; border-radius: 12px; width: 100%; }
+    .big.stopbtn { background: var(--rec); border-color: var(--rec); color: var(--on-rec); font-weight: 700; gap: 10px; }
+    .big.stopbtn:hover:not(:disabled) { background: var(--rec); filter: brightness(0.93); color: var(--on-rec); }
 
-    .meter { margin-top: 9px; }
-    .meter .t { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
-    .meter .t span:last-child { color: var(--text); font-weight: 600; }
-    .bar { height: 6px; border-radius: 4px; background: var(--border); overflow: hidden; }
-    .bar i { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #34d399, #6ee7b7); transition: width .3s; }
-    .bar i.low { background: linear-gradient(90deg, #f59e0b, #fcd34d); } .bar i.dead { background: #fb7185; }
+    .box { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .box .ttl { font-weight: 600; }
+    .box .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .box .meta .sp { flex: 1; }
+    .box a.btn { min-height: 32px; padding: 4px 8px; }
 
-    .tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 11px; background: var(--panel); border: 1px solid var(--border); }
-    .tabs button { flex: 1; border: 0; background: none; padding: 7px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; color: var(--muted); cursor: pointer; }
-    .tabs button.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(20,16,60,.15); }
-    .tabs .count { margin-left: 4px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--border); color: var(--text); }
-    .pane { display: none; } .pane.active { display: block; }
-    #recent { max-height: 380px; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
-    .empty { text-align: center; padding: 34px 10px; color: var(--muted); }
-    .hint { font-size: 11.5px; }
-    .list { margin-top: 14px; }
-    .list-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-    .list-h strong { font-size: 13px; }
-    .link { border: 0; background: none; padding: 0; color: var(--muted); font-size: 11.5px; cursor: pointer; text-decoration: underline; }
-    .item { display: flex; align-items: center; gap: 6px; padding: 6px 4px 6px 8px; border-radius: 9px; }
-    .item:hover { background: var(--panel); }
-    .item a { flex: 1; min-width: 0; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 550; }
-    .item small { color: var(--muted); font-weight: 400; }
-    .del { flex: none; border: 0; background: none; padding: 3px 7px; border-radius: 7px; color: var(--muted); font-size: 12px; cursor: pointer; opacity: 0; }
-    .item:hover .del, .del.armed { opacity: 1; }
-    .del:hover { background: rgba(225,29,72,.12); color: var(--rose); }
-    .del.armed { background: var(--rose); color: #fff; font-weight: 600; }
-    .foot { margin-top: 10px; font-size: 12px; display: flex; justify-content: space-between; }
+    .linkrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .linkrow a { font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
+    #diagnose { min-height: 36px; padding: 4px 6px; font-size: 13px; color: var(--muted); }
+    #diagnose[aria-expanded="true"]::after { content: "\2191"; }
+    #diagnose[aria-expanded="false"]::after { content: "\2193"; }
+    #diagResult { border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; align-items: center; }
+    #diagResult .full { grid-column: 1 / -1; }
+    #diagResult .chip { white-space: normal; text-align: right; }
+
+    header.recbar { display: flex; align-items: center; gap: 10px; padding: 14px 16px; background: var(--rec-bg); border-bottom: 1px solid var(--rec-line); }
+    header.recbar strong { color: var(--rec-ink); flex: 1; }
+    #timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--rec-ink); line-height: 1.3; }
+
+    #alert .body { flex: 1; font-size: 13px; line-height: 1.6; min-width: 0; overflow-wrap: anywhere; }
+    #alert strong { display: block; }
+    #alert a { font-weight: 700; color: inherit; }
+    #alert .x { align-self: flex-start; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; background: none; color: inherit; border-radius: 8px; font-size: 18px; line-height: 1; }
+    #alert .x:hover:not(:disabled) { background: rgba(0, 0, 0, 0.08); color: inherit; }
+
+    .lv { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
+    .lv b { font-weight: 600; }
+    .lv .meter { grid-column: 1 / -1; }
+    .lv .meter > i { width: 0; transition: width 0.3s; }
+
+    .micbox { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
+    .micbox .grow { flex: 1; min-width: 0; }
+    .micbox .grow > div { font-weight: 600; }
+    #micState { display: flex; gap: 6px; align-items: flex-start; }
+    #micState .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; margin-top: 8px; }
+    #micState.paused .pip { background: var(--amber); }
+    #micState.off .pip { background: var(--line-strong); }
+    #micState.unknown .pip { background: var(--amber); }
+    .counts { display: flex; gap: 6px 14px; flex-wrap: wrap; }
+
+    .fin { padding: 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .fin > * { margin: 0; }
+    .fin .head { display: flex; gap: 10px; align-items: center; color: var(--brand); }
+    .fin .head strong { color: var(--text); }
+    .fin .meter > i { background: var(--brand); width: 100%; animation: indet 1.6s ease-in-out infinite; transform-origin: left; }
+    @keyframes indet { 0% { transform: scaleX(0.1); } 60% { transform: scaleX(0.9); } 100% { transform: scaleX(0.1); } }
+    @media (prefers-reduced-motion: reduce) { .fin .meter > i { transform: none; } }
+
+    .searchwrap { position: relative; }
+    .searchwrap svg { position: absolute; left: 12px; top: 11px; pointer-events: none; }
+    #q { padding-left: 36px; }
+    #recent { display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+    .item { display: flex; align-items: center; gap: 6px; padding: 8px 6px 8px 10px; border-radius: 10px; }
+    .item:hover { background: var(--sunk); }
+    .item.armed { background: var(--rec-bg); }
+    .item a.open { flex: 1; min-width: 0; text-decoration: none; color: var(--text); }
+    .item .t { font-weight: 600; }
+    .item .m { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+    .item .m .chip { font-size: 11px; padding: 0 7px; }
+    .item button { flex: none; }
+    .item .del { width: 36px; height: 36px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--muted); border-radius: 8px; }
+    .item .del:hover:not(:disabled) { background: var(--rec-bg); color: var(--rec-ink); }
+    .item .confirm { min-height: 32px; padding: 4px 10px; border-radius: 8px; border: 0; background: var(--rec); color: var(--on-rec); font-size: 12.5px; font-weight: 700; }
+    .item .confirm:hover:not(:disabled) { background: var(--rec); color: var(--on-rec); filter: brightness(0.93); }
+    .empty { padding: 24px 16px; gap: 6px; }
+    #clearAll { font-size: 12.5px; min-height: 32px; padding: 2px 8px; color: var(--muted); align-self: flex-end; }
+    #clearAll.armed { color: var(--rec-ink); }
+    #tab-meet-empty { margin: 0; }
   </style>
 </head>
 <body>
-  <div class="wrapper">
-    <h1 class="brand"><img src="icons/icon48.png" alt=""><span>Debrief<span class="tag">Minutes for every meeting</span></span></h1>
-    <div id="setup" class="warn hidden" style="margin-bottom:10px"><span id="setupMsg">Add your free Gemini key first.</span> <a href="#" id="openTour1"><b>Take the 5-minute tour</b></a> or <a href="#" id="openSettings1">open Settings</a>.</div>
-    <div class="tabs" id="tabs"><button class="active" data-pane="paneRec">Record</button><button data-pane="paneMeet">Meetings<span class="count" id="meetCount">0</span></button></div>
-    <div class="pane active" id="paneRec">
-    <div id="usageWarn" class="alert key hidden"><div><strong>Close to a daily limit</strong><span id="usageWarnText"></span></div></div>
-    <div id="alert" class="alert hidden"><div><strong id="alertTitle"></strong><span id="alertText"></span></div><button class="x" id="alertX" title="Dismiss">×</button></div>
-
-    <div class="hero">
-      <div class="status"><span class="dot" id="dot"></span><span id="statusText">Idle</span><span class="eq" id="eq"><i></i><i></i><i></i><i></i><i></i></span><span id="timer"></span></div>
-      <button id="start" class="cta go">Start recording this tab</button>
-      <button id="stop" class="cta stop hidden">Stop &amp; write MOM</button>
+  <!-- Idle: Home and Meetings -->
+  <div id="idleView">
+    <header class="top">
+      <h1 class="brand"><img src="icons/icon.svg" alt="" width="32" height="32"><span>Debrief</span></h1>
+      <a href="#" id="openTour">Tour</a>
+      <a href="#" id="openSettings">Settings</a>
+    </header>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Popup sections">
+      <button role="tab" id="tabHome" aria-selected="true" aria-controls="paneRec" data-pane="paneRec">Home</button>
+      <button role="tab" id="tabMeet" aria-selected="false" aria-controls="paneMeet" data-pane="paneMeet" tabindex="-1">Meetings <span class="chip" id="meetCount">0</span></button>
     </div>
-    <div id="micWarn" class="warn hidden" style="margin-top:8px"></div>
-    <div id="error" class="warn hidden" style="margin-top:8px"></div>
 
-    <div class="card hidden" id="live">
-      <div class="mrow" id="micRow">
-        <div class="grow">Include my microphone<small id="micState">Your voice goes into the transcript</small></div>
-        <label class="sw"><input type="checkbox" id="micToggle"><span class="tr"></span></label>
+    <div class="stack" id="paneRec" role="tabpanel" aria-labelledby="tabHome">
+      <div id="setup" class="banner err hidden" role="status">
+        <div style="flex:1">
+          <strong class="blk" id="setupMsg">Add your free Gemini key first.</strong>
+          <span class="hint" style="display:block;margin:4px 0 8px;color:inherit">Debrief needs a key to transcribe. It takes two minutes and stays on this computer.</span>
+          <span class="row"><a href="#" id="openTour1" class="btn primary">Take the 5-minute tour</a><a href="#" id="openSettings1" class="btn">Settings</a></span>
+        </div>
       </div>
-      <div class="meter"><div class="t"><span>Meeting audio</span><span id="lvTabT">-</span></div><div class="bar"><i id="lvTab"></i></div></div>
-      <div class="meter"><div class="t"><span>Your mic</span><span id="lvMicT">-</span></div><div class="bar"><i id="lvMic"></i></div></div>
-      <p class="hint" id="segInfo" style="margin:9px 0 0"></p>
+      <div id="offline" class="banner plain hidden" role="status">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 9-2.7M8.5 15.5a5 5 0 0 1 4-1.3M3 3l18 18"></path></svg>
+        <span><strong>You are offline.</strong> Recording works; audio waits here until you are back.</span>
+      </div>
+      <div id="usageWarn" class="banner hidden" role="status"><div><strong class="blk">Close to a daily limit</strong><span id="usageWarnText" class="hint" style="color:inherit"></span></div></div>
+      <div id="callBanner" class="banner hidden" role="status">
+        <span class="pip" aria-hidden="true"></span>
+        <div style="flex:1"><strong>A call is on.</strong> Start recording?<br><small id="callSite">this tab</small></div>
+      </div>
+      <div id="cantRecord" class="banner err hidden" role="alert">
+        <div><strong class="blk">Can’t record this tab</strong>Chrome blocks recording on its own pages. Open the meeting tab, then click Debrief again.</div>
+      </div>
+      <div id="error" class="banner err hidden" role="alert"></div>
+
+      <button id="start" class="btn primary big">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="currentColor"></circle></svg><span id="startLabel">Start recording this tab</span>
+      </button>
+      <p class="hint" id="shortcutHint" style="text-align:center">Tell people you are recording.</p>
+
+      <div class="box hidden" id="lastBox">
+        <p class="lbl">Last meeting</p>
+        <div class="ttl trunc" id="lastTitle"></div>
+        <div class="meta"><span class="hint" id="lastWhen"></span><span class="chip brand hidden" id="lastMail">Emailed</span><span class="sp"></span><a href="#" class="btn ghost" id="lastOpen">Open minutes</a></div>
+      </div>
+
+      <div class="linkrow">
+        <a href="#" id="askHome"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>Ask a question</a>
+        <button id="diagnose" class="btn ghost" aria-expanded="false" aria-controls="diagResult">Check page detection</button>
+      </div>
+      <div id="diagResult" role="region" aria-label="What Debrief can read from this page" aria-live="polite" class="hidden"></div>
     </div>
 
-    <p class="hint" style="margin:8px 2px 0"><a href="#" id="diagnose">Check page detection</a> <span id="diagResult" class="hint"></span></p>
-    <p class="hint" id="shortcutHint" style="margin:10px 2px 0"></p>
-    <p class="hint" style="margin:4px 2px 0">Tell participants you are recording. Use headphones so your mic doesn't pick up other speakers.</p>
+    <div class="stack" id="paneMeet" role="tabpanel" aria-labelledby="tabMeet" hidden style="gap:8px">
+      <label for="q" class="sr">Search meetings</label>
+      <div class="searchwrap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg><input id="q" type="search" placeholder="Search titles and people" autocomplete="off"></div>
+      <div id="recent"><div class="empty"><strong>No meetings yet</strong><p class="hint" style="margin:0">Recorded meetings and their minutes appear here.</p></div></div>
+      <div class="linkrow" style="margin-top:6px">
+        <a href="#" id="askAll">Ask a question across all meetings</a>
+      </div>
+      <button class="btn ghost hidden" id="clearAll">Clear all</button>
+    </div>
+  </div>
 
+  <!-- Recording -->
+  <div id="recView" class="hidden">
+    <header class="recbar">
+      <span class="recdot" id="dot" aria-hidden="true"></span>
+      <strong id="statusText" role="status">Idle</strong>
+      <span id="timer"></span>
+    </header>
+    <div class="stack">
+      <div id="alert" class="alertbar warning hidden" role="alert">
+        <div class="body"><strong id="alertTitle"></strong><span id="alertText"></span><div id="alertActionRow" style="margin-top:6px" class="hidden"><a href="#" id="alertAction">Add a backup key</a></div></div>
+        <button class="x" id="alertX" aria-label="Dismiss" title="Dismiss">×</button>
+      </div>
+      <div id="micWarn" class="banner err hidden" role="alert"></div>
+      <div id="live" class="hidden" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="lv"><span>Meeting audio</span><b id="lvTabT">-</b><div class="meter"><i id="lvTab"></i></div></div>
+          <div class="lv"><span>Your mic</span><b id="lvMicT">-</b><div class="meter"><i id="lvMic"></i></div></div>
+        </div>
+        <div class="micbox" id="micRow">
+          <div class="grow"><div id="micLabel">Include my microphone</div><p id="micState" class="hint"><span class="pip" aria-hidden="true"></span><span id="micStateT">Your voice goes into the transcript</span></p></div>
+          <button id="micToggle" class="sw" role="switch" aria-checked="false" aria-labelledby="micLabel"></button>
+        </div>
+        <p class="hint counts" id="segInfo"></p>
+      </div>
+      <button id="stop" class="btn big stopbtn">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="currentColor"></rect></svg>Stop and write minutes
+      </button>
+      <p class="hint" style="text-align:center">Nothing is lost when you stop. The last minute is still transcribed.</p>
     </div>
-    <div class="pane" id="paneMeet">
-      <div class="list-h"><strong>All meetings</strong><span><button class="link" id="askAll" style="margin-right:10px">Ask a question</button><button class="link hidden" id="clearAll">Clear all</button></span></div>
-      <div id="recent"><p class="empty">No meetings yet.</p></div>
-    </div>
-    <div class="foot"><a href="#" id="openSettings">Settings</a><a href="#" id="openTour">Take the tour</a></div>
+  </div>
+
+  <!-- Finishing -->
+  <div id="finView" class="fin hidden">
+    <div class="head"><span class="spin" aria-hidden="true"></span><strong id="finText" role="status">Finishing transcription…</strong></div>
+    <div class="meter" role="progressbar" aria-label="Transcription progress"><i></i></div>
+    <p class="hint" id="finInfo">Then the minutes are written, about 30 s. You can close this popup.</p>
+    <a href="#" class="btn" id="finOpen">Open the minutes page</a>
   </div>
   <script src="dist/popup.js"></script>
 </body>
