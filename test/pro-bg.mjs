@@ -8,7 +8,7 @@ async function test(name, fn) {
     state.mem.local = {};
     state.mem.session = {};
     state.created.length = 0;
-    for (const k of Object.keys(state.badge)) delete state.badge[k];
+    for (const o of [state.badge, state.title, state.icon]) for (const k of Object.keys(o)) delete o[k];
     await fn();
     passed++;
     console.log(`ok   ${name}`);
@@ -178,6 +178,46 @@ await test('the amber call dot follows the page and is left alone while recordin
   state.badge[5] = 'REC';
   await send({ type: 'in-call', on: true, site: 'Zoom' }, page(5));
   assert.equal(state.badge[5], 'REC');
+});
+
+await test('toolbar: call-on glows by swapping the icon, tooltip is the artboard text, and it stops cleanly', async () => {
+  await send({ type: 'in-call', on: true, site: 'Zoom' }, page(5));
+  assert.equal(state.title[5], 'A call is on. Click to record.');
+  assert.equal(state.icon[5], 'icons/icon16-glow.png');
+  await wait(700);
+  assert.equal(state.icon[5], 'icons/icon16.png', 'swapped to the plain frame after 600 ms');
+  await wait(600);
+  assert.equal(state.icon[5], 'icons/icon16-glow.png', 'and back');
+  await send({ type: 'in-call', on: false }, page(5));
+  assert.equal(state.icon[5], 'icons/icon16.png');
+  assert.equal(state.title[5], 'Debrief');
+  assert.equal(state.badge[5], '');
+  state.icon[5] = 'untouched';
+  await wait(1300);
+  assert.equal(state.icon[5], 'untouched', 'no timer is left running after the last glow stops');
+});
+
+await test('toolbar: recording ends the glow, shows REC with a live tooltip, ! on an alert, resets on stop', async () => {
+  await send({ type: 'in-call', on: true, site: 'Meet' }, page(7));
+  const r = await send({ type: 'start', streamId: 's', tabId: 7, title: 'Meet - Sync - Google Meet', url: 'https://meet.google.com/abc-defg-hij' }, OWN);
+  assert.equal(r.ok, true);
+  assert.equal(state.badge[7], 'REC');
+  assert.equal(state.badge.g, 'REC');
+  assert.match(state.title[7], /^Recording · 0:0\d$/);
+  assert.equal(state.icon[7], 'icons/icon16.png', 'plain icon, glow ended');
+  state.icon[7] = 'untouched';
+  await wait(1300);
+  assert.equal(state.icon[7], 'untouched', 'the glow timer stopped when recording started');
+  const meetingId = state.mem.session.rec.meetingId;
+  await send({ type: 'stt-error', meetingId, error: '[10s me] Gemini HTTP 429: quota, limit: 20, model: gemini-3.8-flash' }, OFFSCREEN);
+  assert.equal(state.badge[7], '!');
+  assert.equal(state.title[7], 'Debrief needs attention');
+  await send({ type: 'segment', meetingId, seg: { t: 5, src: 'others', text: 'ok' } }, OFFSCREEN);
+  assert.equal(state.badge[7], 'REC', 'attention clears when transcription resumes');
+  await send({ type: 'stop' }, OWN);
+  assert.equal(state.badge[7], '');
+  assert.equal(state.badge.g, '');
+  assert.equal(state.title[7], 'Debrief');
 });
 
 console.log(`\n${passed} passed`);
