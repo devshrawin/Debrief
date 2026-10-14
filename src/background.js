@@ -12,6 +12,102 @@ chrome.runtime.onInstalled.addListener((d) => {
   if (d.reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html?restart=1') });
 });
 
+// ---- Toolbar icon states: idle, call on (glow), recording (REC badge), needs attention ----
+// Every call is fire-and-forget: a tab can close between the event and the call.
+const quiet = (p) => Promise.resolve(p).catch(() => {});
+const TIP_IDLE = 'Debrief';
+const TIP_CALL = 'A call is on. Click to record.';
+const TIP_ATTN = 'Debrief needs attention';
+const ICON_IDLE = { 16: 'icons/icon16.png', 32: 'icons/icon32.png', 48: 'icons/icon48.png' };
+const ICON_GLOW = { 16: 'icons/icon16-glow.png', 32: 'icons/icon32-glow.png', 48: 'icons/icon48-glow.png' };
+const setIcon = (tabId, glow) => quiet(chrome.action.setIcon({ tabId, path: glow ? ICON_GLOW : ICON_IDLE }));
+const setBadge = (tabId, text, color) => {
+  const t = tabId == null ? {} : { tabId };
+  if (color) quiet(chrome.action.setBadgeBackgroundColor({ ...t, color }));
+  quiet(chrome.action.setBadgeText({ ...t, text }));
+};
+const setTip = (tabId, title) => quiet(chrome.action.setTitle(tabId == null ? { title } : { tabId, title }));
+
+// Call-on glow: the icon image alternates between plain and glow every 600 ms (static under reduced motion
+// cannot be detected in a service worker, so it stays gentle: a halo, no movement). One shared interval, started
+// with the first glowing tab and cleared with the last, so it can neither leak nor double up. If the worker is
+// stopped the icon simply stays on whichever frame it had; the next 'in-call' message from the page restarts it.
+const GLOW_MS = 600;
+const glowTabs = new Set();
+let glowTimer = null;
+let glowPhase = false;
+function endGlowTimer() {
+  if (glowTabs.size || !glowTimer) return;
+  clearInterval(glowTimer);
+  glowTimer = null;
+  glowPhase = false;
+}
+function startGlow(tabId) {
+  if (glowTabs.has(tabId)) return;
+  if (!glowTimer) glowPhase = true; // the first frame is the glow
+  glowTabs.add(tabId);
+  setIcon(tabId, glowPhase);
+  glowTimer ||= setInterval(() => {
+    glowPhase = !glowPhase;
+    for (const t of glowTabs) setIcon(t, glowPhase);
+  }, GLOW_MS);
+}
+function stopGlow(tabId) {
+  if (!glowTabs.delete(tabId)) return;
+  setIcon(tabId, false);
+  endGlowTimer();
+}
+function showCallOn(tabId) {
+  setBadge(tabId, '●', '#F59E0B'); // static amber dot: the fallback if the glow is not noticed
+  setTip(tabId, TIP_CALL);
+  startGlow(tabId);
+}
+function showCallOff(tabId) {
+  stopGlow(tabId);
+  setBadge(tabId, '');
+  setTip(tabId, TIP_IDLE);
+}
+
+// Recording: red REC badge (never animated) with a live tooltip; a dark ! badge while something needs attention.
+const fmtElapsed = (ms) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+let rec = null; // { tabId, startedAt, attention }
+let recTimer = null;
+function paintRec() {
+  if (!rec) return;
+  const bad = rec.attention;
+  const tip = bad ? TIP_ATTN : `Recording · ${fmtElapsed(Date.now() - rec.startedAt)}`;
+  for (const t of [null, rec.tabId]) {
+    setBadge(t, bad ? '!' : 'REC', bad ? '#1d1f24' : '#c8281c');
+    setTip(t, tip);
+  }
+}
+function showRec(tabId, startedAt, attention = false) {
+  stopGlow(tabId); // the glow ends the moment recording starts
+  rec = { tabId, startedAt, attention };
+  paintRec();
+  clearInterval(recTimer);
+  recTimer = setInterval(paintRec, 5000);
+}
+function setAttention(on) {
+  if (!rec || rec.attention === on) return;
+  rec.attention = on;
+  paintRec();
+}
+function hideRec(tabId) {
+  clearInterval(recTimer);
+  recTimer = null;
+  rec = null;
+  for (const t of [null, tabId]) {
+    setBadge(t, '');
+    setTip(t, TIP_IDLE);
+  }
+}
+// After a service-worker restart in the middle of a recording, put the REC indicator back.
+getState().then((st) => st.recording && !st.stopping && showRec(st.tabId, st.startedAt, !!st.alert), () => {});
+
 let chain = Promise.resolve();
 const serial = (fn) => {
   const p = chain.then(fn, fn);
@@ -46,6 +142,7 @@ async function raiseAlert(meetingId, err) {
     fresh = !st.alert || st.alert.kind !== a.kind || Date.now() - st.alert.notifiedAt > 10 * 60 * 1000;
     return { ...st, alert: { ...a, at: Date.now(), notifiedAt: fresh ? Date.now() : st.alert.notifiedAt } };
   });
+  setAttention(true);
   if (fresh) {
     // No meeting title or addresses here: notifications can show on a shared screen.
     chrome.notifications?.create(`debrief-${a.kind}`, {
@@ -59,7 +156,9 @@ async function raiseAlert(meetingId, err) {
 }
 
 async function clearAlert() {
-  await mutateState((st) => (st.alert ? { ...st, alert: null } : null));
+  let had = false;
+  await mutateState((st) => ((had = !!st.alert), st.alert ? { ...st, alert: null } : null));
+  if (had) setAttention(false);
 }
 
 async function ensureOffscreen() {
@@ -124,11 +223,8 @@ async function startInner(msg) {
   await chrome.storage.session.set({ quietSince: null, heard: false });
   // The pill is a content script; inject it now so it appears without reloading the Meet tab.
   chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ['dist/pill.js'] }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
-  chrome.action.setBadgeText({ text: 'REC' });
-  // A tab-specific badge (the Meet reminder) would hide the global one on that tab.
-  chrome.action.setBadgeBackgroundColor({ tabId: msg.tabId, color: '#d93025' });
-  chrome.action.setBadgeText({ tabId: msg.tabId, text: 'REC' });
+  // A tab-specific badge (the Meet reminder) would hide the global one on that tab, so showRec sets both.
+  showRec(msg.tabId, Date.now());
   return { ok: true };
 }
 
@@ -168,8 +264,7 @@ function stop(opts = {}) {
     await learnVoices(st.meetingId).catch(() => {});
     await closeOffscreen();
     await mutateState(() => ({ recording: false }));
-    chrome.action.setBadgeText({ text: '' });
-    chrome.action.setBadgeText({ tabId: st.tabId, text: '' }).catch(() => {});
+    hideRec(st.tabId);
     // After an automatic stop, open the minutes in the background so it doesn't pull you out of what you're doing.
     await chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${st.meetingId}`), active: !opts.background });
     return { ok: true };
@@ -312,13 +407,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (tabId == null) return { ok: false };
       const st = await getState();
       if (st.recording && st.tabId === tabId) return { ok: true };
-      if (msg.on) {
-        chrome.action.setBadgeBackgroundColor({ tabId, color: '#F59E0B' });
-        chrome.action.setBadgeText({ tabId, text: '●' });
-        chrome.action.setTitle({ tabId, title: `Debrief: a ${msg.site || 'meeting'} call is on. Click (or press Alt+Shift+M) to record it` });
-      } else {
-        chrome.action.setBadgeText({ tabId, text: '' });
-      }
+      if (msg.on) showCallOn(tabId);
+      else showCallOff(tabId);
       return { ok: true };
     },
     // Voice fingerprints of the meeting's speech, made by the recorder. Only fingerprints, never audio.
@@ -372,9 +462,9 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
     const r = await start({ streamId, tabId: tab.id, title: tab.title, url: tab.url });
     if (!r.ok) throw new Error(r.error);
   } catch (e) {
-    chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: '#d93025' });
-    chrome.action.setBadgeText({ tabId: tab.id, text: 'ERR' });
-    chrome.action.setTitle({ tabId: tab.id, title: `Debrief could not start: ${e.message}` });
+    stopGlow(tab.id);
+    setBadge(tab.id, '!', '#1d1f24');
+    setTip(tab.id, `${TIP_ATTN}: could not start (${e.message})`);
   }
 });
 
@@ -384,11 +474,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (!info.url && info.status !== 'complete') return;
   const st = await getState();
   if (st.recording && st.tabId === tabId) return;
-  if (MEET_CALL.test(tab.url || '')) {
-    chrome.action.setBadgeBackgroundColor({ tabId, color: '#F59E0B' });
-    chrome.action.setBadgeText({ tabId, text: '●' });
-    chrome.action.setTitle({ tabId, title: 'Debrief: click (or press Alt+Shift+M) to record this meeting' });
-  }
+  if (MEET_CALL.test(tab.url || '')) showCallOn(tabId);
 });
 
 // Leaving the call page (or the whole meeting site) also ends the recording.
@@ -402,6 +488,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
+  glowTabs.delete(tabId);
+  endGlowTimer();
   const st = await getState();
   if (st.recording && st.tabId === tabId) stop();
 });
