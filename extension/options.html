@@ -53,6 +53,8 @@
     .toggle input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
     .btnrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+    [hidden] { display: none !important; }
+    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
     .btn { padding: 8px 14px; border-radius: 9px; font-weight: 600; font-size: 13px; background: var(--card); border: 1px solid var(--border); }
     .btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
     .status { font-size: 12.5px; color: var(--muted); }
@@ -121,7 +123,8 @@
       <button data-tab="speech"><span class="num">3</span>Speech to text</button>
       <button data-tab="minutes"><span class="num">4</span>Minutes</button>
       <button data-tab="email"><span class="num">5</span>Email</button>
-      <button data-tab="usage"><span class="num">6</span>Usage</button>
+      <button data-tab="voices"><span class="num">6</span>Voices</button>
+      <button data-tab="usage"><span class="num">7</span>Usage</button>
     </nav>
     <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a><br><a href="https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md" target="_blank">Setup guide</a></div>
   </aside>
@@ -462,6 +465,69 @@
         <label class="toggle"><span class="t"><b>Word (.doc)</b><span>Opens in Word with tables intact.</span></span><input type="checkbox" id="emailWord"></label>
         <label class="toggle"><span class="t"><b>Markdown (.md)</b><span>Plain text with formatting marks.</span></span><input type="checkbox" id="emailMd"></label>
         <label class="toggle"><span class="t"><b>Transcript (.txt)</b><span>The full transcript of the meeting.</span></span><input type="checkbox" id="emailTranscript"></label>
+      </div>
+    </section>
+
+    <!-- ============ Voices ============ -->
+    <section class="page" id="page-voices">
+      <h1>Voices</h1>
+      <p class="lede">Teach Debrief what your regular colleagues sound like, so the transcript and minutes can say who spoke. This is a best guess, not a certainty.</p>
+
+      <div class="card">
+        <h2>Recognise who is speaking</h2>
+        <label class="toggle"><span class="t"><b>Name speakers by their voice (best guess)</b><span>Off by default. Click Save changes after switching.</span></span><input type="checkbox" id="voiceOn"></label>
+        <div class="row2">
+          <p class="hint" style="margin-top:0">When on, Debrief makes a small numeric fingerprint of each stretch of the other participants' speech, on this computer, and compares it with the voices below. Where it is unsure, or people talk over each other, the line says <b>Unknown speaker</b> rather than guessing. When Meet's own captions name a different person, both names are shown.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Privacy</h2>
+        <div class="row2">
+          <p class="hint" style="margin-top:0">Everything happens inside your browser. The recording you make here is kept in memory only while this page is open, so you can play it back, and is never saved or uploaded. Only a fingerprint (a list of 256 numbers) is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Enrolled people</h2>
+        <div id="voiceList"></div>
+        <p class="hint" id="voiceEmpty">Nobody yet. Add a person below, one at a time, ideally on their own computer in a quiet room.</p>
+      </div>
+
+      <div class="card">
+        <h2 id="enrolTitle">Add a person</h2>
+        <div class="row2">
+          <label for="enrolName">Name</label>
+          <input id="enrolName" placeholder="e.g. Amal Raj" maxlength="60">
+        </div>
+        <div class="row2">
+          <label class="lab">Read this aloud (about 20 seconds)</label>
+          <div class="seg" id="enrolLang"><button data-lang="en" class="active">English</button><button data-lang="ml">മലയാളം</button></div>
+          <p id="enrolPrompt" style="margin:10px 0 0;padding:12px 14px;border-radius:10px;background:var(--brand-soft);line-height:1.7;max-width:640px"></p>
+          <p class="hint">Speak in the language the person mostly uses in meetings. For someone who uses both, add a second recording in the other language afterwards (Add recording).</p>
+        </div>
+        <div class="row2">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn" id="enrolRec">Record</button>
+            <button class="btn" id="enrolStop" hidden>Stop</button>
+            <button class="btn" id="enrolPlay" hidden>Play back</button>
+            <span id="enrolTime" class="hint" style="margin:0"></span>
+          </div>
+          <div style="margin-top:10px;max-width:460px;height:10px;border-radius:6px;background:var(--border);overflow:hidden"><i id="enrolLevel" style="display:block;height:100%;width:0;background:var(--brand);transition:width .08s"></i></div>
+          <p class="hint" id="enrolMsg" role="status"></p>
+          <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn primary" id="enrolSave" hidden>Save this voice</button>
+            <button class="btn" id="enrolCancel" hidden>Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Forget</h2>
+        <div class="row2">
+          <button class="btn" id="voiceForget" style="color:#b91c1c">Forget all voices</button>
+          <p class="hint">Deletes every enrolled voice and every voice fingerprint saved with past meetings. Transcripts and minutes are not touched.</p>
+        </div>
       </div>
     </section>
 

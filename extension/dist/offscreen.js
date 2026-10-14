@@ -528,6 +528,7 @@
     constructor(onSegment) {
       this.onSegment = onSegment;
       this.floor = -60;
+      this.recent = [];
       this.samples = 0;
       this.cur = [];
       this.curStart = 0;
@@ -538,7 +539,10 @@
       let sum = 0;
       for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
       const db = 10 * Math.log10(sum / block.length + 1e-12);
-      this.floor = db < this.floor ? db : db < this.floor + 6 ? this.floor * 0.98 + db * 0.02 : this.floor;
+      this.recent.push(db);
+      if (this.recent.length > 117) this.recent.shift();
+      const target = [...this.recent].sort((x, y) => x - y)[Math.floor((this.recent.length - 1) * 0.2)];
+      this.floor = this.recent.length === 1 ? db : Math.min(target, this.floor + 0.3);
       const speech = db > Math.max(this.floor + 9, -52);
       const at = this.samples;
       this.samples += block.length;

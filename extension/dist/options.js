@@ -26,9 +26,9 @@
   };
   var __copyProps = (to, from, except, desc) => {
     if (from && typeof from === "object" || typeof from === "function") {
-      for (let key of __getOwnPropNames(from))
-        if (!__hasOwnProp.call(to, key) && key !== except)
-          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+      for (let key2 of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key2) && key2 !== except)
+          __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
     }
     return to;
   };
@@ -692,17 +692,17 @@
         var HMAC = (
           /** @class */
           (function() {
-            function HMAC2(key) {
+            function HMAC2(key2) {
               this.inner = new Hash();
               this.outer = new Hash();
               this.blockSize = this.inner.blockSize;
               this.digestLength = this.inner.digestLength;
               var pad = new Uint8Array(this.blockSize);
-              if (key.length > this.blockSize) {
-                new Hash().update(key).finish(pad).clean();
+              if (key2.length > this.blockSize) {
+                new Hash().update(key2).finish(pad).clean();
               } else {
-                for (var i = 0; i < key.length; i++) {
-                  pad[i] = key[i];
+                for (var i = 0; i < key2.length; i++) {
+                  pad[i] = key2[i];
                 }
               }
               for (var i = 0; i < pad.length; i++) {
@@ -763,8 +763,8 @@
         }
         exports2.hash = hash;
         exports2["default"] = hash;
-        function hmac(key, data) {
-          var h = new HMAC(key).update(data);
+        function hmac(key2, data) {
+          var h = new HMAC(key2).update(data);
           var digest = h.digest();
           h.clean();
           return digest;
@@ -787,7 +787,7 @@
           counter[0]++;
         }
         var hkdfSalt = new Uint8Array(exports2.digestLength);
-        function hkdf(key, salt, info, length) {
+        function hkdf(key2, salt, info, length) {
           if (salt === void 0) {
             salt = hkdfSalt;
           }
@@ -795,7 +795,7 @@
             length = 32;
           }
           var counter = new Uint8Array([1]);
-          var okm = hmac(salt, key);
+          var okm = hmac(salt, key2);
           var hmac_ = new HMAC(okm);
           var buffer = new Uint8Array(hmac_.digestLength);
           var bufpos = buffer.length;
@@ -943,8 +943,8 @@
           var _a2;
           const jsonParse = (_a2 = options === null || options === void 0 ? void 0 : options.jsonParse) !== null && _a2 !== void 0 ? _a2 : true;
           const normalizedHeaders = {};
-          for (const key of Object.keys(headers)) {
-            normalizedHeaders[key.toLowerCase()] = headers[key];
+          for (const key2 of Object.keys(headers)) {
+            normalizedHeaders[key2.toLowerCase()] = headers[key2];
           }
           const msgId = normalizedHeaders["webhook-id"];
           const msgSignature = normalizedHeaders["webhook-signature"];
@@ -1245,6 +1245,7 @@
     const { learnedNames, voices, ...own } = s;
     await chrome.storage.local.set({ settings: own });
   }
+  var key = (id) => `meeting:${id}`;
   function errorDetail(text) {
     try {
       const j = JSON.parse(text);
@@ -1261,6 +1262,28 @@
     const secret = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
     await chrome.storage.local.set({ settings: { ...settings || {}, emailSecret: secret } });
     return secret;
+  }
+  async function getVoices() {
+    const { voices } = await chrome.storage.local.get("voices");
+    return voices || [];
+  }
+  async function saveVoices(list) {
+    await chrome.storage.local.set({ voices: list });
+  }
+  async function forgetAllVoices() {
+    await chrome.storage.local.remove("voices");
+    const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
+    const r = await chrome.storage.local.get(meetingIds.map(key));
+    const changed = {};
+    for (const id of meetingIds) {
+      const m = r[key(id)];
+      if (m && (m.voiceSegs || m.voiceModel)) {
+        const { voiceSegs, voiceModel, ...rest } = m;
+        changed[key(id)] = rest;
+      }
+    }
+    if (Object.keys(changed).length) await chrome.storage.local.set(changed);
+    return Object.keys(changed).length;
   }
 
   // src/local.js
@@ -1356,8 +1379,8 @@
       return false;
     return true;
   }
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
+  function hasOwn(obj, key2) {
+    return Object.prototype.hasOwnProperty.call(obj, key2);
   }
   function isObj(obj) {
     return obj != null && typeof obj === "object" && !Array.isArray(obj);
@@ -1487,13 +1510,13 @@
       { key: "firefox", pattern: /Firefox(?:\W+(\d+)\.(\d+)(?:\.(\d+))?)?/ },
       { key: "safari", pattern: /(?:Version\W+(\d+)\.(\d+)(?:\.(\d+))?)?(?:\W+Mobile\S*)?\W+Safari/ }
     ];
-    for (const { key, pattern } of browserPatterns) {
+    for (const { key: key2, pattern } of browserPatterns) {
       const match = pattern.exec(navigator.userAgent);
       if (match) {
         const major = match[1] || 0;
         const minor = match[2] || 0;
         const patch = match[3] || 0;
-        return { browser: key, version: `${major}.${minor}.${patch}` };
+        return { browser: key2, version: `${major}.${minor}.${patch}` };
       }
     }
     return null;
@@ -1650,7 +1673,7 @@
   var RFC1738 = "RFC1738";
 
   // node_modules/@anthropic-ai/sdk/internal/qs/utils.mjs
-  var has = (obj, key) => (has = Object.hasOwn ?? Function.prototype.call.bind(Object.prototype.hasOwnProperty), has(obj, key));
+  var has = (obj, key2) => (has = Object.hasOwn ?? Function.prototype.call.bind(Object.prototype.hasOwnProperty), has(obj, key2));
   var hex_table = /* @__PURE__ */ (() => {
     const array = [];
     for (let i = 0; i < 256; ++i) {
@@ -1734,8 +1757,8 @@
       return String(prefix) + "[]";
     },
     comma: "comma",
-    indices(prefix, key) {
-      return String(prefix) + "[" + key + "]";
+    indices(prefix, key2) {
+      return String(prefix) + "[" + key2 + "]";
     },
     repeat(prefix) {
       return String(prefix);
@@ -1843,15 +1866,15 @@
       return adjusted_prefix + "[]";
     }
     for (let j = 0; j < obj_keys.length; ++j) {
-      const key = obj_keys[j];
+      const key2 = obj_keys[j];
       const value = (
         // @ts-ignore
-        typeof key === "object" && typeof key.value !== "undefined" ? key.value : obj[key]
+        typeof key2 === "object" && typeof key2.value !== "undefined" ? key2.value : obj[key2]
       );
       if (skipNulls && value === null) {
         continue;
       }
-      const encoded_key = allowDots && encodeDotInKeys ? key.replace(/\./g, "%2E") : key;
+      const encoded_key = allowDots && encodeDotInKeys ? key2.replace(/\./g, "%2E") : key2;
       const key_prefix = isArray(obj) ? typeof generateArrayPrefix === "function" ? generateArrayPrefix(adjusted_prefix, encoded_key) : adjusted_prefix : adjusted_prefix + (allowDots ? "." + encoded_key : "[" + encoded_key + "]");
       sideChannel.set(object, step);
       const valueSideChannel = /* @__PURE__ */ new WeakMap();
@@ -1968,13 +1991,13 @@
     }
     const sideChannel = /* @__PURE__ */ new WeakMap();
     for (let i = 0; i < obj_keys.length; ++i) {
-      const key = obj_keys[i];
-      if (options.skipNulls && obj[key] === null) {
+      const key2 = obj_keys[i];
+      if (options.skipNulls && obj[key2] === null) {
         continue;
       }
       push_to_array(keys, inner_stringify(
-        obj[key],
-        key,
+        obj[key2],
+        key2,
         // @ts-expect-error
         generateArrayPrefix,
         commaRoundTrip,
@@ -2096,12 +2119,12 @@
     } catch {
       return;
     }
-    const mode = st.mode & 511;
-    if (mode & 18) {
-      throw new WorkloadIdentityError(`Credentials file at ${resolved} is group/world-writable (mode 0o${mode.toString(8)}); this allows other local users to plant tokens. Run \`chmod 600 ${resolved}\`.`);
+    const mode2 = st.mode & 511;
+    if (mode2 & 18) {
+      throw new WorkloadIdentityError(`Credentials file at ${resolved} is group/world-writable (mode 0o${mode2.toString(8)}); this allows other local users to plant tokens. Run \`chmod 600 ${resolved}\`.`);
     }
-    if (mode & 36) {
-      throw new WorkloadIdentityError(`Credentials file at ${resolved} is group/world-readable (mode 0o${mode.toString(8)}); run \`chmod 600 ${resolved}\` before retrying.`);
+    if (mode2 & 36) {
+      throw new WorkloadIdentityError(`Credentials file at ${resolved} is group/world-readable (mode 0o${mode2.toString(8)}); run \`chmod 600 ${resolved}\` before retrying.`);
     }
     if (typeof process.getuid === "function" && st.uid !== process.getuid()) {
       onWarn(`credentials file at ${resolved} is owned by uid ${st.uid} (current process uid ${process.getuid()}); verify this is intentional.`);
@@ -2378,9 +2401,9 @@
     cachedLoggers.set(logger, [logLevel, levelLogger]);
     return levelLogger;
   }
-  function loggerFor(client) {
-    const logger = client.logger;
-    const logLevel = client.logLevel ?? "off";
+  function loggerFor(client2) {
+    const logger = client2.logger;
+    const logLevel = client2.logLevel ?? "off";
     if (!logger) {
       return noopLogger;
     }
@@ -2974,11 +2997,11 @@
   var _Stream_client;
   var Stream = /* @__PURE__ */ (() => {
     class Stream2 {
-      constructor(iterator, controller, client) {
+      constructor(iterator, controller, client2) {
         this.iterator = iterator;
         _Stream_client.set(this, void 0);
         this.controller = controller;
-        __classPrivateFieldSet(this, _Stream_client, client, "f");
+        __classPrivateFieldSet(this, _Stream_client, client2, "f");
       }
       /**
        * Iterate the raw Server-Sent Events from `response` — `{event, data, raw}`
@@ -2991,9 +3014,9 @@
       static rawEvents(response, controller = new AbortController()) {
         return _iterSSEMessages(response, controller);
       }
-      static fromSSEResponse(response, controller, client) {
+      static fromSSEResponse(response, controller, client2) {
         let consumed = false;
-        const logger = client ? loggerFor(client) : console;
+        const logger = client2 ? loggerFor(client2) : console;
         async function* iterator() {
           if (consumed) {
             throw new AnthropicError("Cannot iterate over a consumed stream, use `.tee()` to split the stream.");
@@ -3040,13 +3063,13 @@
             releaseRequestSignal(controller);
           }
         }
-        return new Stream2(iterator, controller, client);
+        return new Stream2(iterator, controller, client2);
       }
       /**
        * Generates a Stream from a newline-separated ReadableStream
        * where each item is a JSON value.
        */
-      static fromReadableStream(readableStream, controller, client) {
+      static fromReadableStream(readableStream, controller, client2) {
         let consumed = false;
         async function* iterLines() {
           const lineDecoder = new LineDecoder();
@@ -3084,7 +3107,7 @@
             releaseRequestSignal(controller);
           }
         }
-        return new Stream2(iterator, controller, client);
+        return new Stream2(iterator, controller, client2);
       }
       [(_Stream_client = /* @__PURE__ */ new WeakMap(), Symbol.asyncIterator)]() {
         return this.iterator();
@@ -3217,12 +3240,12 @@
   }
 
   // node_modules/@anthropic-ai/sdk/internal/parse.mjs
-  async function defaultParseResponse(client, props) {
+  async function defaultParseResponse(client2, props) {
     const { response, requestLogID, retryOfRequestLogID, startTime } = props;
     const body = await (async () => {
       if (props.options.stream) {
-        loggerFor(client).debug("response", response.status, response.url, response.headers, response.body);
-        return Stream.fromSSEResponse(response, props.controller, client);
+        loggerFor(client2).debug("response", response.status, response.url, response.headers, response.body);
+        return Stream.fromSSEResponse(response, props.controller, client2);
       }
       if (response.status === 204) {
         return null;
@@ -3248,7 +3271,7 @@
         releaseRequestSignal(props.controller);
       }
     });
-    debugLogRequestDetails(loggerFor(client), `[${requestLogID}] response parsed`, {
+    debugLogRequestDetails(loggerFor(client2), `[${requestLogID}] response parsed`, {
       retryOfRequestLogID,
       url: response.url,
       status: response.status,
@@ -3284,13 +3307,13 @@
     }
     return false;
   }
-  function wrapFetchWithMiddleware(fetchFn, middleware, options, client) {
+  function wrapFetchWithMiddleware(fetchFn, middleware, options, client2) {
     return async (url, init = {}) => {
       if (middleware.length === 0) {
         return fetchFn.call(void 0, url, init);
       }
       const headers = init.headers instanceof Headers ? init.headers : new Headers(init.headers);
-      const response = await applyMiddleware(fetchFn, middleware, options, client)({
+      const response = await applyMiddleware(fetchFn, middleware, options, client2)({
         ...init,
         headers,
         url: typeof url === "string" ? url : url instanceof URL ? url.href : url.url
@@ -3301,32 +3324,32 @@
       return response;
     };
   }
-  function createMiddlewareContext(options, client) {
+  function createMiddlewareContext(options, client2) {
     const cache = /* @__PURE__ */ new WeakMap();
     return {
       options,
       // Resolved per chain, so changes to the client's `logLevel`/`logger`
       // apply to subsequent requests.
-      logger: client ? loggerFor(client) : defaultLogger(),
+      logger: client2 ? loggerFor(client2) : defaultLogger(),
       parse(response) {
         if (options?.stream && response.ok) {
-          return parseMiddlewareResponse(response, options, client);
+          return parseMiddlewareResponse(response, options, client2);
         }
         let parsed = cache.get(response);
         if (!parsed) {
-          parsed = parseMiddlewareResponse(response, options, client);
+          parsed = parseMiddlewareResponse(response, options, client2);
           cache.set(response, parsed);
         }
         return parsed;
       }
     };
   }
-  async function parseMiddlewareResponse(response, options, client) {
+  async function parseMiddlewareResponse(response, options, client2) {
     if (response.bodyUsed || response.body?.locked) {
       throw new AnthropicError("cannot ctx.parse() a response whose body was already consumed; call ctx.parse() instead of reading the body, or read via response.clone()");
     }
     if (options?.stream && response.ok) {
-      return Stream.fromSSEResponse(response.clone(), new AbortController(), client);
+      return Stream.fromSSEResponse(response.clone(), new AbortController(), client2);
     }
     if (response.status === 204) {
       return null;
@@ -3345,7 +3368,7 @@
     }
     return await response.clone().text();
   }
-  function applyMiddleware(fetchFn, middleware, options, client) {
+  function applyMiddleware(fetchFn, middleware, options, client2) {
     let next = async ({ url, ...init }) => {
       try {
         return await fetchFn.call(void 0, url, init);
@@ -3355,7 +3378,7 @@
         throw error;
       }
     };
-    const ctx = createMiddlewareContext(options, client);
+    const ctx = createMiddlewareContext(options, client2);
     for (let i = middleware.length - 1; i >= 0; i--) {
       const mw = middleware[i];
       const nextInner = next;
@@ -3371,17 +3394,17 @@
   var _APIPromise_client;
   var APIPromise = /* @__PURE__ */ (() => {
     class APIPromise2 extends Promise {
-      constructor(client, responsePromise, parseResponse = defaultParseResponse) {
+      constructor(client2, responsePromise, parseResponse = defaultParseResponse) {
         super((resolve) => {
           resolve(null);
         });
         this.responsePromise = responsePromise;
         this.parseResponse = parseResponse;
         _APIPromise_client.set(this, void 0);
-        __classPrivateFieldSet(this, _APIPromise_client, client, "f");
+        __classPrivateFieldSet(this, _APIPromise_client, client2, "f");
       }
       _thenUnwrap(transform) {
-        return new APIPromise2(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client, props) => addResponseIDs(transform(await this.parseResponse(client, props), props), props.response));
+        return new APIPromise2(__classPrivateFieldGet(this, _APIPromise_client, "f"), this.responsePromise, async (client2, props) => addResponseIDs(transform(await this.parseResponse(client2, props), props), props.response));
       }
       /**
        * Gets the raw `Response` instance instead of parsing the response
@@ -3442,9 +3465,9 @@
   var _AbstractPage_client;
   var AbstractPage = /* @__PURE__ */ (() => {
     class AbstractPage2 {
-      constructor(client, response, body, options) {
+      constructor(client2, response, body, options) {
         _AbstractPage_client.set(this, void 0);
-        __classPrivateFieldSet(this, _AbstractPage_client, client, "f");
+        __classPrivateFieldSet(this, _AbstractPage_client, client2, "f");
         this.options = options;
         this.response = response;
         this.body = body;
@@ -3482,8 +3505,8 @@
   })();
   var PagePromise = /* @__PURE__ */ (() => {
     class PagePromise2 extends APIPromise {
-      constructor(client, request, Page2) {
-        super(client, request, async (client2, props) => new Page2(client2, props.response, await defaultParseResponse(client2, props), props.options));
+      constructor(client2, request, Page2) {
+        super(client2, request, async (client3, props) => new Page2(client3, props.response, await defaultParseResponse(client3, props), props.options));
       }
       /**
        * Allow auto-paginating iteration on an unawaited list call, eg:
@@ -3502,8 +3525,8 @@
     return PagePromise2;
   })();
   var Page = class extends AbstractPage {
-    constructor(client, response, body, options) {
-      super(client, response, body, options);
+    constructor(client2, response, body, options) {
+      super(client2, response, body, options);
       this.data = body.data || [];
       this.has_more = body.has_more || false;
       this.first_id = body.first_id || null;
@@ -3546,8 +3569,8 @@
     }
   };
   var PageCursor = class extends AbstractPage {
-    constructor(client, response, body, options) {
-      super(client, response, body, options);
+    constructor(client2, response, body, options) {
+      super(client2, response, body, options);
       this.data = body.data || [];
       this.next_page = body.next_page || null;
     }
@@ -3569,8 +3592,8 @@
     }
   };
   var BidirectionalPageCursor = class extends AbstractPage {
-    constructor(client, response, body, options) {
-      super(client, response, body, options);
+    constructor(client2, response, body, options) {
+      super(client2, response, body, options);
       this.data = body.data || [];
       this.next_page = body.next_page || null;
       this.prev_page = body.prev_page || null;
@@ -3639,38 +3662,38 @@
       throw new TypeError("The provided fetch function does not support file uploads with the current global FormData class.");
     }
     const form = new FormData();
-    await Promise.all(Object.entries(body || {}).map(([key, value]) => addFormValue(form, key, value, stripFilenames)));
+    await Promise.all(Object.entries(body || {}).map(([key2, value]) => addFormValue(form, key2, value, stripFilenames)));
     return form;
   };
-  var addFormValue = async (form, key, value, stripFilenames) => {
+  var addFormValue = async (form, key2, value, stripFilenames) => {
     if (value === void 0)
       return;
     if (value == null) {
-      throw new TypeError(`Received null for "${key}"; to pass null in FormData, you must use the string 'null'`);
+      throw new TypeError(`Received null for "${key2}"; to pass null in FormData, you must use the string 'null'`);
     }
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      form.append(key, String(value));
+      form.append(key2, String(value));
     } else if (value instanceof Response) {
       let options = {};
       const contentType = value.headers.get("Content-Type");
       if (contentType) {
         options = { type: contentType };
       }
-      form.append(key, makeFile([await value.blob()], getName(value, stripFilenames), options));
+      form.append(key2, makeFile([await value.blob()], getName(value, stripFilenames), options));
     } else if (isAsyncIterable(value)) {
-      form.append(key, makeFile([await new Response(ReadableStreamFrom(value)).blob()], getName(value, stripFilenames)));
+      form.append(key2, makeFile([await new Response(ReadableStreamFrom(value)).blob()], getName(value, stripFilenames)));
     } else if (value instanceof Blob) {
       const isFile = typeof File !== "undefined" && value instanceof File;
       const name = isFile ? value.name : getName(value, stripFilenames);
-      form.append(key, makeFile([value], name, { type: value.type }));
+      form.append(key2, makeFile([value], name, { type: value.type }));
     } else if (Array.isArray(value)) {
-      await Promise.all(value.map((entry) => addFormValue(form, key + "[]", entry, stripFilenames)));
+      await Promise.all(value.map((entry) => addFormValue(form, key2 + "[]", entry, stripFilenames)));
     } else if (typeof value.then === "function") {
-      throw new TypeError(`Received a Promise for "${key}"; await it first, e.g. \`await toFile(...)\``);
+      throw new TypeError(`Received a Promise for "${key2}"; await it first, e.g. \`await toFile(...)\``);
     } else if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-      throw new TypeError(`Received ${value.constructor.name} for "${key}"; to upload raw bytes, wrap them with \`await toFile(bytes, 'filename')\``);
+      throw new TypeError(`Received ${value.constructor.name} for "${key2}"; to upload raw bytes, wrap them with \`await toFile(bytes, 'filename')\``);
     } else if (typeof value === "object") {
-      await Promise.all(Object.entries(value).map(([name, prop]) => addFormValue(form, `${key}[${name}]`, prop, stripFilenames)));
+      await Promise.all(Object.entries(value).map(([name, prop]) => addFormValue(form, `${key2}[${name}]`, prop, stripFilenames)));
     } else {
       throw new TypeError(`Invalid value given to form, expected a string, number, boolean, object, Array, File or Blob but got ${value} instead`);
     }
@@ -3734,8 +3757,8 @@
 
   // node_modules/@anthropic-ai/sdk/core/resource.mjs
   var APIResource = class {
-    constructor(client) {
-      this._client = client;
+    constructor(client2) {
+      this._client = client2;
     }
   };
 
@@ -4911,11 +4934,11 @@ ${underline}`);
 
   // node_modules/@anthropic-ai/sdk/lib/helper-client.mjs
   init_error();
-  function copyClientForHelper(client, { authToken, helper }) {
+  function copyClientForHelper(client2, { authToken, helper }) {
     if (!authToken) {
       throw new AnthropicError(`copyClientForHelper: expected a non-empty authToken but received ${JSON.stringify(authToken)}`);
     }
-    const internal = client;
+    const internal = client2;
     const parentDefaults = internal._options.defaultHeaders;
     const parentAuthExtraHeaders = internal._authState?.extraHeaders;
     const inheritedAuthExtraHeaders = parentAuthExtraHeaders ? Object.fromEntries(Object.entries(parentAuthExtraHeaders).filter(([name]) => {
@@ -4927,10 +4950,10 @@ ${underline}`);
       parentDefaults,
       { [STAINLESS_HELPER_HEADER]: helper }
     ]);
-    return client.withOptions({
+    return client2.withOptions({
       apiKey: null,
       authToken,
-      baseURL: client.baseURL,
+      baseURL: client2.baseURL,
       credentials: void 0,
       defaultHeaders
     });
@@ -6065,9 +6088,9 @@ ${underline}`);
         clearTimeout(timer);
     }
   }
-  async function forceStop(client, work, log, requestOptions) {
+  async function forceStop(client2, work, log, requestOptions) {
     try {
-      await client.beta.environments.work.stop(
+      await client2.beta.environments.work.stop(
         work.id,
         { environment_id: work.environment_id, force: true },
         // Caller's headers pass through; the helper-tag header is on the scoped
@@ -6105,14 +6128,14 @@ ${underline}`);
   })();
   function serverLeaseState(e) {
     let node = e instanceof APIError ? e.error : void 0;
-    for (const key of ["error", "details", "current_state"]) {
+    for (const key2 of ["error", "details", "current_state"]) {
       if (!isObj(node))
         return {};
-      node = node[key];
+      node = node[key2];
     }
     return isObj(node) ? node : {};
   }
-  async function heartbeatLoop(client, work, lease, logger, requestOptions, onLeaseTtl) {
+  async function heartbeatLoop(client2, work, lease, logger, requestOptions, onLeaseTtl) {
     let intervalMs = HEARTBEAT_DEFAULT_MS;
     let ttlMs = HEARTBEAT_TTL_DEFAULT_MS;
     let lastSuccessMs = Date.now();
@@ -6122,7 +6145,7 @@ ${underline}`);
       const detach = linkAbort(lease.signal, beatCtrl);
       const cutoff = setTimeout(() => beatCtrl.abort(), intervalMs);
       try {
-        const resp = await client.beta.environments.work.heartbeat(work.id, { environment_id: work.environment_id, expected_last_heartbeat: last }, { ...requestOptions, headers: buildHeaders([requestOptions?.headers]), signal: beatCtrl.signal });
+        const resp = await client2.beta.environments.work.heartbeat(work.id, { environment_id: work.environment_id, expected_last_heartbeat: last }, { ...requestOptions, headers: buildHeaders([requestOptions?.headers]), signal: beatCtrl.signal });
         lastSuccessMs = Date.now();
         last = resp.last_heartbeat;
         if (resp.ttl_seconds > 0) {
@@ -7533,9 +7556,9 @@ ${underline}`);
   var JSON_BUF_PROPERTY = "__json_buf";
   function withLazyInput(prev, jsonBuf) {
     const next = {};
-    for (const key of Object.keys(prev)) {
-      if (key !== "input")
-        next[key] = prev[key];
+    for (const key2 of Object.keys(prev)) {
+      if (key2 !== "input")
+        next[key2] = prev[key2];
     }
     Object.defineProperty(next, JSON_BUF_PROPERTY, { value: jsonBuf, enumerable: false, writable: true });
     let input;
@@ -8373,9 +8396,9 @@ ${underline}`);
   var _BetaToolRunner_pendingToolChangesMessage;
   var BetaToolRunner = /* @__PURE__ */ (() => {
     class BetaToolRunner2 {
-      constructor(client, params, options) {
+      constructor(client2, params, options) {
         _BetaToolRunner_instances.add(this);
-        this.client = client;
+        this.client = client2;
         _BetaToolRunner_consumed.set(this, false);
         _BetaToolRunner_mutated.set(this, false);
         _BetaToolRunner_state.set(this, void 0);
@@ -14382,9 +14405,9 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     const out = {};
     for (let i = 0; i < days; i++) {
       const rows = (usage || {})[dayKey(new Date(now.getTime() - i * 864e5))] || {};
-      for (const [key, r] of Object.entries(rows)) {
-        const [provider, model, kind] = key.split("|");
-        const t = out[key] ||= { provider, model, kind, req: 0, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0 };
+      for (const [key2, r] of Object.entries(rows)) {
+        const [provider, model, kind] = key2.split("|");
+        const t = out[key2] ||= { provider, model, kind, req: 0, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0 };
         for (const f of FIELDS) t[f] += r[f] || 0;
       }
     }
@@ -14434,6 +14457,28 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     }
     return priced ? total : null;
   }
+  var PAID_DEFAULTS = { stt: { in: 1, out: 2.5 }, llm: { in: 0.3, out: 2.5 } };
+  function paidCost(row, prices = {}) {
+    if (row.provider === "ollama" || row.provider === "whisper" || row.provider === "local") return { usd: 0, assumed: false };
+    const own = prices[row.model];
+    const p = own || (row.provider === "gemini" ? PAID_DEFAULTS[row.kind] : null);
+    if (!p) return { usd: null, assumed: false };
+    return { usd: (row.tin || 0) / 1e6 * p.in + (row.tout || 0) / 1e6 * p.out, assumed: !own };
+  }
+  function paidTotal(rows, prices = {}) {
+    let usd = 0;
+    let assumed = false;
+    let unknown = 0;
+    for (const r of rows) {
+      const c = paidCost(r, prices);
+      if (c.usd == null) unknown++;
+      else {
+        usd += c.usd;
+        assumed ||= c.assumed;
+      }
+    }
+    return { usd, assumed, unknown };
+  }
 
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
@@ -14458,7 +14503,7 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     return res;
   }
   async function geminiFetchInner(url, init, settings) {
-    const call = (key) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key } });
+    const call = (key2) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key2 } });
     const res = await call(settings.geminiKey).catch((e) => {
       if (!settings.geminiKey2 || e.name === "AbortError") throw e;
       return null;
@@ -14488,7 +14533,7 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
   // src/llm.js
   var MODERN_CLAUDE = /^claude-(opus-5|fable-5|sonnet-5-5)/;
   async function anthropic({ settings, system, user, onText, signal }) {
-    const client = new Anthropic({ apiKey: settings.anthropicKey, dangerouslyAllowBrowser: true });
+    const client2 = new Anthropic({ apiKey: settings.anthropicKey, dangerouslyAllowBrowser: true });
     const model = settings.anthropicModel;
     const params = {
       model,
@@ -14504,7 +14549,7 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
         fallbacks: "default"
       });
     }
-    const stream2 = client.beta.messages.stream(params, { signal });
+    const stream2 = client2.beta.messages.stream(params, { signal });
     stream2.on("text", onText);
     let msg;
     try {
@@ -14899,17 +14944,545 @@ function out(o) {
   var minutesLanguageOptions = () => [...LANGUAGES.map((l) => ({ value: l.code === "hi" ? "Hindi (Devanagari)" : l.name, label: l.code === "hi" ? "Hindi (Devanagari)" : l.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
   var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l) => l.name).join(", ")} and ${langs.at(-1).name}`;
 
-  // src/options.js
+  // src/voice/client.js
+  function createVoiceClient({ workerUrl, modelUrl, wasmPaths, maxQueue = 24 }) {
+    const worker = new Worker(workerUrl);
+    const pending = /* @__PURE__ */ new Map();
+    let nextId = 1;
+    let ready;
+    let readyFail;
+    const readyP = new Promise((res, rej) => {
+      ready = res;
+      readyFail = rej;
+    });
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.ready) return ready();
+      const p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      m.error ? p.reject(new Error(m.error)) : p.resolve(m.emb);
+    };
+    worker.onerror = (e) => readyFail(new Error(e.message || "voice worker failed"));
+    (async () => {
+      try {
+        const bytes = new Uint8Array(await (await fetch(modelUrl)).arrayBuffer());
+        worker.postMessage({ type: "init", model: bytes, wasmPaths }, [bytes.buffer]);
+      } catch (e) {
+        readyFail(e);
+      }
+    })();
+    return {
+      ready: readyP,
+      get backlog() {
+        return pending.size;
+      },
+      // Resolves with a unit-length Float32Array(256), null (too short / dropped), or rejects.
+      embed(pcm2) {
+        if (pending.size >= maxQueue) return Promise.resolve(null);
+        const id = nextId++;
+        return new Promise((resolve, reject) => {
+          pending.set(id, { resolve, reject });
+          worker.postMessage({ id, pcm: pcm2 }, [pcm2.buffer]);
+        });
+      },
+      async drain(ms = 2e4) {
+        const end = Date.now() + ms;
+        while (pending.size && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+      },
+      close() {
+        worker.terminate();
+        for (const p of pending.values()) p.resolve(null);
+        pending.clear();
+      }
+    };
+  }
+
+  // src/voice/tracker.js
+  var SR = 16e3;
+  var MIN_SEC = 1.5;
+  var MAX_SEC = 4;
+  var PAUSE_BLOCKS = 3;
+  var VoiceTracker = class {
+    // onSegment({ t0, t1, pcm }) is called for each piece. t0 and t1 are seconds since the recording began.
+    constructor(onSegment) {
+      this.onSegment = onSegment;
+      this.floor = -60;
+      this.recent = [];
+      this.samples = 0;
+      this.cur = [];
+      this.curStart = 0;
+      this.quiet = 0;
+      this.speechBlocks = 0;
+    }
+    push(block) {
+      let sum = 0;
+      for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
+      const db = 10 * Math.log10(sum / block.length + 1e-12);
+      this.recent.push(db);
+      if (this.recent.length > 117) this.recent.shift();
+      const target = [...this.recent].sort((x, y) => x - y)[Math.floor((this.recent.length - 1) * 0.2)];
+      this.floor = this.recent.length === 1 ? db : Math.min(target, this.floor + 0.3);
+      const speech = db > Math.max(this.floor + 9, -52);
+      const at = this.samples;
+      this.samples += block.length;
+      if (speech) {
+        if (!this.cur.length) this.curStart = at;
+        this.cur.push(block);
+        this.speechBlocks++;
+        this.quiet = 0;
+      } else if (this.cur.length) {
+        this.quiet++;
+        this.cur.push(block);
+        if (this.quiet >= PAUSE_BLOCKS) this.close(true);
+      }
+      if (this.cur.length && (this.samples - this.curStart) / SR >= MAX_SEC) this.close(false);
+    }
+    close(trimQuiet) {
+      const blocks = trimQuiet ? this.cur.slice(0, this.cur.length - this.quiet) : this.cur;
+      const speech = this.speechBlocks;
+      this.cur = [];
+      this.quiet = 0;
+      this.speechBlocks = 0;
+      const len = blocks.reduce((a, b) => a + b.length, 0);
+      if (len / SR < MIN_SEC || speech * (blocks[0]?.length || 2048) / len < 0.6) return;
+      const pcm2 = new Float32Array(len);
+      let o = 0;
+      for (const b of blocks) {
+        pcm2.set(b, o);
+        o += b.length;
+      }
+      this.onSegment({ t0: this.curStart / SR, t1: this.curStart / SR + len / SR, pcm: pcm2 });
+    }
+    flush() {
+      if (this.cur.length) this.close(true);
+    }
+  };
+
+  // src/voice/match.js
+  function cosine(a, b) {
+    let s = 0;
+    let na = 0;
+    let nb = 0;
+    for (let i = 0; i < a.length; i++) {
+      s += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    return s / (Math.sqrt(na * nb) || 1);
+  }
+  function normalize(v) {
+    let n = 0;
+    for (const x of v) n += x * x;
+    n = Math.sqrt(n) || 1;
+    return Float32Array.from(v, (x) => x / n);
+  }
+  function mean(vectors) {
+    const out = new Float32Array(vectors[0].length);
+    for (const v of vectors) for (let i = 0; i < out.length; i++) out[i] += v[i];
+    return normalize(out);
+  }
+  function pack(emb) {
+    const bytes = new Int8Array(emb.length);
+    for (let i = 0; i < emb.length; i++) bytes[i] = Math.max(-127, Math.min(127, Math.round(emb[i] * 127)));
+    let bin = "";
+    for (const b of new Uint8Array(bytes.buffer)) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+  function unpack(b64) {
+    const bin = atob(b64);
+    const out = new Float32Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = (bin.charCodeAt(i) << 24 >> 24) / 127;
+    return normalize(out);
+  }
+
+  // src/voice/enrol.js
+  var ENROL = {
+    targetSec: 20,
+    // what the screen asks for
+    minSpeechSec: 8,
+    // less speech than this and the fingerprint would be unreliable
+    minPieces: 4,
+    maxWindows: 10,
+    // individual fingerprints kept next to the average
+    minConsistency: 0.35
+    // a piece this unlike the rest (a cough, a second voice) is left out
+  };
+  var PROMPTS = {
+    en: "Please read this aloud at your normal pace and volume. When the team met on Tuesday, we reviewed the registration data, checked the mapping file for each scheme, and agreed that the upload would be ready by Friday afternoon. If anything looks different from last week, please tell me now so we can fix it before the review. Thank you everyone, that is all for today.",
+    ml: "\u0D26\u0D2F\u0D35\u0D3E\u0D2F\u0D3F \u0D38\u0D3E\u0D27\u0D3E\u0D30\u0D23 \u0D35\u0D47\u0D17\u0D24\u0D4D\u0D24\u0D3F\u0D32\u0D41\u0D02 \u0D36\u0D2C\u0D4D\u0D26\u0D24\u0D4D\u0D24\u0D3F\u0D32\u0D41\u0D02 \u0D07\u0D24\u0D4D \u0D09\u0D31\u0D15\u0D4D\u0D15\u0D46 \u0D35\u0D3E\u0D2F\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15. \u0D1A\u0D4A\u0D35\u0D4D\u0D35\u0D3E\u0D34\u0D4D\u0D1A \u0D1F\u0D40\u0D02 \u0D2F\u0D4B\u0D17\u0D02 \u0D1A\u0D47\u0D7C\u0D28\u0D4D\u0D28\u0D2A\u0D4D\u0D2A\u0D4B\u0D7E \u0D1E\u0D19\u0D4D\u0D19\u0D7E \u0D30\u0D1C\u0D3F\u0D38\u0D4D\u0D1F\u0D4D\u0D30\u0D47\u0D37\u0D7B \u0D35\u0D3F\u0D35\u0D30\u0D19\u0D4D\u0D19\u0D7E \u0D2A\u0D30\u0D3F\u0D36\u0D4B\u0D27\u0D3F\u0D1A\u0D4D\u0D1A\u0D41, \u0D13\u0D30\u0D4B \u0D38\u0D4D\u0D15\u0D40\u0D2E\u0D3F\u0D28\u0D41\u0D2E\u0D41\u0D33\u0D4D\u0D33 \u0D2E\u0D3E\u0D2A\u0D4D\u0D2A\u0D3F\u0D02\u0D17\u0D4D \u0D2B\u0D2F\u0D7D \u0D28\u0D4B\u0D15\u0D4D\u0D15\u0D3F, \u0D35\u0D46\u0D33\u0D4D\u0D33\u0D3F\u0D2F\u0D3E\u0D34\u0D4D\u0D1A \u0D09\u0D1A\u0D4D\u0D1A\u0D2F\u0D4D\u0D15\u0D4D\u0D15\u0D4D \u0D2E\u0D41\u0D2E\u0D4D\u0D2A\u0D4D \u0D05\u0D2A\u0D4D\u200C\u0D32\u0D4B\u0D21\u0D4D \u0D24\u0D2F\u0D4D\u0D2F\u0D3E\u0D31\u0D3E\u0D15\u0D41\u0D2E\u0D46\u0D28\u0D4D\u0D28\u0D4D \u0D24\u0D40\u0D30\u0D41\u0D2E\u0D3E\u0D28\u0D3F\u0D1A\u0D4D\u0D1A\u0D41. \u0D15\u0D34\u0D3F\u0D1E\u0D4D\u0D1E \u0D06\u0D34\u0D4D\u0D1A\u0D2F\u0D3F\u0D7D \u0D28\u0D3F\u0D28\u0D4D\u0D28\u0D4D \u0D0E\u0D28\u0D4D\u0D24\u0D46\u0D19\u0D4D\u0D15\u0D3F\u0D32\u0D41\u0D02 \u0D35\u0D4D\u0D2F\u0D24\u0D4D\u0D2F\u0D3E\u0D38\u0D02 \u0D15\u0D23\u0D4D\u0D1F\u0D3E\u0D7D \u0D26\u0D2F\u0D35\u0D3E\u0D2F\u0D3F \u0D07\u0D2A\u0D4D\u0D2A\u0D4B\u0D7E \u0D2A\u0D31\u0D2F\u0D41\u0D15. \u0D0E\u0D32\u0D4D\u0D32\u0D3E\u0D35\u0D7C\u0D15\u0D4D\u0D15\u0D41\u0D02 \u0D28\u0D28\u0D4D\u0D26\u0D3F, \u0D07\u0D28\u0D4D\u0D28\u0D24\u0D4D\u0D24\u0D47\u0D15\u0D4D\u0D15\u0D4D \u0D07\u0D24\u0D4D\u0D30\u0D2E\u0D3E\u0D24\u0D4D\u0D30\u0D02."
+  };
+  function speechPieces(pcm2) {
+    const out = [];
+    const tracker = new VoiceTracker((s) => out.push(s));
+    for (let i = 0; i + 2048 <= pcm2.length; i += 2048) tracker.push(pcm2.subarray(i, i + 2048));
+    tracker.flush();
+    return out;
+  }
+  async function buildPrint(pcm2, embed) {
+    const pieces = speechPieces(pcm2);
+    const speechSec = pieces.reduce((a, p) => a + (p.t1 - p.t0), 0);
+    if (speechSec < ENROL.minSpeechSec || pieces.length < ENROL.minPieces) {
+      return { ok: false, speechSec, reason: `Only ${speechSec.toFixed(0)} seconds of clear speech were heard (about ${ENROL.minSpeechSec} are needed). Move closer to the microphone, cut background noise, and read the whole text.` };
+    }
+    const embs = [];
+    for (const p of pieces) {
+      const e = await embed(p.pcm.slice());
+      if (e) embs.push(e);
+    }
+    if (embs.length < ENROL.minPieces) return { ok: false, speechSec, reason: "The voice model could not process enough of the recording. Try again." };
+    let keep = embs;
+    const first = mean(embs);
+    const kept = embs.filter((e) => cosine(e, first) >= ENROL.minConsistency);
+    if (kept.length >= ENROL.minPieces) keep = kept;
+    const centroid = mean(keep);
+    const spread = keep.map((e) => cosine(e, centroid));
+    const consistency = spread.reduce((a, b) => a + b, 0) / spread.length;
+    const step = Math.max(1, Math.floor(keep.length / ENROL.maxWindows));
+    const windows = keep.filter((_, i) => i % step === 0).slice(0, ENROL.maxWindows);
+    return {
+      ok: true,
+      speechSec,
+      pieces: keep.length,
+      consistency,
+      centroid: pack(centroid),
+      windows: windows.map(pack),
+      warn: consistency < 0.5 ? "The recording sounded uneven (background noise or more than one voice?). Re-record in a quiet place for better matching." : ""
+    };
+  }
+  function newId() {
+    return `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  }
+  function upsertPerson(list, { id, name, lang: lang2, print }) {
+    const clean = String(name || "").trim().replace(/\s+/g, " ").slice(0, 60);
+    if (!clean) throw new Error("Give the person a name first.");
+    const taken = list.find((p) => p.id !== id && p.name.toLowerCase() === clean.toLowerCase());
+    if (taken) throw new Error(`There is already a voice called ${taken.name}.`);
+    const rec2 = { id: id || newId(), name: clean, lang: lang2 || "en", centroid: print.centroid, windows: print.windows, secs: Math.round(print.speechSec), created: Date.now() };
+    const i = list.findIndex((p) => p.id === rec2.id);
+    if (i < 0) return [...list, rec2];
+    const next = [...list];
+    next[i] = { ...next[i], ...rec2, created: next[i].created, updated: Date.now() };
+    return next;
+  }
+  function addRecording(list, id, { lang: lang2, print }) {
+    const i = list.findIndex((p2) => p2.id === id);
+    if (i < 0) throw new Error("That person no longer exists.");
+    const p = list[i];
+    const c = mean([unpack(p.centroid), unpack(print.centroid)]);
+    const windows = [...p.windows || [], ...print.windows].slice(-ENROL.maxWindows * 2);
+    const langs = [.../* @__PURE__ */ new Set([...p.langs || [p.lang || "en"], lang2])];
+    const next = [...list];
+    next[i] = { ...p, centroid: pack(c), windows, langs, secs: (p.secs || 0) + Math.round(print.speechSec), updated: Date.now() };
+    return next;
+  }
+
+  // src/wav.js
+  function encodeWav(samples, sampleRate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const str = (off2, s) => [...s].forEach((c, i) => v.setUint8(off2 + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + samples.length * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2) {
+      const x = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  // src/voices-ui.js
   var $ = (id) => document.getElementById(id);
+  var MAX_SEC2 = 40;
+  var people = [];
+  var mode = { kind: "new", id: null };
+  var lang = "en";
+  var pcm = null;
+  var audioUrl = "";
+  var rec = null;
+  var client = null;
+  var setMsg = (t, bad = false) => {
+    $("enrolMsg").textContent = t;
+    $("enrolMsg").style.color = bad ? "#b91c1c" : "";
+  };
+  function getClient() {
+    if (!client) {
+      client = createVoiceClient({
+        workerUrl: chrome.runtime.getURL("dist/worker.js"),
+        modelUrl: chrome.runtime.getURL("models/wespeaker_resnet34_lm.onnx"),
+        wasmPaths: chrome.runtime.getURL("vendor/ort/"),
+        maxQueue: 64
+      });
+    }
+    return client;
+  }
+  function closeClient() {
+    client?.close();
+    client = null;
+  }
+  var LANG_NAME = { en: "English", ml: "Malayalam" };
+  var fmtDate = (t) => new Date(t).toLocaleDateString(void 0, { day: "numeric", month: "short", year: "numeric" });
+  function renderList() {
+    $("voiceEmpty").hidden = people.length > 0;
+    $("voiceList").replaceChildren(
+      ...people.map((p) => {
+        const row = document.createElement("div");
+        row.className = "voice-row";
+        row.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)";
+        const who = document.createElement("div");
+        who.style.cssText = "flex:1;min-width:180px";
+        const langs = (p.langs || [p.lang || "en"]).map((l) => LANG_NAME[l] || l).join(" + ");
+        who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
+        who.querySelector(".vn").textContent = p.name;
+        who.querySelector(".vm").textContent = `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
+        const btn = (label, fn, danger) => {
+          const b = Object.assign(document.createElement("button"), { className: "btn", textContent: label });
+          if (danger) b.style.color = "#b91c1c";
+          b.onclick = fn;
+          return b;
+        };
+        row.append(
+          who,
+          btn("Rename", () => rename(p)),
+          btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)),
+          btn("Add recording", () => begin({ kind: "add", id: p.id }, p)),
+          btn("Delete", () => remove(p), true)
+        );
+        return row;
+      })
+    );
+  }
+  async function refresh() {
+    people = await getVoices();
+    renderList();
+  }
+  async function rename(p) {
+    const name = prompt("New name", p.name);
+    if (name == null) return;
+    try {
+      const clean = name.trim().replace(/\s+/g, " ").slice(0, 60);
+      if (!clean) throw new Error("A name cannot be empty.");
+      if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
+      people = people.map((x) => x.id === p.id ? { ...x, name: clean } : x);
+      await saveVoices(people);
+      renderList();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+  async function remove(p) {
+    if (!confirm(`Delete the voice of ${p.name}? Their fingerprint is removed from this browser.`)) return;
+    people = people.filter((x) => x.id !== p.id);
+    await saveVoices(people);
+    renderList();
+  }
+  function resetRecording() {
+    stopCapture(true);
+    pcm = null;
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = "";
+    $("enrolPlay").hidden = true;
+    $("enrolSave").hidden = true;
+    $("enrolStop").hidden = true;
+    $("enrolRec").hidden = false;
+    $("enrolRec").textContent = "Record";
+    $("enrolLevel").style.width = "0";
+    $("enrolTime").textContent = "";
+  }
+  function begin(m, person) {
+    resetRecording();
+    mode = m;
+    $("enrolTitle").textContent = m.kind === "new" ? "Add a person" : m.kind === "rerecord" ? `Re-record ${person.name}` : `Add another recording for ${person.name}`;
+    $("enrolName").value = person ? person.name : "";
+    $("enrolName").disabled = !!person;
+    $("enrolCancel").hidden = m.kind === "new";
+    setLang(m.kind === "add" ? (person.langs || [person.lang || "en"]).includes("en") ? "ml" : "en" : lang);
+    setMsg(m.kind === "add" ? "Record in the other language: this makes the voice recognisable in both." : "");
+    $("enrolName").scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  function setLang(l) {
+    lang = l;
+    $("enrolPrompt").textContent = PROMPTS[l];
+    document.querySelectorAll("#enrolLang button").forEach((b) => b.classList.toggle("active", b.dataset.lang === l));
+  }
+  async function startCapture() {
+    if (rec) return;
+    setMsg("");
+    const stream2 = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+    const ctx = new AudioContext({ sampleRate: SR });
+    await ctx.audioWorklet.addModule("worklet.js");
+    const src = ctx.createMediaStreamSource(stream2);
+    const node = new AudioWorkletNode(ctx, "pcm-tap", { channelCount: 1, channelCountMode: "explicit" });
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    src.connect(node).connect(mute).connect(ctx.destination);
+    const r = { ctx, stream: stream2, node, blocks: [], started: Date.now(), timer: 0, peak: 0 };
+    node.port.onmessage = (e) => {
+      const b = e.data;
+      r.blocks.push(b);
+      let s = 0;
+      for (let i = 0; i < b.length; i++) s += b[i] * b[i];
+      const rms = Math.sqrt(s / b.length);
+      r.peak = Math.max(r.peak, rms);
+      const db = 20 * Math.log10(rms + 1e-9);
+      $("enrolLevel").style.width = `${Math.max(0, Math.min(100, (db + 50) / 40 * 100))}%`;
+    };
+    r.timer = setInterval(() => {
+      const sec = (Date.now() - r.started) / 1e3;
+      $("enrolTime").textContent = `${sec.toFixed(0)} s${sec < ENROL.targetSec ? ` (aim for about ${ENROL.targetSec})` : " \u2713"}`;
+      if (sec >= MAX_SEC2) finishCapture();
+    }, 250);
+    rec = r;
+  }
+  function stopCapture(discard) {
+    if (!rec) return null;
+    const r = rec;
+    rec = null;
+    clearInterval(r.timer);
+    r.stream.getTracks().forEach((t) => t.stop());
+    r.ctx.close().catch(() => {
+    });
+    if (discard) return null;
+    const len = r.blocks.reduce((a, b) => a + b.length, 0);
+    const out = new Float32Array(len);
+    let o = 0;
+    for (const b of r.blocks) {
+      out.set(b, o);
+      o += b.length;
+    }
+    return { pcm: out, peak: r.peak };
+  }
+  function finishCapture() {
+    const got = stopCapture(false);
+    $("enrolStop").hidden = true;
+    $("enrolRec").hidden = false;
+    $("enrolRec").textContent = "Record again";
+    $("enrolLevel").style.width = "0";
+    if (!got || got.pcm.length < SR * 3) {
+      setMsg("That was too short. Press Record and read the text above.", true);
+      return;
+    }
+    if (got.peak < 5e-3) {
+      setMsg("Almost nothing was picked up. Check that the right microphone is selected in Chrome, then record again.", true);
+      return;
+    }
+    pcm = got.pcm;
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = URL.createObjectURL(new Blob([encodeWav(pcm, SR)], { type: "audio/wav" }));
+    $("enrolPlay").hidden = false;
+    $("enrolSave").hidden = false;
+    $("enrolTime").textContent = `${(pcm.length / SR).toFixed(0)} s recorded`;
+    setMsg("Play it back to check it is clear, then save. Nothing is stored until you press Save.");
+  }
+  async function save() {
+    if (!pcm) return;
+    const name = $("enrolName").value;
+    try {
+      if (mode.kind === "new") upsertPerson(people, { name, lang, print: { centroid: "", windows: [], speechSec: 0 } });
+      $("enrolSave").disabled = true;
+      setMsg("Working out the voice fingerprint\u2026 (the first time this loads the speaker model)");
+      const c = getClient();
+      await Promise.race([c.ready, new Promise((_, rej) => setTimeout(() => rej(new Error("The speaker model did not load. Reload this page and try again.")), 6e4))]);
+      const print = await buildPrint(pcm, (p) => c.embed(p));
+      if (!print.ok) {
+        setMsg(print.reason, true);
+        return;
+      }
+      if (mode.kind === "new") people = upsertPerson(people, { name, lang, print });
+      else if (mode.kind === "rerecord") people = upsertPerson(people, { id: mode.id, name, lang, print });
+      else people = addRecording(people, mode.id, { lang, print });
+      await saveVoices(people);
+      const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. Only the fingerprint was stored.${print.warn ? ` ${print.warn}` : ""}`;
+      mode = { kind: "new", id: null };
+      resetRecording();
+      $("enrolName").value = "";
+      $("enrolName").disabled = false;
+      $("enrolTitle").textContent = "Add a person";
+      $("enrolCancel").hidden = true;
+      setMsg(done, false);
+      renderList();
+    } catch (e) {
+      setMsg(e.message, true);
+    } finally {
+      $("enrolSave").disabled = false;
+    }
+  }
+  async function initVoices() {
+    await refresh();
+    setLang("en");
+    document.querySelectorAll("#enrolLang button").forEach((b) => b.onclick = () => setLang(b.dataset.lang));
+    $("enrolRec").onclick = async () => {
+      try {
+        if (pcm) {
+          pcm = null;
+          $("enrolPlay").hidden = true;
+          $("enrolSave").hidden = true;
+        }
+        if (mode.kind === "new" && !$("enrolName").value.trim()) {
+          setMsg("Type the person\u2019s name first.", true);
+          $("enrolName").focus();
+          return;
+        }
+        await startCapture();
+        $("enrolRec").hidden = true;
+        $("enrolStop").hidden = false;
+        setMsg("Recording\u2026 read the text above at a normal pace.");
+      } catch (e) {
+        setMsg(e.name === "NotAllowedError" ? "The microphone is blocked. Use \u201CAllow microphone\u201D on the General page, then try again." : `Could not start the microphone: ${e.message}`, true);
+      }
+    };
+    $("enrolStop").onclick = finishCapture;
+    $("enrolPlay").onclick = () => audioUrl && new Audio(audioUrl).play();
+    $("enrolSave").onclick = save;
+    $("enrolCancel").onclick = () => {
+      mode = { kind: "new", id: null };
+      resetRecording();
+      $("enrolName").value = "";
+      $("enrolName").disabled = false;
+      $("enrolTitle").textContent = "Add a person";
+      $("enrolCancel").hidden = true;
+      setMsg("");
+    };
+    $("voiceForget").onclick = async () => {
+      if (!confirm("Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.")) return;
+      const n = await forgetAllVoices();
+      people = [];
+      renderList();
+      closeClient();
+      setMsg(`All voices forgotten${n ? ` (and fingerprints removed from ${n} saved meeting${n === 1 ? "" : "s"})` : ""}.`);
+    };
+    chrome.storage.onChanged.addListener((c) => {
+      if (c.voices) refresh();
+    });
+    window.addEventListener("pagehide", () => {
+      stopCapture(true);
+      closeClient();
+    });
+  }
+
+  // src/options.js
+  var $2 = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
   function read() {
     const s = {};
     for (const k of FIELDS2) {
-      const el = $(k);
+      const el = $2(k);
       if (!el) continue;
       s[k] = el.type === "checkbox" ? el.checked : el.value.trim();
     }
-    s.shareMode = $("shareAuto").checked ? "auto" : "review";
+    s.shareMode = $2("shareAuto").checked ? "auto" : "review";
     s.meetingLanguages = [...document.querySelectorAll("#langChips input:checked")].map((c) => c.dataset.lang);
     return s;
   }
@@ -14925,10 +15498,10 @@ function out(o) {
   async function renderLearned() {
     const { learned } = await chrome.storage.local.get("learned");
     const names2 = Object.keys(learned?.names || {});
-    $("learnedNames").textContent = names2.length ? names2.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
+    $2("learnedNames").textContent = names2.length ? names2.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
     const pending = learned?.pending || [];
-    $("pendingEmpty").classList.toggle("hidden", pending.length > 0);
-    $("pendingList").replaceChildren(
+    $2("pendingEmpty").classList.toggle("hidden", pending.length > 0);
+    $2("pendingList").replaceChildren(
       ...pending.map((p) => {
         const row = document.createElement("div");
         row.style.cssText = "display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap";
@@ -14943,8 +15516,8 @@ function out(o) {
         const ok = Object.assign(document.createElement("button"), { className: "btn", textContent: "Fix it from now on" });
         const no = Object.assign(document.createElement("button"), { className: "btn", textContent: "Dismiss" });
         ok.onclick = async () => {
-          $("dictionary").value = learnAlias($("dictionary").value, p.suggest, p.found);
-          await save();
+          $2("dictionary").value = learnAlias($2("dictionary").value, p.suggest, p.found);
+          await save2();
           await chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id) } });
         };
         no.onclick = async () => chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id), rejected: [...learned.rejected || [], p.id] } });
@@ -14953,7 +15526,7 @@ function out(o) {
       })
     );
   }
-  $("clearLearned").onclick = async () => {
+  $2("clearLearned").onclick = async () => {
     const { learned } = await chrome.storage.local.get("learned");
     await chrome.storage.local.set({ learned: { ...learned, names: {} } });
   };
@@ -14966,19 +15539,20 @@ function out(o) {
   async function renderUsage() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
-    const typed = parseLimits($("usageLimits").value || settings.usageLimits);
+    const typed = parseLimits($2("usageLimits").value || settings.usageLimits);
     const limits = { ...learnedLimits, ...typed };
     const rows = summarize(usage, usageDays);
+    const prices = parsePrices($2("usagePrices").value || settings.usagePrices);
     const today = summarize(usage, 1);
-    const table = $("usageTable");
+    const table = $2("usageTable");
     table.replaceChildren();
     const head = table.createTHead().insertRow();
-    ["Service", "Used for", "Requests", "Failed", "Tokens in / out", "Audio", usageDays === 1 ? "Left today (estimate)" : ""].forEach((h) => head.append(Object.assign(document.createElement("th"), { textContent: h })));
+    ["Service", "Used for", "Requests", "Failed", "Tokens in / out", "Audio", "Cost if paid", usageDays === 1 ? "Left today (estimate)" : ""].forEach((h) => head.append(Object.assign(document.createElement("th"), { textContent: h })));
     const body = table.createTBody();
     if (!rows.length) {
       const r = body.insertRow();
       const c = r.insertCell();
-      c.colSpan = 7;
+      c.colSpan = 8;
       c.textContent = "Nothing yet. Counts start with your next recording.";
       c.style.color = "var(--muted)";
     }
@@ -14991,6 +15565,8 @@ function out(o) {
       cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ""}` : "0", "num");
       cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : "-", "num");
       cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : "-", "num");
+      const paid2 = paidCost(r, prices);
+      cell(paid2.usd == null ? "-" : r.fail && !r.tin && !r.tout ? "$0.00" : `${paid2.assumed ? "~" : ""}$${paid2.usd < 0.01 && paid2.usd > 0 ? paid2.usd.toFixed(4) : paid2.usd.toFixed(2)}`, "num");
       const left = tr.insertCell();
       const limit2 = limits[r.model];
       if (usageDays === 1 && limit2) {
@@ -15001,8 +15577,9 @@ function out(o) {
     }
     const reqs = rows.reduce((a, r) => a + r.req, 0);
     const audio = rows.filter((r) => r.kind === "stt").reduce((a, r) => a + r.audioSec, 0);
-    const cost = estimateCost(rows, parsePrices($("usagePrices").value || settings.usagePrices));
-    $("usageTotals").textContent = `${reqs} requests \xB7 ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` \xB7 about $${cost.toFixed(2)} at your prices` : ""} \xB7 quota day ${dayKey()} (Pacific)`;
+    const cost = estimateCost(rows, prices);
+    const paid = paidTotal(rows, prices);
+    $2("usageTotals").textContent = `${reqs} requests \xB7 ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` \xB7 about $${cost.toFixed(2)} at your prices` : ""} \xB7 if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""} \xB7 quota day ${dayKey()} (Pacific)`;
   }
   document.querySelectorAll("#usageRange button").forEach((b) => {
     b.onclick = () => {
@@ -15011,19 +15588,19 @@ function out(o) {
       renderUsage();
     };
   });
-  $("usageReset").onclick = async () => {
+  $2("usageReset").onclick = async () => {
     if (!confirm("Reset all usage counters? This only clears Debrief's own tally.")) return;
     await chrome.storage.local.remove(["usage", "learnedLimits"]);
     renderUsage();
   };
-  $("usageLimits").oninput = renderUsage;
-  $("usagePrices").oninput = renderUsage;
+  $2("usageLimits").oninput = renderUsage;
+  $2("usagePrices").oninput = renderUsage;
   chrome.storage.onChanged.addListener((c) => {
     if (c.usage || c.learnedLimits) renderUsage();
   });
   function showProviderFields() {
-    document.querySelectorAll("[data-stt]").forEach((el) => el.classList.toggle("hidden", el.dataset.stt !== $("sttProvider").value));
-    document.querySelectorAll("[data-llm]").forEach((el) => el.classList.toggle("hidden", el.dataset.llm !== $("llmProvider").value));
+    document.querySelectorAll("[data-stt]").forEach((el) => el.classList.toggle("hidden", el.dataset.stt !== $2("sttProvider").value));
+    document.querySelectorAll("[data-llm]").forEach((el) => el.classList.toggle("hidden", el.dataset.llm !== $2("llmProvider").value));
   }
   async function requestOrigins(s) {
     const urls = [];
@@ -15042,7 +15619,7 @@ function out(o) {
     if (!await chrome.permissions.request({ origins })) throw new Error("Permission for the custom endpoint was denied.");
   }
   function buildLanguageUi() {
-    $("langChips").replaceChildren(
+    $2("langChips").replaceChildren(
       ...LANGUAGES.map((l) => {
         const label = document.createElement("label");
         label.className = "chip";
@@ -15054,7 +15631,7 @@ function out(o) {
         return label;
       })
     );
-    $("momLanguage").replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement("option"), { value: o.value, textContent: o.label })));
+    $2("momLanguage").replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement("option"), { value: o.value, textContent: o.label })));
   }
   function setLanguages(s) {
     const chosen = chosenLanguages(s);
@@ -15064,11 +15641,11 @@ function out(o) {
   }
   function langHint() {
     const picked = LANGUAGES.filter((l) => document.querySelector(`#langChips input[data-lang="${l.code}"]`)?.checked);
-    $("langHint").textContent = picked.length ? `Debrief will expect ${names(picked)}, in any mix. Fewer choices give more accurate text.` : "Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.";
+    $2("langHint").textContent = picked.length ? `Debrief will expect ${names(picked)}, in any mix. Fewer choices give more accurate text.` : "Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.";
   }
   var loaded = {};
   var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  async function save() {
+  async function save2() {
     const vals = read();
     const out = { ...await getSettings() };
     for (const k of Object.keys(vals)) if (!same(vals[k], loaded[k])) out[k] = vals[k];
@@ -15080,82 +15657,82 @@ function out(o) {
   async function micStatus() {
     try {
       const p = await navigator.permissions.query({ name: "microphone" });
-      $("micStatus").textContent = p.state === "granted" ? "Microphone allowed \u2713" : `Microphone: ${p.state}`;
+      $2("micStatus").textContent = p.state === "granted" ? "Microphone allowed \u2713" : `Microphone: ${p.state}`;
     } catch {
     }
   }
-  $("sttProvider").onchange = showProviderFields;
-  $("llmProvider").onchange = showProviderFields;
-  $("save").onclick = async () => {
+  $2("sttProvider").onchange = showProviderFields;
+  $2("llmProvider").onchange = showProviderFields;
+  $2("save").onclick = async () => {
     try {
-      await save();
-      $("msg").textContent = "Saved \u2713";
+      await save2();
+      $2("msg").textContent = "Saved \u2713";
       updateGuide();
     } catch (e) {
-      $("msg").textContent = e.message;
+      $2("msg").textContent = e.message;
     }
-    setTimeout(() => $("msg").textContent = "", 3e3);
+    setTimeout(() => $2("msg").textContent = "", 3e3);
   };
-  $("grantMic").onclick = async () => {
+  $2("grantMic").onclick = async () => {
     try {
       const stream2 = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream2.getTracks().forEach((t) => t.stop());
     } catch (e) {
-      $("micStatus").textContent = `Not allowed: ${e.message}`;
+      $2("micStatus").textContent = `Not allowed: ${e.message}`;
       return;
     }
     micStatus();
   };
-  $("useOllama").onclick = () => {
-    $("llmProvider").value = "openai";
+  $2("useOllama").onclick = () => {
+    $2("llmProvider").value = "openai";
     showProviderFields();
-    $("oaBase").value = OLLAMA_BASE;
-    $("oaKey").value = "";
-    $("localStatus").textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
+    $2("oaBase").value = OLLAMA_BASE;
+    $2("oaKey").value = "";
+    $2("localStatus").textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
   };
-  $("findOllama").onclick = async () => {
-    $("localStatus").textContent = "Looking for Ollama\u2026";
-    const base = $("oaBase").value.trim() || OLLAMA_BASE;
+  $2("findOllama").onclick = async () => {
+    $2("localStatus").textContent = "Looking for Ollama\u2026";
+    const base = $2("oaBase").value.trim() || OLLAMA_BASE;
     const r = await listOllamaModels(base);
     if (!r.ok) {
-      $("ollamaPick").classList.add("hidden");
-      $("localStatus").textContent = r.message;
+      $2("ollamaPick").classList.add("hidden");
+      $2("localStatus").textContent = r.message;
       return;
     }
-    const sel = $("ollamaModels");
+    const sel = $2("ollamaModels");
     sel.replaceChildren(...r.models.map((m) => Object.assign(document.createElement("option"), { value: m.name, textContent: `${m.name}${m.sizeGB ? ` (${m.sizeGB} GB)` : ""}` })));
-    if (r.models.some((m) => m.name === $("oaModel").value)) sel.value = $("oaModel").value;
-    $("ollamaPick").classList.remove("hidden");
+    if (r.models.some((m) => m.name === $2("oaModel").value)) sel.value = $2("oaModel").value;
+    $2("ollamaPick").classList.remove("hidden");
     const pick = async () => {
-      $("oaBase").value = base;
-      $("oaModel").value = sel.value;
+      $2("oaBase").value = base;
+      $2("oaModel").value = sel.value;
       const ctx = await ollamaContext(sel.value, base);
-      $("localStatus").textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
+      $2("localStatus").textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
     };
     sel.onchange = pick;
     await pick();
   };
-  $("useWhisper").onclick = () => {
-    $("sttProvider").value = "openai";
+  $2("useWhisper").onclick = () => {
+    $2("sttProvider").value = "openai";
     showProviderFields();
-    $("sttBase").value = WHISPER_BASE;
-    $("sttKey").value = "";
-    $("whisperStatus").textContent = "Set to http://localhost:8000/v1. Change the address if your server uses another port.";
+    $2("sttBase").value = WHISPER_BASE;
+    $2("sttKey").value = "";
+    $2("whisperStatus").textContent = "Set to http://localhost:8000/v1. Change the address if your server uses another port.";
   };
-  $("testWhisper").onclick = async () => {
-    $("whisperStatus").textContent = "Testing\u2026";
-    const base = ($("sttBase").value.trim() || WHISPER_BASE).replace(/\/+$/, "");
+  $2("testWhisper").onclick = async () => {
+    $2("whisperStatus").textContent = "Testing\u2026";
+    const base = ($2("sttBase").value.trim() || WHISPER_BASE).replace(/\/+$/, "");
     try {
       const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(6e3) });
-      $("whisperStatus").textContent = res.ok ? "The server answered \u2713" : explain(null, res.status, "The server");
+      $2("whisperStatus").textContent = res.ok ? "The server answered \u2713" : explain(null, res.status, "The server");
     } catch (e) {
-      $("whisperStatus").textContent = explain(e, 0, "the server");
+      $2("whisperStatus").textContent = explain(e, 0, "the server");
     }
   };
-  $("testLlm").onclick = async () => {
-    $("llmStatus").textContent = "Testing\u2026";
+  $2("testLlm").onclick = async () => {
+    $2("llmStatus").textContent = "Testing\u2026";
     try {
-      const settings = await save();
+      const settings = await save2();
       const ping = (s) => generate2({ settings: s, system: "You are a connectivity test.", user: "Reply with exactly: OK", onText: () => {
       } });
       const runs = [["Main", { ...settings, geminiKey2: "" }]];
@@ -15169,42 +15746,42 @@ function out(o) {
           results.push(`${label}: failed: ${e.message.slice(0, 150)}`);
         }
       }
-      $("llmStatus").textContent = results.join(" \xB7 ");
+      $2("llmStatus").textContent = results.join(" \xB7 ");
     } catch (e) {
-      $("llmStatus").textContent = `Failed: ${e.message}`;
+      $2("llmStatus").textContent = `Failed: ${e.message}`;
     }
   };
   async function updateGuide() {
     const s = await getSettings();
     const mic = await navigator.permissions.query({ name: "microphone" }).then((p) => p.state === "granted").catch(() => false);
     const done = { g1: !!s.geminiKey || s.sttProvider !== "gemini" && s.llmProvider !== "gemini", g2: mic, g3: !!s.myName, g4: mailReady(s) };
-    for (const [id, ok] of Object.entries(done)) $(id)?.classList.toggle("done", ok);
+    for (const [id, ok] of Object.entries(done)) $2(id)?.classList.toggle("done", ok);
   }
   function allAllowed() {
-    return parseAddresses([$("shareList").value, ...parseGroups($("shareGroups").value).map((g) => g.list.join(","))].join(","));
+    return parseAddresses([$2("shareList").value, ...parseGroups($2("shareGroups").value).map((g) => g.list.join(","))].join(","));
   }
   function renderAllow() {
-    const l = allowListLines(allAllowed(), { domains: $("shareDomains").checked });
-    $("allowLines").textContent = `const ALLOWED = ${l.allowed};
+    const l = allowListLines(allAllowed(), { domains: $2("shareDomains").checked });
+    $2("allowLines").textContent = `const ALLOWED = ${l.allowed};
 const ALLOWED_DOMAINS = ${l.domains};`;
   }
-  ["shareList", "shareGroups"].forEach((id) => $(id).oninput = renderAllow);
-  $("shareDomains").onchange = renderAllow;
-  $("copyScriptAllow").onclick = async () => {
-    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $("shareDomains").checked }));
-    $("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
-    setTimeout(() => $("copyAllowMsg").textContent = "", 6e3);
+  ["shareList", "shareGroups"].forEach((id) => $2(id).oninput = renderAllow);
+  $2("shareDomains").onchange = renderAllow;
+  $2("copyScriptAllow").onclick = async () => {
+    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $2("shareDomains").checked }));
+    $2("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
+    setTimeout(() => $2("copyAllowMsg").textContent = "", 6e3);
   };
-  $("scriptText").textContent = Code_default;
-  $("copyScript").onclick = async () => {
+  $2("scriptText").textContent = Code_default;
+  $2("copyScript").onclick = async () => {
     await navigator.clipboard.writeText(Code_default);
-    $("copyMsg").textContent = "Copied \u2713";
-    setTimeout(() => $("copyMsg").textContent = "", 1500);
+    $2("copyMsg").textContent = "Copied \u2713";
+    setTimeout(() => $2("copyMsg").textContent = "", 1500);
   };
-  $("testMail").onclick = async () => {
-    $("mailMsg").textContent = "Sending\u2026";
+  $2("testMail").onclick = async () => {
+    $2("mailMsg").textContent = "Sending\u2026";
     try {
-      const s = await save();
+      const s = await save2();
       if (!mailReady(s)) throw new Error("Paste the Apps Script web app URL (it ends in /exec) first.");
       const r = await sendMail(
         {
@@ -15215,21 +15792,21 @@ const ALLOWED_DOMAINS = ${l.domains};`;
         },
         s
       );
-      $("mailMsg").textContent = `Sent to ${r.to} \u2713 Check your inbox.`;
+      $2("mailMsg").textContent = `Sent to ${r.to} \u2713 Check your inbox.`;
     } catch (e) {
-      $("mailMsg").textContent = `Failed: ${e.message}`;
+      $2("mailMsg").textContent = `Failed: ${e.message}`;
     }
   };
   (async () => {
     const s = await getSettings();
     buildLanguageUi();
     for (const k of FIELDS2) {
-      const el = $(k);
+      const el = $2(k);
       if (!el) continue;
       if (el.type === "checkbox") el.checked = !!s[k];
       else el.value = s[k];
     }
-    $("shareAuto").checked = s.shareMode === "auto";
+    $2("shareAuto").checked = s.shareMode === "auto";
     setLanguages(s);
     loaded = read();
     showProviderFields();
@@ -15238,19 +15815,20 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     updateGuide();
     renderUsage();
     renderLearned();
+    initVoices();
     showTab(location.hash.slice(1) || "start");
   })();
   chrome.storage.onChanged.addListener(async (changes) => {
     if (!changes.settings) return;
     const fresh = await getSettings();
     for (const k of FIELDS2) {
-      const el = $(k);
+      const el = $2(k);
       if (!el || !same(read()[k], loaded[k])) continue;
       if (el.type === "checkbox") el.checked = !!fresh[k];
       else el.value = fresh[k];
       loaded[k] = fresh[k];
     }
-    $("shareAuto").checked = fresh.shareMode === "auto";
+    $2("shareAuto").checked = fresh.shareMode === "auto";
     loaded.shareMode = fresh.shareMode;
     if (same(read().meetingLanguages, loaded.meetingLanguages)) {
       setLanguages(fresh);

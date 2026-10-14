@@ -175,4 +175,60 @@ await test('voice tracker: a noisy room does not turn into endless speech', () =
   assert.ok(out.every((s) => s.t0 >= 9.5), 'only the loud part counts');
 });
 
+// ---- enrolment plumbing (the fingerprint here is fake: this tests the rules, not the voice model) ----
+const E = await import('../src/voice/enrol.js');
+const speechAudio = (secs) => {
+  const parts = [];
+  parts.push(tone(-60, 2048 * 4)); // a recording starts in a quiet moment
+  for (let i = 0; i < secs; i += 3) parts.push(tone(-25, 2048 * 24), tone(-60, 2048 * 4));
+  const out = new Float32Array(parts.reduce((a, b) => a + b.length, 0));
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+};
+
+await test('enrolment: about 20 s of speech becomes an average plus a few samples, nothing else', async () => {
+  const r = await E.buildPrint(speechAudio(21), async () => near(BASES[1]));
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.ok(r.speechSec >= 12 && r.pieces >= 4);
+  assert.ok(r.windows.length >= 1 && r.windows.length <= E.ENROL.maxWindows);
+  assert.deepEqual(Object.keys(r).sort(), ['centroid', 'consistency', 'ok', 'pieces', 'speechSec', 'warn', 'windows']);
+  assert.ok(V.cosine(V.unpack(r.centroid), BASES[1]) > 0.8);
+});
+
+await test('enrolment: too little speech or silence is refused with a plain reason', async () => {
+  const r = await E.buildPrint(speechAudio(3), async () => near(BASES[1]));
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /seconds of clear speech/);
+  const q = await E.buildPrint(new Float32Array(16000 * 20), async () => near(BASES[1]));
+  assert.equal(q.ok, false);
+});
+
+await test('enrolment: a piece of someone else speaking is left out of the fingerprint', async () => {
+  let n = 0;
+  const r = await E.buildPrint(speechAudio(30), async () => (++n === 3 ? near(BASES[2]) : near(BASES[1])));
+  assert.equal(r.ok, true);
+  assert.ok(V.cosine(V.unpack(r.centroid), BASES[1]) > 0.8);
+});
+
+await test('enrolment: add, name clash, re-record and add-a-language keep one person per name', () => {
+  const print = { centroid: amal.centroid, windows: amal.windows, speechSec: 20 };
+  let list = E.upsertPerson([], { name: '  Amal   Raj ', lang: 'en', print });
+  assert.equal(list[0].name, 'Amal Raj');
+  assert.throws(() => E.upsertPerson(list, { name: 'amal raj', print }), /already a voice/);
+  assert.throws(() => E.upsertPerson(list, { name: '  ', print }), /name/);
+  const id = list[0].id;
+  list = E.upsertPerson(list, { id, name: 'Amal Raj', lang: 'en', print: { ...print, centroid: priya.centroid } });
+  assert.equal(list.length, 1);
+  assert.equal(list[0].centroid, priya.centroid);
+  list = E.addRecording(list, id, { lang: 'ml', print });
+  assert.deepEqual(list[0].langs, ['en', 'ml']);
+  assert.equal(list[0].secs, 40);
+  assert.ok(list[0].windows.length > print.windows.length);
+  assert.ok(!JSON.stringify(list).includes('pcm'), 'no audio field is ever stored');
+});
+
 console.log(`\n${passed} passed`);
