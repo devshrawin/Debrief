@@ -118,7 +118,7 @@ npm run build
 
 ## The optional on-page pill
 
-Off by default so nothing sits on top of your meeting. Tick **Also show the pill on top of the Meet page** in Settings to get a compact draggable capsule with the recording timer, an equalizer, the mic button (green `Mic on`, grey `Mic off`, amber `Muted`), a red chip when an API limit hits, and a detail card on hover with meters and **Stop & write MOM**.
+Off by default so nothing sits on top of your meeting. Tick **Also show the pill on top of the Meet page** in Settings to get a compact draggable capsule with the recording timer, an equalizer, the mic button (green `Mic on`, grey `Mic off`, amber `Muted`), a red chip when an API limit hits, and a detail card that opens when you click the pill (not on hover; click elsewhere or press Esc to close) with meters and **Stop & write MOM**.
 
 ## Email the MOM
 

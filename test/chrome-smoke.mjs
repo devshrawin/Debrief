@@ -191,6 +191,20 @@ try {
     const host = document.querySelector('[data-debrief]');
     const root = host.__debriefRoot;
     const out = { shown: host.style.display !== 'none', time: root.querySelector('.time').textContent, mic: root.querySelector('.mic').textContent.trim() };
+    // the panel opens on click only: hovering does nothing, a click outside closes it
+    const wrapEl = root.querySelector('.wrap');
+    const panelEl = root.querySelector('.panel');
+    wrapEl.dispatchEvent(new MouseEvent('mouseenter'));
+    await new Promise((r) => setTimeout(r, 300));
+    out.hoverClosed = panelEl.classList.contains('hidden');
+    const pillEl = root.querySelector('.pill');
+    const press = () => { pillEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: 5, clientY: 5, pointerId: 1, bubbles: true })); pillEl.dispatchEvent(new PointerEvent('pointerup', { clientX: 5, clientY: 5, pointerId: 1, bubbles: true })); };
+    press();
+    await new Promise((r) => setTimeout(r, 300));
+    out.clickOpens = !panelEl.classList.contains('hidden');
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    out.outsideCloses = panelEl.classList.contains('hidden');
     root.querySelector('.mic').click();
     await new Promise((r) => setTimeout(r, 800));
     out.after = root.querySelector('.mic').textContent.trim();
@@ -198,7 +212,7 @@ try {
     await chrome.storage.session.set({ rec: { recording: false } });
     return out;
   })()`);
-  check('pill shows timer and mic state, click toggles mic', pillRes.shown && /^01:0/.test(pillRes.time) && pillRes.mic === 'Mic on' && pillRes.after === 'Mic off' && pillRes.state === false, JSON.stringify(pillRes));
+  check('pill shows timer and mic state, click toggles mic, panel opens on click not hover', pillRes.hoverClosed && pillRes.clickOpens && pillRes.outsideCloses && pillRes.shown && /^01:0/.test(pillRes.time) && pillRes.mic === 'Mic on' && pillRes.after === 'Mic off' && pillRes.state === false, JSON.stringify(pillRes));
 
   // Screenshots of the recording UI (popup + on-page pill) with a quota alert showing.
   const alertRec = (tabId) => `chrome.storage.session.set({ rec: { recording: true, meetingId: 'mtest', tabId: ${tabId}, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetMuted: false, alert: { kind: 'quota', title: 'API limit reached', detail: 'gemini-3.8-flash: free-tier limit used up, resets in about 18h. Debrief tries other models first; chunks that still fail are kept and retried from the MOM page.', at: Date.now(), notifiedAt: Date.now() } }, levels: { tab: 0.14, mic: 0.02, ctx: 'running', at: Date.now() } })`;
@@ -209,7 +223,7 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 2, mobile: false }, popup.sessionId);
     fs.writeFileSync(`${process.env.SHOTS}/popup-recording.png`, Buffer.from((await send('Page.captureScreenshot', {}, popup.sessionId)).data, 'base64'));
     const tabId = await opts.evaluate(`chrome.runtime.sendMessage({ target: 'bg', type: 'whoami' }).then((r) => r.tabId)`);
-    await opts.evaluate(`(async () => { await ${alertRec(tabId)}; await new Promise((r) => setTimeout(r, 1300)); document.querySelector('[data-debrief]').__debriefRoot.querySelector('.wrap').dispatchEvent(new MouseEvent('mouseenter')); await new Promise((r) => setTimeout(r, 400)); })()`);
+    await opts.evaluate(`(async () => { await ${alertRec(tabId)}; await new Promise((r) => setTimeout(r, 1300)); document.querySelector('[data-debrief]').__debriefRoot.querySelector('.pill').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, bubbles: true })); document.querySelector('[data-debrief]').__debriefRoot.querySelector('.pill').dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, bubbles: true })); await new Promise((r) => setTimeout(r, 400)); })()`);
     await send('Emulation.setDeviceMetricsOverride', { width: 760, height: 640, deviceScaleFactor: 2, mobile: false }, opts.sessionId);
     fs.writeFileSync(`${process.env.SHOTS}/pill.png`, Buffer.from((await send('Page.captureScreenshot', {}, opts.sessionId)).data, 'base64'));
   }
