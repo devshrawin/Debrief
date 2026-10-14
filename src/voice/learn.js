@@ -54,7 +54,7 @@ function cleaned(segs) {
 }
 
 // Updates the list of enrolled people from one meeting. Returns { list, changed, report }.
-export function learnFromMeeting(meeting, people, { myName = '' } = {}) {
+export function learnFromMeeting(meeting, people, { myName = '', blocked = [] } = {}) {
   const report = { meeting: meeting.id, learned: [], skipped: [] };
   if (!meeting?.voiceSegs?.length || !meeting?.captions?.length) {
     report.skipped.push({ why: !meeting?.captions?.length ? 'no captions were read in this meeting' : 'no voice pieces were recorded' });
@@ -76,6 +76,10 @@ export function learnFromMeeting(meeting, people, { myName = '' } = {}) {
   for (let i = 0; i < found.length; i++) for (let j = i + 1; j < found.length; j++) if (cosine(found[i].centroid, found[j].centroid) >= LEARN.twin) (bad.add(i), bad.add(j));
   let list = [...people];
   found.forEach((f, i) => {
+    if (isBlocked(blocked, f.name, f.centroid)) {
+      report.skipped.push({ name: f.name, why: 'you asked not to learn this voice' });
+      return;
+    }
     if (bad.has(i)) {
       report.skipped.push({ name: f.name, why: 'another speaker in this meeting sounded the same, so it was unclear who was who' });
       return;
@@ -130,7 +134,7 @@ const scale = (v, k) => Float32Array.from(v, (x) => x * k);
 // until it has enough clean speech from two meetings, and nothing here touches a voice you recorded yourself.
 export const isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || '');
 
-export function learnRecurring(meeting, people) {
+export function learnRecurring(meeting, people, { blocked = [] } = {}) {
   const report = { meeting: meeting.id, updated: [], created: [], skipped: [] };
   const segs = meeting.voiceSegs || [];
   if (segs.length < 8) {
@@ -176,6 +180,10 @@ export function learnRecurring(meeting, people) {
       const secs = secsOf(vecs) * step;
       if (vecs.length < LEARN.minPieces || secs < LEARN.minSecs) continue;
       const c = mean(vecs.map((x) => x.v));
+      if (isBlocked(blocked, '', c)) {
+        report.skipped.push({ why: 'a voice you asked not to learn was heard' });
+        continue;
+      }
       // a group sounding like a voice we have but did not match (borderline): leave it, it is likely the same person
       if (list.some((p) => cosine(unpack(p.centroid), c) >= 0.6)) {
         report.skipped.push({ why: 'a group of pieces sounded like an existing voice but not clearly enough, so it was left out' });
@@ -196,6 +204,36 @@ export function adoptName(list, centroid, name) {
   const next = [...list];
   next[i] = { ...next[i], name, updated: Date.now() };
   return next;
+}
+
+// ---- people who must not be learned again, and merging two voices that are really one person ----
+// blocked: [{ name, centroid }] kept when someone deletes a learned voice and asks for it not to come back.
+export const blockEntry = (p) => ({ name: p.name, centroid: p.centroid });
+
+export function isBlocked(blocked, name, centroid) {
+  const n = norm(name);
+  return (blocked || []).some((b) => (n && !isAnon({ name }) && norm(b.name) === n) || (centroid && b.centroid && cosine(unpack(b.centroid), centroid) >= 0.7));
+}
+
+// Folds voice `fromId` into `intoId`: one centroid weighted by seconds of speech, samples of both kept.
+export function mergePeople(list, fromId, intoId) {
+  const from = list.find((p) => p.id === fromId);
+  const into = list.find((p) => p.id === intoId);
+  if (!from || !into || from.id === into.id) throw new Error('Pick two different voices to merge.');
+  const wf = Math.max(1, from.secs || 1);
+  const wi = Math.max(1, into.secs || 1);
+  const merged = {
+    ...into,
+    centroid: pack(mean([scale(unpack(into.centroid), wi), scale(unpack(from.centroid), wf)])),
+    windows: [...(into.windows || []), ...(from.windows || [])].slice(-LEARN.keep * 2),
+    secs: (into.secs || 0) + (from.secs || 0),
+    meetings: Math.max(into.meetings || 1, from.meetings || 1),
+    langs: [...new Set([...(into.langs || [into.lang || 'en']), ...(from.langs || [from.lang || 'en'])])],
+    learnedFrom: [...new Set([...(into.learnedFrom || []), ...(from.learnedFrom || [])])].slice(-50),
+    updated: Date.now(),
+  };
+  if (into.auto) merged.ready = merged.secs >= LEARN.readySecs && merged.meetings >= LEARN.readyMeetings;
+  return list.filter((p) => p.id !== fromId).map((p) => (p.id === intoId ? merged : p));
 }
 
 export const usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready);

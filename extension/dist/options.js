@@ -152,6 +152,13 @@
     if (Object.keys(changed).length) await chrome.storage.local.set(changed);
     return Object.keys(changed).length;
   }
+  async function getBlockedVoices() {
+    const { voiceBlock } = await chrome.storage.local.get("voiceBlock");
+    return voiceBlock || [];
+  }
+  async function saveBlockedVoices(list) {
+    await chrome.storage.local.set({ voiceBlock: list.slice(-100) });
+  }
 
   // src/local.js
   var OLLAMA_BASE = "http://localhost:11434/v1";
@@ -946,7 +953,28 @@ function out(o) {
     keep: 12
     // individual fingerprints kept
   };
+  var scale = (v, k) => Float32Array.from(v, (x) => x * k);
   var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
+  var blockEntry = (p) => ({ name: p.name, centroid: p.centroid });
+  function mergePeople(list, fromId, intoId) {
+    const from = list.find((p) => p.id === fromId);
+    const into = list.find((p) => p.id === intoId);
+    if (!from || !into || from.id === into.id) throw new Error("Pick two different voices to merge.");
+    const wf = Math.max(1, from.secs || 1);
+    const wi = Math.max(1, into.secs || 1);
+    const merged = {
+      ...into,
+      centroid: pack(mean([scale(unpack(into.centroid), wi), scale(unpack(from.centroid), wf)])),
+      windows: [...into.windows || [], ...from.windows || []].slice(-LEARN.keep * 2),
+      secs: (into.secs || 0) + (from.secs || 0),
+      meetings: Math.max(into.meetings || 1, from.meetings || 1),
+      langs: [.../* @__PURE__ */ new Set([...into.langs || [into.lang || "en"], ...from.langs || [from.lang || "en"]])],
+      learnedFrom: [.../* @__PURE__ */ new Set([...into.learnedFrom || [], ...from.learnedFrom || []])].slice(-50),
+      updated: Date.now()
+    };
+    if (into.auto) merged.ready = merged.secs >= LEARN.readySecs && merged.meetings >= LEARN.readyMeetings;
+    return list.filter((p) => p.id !== fromId).map((p) => p.id === intoId ? merged : p);
+  }
   var usableVoices = (people2) => (people2 || []).filter((p) => !p.auto || p.ready);
   function unnamedGroups(meeting, people2, { max = 4, minSecs = 15, cap = 300 } = {}) {
     const usable2 = usableVoices(people2);
@@ -1307,6 +1335,7 @@ function out(o) {
           btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)),
           btn("Add recording", () => begin({ kind: "add", id: p.id }, p)),
           btn("Export", () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`)),
+          ...p.auto && people.length > 1 ? [btn("Merge into\u2026", () => mergeInto(p))] : [],
           btn("Delete", () => remove(p), true)
         );
         return row;
@@ -1367,9 +1396,37 @@ function out(o) {
   }
   async function remove(p) {
     if (!confirm(`Delete the voice of ${p.name}? Their fingerprint is removed from this browser.`)) return;
+    if (p.auto && confirm(`${p.name} was learned from your meetings and would be learned again.
+
+OK = also never learn this voice again.
+Cancel = just delete it for now.`)) {
+      await saveBlockedVoices([...await getBlockedVoices(), blockEntry(p)]);
+      renderBlocked();
+    }
     people = people.filter((x) => x.id !== p.id);
     await saveVoices(people);
     renderList();
+  }
+  async function mergeInto(p) {
+    const others = people.filter((x) => x.id !== p.id);
+    const pick = prompt(`Merge ${p.name} into which voice? Type the number:
+
+${others.map((x, i) => `${i + 1}. ${x.name}`).join("\n")}`);
+    const target = others[Number(pick) - 1];
+    if (!target) return;
+    if (!confirm(`Merge ${p.name} into ${target.name}? The result is called ${target.name}.`)) return;
+    try {
+      people = mergePeople(people, p.id, target.id);
+      await saveVoices(people);
+      renderList();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+  async function renderBlocked() {
+    const blocked = await getBlockedVoices();
+    $("voiceBlockedRow").hidden = !blocked.length;
+    $("voiceBlockedMsg").textContent = `${blocked.length} learned voice${blocked.length === 1 ? " is" : "s are"} set never to be learned again.`;
   }
   function resetRecording() {
     stopCapture(true);
@@ -1575,6 +1632,11 @@ OK = replace, Cancel = keep what you have.`);
       e.target.value = "";
       if (f) importFile(f);
     };
+    renderBlocked();
+    $("voiceAllowAgain").onclick = async () => {
+      await saveBlockedVoices([]);
+      renderBlocked();
+    };
     $("voiceForget").onclick = async () => {
       if (!confirm("Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.")) return;
       const n = await forgetAllVoices();
@@ -1591,6 +1653,76 @@ OK = replace, Cancel = keep what you have.`);
       closeClient();
     });
   }
+
+  // src/checkup.js
+  var OK = "\u2713";
+  var WARN = "!";
+  var BAD = "\u2717";
+  async function runCheckup() {
+    const rows = [];
+    const add = (level, title, detail = "") => rows.push({ level, title, detail });
+    const s = await getSettings();
+    if (s.sttProvider === "gemini" || s.llmProvider === "gemini") {
+      add(s.geminiKey ? OK : BAD, "Gemini key", s.geminiKey ? s.geminiKey2 ? "main and backup key are set" : "a key is set (no backup key)" : "missing: add it on the Get started page");
+      try {
+        const { usage, learnedLimits = {}, modelCooldown = {} } = await chrome.storage.local.get(["usage", "learnedLimits", "modelCooldown"]);
+        const limits = { ...learnedLimits, ...parseLimits(s.usageLimits) };
+        const today = summarize(usage, 1);
+        const used = (m) => today.filter((x) => x.model === m).reduce((a, x) => a + x.req, 0);
+        for (const m of [s.sttGeminiModel, s.geminiModel].filter(Boolean)) {
+          const lim = limits[m];
+          if (!lim) add(OK, `Quota today: ${m}`, `${used(m)} requests so far (limit not known yet)`);
+          else add(used(m) >= lim ? BAD : used(m) >= lim * 0.8 ? WARN : OK, `Quota today: ${m}`, `${used(m)} of about ${lim} requests used`);
+        }
+        const cooling = Object.entries(modelCooldown).filter(([, u]) => u > Date.now());
+        if (cooling.length) add(WARN, "Models resting after hitting their limit", cooling.map(([m, u]) => `${m} until ${new Date(u).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`).join(", "));
+      } catch {
+      }
+    }
+    try {
+      const p = await navigator.permissions.query({ name: "microphone" });
+      add(p.state === "granted" ? OK : s.captureMic === false ? OK : WARN, "Microphone permission", p.state === "granted" ? "allowed" : `${p.state}: only other people will be recorded until you press "Allow microphone" on the General page`);
+    } catch {
+    }
+    add(s.followMeetMute !== false ? OK : WARN, "Mic follows the call's mute button", s.followMeetMute !== false ? "on" : "off: your mic is recorded even when you are muted in the call");
+    add(OK, "Speaker names from Meet captions", { read: "used when captions are on", auto: "Debrief turns captions on while recording", off: "off" }[s.meetCaptions] || s.meetCaptions);
+    if (!s.emailWebhook) add(WARN, "Email relay", "not set up (optional)");
+    else if (!mailReady(s)) add(BAD, "Email relay", "the URL does not look like an Apps Script web app URL ending in /exec");
+    else {
+      try {
+        const res = await fetch(s.emailWebhook, { redirect: "follow", signal: AbortSignal.timeout(15e3) });
+        const j = await res.json();
+        if (j?.ok) add(Number(j.version) >= 7 ? OK : WARN, "Email relay", `reachable, script version ${j.version}${j.locked ? ", locked to this Debrief" : ", not locked yet (send a test email)"}${Number(j.version) >= 7 ? "" : ". Attendance from the calendar needs version 7: copy the script again and deploy a new version"}`);
+        else add(BAD, "Email relay", 'answered, but not as the Debrief script (is it set to "Anyone"?)');
+      } catch (e) {
+        add(BAD, "Email relay", `could not be reached (${e.message}). Check the deployment is set to "Anyone"`);
+      }
+    }
+    const voices = await getVoices();
+    const blocked = await getBlockedVoices();
+    add(OK, "Voice recognition", `${s.voiceOn ? "naming is on" : "naming is off"}, ${s.voiceLearn ? "learning is on" : "learning is off"}; ${voices.filter((v) => !v.auto).length} recorded, ${voices.filter((v) => v.auto && v.ready).length} learned and in use, ${voices.filter((v) => v.auto && !v.ready).length} still learning${blocked.length ? `, ${blocked.length} blocked` : ""}`);
+    try {
+      const r = await fetch(chrome.runtime.getURL("models/wespeaker_resnet34_lm.onnx"), { method: "HEAD" });
+      add(r.ok ? OK : BAD, "Speaker model file", r.ok ? "present in the extension" : "missing from the extension folder");
+    } catch {
+      add(BAD, "Speaker model file", "could not be read");
+    }
+    try {
+      const m = (await listMeetings()).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+      if (m) {
+        const dbg = m.debug || [];
+        const muteLines = dbg.filter((x) => /^Meet mic/.test(x));
+        const silent = dbg.find((x) => /^mic: the raw microphone/.test(x));
+        add(OK, `Last meeting: ${m.title || m.id}`, `${(m.segments || []).length} transcript pieces, ${(m.errors || []).length} errors, ${Object.keys(m.presence || {}).length} people seen, ${(m.voiceSegs || []).length} voice pieces, ${(m.captions || []).length} caption lines`);
+        add(muteLines.length ? OK : WARN, "Last meeting: the call's mute button", muteLines.length ? `${muteLines.length} changes seen; last: ${muteLines.at(-1)}` : "no mute changes were seen (either you never muted, or the mute button was not found on the page)");
+        if (silent) add(BAD, "Last meeting: microphone", "it delivered only silence: check the microphone chosen in General and Windows privacy settings");
+        add(m.invited?.length ? OK : WARN, "Last meeting: calendar invite", m.invited?.length ? `${m.invited.length} invitees found${m.invitedHow ? ` (by ${m.invitedHow})` : ""}` : m.invitedError ? `lookup failed: ${String(m.invitedError).slice(0, 100)}` : m.invitedNotFound ? "no calendar event matched the Meet link or title" : "not looked up yet");
+      }
+    } catch {
+    }
+    return rows;
+  }
+  var checkupText = (rows) => rows.map((r) => `${r.level} ${r.title}${r.detail ? `: ${r.detail}` : ""}`).join("\n");
 
   // src/options.js
   var $2 = (id) => document.getElementById(id);
@@ -1897,6 +2029,28 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     await navigator.clipboard.writeText(Code_default);
     $2("copyMsg").textContent = "Copied \u2713";
     setTimeout(() => $2("copyMsg").textContent = "", 1500);
+  };
+  $2("checkup").onclick = async () => {
+    $2("checkup").disabled = true;
+    $2("checkupMsg").textContent = "Checking\u2026";
+    try {
+      const rows = await runCheckup();
+      const text = checkupText(rows);
+      $2("checkupOut").textContent = text;
+      $2("checkupOut").hidden = false;
+      $2("checkupCopy").hidden = false;
+      $2("checkupCopy").onclick = async () => {
+        await navigator.clipboard.writeText(text);
+        $2("checkupMsg").textContent = "Copied \u2713";
+      };
+      const bad = rows.filter((r) => r.level === "\u2717").length;
+      const warn = rows.filter((r) => r.level === "!").length;
+      $2("checkupMsg").textContent = bad ? `${bad} problem${bad === 1 ? "" : "s"}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : "All good";
+    } catch (e) {
+      $2("checkupMsg").textContent = `Could not check: ${e.message}`;
+    } finally {
+      $2("checkup").disabled = false;
+    }
   };
   $2("testMail").onclick = async () => {
     $2("mailMsg").textContent = "Sending\u2026";

@@ -195,4 +195,26 @@ await test('recurring: too little speech creates nothing', () => {
   assert.equal(L.learnRecurring({ id: 'x', voiceSegs: [piece(0, 1), piece(4, 1)] }, []).changed, false);
 });
 
+await test('block and merge: a deleted learned voice is not learned again, and two voices of one person can be merged', () => {
+  const learned = L.learnRecurring(talk('b1', [1, 2]), []).list;
+  const gone = learned[0];
+  const blocked = [L.blockEntry(gone)];
+  const left = learned.filter((p) => p.id !== gone.id);
+  const again = L.learnRecurring(talk('b2', [1, 2]), left, { blocked });
+  assert.ok(!again.list.some((p) => V.cosine(V.unpack(p.centroid), B[1]) > 0.8), 'the blocked voice is not recreated');
+  assert.ok(again.report.skipped.some((s) => /asked not to learn/.test(s.why)));
+  // caption names are blocked by name too
+  const viaCaptions = L.learnFromMeeting(meeting('b3'), [], { blocked: [{ name: 'amal raj', centroid: null }] });
+  assert.ok(!viaCaptions.list.some((p) => p.name === 'Amal Raj'));
+  assert.ok(viaCaptions.list.some((p) => p.name === 'Priya Nair'));
+  // merge
+  let list = L.learnRecurring(talk('m1', [1]), []).list;
+  list = [...list, { ...list[0], id: 'twin', name: 'Unnamed voice 2', centroid: V.pack(near(B[1])), secs: 30 }];
+  const merged = L.mergePeople(list, 'twin', list[0].id);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].secs, list[0].secs + 30);
+  assert.ok(V.cosine(V.unpack(merged[0].centroid), B[1]) > 0.8);
+  assert.throws(() => L.mergePeople(list, list[0].id, list[0].id), /two different/);
+});
+
 console.log(`\n${passed} passed`);

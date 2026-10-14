@@ -150,7 +150,7 @@
     }
     return vecs;
   }
-  function learnFromMeeting(meeting, people, { myName = "" } = {}) {
+  function learnFromMeeting(meeting, people, { myName = "", blocked = [] } = {}) {
     const report = { meeting: meeting.id, learned: [], skipped: [] };
     if (!meeting?.voiceSegs?.length || !meeting?.captions?.length) {
       report.skipped.push({ why: !meeting?.captions?.length ? "no captions were read in this meeting" : "no voice pieces were recorded" });
@@ -171,6 +171,10 @@
     for (let i = 0; i < found.length; i++) for (let j = i + 1; j < found.length; j++) if (cosine(found[i].centroid, found[j].centroid) >= LEARN.twin) bad.add(i), bad.add(j);
     let list = [...people];
     found.forEach((f, i) => {
+      if (isBlocked(blocked, f.name, f.centroid)) {
+        report.skipped.push({ name: f.name, why: "you asked not to learn this voice" });
+        return;
+      }
       if (bad.has(i)) {
         report.skipped.push({ name: f.name, why: "another speaker in this meeting sounded the same, so it was unclear who was who" });
         return;
@@ -214,7 +218,7 @@
   }
   var scale = (v, k) => Float32Array.from(v, (x) => x * k);
   var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
-  function learnRecurring(meeting, people) {
+  function learnRecurring(meeting, people, { blocked = [] } = {}) {
     const report = { meeting: meeting.id, updated: [], created: [], skipped: [] };
     const segs = meeting.voiceSegs || [];
     if (segs.length < 8) {
@@ -258,6 +262,10 @@
         const secs = secsOf(vecs) * step;
         if (vecs.length < LEARN.minPieces || secs < LEARN.minSecs) continue;
         const c = mean(vecs.map((x) => x.v));
+        if (isBlocked(blocked, "", c)) {
+          report.skipped.push({ why: "a voice you asked not to learn was heard" });
+          continue;
+        }
         if (list.some((p) => cosine(unpack(p.centroid), c) >= 0.6)) {
           report.skipped.push({ why: "a group of pieces sounded like an existing voice but not clearly enough, so it was left out" });
           continue;
@@ -275,6 +283,10 @@
     const next = [...list];
     next[i] = { ...next[i], name, updated: Date.now() };
     return next;
+  }
+  function isBlocked(blocked, name, centroid) {
+    const n = norm(name);
+    return (blocked || []).some((b) => n && !isAnon({ name }) && norm(b.name) === n || centroid && b.centroid && cosine(unpack(b.centroid), centroid) >= 0.7);
   }
 
   // src/alerts.js
@@ -462,6 +474,10 @@
   async function saveVoices(list) {
     await chrome.storage.local.set({ voices: list });
   }
+  async function getBlockedVoices() {
+    const { voiceBlock } = await chrome.storage.local.get("voiceBlock");
+    return voiceBlock || [];
+  }
 
   // src/background.js
   chrome.runtime.onInstalled.addListener((d) => {
@@ -575,8 +591,9 @@
     if (!s.voiceLearn) return;
     const m = await getMeeting(meetingId);
     if (!m) return;
-    const r = learnFromMeeting(m, s.voices || [], { myName: s.myName });
-    const r2 = learnRecurring(m, r.list);
+    const blocked = await getBlockedVoices();
+    const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
+    const r2 = learnRecurring(m, r.list, { blocked });
     if (r.changed || r2.changed) await saveVoices(r2.list);
     await updateMeeting(meetingId, (mm) => {
       mm.voiceLearn = { ...r.report, recurring: r2.report };

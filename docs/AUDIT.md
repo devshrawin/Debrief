@@ -57,19 +57,21 @@ Branch `pro`. "Verified" means I ran it and saw the result in this session. "Tes
 10. **Another computer:** install from the folder, run the tour, confirm nothing needs your settings.
 11. **Listening checks:** pick three lines labelled with a name and listen to the recording at that time.
 
-## 6. Cheap wins (small effort, real payoff)
+## 6. Cheap wins
 
-1. **Per-model cooldown after a 429.** Remember "model X is over its limit until T" and skip it in the chain. The clip run made 49 failing requests out of 67; this should remove most of them and the 100–300 s chunk times. (About an hour.)
-2. **Strip `mm:ss` prefixes** that fallback models put in transcripts (seen in chunks 7+). (15 minutes.)
-3. **Bigger audio chunks** (for example 100–150 s to about 240 s): fewer requests against a free tier of about 25 a day. Needs a before/after on the clip for loops and quality before changing the default.
-4. **Drop the Anthropic SDK for plain `fetch`:** it is about 500 KB in each of four pages (options, minutes, Ask, tour). Faster page opens, smaller extension.
-5. **"Never learn this person"** for learned voices you deleted (otherwise they come back).
-6. **One "Check setup" panel** that prints key, quota, mic, captions, model, voices and the last mute events in one place to paste when something fails.
-7. **Show the mic state in the popup** ("following Meet: muted") so you can see it working.
-8. **Voices page screenshot in the README**, and a short "how to record a good enrolment" tip.
-9. **Merge two voices** button for learned "Unnamed voice" duplicates.
-10. **Regenerate hint on old minutes** that still show icon-font names (open and press *Write minutes*).
-11. **Quiet-hours quota hint:** warn at the start of a recording if today's limits are nearly used.
+Done (2026-10-14, after the first audit), each with automated tests:
+1. **Per-model cooldown after a 429**: a Gemini model that has just reported its limit is skipped until it can answer (until the Pacific-midnight reset for daily limits, or the retry time Google gives). When every model is exhausted the chunk fails at once and the audio stays queued instead of minutes of back-off.
+2. **Timestamps stripped** from fallback transcripts (`00:04Child Development…`).
+3. **Anthropic SDK replaced by `fetch`**: the options, minutes, Ask and tour pages are 5 to 10 times smaller (for example options 652 KB to 92 KB, minutes 730 KB to 172 KB).
+4. **Never learn this voice again** when deleting a learned voice, and **Merge into…** for two learned voices that are one person.
+5. **Check my setup** panel (Get started page): keys, today's quota, models resting, microphone, mute follow, email relay version, voices, and what happened in the last meeting. Safe to paste: it never prints a key.
+6. **The popup says what it sees of the call's mute button.**
+7. **Regenerating the minutes reuses the items found the first time** (temperature 0 for extraction and the check), with a Re-read transcript button.
+
+Still open:
+- **Bigger audio chunks** (about 240 s instead of 100 to 150 s): fewer requests on a free tier of about 25 a day, but it needs a before/after on the clip (loops, missed speech) and a working quota, so the default is unchanged.
+- Voices page screenshot in the README.
+- Quota warning at the start of a recording (the popup already warns at 80% while recording).
 
 ## 7. Risks to keep in mind
 

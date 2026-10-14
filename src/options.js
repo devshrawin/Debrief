@@ -7,6 +7,7 @@ import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvi
 import { learnAlias } from './dictionary.js';
 import { LANGUAGES, chosenLanguages, minutesLanguageOptions, joinNames } from './languages.js';
 import { initVoices } from './voices-ui.js';
+import { runCheckup, checkupText } from './checkup.js';
 import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, dayKey } from './usage.js';
 
 const $ = (id) => document.getElementById(id);
@@ -348,6 +349,29 @@ $('copyScript').onclick = async () => {
   await navigator.clipboard.writeText(scriptText);
   $('copyMsg').textContent = 'Copied ✓';
   setTimeout(() => ($('copyMsg').textContent = ''), 1500);
+};
+
+$('checkup').onclick = async () => {
+  $('checkup').disabled = true;
+  $('checkupMsg').textContent = 'Checking…';
+  try {
+    const rows = await runCheckup();
+    const text = checkupText(rows);
+    $('checkupOut').textContent = text;
+    $('checkupOut').hidden = false;
+    $('checkupCopy').hidden = false;
+    $('checkupCopy').onclick = async () => {
+      await navigator.clipboard.writeText(text);
+      $('checkupMsg').textContent = 'Copied ✓';
+    };
+    const bad = rows.filter((r) => r.level === '✗').length;
+    const warn = rows.filter((r) => r.level === '!').length;
+    $('checkupMsg').textContent = bad ? `${bad} problem${bad === 1 ? '' : 's'}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : 'All good';
+  } catch (e) {
+    $('checkupMsg').textContent = `Could not check: ${e.message}`;
+  } finally {
+    $('checkup').disabled = false;
+  }
 };
 
 $('testMail').onclick = async () => {

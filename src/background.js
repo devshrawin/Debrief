@@ -3,7 +3,7 @@ import { learnFromMeeting, learnRecurring } from './voice/learn.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
-import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState, saveVoices } from './store.js';
+import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState, saveVoices, getBlockedVoices } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -137,8 +137,9 @@ async function learnVoices(meetingId) {
   if (!s.voiceLearn) return;
   const m = await getMeeting(meetingId);
   if (!m) return;
-  const r = learnFromMeeting(m, s.voices || [], { myName: s.myName });
-  const r2 = learnRecurring(m, r.list);
+  const blocked = await getBlockedVoices();
+  const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
+  const r2 = learnRecurring(m, r.list, { blocked });
   if (r.changed || r2.changed) await saveVoices(r2.list);
   await updateMeeting(meetingId, (mm) => {
     mm.voiceLearn = { ...r.report, recurring: r2.report };
