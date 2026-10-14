@@ -142,7 +142,7 @@ try {
   const popup = await openPage(`chrome-extension://${id}/popup.html`);
   const cmds = await popup.evaluate(`chrome.commands.getAll()`);
   check('start/stop shortcut registered', cmds.some((c) => c.name === 'toggle-recording'), JSON.stringify(cmds.map((c) => [c.name, c.shortcut])));
-  check('popup shows brand and icon', await popup.evaluate(`document.querySelector('h1.brand img').naturalWidth === 48 && document.querySelector('h1.brand').textContent.includes('Debrief')`));
+  check('popup shows brand and icon', await popup.evaluate(`document.querySelector('h1.brand img').naturalWidth > 0 && /icon.svg$/.test(document.querySelector('h1.brand img').src) && document.querySelector('h1.brand').textContent.includes('Debrief')`));
   if (process.env.SHOTS) {
     const fs = await import('node:fs');
     await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 520, deviceScaleFactor: 2, mobile: false }, popup.sessionId);
