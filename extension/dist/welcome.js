@@ -14839,7 +14839,7 @@ function out(o) {
           "div",
           { class: "grid2" },
           h("div", { class: "mini" }, h("b", {}, "What you need"), "One free Gemini key (two minutes). Everything else is optional: microphone, names, email, sharing."),
-          h("div", { class: "mini" }, h("b", {}, "Your privacy"), "There is no Debrief server. Audio and text go directly from your browser to the service you choose, and your keys never leave this browser.")
+          h("div", { class: "mini" }, h("b", {}, "Your privacy"), "Debrief has no server of its own. Audio and text go from your browser to the services you choose, and your keys stay in this browser. If you turn on email, the minutes also pass through a script in your own Google account.")
         ),
         h("div", { class: "callout", style: "margin-top:16px" }, "Tell participants when you are recording. Your company may also restrict browser extensions or tab capture.")
       ]

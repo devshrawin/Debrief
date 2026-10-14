@@ -32,7 +32,8 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 | | |
 |---|---|
 | **One-click recording** | Start from the popup or press `Alt+Shift+M`. The toolbar icon glows amber during a call as a reminder to record (Google Meet, and Zoom, Teams, Webex, Whereby, Jitsi, GoTo, BlueJeans, Chime, Zoho Meeting and Skype in the browser). |
-| **Hinglish and Malayalam aware** | Hindi comes out in Devanagari, Malayalam in Malayalam script, English words stay in English. Pick *Auto*, *Hindi + English* or *Malayalam + English* in Settings. Works with Gemini and Sarvam; Whisper-compatible servers get a Malayalam hint too. |
+| **Any languages, in any mix** | Tick as many of 20 languages as your meetings use (English, Hindi, Malayalam, Tamil, Telugu, Kannada, Marathi, Bengali, Gujarati, Punjabi, Odia, Urdu, Spanish, French, German, Portuguese, Russian, Arabic, Chinese, Japanese), or leave all unticked for automatic. Each language is written in its own script and English words stay in English. Gemini gets all of them as hints; Sarvam and Whisper-style servers are narrowed to the language when you pick exactly one. |
+| **Ask your meetings** | Ask a question on any minutes page, or across all your meetings from the popup (**Meetings → Ask a question**). Debrief finds the best-matching excerpts locally and answers with the source of every point, e.g. `[Cadence call, 12 Oct, 14:20]`. Nothing is guessed: if it isn't in your meetings it says so. |
 | **Mic on your terms** | Switch your own voice in or out of the transcript from the popup, with `Alt+Shift+K`, or from an optional compact pill on the Meet page. |
 | **Follows Meet's mute** | While Meet itself is muted, Debrief ignores your mic, so side conversations stay out of the transcript. |
 | **Live health meters** | See meeting-audio and mic levels in the popup and the optional pill. If the recorder dies or the meeting is silent, you see it immediately instead of after the call. |
@@ -43,7 +44,7 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 | **Auto-email** | The minutes land in your inbox the moment they're written, as a clean HTML email (tables intact), with the transcript attached if you like. It sends from *your own* Gmail through a 40-line Google Apps Script you deploy once. See [Email the MOM](#email-the-mom). |
 | **MOM your way** | Streams Markdown minutes: summary, decisions, action items table. Edit, copy, export `.md`, Word or PDF. Write in English or Hindi. |
 | **Manage meetings** | Delete a single meeting or clear them all from the popup. |
-| **Private** | Everything goes straight from Chrome to the provider you choose. No server of ours, ever. |
+| **Private** | Debrief has no server of its own. Audio and text go from your browser to the services you choose (Gemini by default, or Sarvam, Deepgram, Claude, or models on your own computer), and your keys stay in this browser, stored unencrypted in Chrome's extension storage. If you turn on email, the minutes and any attachments also pass through a script in your own Google account. |
 
 ## New in Pro
 
@@ -110,7 +111,7 @@ There is no server of ours in the loop: the extension posts to a tiny script in 
 
 The full walkthrough, with troubleshooting, is in the [setup guide](docs/SETUP.md#5-email-the-minutes-to-yourself-optional). Regenerating or editing never re-sends by itself; press **Email me** on the MOM page to send again.
 
-Safety: whatever a request says, the script only ever mails **your own address** plus whatever you put in its `ALLOWED` list, and the URL is a long secret only Debrief knows. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
+Safety: whatever a request says, the script only ever mails **your own address** plus whatever you put in its `ALLOWED` list, and it locks itself to the Debrief install that talks to it first: Debrief makes up a random secret on its own (you never type one) and the script refuses every request without it, so the web address alone is useless to anyone else. After reinstalling Debrief or using a new browser profile, run the script's `resetSecret` function once and send a test email. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
 
 ## How it works
 
