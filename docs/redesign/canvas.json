@@ -1,0 +1,28 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-14T10:30:00Z"},
+  "title": "Debrief redesign",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 2160, "title": "Foundations, components, dialogs & states", "is_interactive": true},
+    "Brand.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 1640, "title": "Logo, icon states, store"},
+    "Popup.dc.html": {"x": 0, "y": 2600, "w": 1640, "h": 900, "title": "Toolbar popup (360 px): idle, recording, finishing, meetings"},
+    "Pill.dc.html": {"x": 1720, "y": 2600, "w": 1280, "h": 1080, "title": "On-page pill & panel", "is_interactive": true},
+    "Tour.dc.html": {"x": 3080, "y": 2600, "w": 1280, "h": 860, "title": "First-run tour", "is_interactive": true},
+    "SettingsStart.dc.html": {"x": 0, "y": 4100, "w": 1280, "h": 1320, "title": "Settings: Get started", "expand": "fill"},
+    "SettingsVoices.dc.html": {"x": 1360, "y": 4100, "w": 1280, "h": 2560, "title": "Settings: Voices", "expand": "fill", "is_interactive": true},
+    "SettingsUsage.dc.html": {"x": 2720, "y": 4100, "w": 1280, "h": 1080, "title": "Settings: Usage", "expand": "fill", "is_interactive": true},
+    "Minutes.dc.html": {"x": 0, "y": 7080, "w": 1280, "h": 2700, "title": "Minutes page", "expand": "fill", "is_interactive": true},
+    "Ask.dc.html": {"x": 1360, "y": 7080, "w": 1280, "h": 1180, "title": "Ask your meetings", "expand": "fill"},
+    "Email.dc.html": {"x": 2720, "y": 7080, "w": 1720, "h": 1380, "title": "Minutes output: official Amnex format (PDF, Word, email)"}
+  },
+  "order": ["Main.dc.html", "Brand.dc.html", "Popup.dc.html", "Pill.dc.html", "Tour.dc.html", "SettingsStart.dc.html", "SettingsVoices.dc.html", "SettingsUsage.dc.html", "Minutes.dc.html", "Ask.dc.html", "Email.dc.html"],
+  "notes": {
+    "t1": {"x": 0, "y": -320, "text": "Foundations & brand", "kind": "title1", "maxW": 2960},
+    "t2": {"x": 0, "y": 2280, "text": "In the browser, during the call", "kind": "title1", "maxW": 4360},
+    "t3": {"x": 0, "y": 3780, "text": "Settings", "kind": "title1", "maxW": 4000},
+    "t4": {"x": 0, "y": 6760, "text": "After the meeting", "kind": "title1", "maxW": 4440}
+  },
+  "designSystems": []
+}

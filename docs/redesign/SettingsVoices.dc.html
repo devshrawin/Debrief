@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief settings: Voices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--brand,#3a33a8)}a:hover{color:var(--brand-hover,#2f2990)}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--line-strong:#c4c9d2;--brand:#3a33a8;--brand-hover:#2f2990;--on-brand:#ffffff;--tint:#eceafc;--tint-ink:#2c268a;--amber:#ff7a1a;--amber-bg:#fff3e4;--amber-line:#f2bf86;--amber-ink:#8a3a00;--rec:#c8281c;--on-rec:#ffffff;--rec-bg:#fdeceb;--rec-line:#efb0aa;--rec-ink:#99170c;--ok:#147a40;--ok-bg:#e6f5ec;--ok-line:#a8dcbc;--info-bg:#eef0fd;--info-line:#c9cef4;--shadow:0 1px 2px rgba(20,22,40,.05),0 2px 8px rgba(20,22,40,.04);--focus:#3a33a8;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page)}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--line-strong:#4a4f58;--brand:#9d97ff;--brand-hover:#b3aeff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff;--amber:#ff9a4d;--amber-bg:#352614;--amber-line:#6b4a1c;--amber-ink:#ffd3a3;--rec:#ff7b72;--on-rec:#2a0705;--rec-bg:#3b1b1a;--rec-line:#6e2f2b;--rec-ink:#ffc4bf;--ok:#6fd49a;--ok-bg:#15301f;--ok-line:#2b5b3c;--info-bg:#23264a;--info-line:#3b3f74;--shadow:0 1px 2px rgba(0,0,0,.35);--focus:#b9b4ff}
+.db *{box-sizing:border-box}
+.db :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.btn{font:inherit;font-weight:600;font-size:14px;min-height:36px;padding:7px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.3;text-decoration:none}
+.btn.sm{min-height:36px;padding:4px 10px;font-size:13px}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.danger{border-color:var(--rec-line);color:var(--rec-ink)}
+.btn.danger-solid{background:var(--rec);border-color:var(--rec);color:var(--on-rec)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--brand)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.sw{width:40px;height:24px;border-radius:999px;border:0;padding:0;background:var(--line-strong);position:relative;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--brand)}.sw[aria-checked="true"]::after{transform:translateX(16px)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;border:1px solid var(--line);background:var(--sunk);color:var(--text);line-height:1.6;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
+.chip.warn{background:var(--amber-bg);border-color:var(--amber-line);color:var(--amber-ink)}
+.chip.brand{background:var(--tint);border-color:transparent;color:var(--tint-ink)}
+.inp{font:inherit;width:100%;min-height:38px;padding:8px 12px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.nav a{display:flex;align-items:center;gap:10px;min-height:38px;padding:4px 10px;border-radius:9px;color:var(--text);text-decoration:none;font-weight:500}
+.nav a .n{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--sunk);color:var(--muted);flex:none}
+.nav a[aria-current="page"]{background:var(--tint);color:var(--tint-ink);font-weight:700}
+.nav a[aria-current="page"] .n{background:var(--brand);color:var(--on-brand)}
+.meter{height:10px;border-radius:99px;background:var(--sunk);overflow:hidden;border:1px solid var(--line)}
+.meter>i{display:block;height:100%;border-radius:99px;background:var(--ok);transition:width .2s}
+.recdot{width:10px;height:10px;border-radius:50%;background:var(--rec);animation:rd 1.6s ease-out infinite;flex:none}
+@keyframes rd{0%{box-shadow:0 0 0 0 rgba(200,40,28,.55)}70%{box-shadow:0 0 0 7px rgba(200,40,28,0)}100%{box-shadow:0 0 0 0 rgba(200,40,28,0)}}
+@media (prefers-reduced-motion:reduce){.db *{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div class="db {{theme}}" style="min-height: 2560px; display: flex; flex-wrap: wrap; align-items: flex-start">
+
+<nav class="nav" aria-label="Settings" id="nav" style="flex: 1 1 232px; max-width: 280px; padding: 28px 16px; display: flex; flex-direction: column; gap: 2px">
+  <div style="display: flex; align-items: center; gap: 10px; padding: 0 10px 18px">
+    <svg width="30" height="30" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+    <strong style="font-size: 16px">Debrief settings</strong>
+  </div>
+  <a href="SettingsStart.dc.html"><span class="n">1</span>Get started</a>
+  <a href="#"><span class="n">2</span>General</a>
+  <a href="#"><span class="n">3</span>Speech to text</a>
+  <a href="#"><span class="n">4</span>Minutes</a>
+  <a href="#"><span class="n">5</span>Email</a>
+  <a href="#" aria-current="page"><span class="n">6</span>Voices</a>
+  <a href="SettingsUsage.dc.html"><span class="n">7</span>Usage</a>
+  <div style="border-top: 1px solid var(--line); margin: 14px 10px 8px"></div>
+  <a href="Tour.dc.html" style="color: var(--muted); font-size: 13px">Take the tour</a>
+  <a href="#" style="color: var(--muted); font-size: 13px">Setup guide</a>
+</nav>
+
+<main id="page-voices" style="flex: 999 1 560px; min-width: 0; padding: 36px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 900px">
+  <div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 1.25; letter-spacing: -0.015em">Voices</h1>
+    <p style="margin: 4px 0 0; color: var(--muted); font-size: 15px">Put names next to what people said, by recognising their voice. Off until you turn it on. Everything here stays on this computer.</p>
+  </div>
+
+  <section class="card" style="padding: 6px 22px">
+    <div style="display: flex; gap: 16px; align-items: center; padding: 14px 0">
+      <div style="flex: 1; min-width: 0"><h2 style="margin: 0; font-size: 16px">Recognise who is speaking</h2><p class="hint" style="margin-top: 2px">A best guess. When Debrief is not sure, the transcript says “Unknown speaker”.</p></div>
+      <button id="voiceOn" class="sw" role="switch" aria-checked="{{onStr}}" onClick="{{toggleOn}}" aria-label="Recognise who is speaking"></button>
+    </div>
+    <div style="display: flex; gap: 16px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--line); opacity: {{subOp}}">
+      <div style="flex: 1; min-width: 0"><h2 style="margin: 0; font-size: 16px">Learn voices on its own</h2>
+        <p style="margin: 4px 0 0; font-size: 13.5px; color: var(--muted)">Debrief notices voices that come back in two or more meetings and asks you to name them. It can mix up people who sound alike, such as relatives or people on the same poor line. Tell your regular colleagues that you use this.</p></div>
+      <button id="voiceLearn" class="sw" role="switch" aria-checked="true" aria-label="Learn voices on its own" disabled="{{subOff}}"></button>
+    </div>
+    <div style="display: flex; gap: 16px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--line); opacity: {{subOp}}">
+      <div style="flex: 1; min-width: 0"><h2 style="margin: 0; font-size: 16px">Keep short samples of unnamed voices</h2>
+        <p style="margin: 4px 0 0; font-size: 13.5px; color: var(--muted)">So you can press play and hear who it is before naming them. These clips are <strong style="color: var(--text)">the only audio Debrief keeps</strong>: up to 8 seconds per unnamed voice, stored in this browser. A clip is deleted as soon as you name or dismiss that voice, and after 30 days in any case.</p></div>
+      <button id="voiceSamples" class="sw" role="switch" aria-checked="false" aria-label="Keep short samples of unnamed voices" disabled="{{subOff}}"></button>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="pv" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+    <h2 id="pv" class="lbl">Privacy, in three facts</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 14px">
+      <div style="padding: 14px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 6px"><strong>Stays in this browser</strong><span style="font-size: 13.5px; color: var(--muted)">Recognition runs on your computer. No voice is sent to Google, Claude or anyone else.</span></div>
+      <div style="padding: 14px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 6px"><strong>256 numbers per person</strong><span style="font-size: 13.5px; color: var(--muted)">A voiceprint is a list of numbers. It can’t be played back as speech.</span></div>
+      <div style="padding: 14px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 6px"><strong>Gone in one click</strong><span style="font-size: 13.5px; color: var(--muted)">Delete one person below, or everyone at the bottom of this page.</span></div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="ep" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 6px">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px"><h2 id="ep" class="lbl">Enrolled people · 5</h2><a href="#enrol" class="btn sm">Add a person</a></div>
+    <ul id="voiceList" style="list-style: none; margin: 0; padding: 0">
+      <sc-for list="{{people}}" as="p" hint-placeholder-count="5">
+        <li style="display: flex; gap: 14px; align-items: center; padding: 12px 0; border-top: {{p.bt}}; flex-wrap: wrap">
+          <span style="width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: {{p.avbg}}; color: {{p.avfg}}; flex: none; border: {{p.avbd}}">{{p.initial}}</span>
+          <div style="flex: 1 1 220px; min-width: 0">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><strong style="overflow-wrap: anywhere">{{p.name}}</strong><span class="chip {{p.cls}}">{{p.badge}}</span></div>
+            <p class="hint">{{p.meta}}</p>
+          </div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <sc-if value="{{p.sample}}" hint-placeholder-val="{{false}}"><button class="btn sm primary" aria-label="Play sample of {{p.name}}"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"></path></svg>Play sample</button></sc-if>
+            <button class="btn sm">{{p.renameText}}</button>
+            <sc-if value="{{p.named}}" hint-placeholder-val="{{true}}"><button class="btn sm">Re-record</button><button class="btn sm">Add recording</button></sc-if>
+            <button class="btn sm" aria-haspopup="menu" aria-label="More actions for {{p.name}}">More<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none"></path></svg></button>
+          </div>
+        </li>
+      </sc-for>
+    </ul>
+    <div class="card" role="menu" aria-label="More actions for Ravi Menon" style="align-self: flex-end; width: 220px; padding: 6px; margin-top: -4px; box-shadow: 0 12px 30px -10px rgba(20,22,40,.35)">
+      <button role="menuitem" style="width: 100%; min-height: 36px; text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: var(--sunk); color: var(--text); font: inherit; cursor: pointer">Export this voice</button>
+      <button role="menuitem" style="width: 100%; min-height: 36px; text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; cursor: pointer">Merge into…</button>
+      <button role="menuitem" style="width: 100%; min-height: 36px; text-align: left; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--rec-ink); font: inherit; font-weight: 600; cursor: pointer">Delete Ravi Menon</button>
+    </div>
+    <p id="voiceEmpty" class="hint" style="padding: 10px 0 0; border-top: 1px dashed var(--line)">Empty state: <strong style="color: var(--text)">Nobody yet.</strong> Add yourself first; it takes 20 seconds.</p>
+  </section>
+
+  <section id="enrol" class="card" aria-labelledby="enrolTitle" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 16px">
+    <h2 id="enrolTitle" class="lbl">Add a person</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; align-items: end">
+      <div style="display: flex; flex-direction: column; gap: 6px"><label for="enrolName" style="font-weight: 600">Name</label><input id="enrolName" class="inp" value="Anjali Krishnan"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span id="lgl" style="font-weight: 600">They will read in</span>
+        <div id="enrolLang" role="radiogroup" aria-labelledby="lgl" style="display: flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line)">
+          <sc-for list="{{langs}}" as="l" hint-placeholder-count="4">
+            <button role="radio" aria-checked="{{l.on}}" onClick="{{l.pick}}" lang="{{l.code}}" style="flex: 1; min-height: 36px; border: 0; border-radius: 9px; font: inherit; font-weight: 600; cursor: pointer; padding: 0 8px; background: {{l.bg}}; color: {{l.fg}}; box-shadow: {{l.sh}}; white-space: nowrap">{{l.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div id="enrolPrompt" lang="{{promptLang}}" style="padding: 22px 24px; border-radius: 14px; background: var(--tint); color: var(--tint-ink); font-size: 21px; line-height: 1.8; text-wrap: pretty">{{prompt}}</div>
+    <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap">
+      <sc-if value="{{notRecording}}" hint-placeholder-val="{{true}}"><button id="enrolRec" class="btn" onClick="{{rec}}" disabled="{{noMic}}" style="min-height: 44px; border-color: var(--rec-line); color: var(--rec-ink)"><span style="width: 12px; height: 12px; border-radius: 50%; background: var(--rec)"></span>Record</button></sc-if>
+      <sc-if value="{{recording}}" hint-placeholder-val="{{false}}"><button id="enrolStop" class="btn danger-solid" onClick="{{stopRec}}" style="min-height: 44px"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect width="12" height="12" rx="2.5" fill="currentColor"></rect></svg>Stop</button></sc-if>
+      <button id="enrolPlay" class="btn" disabled="{{cantPlay}}" style="min-height: 44px"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"></path></svg>Play back</button>
+      <div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px">
+        <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="display: flex; gap: 8px; align-items: center"><sc-if value="{{recording}}" hint-placeholder-val="{{false}}"><span class="recdot"></span></sc-if>Level</span><span id="enrolTime" style="font-variant-numeric: tabular-nums; font-weight: 600">{{time}} <span class="hint" style="display: inline">/ aim for about 20 s</span></span></div>
+        <div class="meter" aria-hidden="true"><i id="enrolLevel" style="width: {{level}}"></i></div>
+      </div>
+    </div>
+    <p id="enrolMsg" role="status" style="margin: 0; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; background: {{msgBg}}; color: {{msgFg}}; border: 1px solid {{msgBd}}">{{msg}}</p>
+    <div style="display: flex; gap: 8px; justify-content: flex-end"><button id="enrolCancel" class="btn">Cancel</button><button id="enrolSave" class="btn primary" disabled="{{cantSave}}">Save voice</button></div>
+  </section>
+
+  <section id="unnamedCard" class="card" aria-labelledby="un" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 12px">
+    <div><h2 id="un" class="lbl">Unnamed voices in your latest meeting</h2><p class="hint" style="margin-top: 4px">Weekly sync: Kochi rollout · yesterday. Name a voice once and it is recognised next time.</p></div>
+    <ul id="unnamedList" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+      <li style="padding: 14px; border-radius: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap"><strong>Voice A</strong><span class="hint">spoke 4 min 10 s</span><span style="flex: 1"></span><button class="btn sm"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"></path></svg>Play sample</button></div>
+        <p style="margin: 0; font-size: 13.5px; color: var(--muted)"><a href="#">03:12</a> “we can freeze the fare table by the 25th” · <a href="#">17:40</a> <span lang="ml">“അത് അടുത്ത ആഴ്ച നോക്കാം”</span></p>
+        <div style="display: flex; gap: 8px"><label for="vA" style="position: absolute; left: -9999px">Name for Voice A</label><input id="vA" class="inp" placeholder="Who is this?" style="flex: 1"><button class="btn primary">Name</button><button class="btn ghost" style="color: var(--muted)">Not a person</button></div>
+      </li>
+      <li style="padding: 14px; border-radius: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap"><strong>Voice B</strong><span class="hint">spoke 48 s · no sample kept</span></div>
+        <p style="margin: 0; font-size: 13.5px; color: var(--muted)"><a href="#">22:05</a> <span lang="hi">“मैं सोमवार तक भेज दूँगा”</span> · <a href="#">31:18</a> “sounds good”</p>
+        <div style="display: flex; gap: 8px"><label for="vB" style="position: absolute; left: -9999px">Name for Voice B</label><input id="vB" class="inp" value="Ravi" style="flex: 1"><button class="btn primary">Name</button><button class="btn ghost" style="color: var(--muted)">Not a person</button></div>
+        <p class="hint">“Ravi Menon” is already enrolled. Naming merges this voice into his.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="sv" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 12px">
+    <h2 id="sv" class="lbl">Share voices with a colleague</h2>
+    <p style="margin: 0; font-size: 13.5px">Export saves the voiceprints (numbers, no audio) as a file a teammate can import, so their Debrief recognises the same people.</p>
+    <div style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4M12 17v.5"></path></svg>
+      <p style="margin: 0; font-size: 13.5px">Only share a person’s voice if they have agreed. A voiceprint identifies someone, like a photo does.</p>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap"><button id="voiceExport" class="btn">Export voices…</button><button id="voiceImport" class="btn">Import a file…</button><span id="voiceShareMsg" class="hint" style="align-self: center"></span></div>
+  </section>
+
+  <section class="card" aria-labelledby="fg" style="padding: 20px 22px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; border-color: var(--rec-line)">
+    <div style="flex: 1 1 300px"><h2 id="fg" class="lbl" style="color: var(--rec-ink)">Forget</h2><p style="margin: 4px 0 0; font-size: 13.5px">Delete every voiceprint and sample on this computer. Names already in transcripts stay as written.</p></div>
+    <button id="voiceForget" class="btn danger">Forget all voices…</button>
+  </section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"enrolState":{"editor":"enum","options":["ready","recording","tooShort","noMic","saved"],"default":"recording"},"$preview":{"width":1280,"height":2560}}'>
+class Component extends DCLogic {
+  constructor(p){ super(p); this.state = { on: true, lang: 'ml', es: null }; }
+  renderVals() {
+    const s = this.state;
+    const es = s.es ?? this.props.enrolState ?? 'recording';
+    const P = [
+      ['Akhil Nazim (you)', 'A', 'Recorded', 'brand', 'English, Malayalam · 62 s of speech', false, true],
+      ['Priya Nair', 'P', 'Recorded', 'brand', 'English, Hindi · 24 s', false, true],
+      ['Ravi Menon', 'R', 'Learned, in use', 'ok', 'English, Hindi · 6 meetings · 11 min', false, true],
+      ['अंजलि कृष्णन', 'अ', 'Learned, still learning', 'warn', 'Malayalam · 1 meeting · 2 min. Needs one more meeting.', false, true],
+      ['Unnamed voice · Weekly sync', '?', 'Unnamed voice', '', 'English · 3 meetings · 4 min · sample kept', true, false]
+    ];
+    const LG = [['en','English','English'],['hi','हिन्दी','Hindi'],['ml','മലയാളം','Malayalam'],['free','Speak freely','Speak freely']];
+    const PR = {
+      en: 'Please read this aloud at your normal pace. Our weekly review covers the budget, the delivery dates and any risks the team has noticed since last Monday.',
+      hi: 'कृपया इसे अपनी सामान्य गति से पढ़ें। हमारी साप्ताहिक बैठक में बजट, समय-सीमा और पिछले सोमवार से टीम को दिखे जोखिमों पर चर्चा होती है।',
+      ml: 'ദയവായി ഇത് സാധാരണ വേഗത്തിൽ ഉറക്കെ വായിക്കുക. ഞങ്ങളുടെ പ്രതിവാര യോഗത്തിൽ ബജറ്റ്, സമയപരിധി, കഴിഞ്ഞ തിങ്കളാഴ്ച മുതൽ ടീം ശ്രദ്ധിച്ച അപകടസാധ്യതകൾ എന്നിവ ചർച്ച ചെയ്യുന്നു.',
+      free: 'Talk about anything for about 20 seconds: your day, your work, the traffic on the way in. Any language, or a mix, is fine.'
+    };
+    const MS = {
+      ready: ['Press Record and read the text above. Use the mic you use in meetings.', 'var(--sunk)', 'var(--text)', 'var(--line)', '0:00', '0%'],
+      recording: ['Listening… keep going until about 20 seconds.', 'var(--info-bg)', 'var(--text)', 'var(--info-line)', '0:12', '58%'],
+      tooShort: ['Only 6 seconds of speech came through. Record again and read the whole text.', 'var(--amber-bg)', 'var(--amber-ink)', 'var(--amber-line)', '0:06', '0%'],
+      noMic: ['No microphone is available. Allow it in General › Microphone, or plug one in.', 'var(--rec-bg)', 'var(--rec-ink)', 'var(--rec-line)', '0:00', '0%'],
+      saved: ['Saved. Anjali Krishnan will be recognised from the next meeting.', 'var(--ok-bg)', 'var(--ok)', 'var(--ok-line)', '0:21', '0%']
+    };
+    const m = MS[es];
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      onStr: s.on ? 'true' : 'false', toggleOn: () => this.setState({ on: !s.on }),
+      subOff: !s.on, subOp: s.on ? 1 : 0.5,
+      people: P.map(([name, initial, badge, cls, meta, sample, named], i) => ({ name, initial, badge, cls, meta, sample, named, bt: i ? '1px solid var(--line)' : '0', renameText: named ? 'Rename' : 'Name this voice', avbg: named ? 'var(--tint)' : 'var(--sunk)', avfg: named ? 'var(--tint-ink)' : 'var(--muted)', avbd: named ? '0' : '1px dashed var(--line-strong)' })),
+      langs: LG.map(([code, label]) => { const on = s.lang === code; return { code: code === 'free' ? 'en' : code, label, on: on ? 'true' : 'false', bg: on ? 'var(--card)' : 'transparent', fg: on ? 'var(--text)' : 'var(--muted)', sh: on ? '0 1px 3px rgba(20,22,40,.15)' : 'none', pick: () => this.setState({ lang: code }) }; }),
+      prompt: PR[s.lang], promptLang: s.lang === 'free' ? 'en' : s.lang,
+      recording: es === 'recording', notRecording: es !== 'recording', noMic: es === 'noMic',
+      cantPlay: !(es === 'saved' || es === 'tooShort'), cantSave: es !== 'saved' && es !== 'ready' ? true : es === 'ready',
+      rec: () => this.setState({ es: 'recording' }), stopRec: () => this.setState({ es: 'saved' }),
+      msg: m[0], msgBg: m[1], msgFg: m[2], msgBd: m[3], time: m[4], level: m[5]
+    };
+  }
+}
+</script>
+</body>
+</html>

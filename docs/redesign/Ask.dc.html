@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ask your meetings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--brand,#3a33a8)}a:hover{color:var(--brand-hover,#2f2990)}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--line-strong:#c4c9d2;--brand:#3a33a8;--brand-hover:#2f2990;--on-brand:#ffffff;--tint:#eceafc;--tint-ink:#2c268a;--amber-bg:#fff3e4;--amber-line:#f2bf86;--amber-ink:#8a3a00;--rec-bg:#fdeceb;--rec-line:#efb0aa;--rec-ink:#99170c;--ok:#147a40;--ok-bg:#e6f5ec;--info-bg:#eef0fd;--info-line:#c9cef4;--shadow:0 1px 2px rgba(20,22,40,.05),0 2px 8px rgba(20,22,40,.04);--focus:#3a33a8;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page)}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--line-strong:#4a4f58;--brand:#9d97ff;--brand-hover:#b3aeff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff;--amber-bg:#352614;--amber-line:#6b4a1c;--amber-ink:#ffd3a3;--rec-bg:#3b1b1a;--rec-line:#6e2f2b;--rec-ink:#ffc4bf;--ok:#6fd49a;--ok-bg:#15301f;--info-bg:#23264a;--info-line:#3b3f74;--shadow:0 1px 2px rgba(0,0,0,.35);--focus:#b9b4ff}
+.db *{box-sizing:border-box}
+.db :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.btn{font:inherit;font-weight:600;font-size:14px;min-height:36px;padding:7px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.3;text-decoration:none}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.src{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:6px;background:var(--tint);color:var(--tint-ink);font-size:11.5px;font-weight:800;text-decoration:none;vertical-align:2px;margin-left:2px}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.caret{display:inline-block;width:8px;height:18px;background:var(--brand);vertical-align:text-bottom;animation:bl 1s steps(2) infinite}
+@keyframes bl{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.db *{animation:none!important}}
+</style>
+</helmet>
+<div class="db {{theme}}" style="min-height: 1180px">
+<main style="max-width: 820px; margin: 0 auto; padding: 48px 24px 64px; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; align-items: center; gap: 10px">
+    <svg width="26" height="26" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+    <span style="font-weight: 700">Debrief</span>
+  </div>
+  <div>
+    <h1 style="margin: 0; font-size: 34px; line-height: 1.2; letter-spacing: -0.02em">Ask your meetings</h1>
+    <p style="margin: 6px 0 0; font-size: 16px; color: var(--muted)">Ask anything that was said. Every point in the answer links to the meeting and the moment it came from.</p>
+  </div>
+
+  <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap">
+    <label for="scope" style="font-weight: 600">Search</label>
+    <select id="scope" style="font: inherit; min-height: 38px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--card); color: var(--text)"><option>All meetings</option><option>Last 7 days</option><option>Last 30 days</option></select>
+    <span id="count" class="hint">14 meetings, 9 h 20 min of transcript</span>
+  </div>
+
+  <div id="askBox" class="card" style="padding: 8px 8px 8px 18px; display: flex; gap: 10px; align-items: flex-end; border-color: var(--brand); box-shadow: 0 0 0 3px var(--tint)">
+    <label for="aq" style="position: absolute; left: -9999px">Your question</label>
+    <textarea id="aq" rows="2" style="flex: 1; font: inherit; font-size: 17px; line-height: 1.6; border: 0; background: transparent; color: var(--text); resize: none; padding: 8px 0; outline: none">What did we decide about validators, and who owns it?</textarea>
+    <button class="btn primary" aria-label="Ask" style="width: 44px; height: 44px; padding: 0; border-radius: 12px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button>
+  </div>
+
+  <sc-if value="{{isSearching}}" hint-placeholder-val="{{false}}">
+    <p role="status" class="hint" style="display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--brand)"><span class="spin"></span><span style="color: var(--muted)">Searching 14 meetings… found 4 relevant passages</span></p>
+  </sc-if>
+
+  <sc-if value="{{hasAnswer}}" hint-placeholder-val="{{true}}">
+  <section aria-live="polite" class="card" style="padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 15.5px; line-height: 1.75">
+      <li>The pilot needs 180 validators but the vendor can ship 140 this month, so the team is 40 short.<a class="src" href="#s1" aria-label="Source 1">1</a></li>
+      <li>Ravi Menon owns it: he will confirm numbers with the vendor by Monday 19 October.<a class="src" href="#s1" aria-label="Source 1">1</a><a class="src" href="#s2" aria-label="Source 2">2</a></li>
+      <li>If stock stays short, the fallback is to start with two depots and add Kakkanad later. This was suggested but <strong>not decided</strong>.<a class="src" href="#s3" aria-label="Source 3">3</a><sc-if value="{{isStreaming}}" hint-placeholder-val="{{false}}"><span class="caret" aria-hidden="true"></span></sc-if></li>
+    </ul>
+    <div style="border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 6px">
+      <p class="lbl">Sources</p>
+      <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px">
+        <li id="s1" style="display: flex; gap: 10px; align-items: baseline; min-height: 36px; flex-wrap: wrap"><span class="src">1</span><a href="#" style="font-weight: 600">Weekly sync: Kochi depot rollout</a><span class="hint">Tue 13 Oct · 14:05–14:31</span></li>
+        <li id="s2" style="display: flex; gap: 10px; align-items: baseline; min-height: 36px; flex-wrap: wrap"><span class="src">2</span><a href="#" style="font-weight: 600">Vendor call: validator firmware</a><span class="hint">Mon 12 Oct · 06:50</span></li>
+        <li id="s3" style="display: flex; gap: 10px; align-items: baseline; min-height: 36px; flex-wrap: wrap"><span class="src">3</span><a href="#" style="font-weight: 600" lang="hi">साप्ताहिक समीक्षा: भुगतान गेटवे</a><span class="hint">Fri 9 Oct · 41:12</span></li>
+      </ol>
+    </div>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{isNoMatch}}" hint-placeholder-val="{{false}}">
+    <div class="card" style="padding: 28px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center"><strong style="font-size: 15px">Nothing about this in your meetings</strong><p class="hint">Searched 14 meetings. Try other words, a person’s name, or “All meetings”.</p></div>
+  </sc-if>
+  <sc-if value="{{isNoModel}}" hint-placeholder-val="{{false}}">
+    <div role="alert" style="padding: 16px 18px; border-radius: 14px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><div style="flex: 1 1 300px"><strong>Choose a model for answers first</strong><p style="margin: 2px 0 0">Asking uses the same service as your minutes. None is set up yet.</p></div><a href="#" class="btn">Open Settings › Minutes</a></div>
+  </sc-if>
+  <sc-if value="{{isError}}" hint-placeholder-val="{{false}}">
+    <div role="alert" style="padding: 16px 18px; border-radius: 14px; background: var(--rec-bg); border: 1px solid var(--rec-line); color: var(--rec-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap"><div style="flex: 1 1 300px"><strong>No answer this time</strong><p style="margin: 2px 0 0">Gemini did not reply within 30 seconds. Your question is kept.</p></div><button class="btn">Try again</button></div>
+  </sc-if>
+  <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+    <div style="display: flex; flex-direction: column; gap: 8px"><p class="lbl">Try asking</p><div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="btn">What is still open from last week?</button><button class="btn">What did Priya promise this month?</button><button class="btn">Summarise the vendor calls</button></div></div>
+  </sc-if>
+
+  <p class="hint" style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 3px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><span>Searching happens on this computer. Only the passages that match, about 2 to 6 short pieces, are sent with your question to <strong>Gemini</strong>, your minutes service. No audio is sent.</span></p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"askState":{"editor":"enum","options":["answer","streaming","searching","empty","noMatch","noModel","error"],"default":"answer"},"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.askState ?? 'answer';
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      isSearching: s === 'searching', hasAnswer: s === 'answer' || s === 'streaming', isStreaming: s === 'streaming',
+      isNoMatch: s === 'noMatch', isNoModel: s === 'noModel', isError: s === 'error', isEmpty: s === 'empty'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief foundations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#3a33a8}a:hover{color:#2f2990}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--line-strong:#c4c9d2;--brand:#3a33a8;--brand-hover:#2f2990;--on-brand:#ffffff;--tint:#eceafc;--tint-ink:#2c268a;--amber:#ff7a1a;--amber-glow:#ffb347;--amber-bg:#fff3e4;--amber-line:#f2bf86;--amber-ink:#8a3a00;--rec:#c8281c;--on-rec:#ffffff;--rec-bg:#fdeceb;--rec-line:#efb0aa;--rec-ink:#99170c;--ok:#147a40;--ok-bg:#e6f5ec;--ok-line:#a8dcbc;--info-bg:#eef0fd;--info-line:#c9cef4;--shadow:0 1px 2px rgba(20,22,40,.05),0 2px 8px rgba(20,22,40,.04);--focus:#3a33a8;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page);color-scheme:light}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--line-strong:#4a4f58;--brand:#9d97ff;--brand-hover:#b3aeff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff;--amber:#ff9a4d;--amber-bg:#352614;--amber-line:#6b4a1c;--amber-ink:#ffd3a3;--rec:#ff7b72;--on-rec:#2a0705;--rec-bg:#3b1b1a;--rec-line:#6e2f2b;--rec-ink:#ffc4bf;--ok:#6fd49a;--ok-bg:#15301f;--ok-line:#2b5b3c;--info-bg:#23264a;--info-line:#3b3f74;--shadow:0 1px 2px rgba(0,0,0,.35);--focus:#b9b4ff;color-scheme:dark}
+.db *{box-sizing:border-box}
+.db :focus-visible,.is-focus{outline:2px solid var(--focus)!important;outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.btn{font:inherit;font-weight:600;font-size:14px;min-height:36px;padding:7px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.3;text-decoration:none}
+.btn:hover,.btn.is-hover{background:var(--sunk)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.primary:hover,.btn.primary.is-hover{background:var(--brand-hover)}
+.btn.primary.is-active{transform:translateY(1px);box-shadow:inset 0 2px 0 rgba(0,0,0,.18)}
+.btn.danger{border-color:var(--rec-line);color:var(--rec-ink)}
+.btn.danger-solid{background:var(--rec);border-color:var(--rec);color:var(--on-rec)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--brand)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.sw{width:40px;height:24px;border-radius:999px;border:0;padding:0;background:var(--line-strong);position:relative;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--brand)}
+.sw[aria-checked="true"]::after{transform:translateX(16px)}
+.sw:disabled{opacity:.45}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:999px;border:1px solid var(--line);background:var(--sunk);color:var(--text);line-height:1.6;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
+.chip.warn{background:var(--amber-bg);border-color:var(--amber-line);color:var(--amber-ink)}
+.chip.rec{background:var(--rec-bg);border-color:var(--rec-line);color:var(--rec-ink)}
+.chip.brand{background:var(--tint);border-color:transparent;color:var(--tint-ink)}
+.inp{font:inherit;width:100%;min-height:38px;padding:8px 12px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text)}
+.inp.err{border-color:var(--rec);box-shadow:0 0 0 3px var(--rec-bg)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.meter{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden;border:1px solid var(--line)}
+.meter>i{display:block;height:100%;border-radius:99px;background:var(--ok)}
+.meter>i.q{background:var(--amber)}.meter>i.s{background:var(--rec)}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:sp 0.8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.sk{background:linear-gradient(90deg,var(--sunk),var(--line),var(--sunk));background-size:200% 100%;animation:sh 1.4s ease-in-out infinite;border-radius:6px}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.db *{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div class="db {{theme}}" style="position: relative; width: 1440px; min-height: 2160px; padding: 64px 72px; display: flex; flex-direction: column; gap: 40px">
+
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; flex-wrap: wrap">
+  <div style="display: flex; gap: 18px; align-items: center">
+    <svg width="56" height="56" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+    <div>
+      <p class="lbl">Debrief · design language v1</p>
+      <h1 style="margin: 2px 0 0; font-size: 40px; line-height: 1.15; letter-spacing: -0.02em">Calm, quick, honest</h1>
+    </div>
+  </div>
+  <p style="margin: 0; max-width: 560px; color: var(--muted); font-size: 15px">One system for every surface. Indigo is the brand and “selected”. Saffron means “a call is on and you are not recording”. Red means recording or deleting. Green means it works. Nothing else gets a colour.</p>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+  <div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px">
+    <p class="lbl">Colour tokens · light</p>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{lightSw}}" as="s" hint-placeholder-count="12">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="height: 52px; border-radius: 10px; border: 1px solid rgba(0,0,0,.08); background: {{s.hex}}"></div>
+          <div style="font-size: 12.5px; font-weight: 600; line-height: 1.3">{{s.name}}</div>
+          <div style="font-size: 12px; color: var(--muted); font-family: ui-monospace, Consolas, monospace">{{s.hex}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div class="db dark card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px; background: #24272c">
+    <p class="lbl">Colour tokens · dark</p>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{darkSw}}" as="s" hint-placeholder-count="12">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="height: 52px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: {{s.hex}}"></div>
+          <div style="font-size: 12.5px; font-weight: 600; line-height: 1.3">{{s.name}}</div>
+          <div style="font-size: 12px; color: var(--muted); font-family: ui-monospace, Consolas, monospace">{{s.hex}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px">
+  <div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 14px">
+    <p class="lbl">Type · system stack, no web fonts</p>
+    <div style="font-size: 32px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2">Weekly sync: Kochi rollout</div>
+    <div style="font-size: 20px; font-weight: 650; line-height: 1.3">Decisions and action items</div>
+    <div style="font-size: 15px; line-height: 1.7">Priya will send the revised budget by Friday. <span lang="hi">प्रिया शुक्रवार तक संशोधित बजट भेजेंगी।</span> <span lang="ml">പ്രിയ വെള്ളിയാഴ്ചയ്ക്കുള്ളിൽ പുതുക്കിയ ബജറ്റ് അയയ്ക്കും.</span></div>
+    <div class="hint">"Google Sans", "Segoe UI", system-ui, "Nirmala UI", "Kartika", sans-serif · body 14–15 px · line height 1.6 minimum, 1.7 where Devanagari or Malayalam is likely · numbers tabular in timers and tables</div>
+  </div>
+  <div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 14px">
+    <p class="lbl">Shape, depth, motion</p>
+    <div style="display: flex; gap: 14px; align-items: flex-end">
+      <div style="width: 84px; height: 64px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow)"></div>
+      <div style="width: 84px; height: 44px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line-strong)"></div>
+      <div style="width: 84px; height: 28px; border-radius: 999px; background: var(--tint)"></div>
+    </div>
+    <ul style="margin: 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px">
+      <li>Cards 14 px, controls 10 px, chips and switches fully round.</li>
+      <li>Hairline borders do the work; shadow is barely there.</li>
+      <li>Motion only for live things: the REC dot, meters, the call glow. All of it stops under reduced motion.</li>
+      <li>Every target is at least 36 px; focus ring 2 px indigo, offset 2 px.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 20px">
+  <p class="lbl">Buttons · every state</p>
+  <div style="display: grid; grid-template-columns: 140px repeat(6, minmax(0, 1fr)); gap: 14px; align-items: center">
+    <span class="hint">State</span><span class="hint">Default</span><span class="hint">Hover</span><span class="hint">Focus</span><span class="hint">Pressed</span><span class="hint">Disabled</span><span class="hint">Loading</span>
+    <span style="font-weight: 600">Primary</span>
+    <button class="btn primary">Save changes</button><button class="btn primary is-hover">Save changes</button><button class="btn primary is-focus">Save changes</button><button class="btn primary is-active">Save changes</button><button class="btn primary" disabled>Save changes</button><button class="btn primary" aria-busy="true"><span class="spin"></span>Saving…</button>
+    <span style="font-weight: 600">Secondary</span>
+    <button class="btn">Test my key</button><button class="btn is-hover">Test my key</button><button class="btn is-focus">Test my key</button><button class="btn is-active">Test my key</button><button class="btn" disabled>Test my key</button><button class="btn" aria-busy="true"><span class="spin"></span>Testing…</button>
+    <span style="font-weight: 600">Danger</span>
+    <button class="btn danger">Delete meeting</button><button class="btn danger is-hover">Delete meeting</button><button class="btn danger is-focus">Delete meeting</button><button class="btn danger-solid">Delete</button><button class="btn danger" disabled>Delete meeting</button><button class="btn danger" aria-busy="true"><span class="spin"></span>Deleting…</button>
+    <span style="font-weight: 600">Ghost / link</span>
+    <button class="btn ghost">Replace</button><button class="btn ghost is-hover">Replace</button><button class="btn ghost is-focus">Replace</button><button class="btn ghost is-active">Replace</button><button class="btn ghost" disabled>Replace</button><span class="hint">—</span>
+  </div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+  <div class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 4px">
+    <p class="lbl" style="margin-bottom: 8px">Toggle row</p>
+    <div style="display: flex; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line)">
+      <div style="flex: 1; min-width: 0"><div style="font-weight: 600">Include my microphone</div><p class="hint">Your voice goes into the transcript.</p></div>
+      <button class="sw" role="switch" aria-checked="{{micOn}}" aria-label="Include my microphone" onClick="{{toggleMic}}"></button>
+    </div>
+    <div style="display: flex; gap: 16px; align-items: center; padding: 10px 0">
+      <div style="flex: 1; min-width: 0"><div style="font-weight: 600; opacity: .55">Pause mic while muted in the call</div><p class="hint">Needs “Include my microphone”.</p></div>
+      <button class="sw" role="switch" aria-checked="false" aria-label="Pause mic while muted in the call" disabled></button>
+    </div>
+  </div>
+  <div class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+    <p class="lbl">Field row &amp; validation</p>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="f1" style="font-weight: 600">Your name</label>
+      <input id="f1" class="inp" value="Akhil Nazim">
+      <p class="hint">Used to label your own voice in the transcript.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="f2" style="font-weight: 600">Web app URL</label>
+      <input id="f2" class="inp err" value="https://script.google.com/macros/s/AKfy" aria-invalid="true" aria-describedby="f2e">
+      <p id="f2e" class="hint" style="color: var(--rec-ink); font-weight: 600">This should end in /exec. Copy the URL from “Deploy › Manage deployments”.</p>
+    </div>
+  </div>
+  <div class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+    <p class="lbl">Secret field</p>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-weight: 600" id="k1">Gemini key</span>
+      <div style="display: flex; gap: 8px; align-items: center">
+        <div aria-labelledby="k1" style="flex: 1; min-height: 38px; padding: 8px 12px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); letter-spacing: .2em; color: var(--muted)">••••••••••••</div>
+        <button class="btn">Replace</button>
+      </div>
+      <p class="hint" style="display: flex; gap: 6px; align-items: center"><span class="chip ok">Working</span> Saved on this computer only. Never shown again.</p>
+    </div>
+    <p class="hint">Once saved, a secret is never rendered. “Replace” opens an empty password field; Escape keeps the old one.</p>
+  </div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+  <div class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+    <p class="lbl">Segmented control</p>
+    <div role="radiogroup" aria-label="Minutes mode" style="display: flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line)">
+      <sc-for list="{{modes}}" as="m" hint-placeholder-count="2">
+        <button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="flex: 1; min-height: 36px; border: 0; border-radius: 9px; font: inherit; font-weight: 600; cursor: pointer; background: {{m.bg}}; color: {{m.fg}}; box-shadow: {{m.sh}}">{{m.label}}</button>
+      </sc-for>
+    </div>
+    <p class="hint">{{modeNote}}</p>
+    <p class="lbl" style="margin-top: 6px">Status chips</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <span class="chip ok">Saved</span><span class="chip ok">Allowed</span><span class="chip warn">Optional, not set</span><span class="chip warn">Limit</span><span class="chip rec">REC</span><span class="chip rec">Not working</span><span class="chip brand">Emailed</span><span class="chip">Gemini 2.5 Flash</span>
+    </div>
+  </div>
+  <div class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+    <p class="lbl">Chip multi-select</p>
+    <div role="group" aria-label="Languages spoken in your meetings" style="display: flex; flex-wrap: wrap; gap: 8px">
+      <sc-for list="{{langs}}" as="l" hint-placeholder-count="6">
+        <button aria-pressed="{{l.on}}" onClick="{{l.pick}}" style="min-height: 36px; padding: 6px 14px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid {{l.bd}}; background: {{l.bg}}; color: {{l.fg}}; display: inline-flex; gap: 6px; align-items: center"><sc-if value="{{l.on}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></sc-if>{{l.label}}</button>
+      </sc-for>
+    </div>
+    <p class="lbl" style="margin-top: 6px">Code block with Copy</p>
+    <div style="border-radius: 10px; border: 1px solid var(--line); background: var(--sunk); overflow: hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line)"><span class="hint">Code.gs</span><button class="btn ghost" style="min-height: 32px">Copy</button></div>
+      <pre style="margin: 0; padding: 12px; font: 12.5px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere">function doPost(e) {
+  const m = JSON.parse(e.postData.contents);
+  GmailApp.sendEmail(m.to, m.subject, "", …</pre>
+    </div>
+  </div>
+  <div class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 12px">
+    <p class="lbl">Callouts</p>
+    <div style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--info-bg); border: 1px solid var(--info-line)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.5"></path></svg>
+      <p style="margin: 0; font-size: 13.5px">Each Google project has its own daily quota. A backup key from a second project doubles your free minutes.</p>
+    </div>
+    <div style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4M12 17v.5"></path></svg>
+      <p style="margin: 0; font-size: 13.5px"><strong>Google’s free tier may use your audio to improve its products.</strong> For confidential meetings, use a paid key or a local model.</p>
+    </div>
+    <p class="lbl" style="margin-top: 6px">Level meter</p>
+    <div style="display: grid; grid-template-columns: 96px 1fr 56px; gap: 10px; align-items: center; font-size: 13px">
+      <span>Meeting audio</span><div class="meter"><i style="width: 72%"></i></div><span style="font-weight: 600">Good</span>
+      <span>Your mic</span><div class="meter"><i class="q" style="width: 18%"></i></div><span style="font-weight: 600">Quiet</span>
+      <span>Your mic</span><div class="meter"><i class="s" style="width: 3%"></i></div><span style="font-weight: 600">Silent</span>
+    </div>
+  </div>
+</section>
+
+<section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 14px">
+  <div style="display: flex; justify-content: space-between; align-items: center"><p class="lbl">Data table</p><span class="hint">“~” = estimate from token counts, never a bill</span></div>
+  <div style="overflow-x: auto">
+    <table style="width: 100%; border-collapse: collapse; font-size: 13.5px">
+      <thead><tr style="text-align: left; color: var(--muted)"><th style="padding: 8px 10px; border-bottom: 1px solid var(--line); font-weight: 600">Service and model</th><th style="padding: 8px 10px; border-bottom: 1px solid var(--line); font-weight: 600">Used for</th><th style="padding: 8px 10px; border-bottom: 1px solid var(--line); font-weight: 600; text-align: right">Requests</th><th style="padding: 8px 10px; border-bottom: 1px solid var(--line); font-weight: 600; text-align: right">Cost if paid</th></tr></thead>
+      <tbody>
+        <tr><td style="padding: 10px; border-bottom: 1px solid var(--line)">Gemini · 2.5 Flash</td><td style="padding: 10px; border-bottom: 1px solid var(--line)">Transcription</td><td style="padding: 10px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums">412</td><td style="padding: 10px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums">~ ₹38</td></tr>
+        <tr style="background: var(--tint)"><td style="padding: 10px">Claude · Sonnet <span class="hint">(selected row)</span></td><td style="padding: 10px">Minutes</td><td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums">9</td><td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums">~ ₹21</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+  <div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; justify-content: space-between; align-items: center"><p class="lbl">Dialog · replaces confirm() and prompt()</p><div style="display: flex; gap: 8px"><button class="btn" onClick="{{openConfirm}}">Try confirm</button><button class="btn" onClick="{{openPrompt}}">Try prompt</button></div></div>
+    <div style="position: relative; height: 330px; border-radius: 12px; background: rgba(15,16,30,.45); display: grid; place-items: center; padding: 20px">
+      <div role="dialog" aria-modal="true" aria-labelledby="dlgT" class="card" style="width: 100%; max-width: 420px; padding: 22px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 50px -12px rgba(0,0,0,.4)">
+        <h2 id="dlgT" style="margin: 0; font-size: 18px; line-height: 1.3">Delete this meeting?</h2>
+        <p style="margin: 0; color: var(--muted)">“Weekly sync: Kochi rollout” and its transcript will be removed from this computer. This can’t be undone.</p>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 6px"><button class="btn">Keep it</button><button class="btn danger-solid">Delete</button></div>
+      </div>
+    </div>
+    <p class="hint">Focus starts on the safe button, Tab cycles inside, Escape cancels, focus returns to the button that opened it. At phone width the buttons stack full width.</p>
+  </div>
+  <div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 12px">
+    <p class="lbl">Alert banners · one clear action each</p>
+    <div role="status" style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--info-bg); border: 1px solid var(--info-line)">
+      <div style="flex: 1"><strong>Minutes emailed to you</strong><p class="hint" style="color: inherit">Sent 10:42 to akhil@company.com</p></div><button class="btn ghost" style="min-height: 32px">Open</button>
+    </div>
+    <div role="alert" style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink)">
+      <div style="flex: 1"><strong>Gemini’s free limit is reached for today</strong><p style="margin: 0; font-size: 13px">Recording continues. Audio waits here and is transcribed when you add a backup key or the limit resets at 13:30.</p></div><button class="btn" style="min-height: 32px">Add backup key</button>
+    </div>
+    <div role="alert" style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--rec-bg); border: 1px solid var(--rec-line); color: var(--rec-ink)">
+      <div style="flex: 1"><strong>Your key was rejected</strong><p style="margin: 0; font-size: 13px">Google says the key is not valid. Nothing was lost; audio is kept until it works.</p></div><button class="btn" style="min-height: 32px">Replace key</button>
+    </div>
+    <div style="display: flex; gap: 16px; align-items: center; margin-top: 4px">
+      <div role="status" style="display: inline-flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 12px; background: #1d1f24; color: #fff; font-size: 13.5px; box-shadow: 0 8px 24px -8px rgba(0,0,0,.4)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6fd49a" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Copied to clipboard</div>
+      <span class="hint">Toast · 4 s, pauses on hover, polite live region</span>
+    </div>
+  </div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+  <div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 10px">
+    <p class="lbl">Loading · skeleton</p>
+    <div class="sk" style="height: 20px; width: 60%"></div><div class="sk" style="height: 12px"></div><div class="sk" style="height: 12px; width: 88%"></div><div class="sk" style="height: 12px; width: 72%"></div>
+    <p class="hint" style="display: flex; gap: 8px; align-items: center; margin-top: 6px"><span class="spin" style="color: var(--brand)"></span>Writing the minutes… about 30 s</p>
+  </div>
+  <div class="card" style="padding: 28px 24px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path><path d="M8 9h8M8 12h5"></path></svg>
+    <strong style="font-size: 15px">No meetings yet</strong>
+    <p class="hint">Join a call and press record. Your minutes will land here.</p>
+    <button class="btn primary" style="margin-top: 4px">Start recording this tab</button>
+  </div>
+  <div class="card" style="padding: 28px 24px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--rec)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16v.5"></path></svg>
+    <strong style="font-size: 15px">The minutes couldn’t be written</strong>
+    <p class="hint">Claude replied “overloaded”. Your transcript is safe.</p>
+    <button class="btn primary" style="margin-top: 4px">Try again</button>
+  </div>
+</section>
+
+<sc-if value="{{dlgOpen}}" hint-placeholder-val="{{false}}">
+  <div style="position: absolute; inset: 0; background: rgba(15,16,30,.5); display: grid; place-items: center; padding: 24px; z-index: 5" onClick="{{close}}">
+    <div role="dialog" aria-modal="true" aria-labelledby="liveT" class="card" onClick="{{stop}}" onKeyDown="{{onKey}}" style="width: 100%; max-width: 440px; padding: 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 24px 60px -12px rgba(0,0,0,.5)">
+      <h2 id="liveT" style="margin: 0; font-size: 18px">{{dlgTitle}}</h2>
+      <p style="margin: 0; color: var(--muted)">{{dlgText}}</p>
+      <sc-if value="{{dlgPrompt}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: 6px"><label for="dlgIn" style="font-weight: 600">Name</label><input id="dlgIn" class="inp" value="Ravi Menon" autofocus></div>
+      </sc-if>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 6px">
+        <button class="btn" onClick="{{close}}" autofocus>Cancel</button>
+        <button class="btn {{dlgBtnClass}}" onClick="{{close}}">{{dlgOk}}</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2160}}'>
+class Component extends DCLogic {
+  constructor(p){ super(p); this.state = { mic: true, mode: 'thorough', langs: { en: true, hi: true, ml: true, ta: false, kn: false, te: false }, dlg: null }; }
+  renderVals() {
+    const s = this.state;
+    const L = [['Page','#f6f7f9'],['Card','#ffffff'],['Text','#1d1f24'],['Muted text','#565d68'],['Hairline','#dfe2e8'],['Brand indigo','#3a33a8'],['Selected tint','#eceafc'],['Call on (saffron)','#ff7a1a'],['Saffron glow','#ffb347'],['Recording / delete','#c8281c'],['Works / saved','#147a40'],['Warning surface','#fff3e4']];
+    const D = [['Page','#1b1d21'],['Card','#24272c'],['Text','#e8eaee'],['Muted text','#a7adb7'],['Hairline','#353941'],['Brand indigo','#9d97ff'],['Selected tint','#25234a'],['Call on (saffron)','#ff9a4d'],['Saffron glow','#ffb347'],['Recording / delete','#ff7b72'],['Works / saved','#6fd49a'],['Warning surface','#352614']];
+    const langDefs = [['en','English'],['hi','हिन्दी Hindi'],['ml','മലയാളം Malayalam'],['ta','தமிழ் Tamil'],['kn','ಕನ್ನಡ Kannada'],['te','తెలుగు Telugu']];
+    const modes = [['thorough','Thorough'],['quick','Quick']];
+    const dlg = s.dlg;
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      lightSw: L.map(([name,hex]) => ({ name, hex })),
+      darkSw: D.map(([name,hex]) => ({ name, hex })),
+      micOn: s.mic ? 'true' : 'false',
+      toggleMic: () => this.setState({ mic: !s.mic }),
+      modes: modes.map(([id,label]) => { const on = s.mode === id; return { label, on: on ? 'true' : 'false', bg: on ? 'var(--card)' : 'transparent', fg: on ? 'var(--text)' : 'var(--muted)', sh: on ? '0 1px 3px rgba(20,22,40,.15)' : 'none', pick: () => this.setState({ mode: id }) }; }),
+      modeNote: s.mode === 'thorough' ? 'Reads the transcript twice and checks nothing was missed. About 2× the tokens.' : 'One pass. Cheaper and faster; may miss small action items.',
+      langs: langDefs.map(([id,label]) => { const on = !!s.langs[id]; return { label, on, bd: on ? 'var(--brand)' : 'var(--line-strong)', bg: on ? 'var(--tint)' : 'var(--card)', fg: on ? 'var(--tint-ink)' : 'var(--text)', pick: () => this.setState({ langs: { ...s.langs, [id]: !on } }) }; }),
+      dlgOpen: !!dlg,
+      dlgPrompt: dlg === 'prompt',
+      dlgTitle: dlg === 'prompt' ? 'Name this voice' : 'Forget all voices?',
+      dlgText: dlg === 'prompt' ? 'This voice spoke for 3 min 12 s in “Weekly sync”. Give it a name and Debrief will use it next time.' : 'Every enrolled and learned voice is deleted from this computer. Transcripts keep the names already written.',
+      dlgOk: dlg === 'prompt' ? 'Save name' : 'Forget all voices',
+      dlgBtnClass: dlg === 'prompt' ? 'primary' : 'danger-solid',
+      openConfirm: () => this.setState({ dlg: 'confirm' }),
+      openPrompt: () => this.setState({ dlg: 'prompt' }),
+      close: () => this.setState({ dlg: null }),
+      stop: (e) => e.stopPropagation(),
+      onKey: (e) => { if (e.key === 'Escape') this.setState({ dlg: null }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
