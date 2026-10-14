@@ -1,3 +1,4 @@
+import { cleanPresence } from './iconText.js';
 // Who was invited vs who actually joined, and the attendance table for the minutes.
 //
 // invited: [{ name?, email?, status? }]       from the calendar event (status: yes / no / maybe / invited)
@@ -51,7 +52,8 @@ function score(a, b) {
   return sameFirst ? 0.9 : 0.6;
 }
 
-export function matchPeople(invited, presence, { entries = [], myName = '' } = {}) {
+export function matchPeople(invited, presenceIn, { entries = [], myName = '' } = {}) {
+  const presence = cleanPresence(presenceIn);
   // "You" is the person running Debrief: their name if known, else the organiser of the invite.
   const owner = (invited || []).find((p) => p.status === 'owner');
   const selfName = myName || owner?.name || owner?.email || '';
@@ -88,7 +90,8 @@ const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String
 const RSVP = { yes: 'Accepted', no: 'Declined', maybe: 'Maybe', invited: 'No reply', owner: 'Organiser' };
 
 // Markdown section for the minutes, or '' if there is nothing to say.
-export function attendanceMarkdown({ invited, presence, durationSec, entries, myName }) {
+export function attendanceMarkdown({ invited, presence: presenceIn, durationSec, entries, myName }) {
+  const presence = cleanPresence(presenceIn);
   const hasInvited = (invited || []).length > 0;
   const hasPresence = Object.keys(presence || {}).length > 0;
   if (!hasInvited && !hasPresence) return '';

@@ -16465,6 +16465,12 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     return t.split("\n").filter((l3) => !/^\s*<\/?(checklist|transcript|speakers|minutes)>\s*$/i.test(l3)).join("\n").replace(/\s*\|?\s*"?quote_of_max_12_words"?/gi, "").trim();
   }
 
+  // src/iconText.js
+  var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+  function cleanPresence(presence) {
+    return Object.fromEntries(Object.entries(presence || {}).filter(([n]) => !isIconText(n)));
+  }
+
   // src/attendance.js
   var norm2 = (s) => String(s || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   var tokens = (s) => norm2(s).split(" ").filter(Boolean);
@@ -16506,7 +16512,8 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     if (!surnames) return 0;
     return sameFirst ? 0.9 : 0.6;
   }
-  function matchPeople(invited, presence, { entries = [], myName = "" } = {}) {
+  function matchPeople(invited, presenceIn, { entries = [], myName = "" } = {}) {
+    const presence = cleanPresence(presenceIn);
     const owner = (invited || []).find((p) => p.status === "owner");
     const selfName = myName || owner?.name || owner?.email || "";
     const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
@@ -16538,7 +16545,8 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
   }
   var mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
   var RSVP = { yes: "Accepted", no: "Declined", maybe: "Maybe", invited: "No reply", owner: "Organiser" };
-  function attendanceMarkdown({ invited, presence, durationSec, entries, myName }) {
+  function attendanceMarkdown({ invited, presence: presenceIn, durationSec, entries, myName }) {
+    const presence = cleanPresence(presenceIn);
     const hasInvited = (invited || []).length > 0;
     const hasPresence = Object.keys(presence || {}).length > 0;
     if (!hasInvited && !hasPresence) return "";

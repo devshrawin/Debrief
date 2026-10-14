@@ -1,3 +1,4 @@
+import { isIconText } from './iconText.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
@@ -251,7 +252,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const who = (n) => (/^you$/i.test(n) && me ? me : n);
       await updateMeeting(st.meetingId, (m) => {
         const pres = (m.presence ||= {});
-        for (const n of msg.names || []) {
+        for (const n of (msg.names || []).filter((x) => !isIconText(x))) {
           const k = who(n);
           const p = pres[k];
           if (p) {
