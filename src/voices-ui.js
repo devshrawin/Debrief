@@ -38,7 +38,8 @@ function closeClient() {
   client = null;
 }
 
-const LANG_NAME = { en: 'English', ml: 'Malayalam' };
+const LANG_NAME = { en: 'English', hi: 'Hindi', ml: 'Malayalam', free: 'free speech' };
+const ORDER = ['en', 'hi', 'ml', 'free'];
 const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 function renderList() {
@@ -120,8 +121,8 @@ function begin(m, person) {
   $('enrolName').value = person ? person.name : '';
   $('enrolName').disabled = !!person;
   $('enrolCancel').hidden = m.kind === 'new';
-  setLang(m.kind === 'add' ? ((person.langs || [person.lang || 'en']).includes('en') ? 'ml' : 'en') : lang);
-  setMsg(m.kind === 'add' ? 'Record in the other language: this makes the voice recognisable in both.' : '');
+  setLang(m.kind === 'add' ? ORDER.find((l) => !(person.langs || [person.lang || 'en']).includes(l)) || 'free' : lang);
+  setMsg(m.kind === 'add' ? 'Record in another language this person uses in meetings: it makes the voice recognisable in each.' : '');
   $('enrolName').scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 

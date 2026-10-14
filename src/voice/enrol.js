@@ -12,8 +12,11 @@ export const ENROL = {
   minConsistency: 0.35, // a piece this unlike the rest (a cough, a second voice) is left out
 };
 
-// Reading prompts. Two languages so the fingerprint can be made in the language a person mostly speaks.
+// Reading prompts. The fingerprint is made from whatever language is spoken, so record in the language(s) the
+// person really uses in meetings; "free" has no script, for any other language or for a Hinglish mix.
 export const PROMPTS = {
+  hi: 'कृपया इसे अपनी सामान्य गति और आवाज़ में ज़ोर से पढ़ें। जब मंगलवार को टीम की बैठक हुई, तब हमने रजिस्ट्रेशन का डेटा देखा, हर स्कीम की मैपिंग फ़ाइल जाँची, और तय किया कि अपलोड शुक्रवार दोपहर तक तैयार हो जाएगा। अगर पिछले हफ़्ते से कुछ भी अलग दिखे, तो कृपया अभी बताइए ताकि रिव्यू से पहले उसे ठीक किया जा सके। सभी का धन्यवाद, आज के लिए बस इतना ही।',
+  free: 'Speak naturally for about 20 seconds, in the language you use in meetings (for example, describe what you did yesterday, your plans for this week, or how your team works). Mixing languages the way you normally do is fine.',
   en: 'Please read this aloud at your normal pace and volume. When the team met on Tuesday, we reviewed the registration data, checked the mapping file for each scheme, and agreed that the upload would be ready by Friday afternoon. If anything looks different from last week, please tell me now so we can fix it before the review. Thank you everyone, that is all for today.',
   ml: 'ദയവായി സാധാരണ വേഗത്തിലും ശബ്ദത്തിലും ഇത് ഉറക്കെ വായിക്കുക. ചൊവ്വാഴ്ച ടീം യോഗം ചേർന്നപ്പോൾ ഞങ്ങൾ രജിസ്ട്രേഷൻ വിവരങ്ങൾ പരിശോധിച്ചു, ഓരോ സ്കീമിനുമുള്ള മാപ്പിംഗ് ഫയൽ നോക്കി, വെള്ളിയാഴ്ച ഉച്ചയ്ക്ക് മുമ്പ് അപ്‌ലോഡ് തയ്യാറാകുമെന്ന് തീരുമാനിച്ചു. കഴിഞ്ഞ ആഴ്ചയിൽ നിന്ന് എന്തെങ്കിലും വ്യത്യാസം കണ്ടാൽ ദയവായി ഇപ്പോൾ പറയുക. എല്ലാവർക്കും നന്ദി, ഇന്നത്തേക്ക് ഇത്രമാത്രം.',
 };
