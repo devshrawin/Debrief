@@ -1152,8 +1152,10 @@
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguages: [],
+    // languages to expect (codes from languages.js); empty = automatic
     meetingLanguage: "auto",
-    // auto | hinglish | malayalam
+    // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailSecret: "",
@@ -14861,6 +14863,40 @@ function out(o) {
   }
   var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
 
+  // src/languages.js
+  var LANGUAGES = [
+    { code: "en", name: "English", bcp: "en-IN", script: "Latin script" },
+    { code: "hi", name: "Hindi", bcp: "hi-IN", script: "Devanagari" },
+    { code: "ml", name: "Malayalam", bcp: "ml-IN", script: "Malayalam script" },
+    { code: "ta", name: "Tamil", bcp: "ta-IN", script: "Tamil script" },
+    { code: "te", name: "Telugu", bcp: "te-IN", script: "Telugu script" },
+    { code: "kn", name: "Kannada", bcp: "kn-IN", script: "Kannada script" },
+    { code: "mr", name: "Marathi", bcp: "mr-IN", script: "Devanagari" },
+    { code: "bn", name: "Bengali", bcp: "bn-IN", script: "Bengali script" },
+    { code: "gu", name: "Gujarati", bcp: "gu-IN", script: "Gujarati script" },
+    { code: "pa", name: "Punjabi", bcp: "pa-IN", script: "Gurmukhi" },
+    { code: "or", name: "Odia", bcp: "or-IN", script: "Odia script" },
+    { code: "ur", name: "Urdu", bcp: "ur-IN", script: "Urdu (Arabic) script" },
+    { code: "es", name: "Spanish", bcp: "es-ES", script: "Latin script" },
+    { code: "fr", name: "French", bcp: "fr-FR", script: "Latin script" },
+    { code: "de", name: "German", bcp: "de-DE", script: "Latin script" },
+    { code: "pt", name: "Portuguese", bcp: "pt-BR", script: "Latin script" },
+    { code: "ru", name: "Russian", bcp: "ru-RU", script: "Cyrillic" },
+    { code: "ar", name: "Arabic", bcp: "ar-XA", script: "Arabic script" },
+    { code: "zh", name: "Chinese (Mandarin)", bcp: "zh-CN", script: "Chinese characters" },
+    { code: "ja", name: "Japanese", bcp: "ja-JP", script: "Japanese script" }
+  ];
+  var BY_CODE = new Map(LANGUAGES.map((l) => [l.code, l]));
+  var LEGACY = { auto: ["en", "hi", "ml"], hinglish: ["hi", "en"], malayalam: ["ml", "en"] };
+  function chosenLanguages(settings) {
+    const list = settings?.meetingLanguages;
+    if (Array.isArray(list) && list.length) return list.map((c) => BY_CODE.get(c)).filter(Boolean);
+    const legacy = settings?.meetingLanguage;
+    return legacy && legacy !== "auto" && LEGACY[legacy] ? LEGACY[legacy].map((c) => BY_CODE.get(c)) : null;
+  }
+  var minutesLanguageOptions = () => [...LANGUAGES.map((l) => ({ value: l.code === "hi" ? "Hindi (Devanagari)" : l.name, label: l.code === "hi" ? "Hindi (Devanagari)" : l.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
+  var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l) => l.name).join(", ")} and ${langs.at(-1).name}`;
+
   // src/options.js
   var $ = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
@@ -14872,6 +14908,7 @@ function out(o) {
       s[k] = el.type === "checkbox" ? el.checked : el.value.trim();
     }
     s.shareMode = $("shareAuto").checked ? "auto" : "review";
+    s.meetingLanguages = [...document.querySelectorAll("#langChips input:checked")].map((c) => c.dataset.lang);
     return s;
   }
   function showTab(name) {
@@ -14885,8 +14922,8 @@ function out(o) {
   document.querySelectorAll("[data-go]").forEach((a) => a.onclick = () => showTab(a.dataset.go));
   async function renderLearned() {
     const { learned } = await chrome.storage.local.get("learned");
-    const names = Object.keys(learned?.names || {});
-    $("learnedNames").textContent = names.length ? names.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
+    const names2 = Object.keys(learned?.names || {});
+    $("learnedNames").textContent = names2.length ? names2.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
     const pending = learned?.pending || [];
     $("pendingEmpty").classList.toggle("hidden", pending.length > 0);
     $("pendingList").replaceChildren(
@@ -15001,6 +15038,31 @@ function out(o) {
     }
     if (!origins.length || await chrome.permissions.contains({ origins })) return;
     if (!await chrome.permissions.request({ origins })) throw new Error("Permission for the custom endpoint was denied.");
+  }
+  function buildLanguageUi() {
+    $("langChips").replaceChildren(
+      ...LANGUAGES.map((l) => {
+        const label = document.createElement("label");
+        label.className = "chip";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.dataset.lang = l.code;
+        cb.onchange = langHint;
+        label.append(cb, l.name);
+        return label;
+      })
+    );
+    $("momLanguage").replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement("option"), { value: o.value, textContent: o.label })));
+  }
+  function setLanguages(s) {
+    const chosen = chosenLanguages(s);
+    const set = new Set((chosen || []).map((l) => l.code));
+    document.querySelectorAll("#langChips input").forEach((c) => c.checked = set.has(c.dataset.lang));
+    langHint();
+  }
+  function langHint() {
+    const picked = LANGUAGES.filter((l) => document.querySelector(`#langChips input[data-lang="${l.code}"]`)?.checked);
+    $("langHint").textContent = picked.length ? `Debrief will expect ${names(picked)}, in any mix. Fewer choices give more accurate text.` : "Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.";
   }
   var loaded = {};
   var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -15158,6 +15220,7 @@ const ALLOWED_DOMAINS = ${l.domains};`;
   };
   (async () => {
     const s = await getSettings();
+    buildLanguageUi();
     for (const k of FIELDS2) {
       const el = $(k);
       if (!el) continue;
@@ -15165,6 +15228,7 @@ const ALLOWED_DOMAINS = ${l.domains};`;
       else el.value = s[k];
     }
     $("shareAuto").checked = s.shareMode === "auto";
+    setLanguages(s);
     loaded = read();
     showProviderFields();
     renderAllow();
@@ -15186,5 +15250,9 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     }
     $("shareAuto").checked = fresh.shareMode === "auto";
     loaded.shareMode = fresh.shareMode;
+    if (same(read().meetingLanguages, loaded.meetingLanguages)) {
+      setLanguages(fresh);
+      loaded.meetingLanguages = read().meetingLanguages;
+    }
   });
 })();

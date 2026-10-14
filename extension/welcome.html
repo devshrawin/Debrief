@@ -57,6 +57,11 @@
     .toggle input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 38px; height: 22px; padding: 0; margin: 0 !important; max-width: none !important; border: 0 !important; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .2s; }
     .toggle input::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
     .toggle input:checked { background: var(--okc); } .toggle input:checked::after { transform: translateX(16px); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+    .card label.chip { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--field); font-size: 13px; font-weight: 500; cursor: pointer; user-select: none; }
+    .chip input { appearance: none; -webkit-appearance: none; width: 0 !important; height: 0; margin: 0 !important; padding: 0 !important; border: 0 !important; position: absolute; opacity: 0; }
+    .card label.chip:has(input:checked) { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+    .card label.chip:has(input:checked)::before { content: "\2713"; font-size: 11px; }
     kbd { font: 12px ui-monospace, Consolas, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; background: var(--card); }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .mini { background: var(--field); border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; }

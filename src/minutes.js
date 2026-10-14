@@ -16,6 +16,7 @@ import {
 } from './prompt.js';
 import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
+import { languagesOf, joinNames } from './languages.js';
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -59,7 +60,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
 
   onStatus('Writing the minutes…');
   stats.calls++;
-  let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText));
+  let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages: joinNames(languagesOf(settings)) }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText));
   if (!mom) throw new Error('The model returned an empty reply. Try again, or choose another model in Settings.');
 
   if (thorough && words <= (local ? 6000 : 24000)) {

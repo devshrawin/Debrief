@@ -3,7 +3,8 @@
 export const DEFAULTS = {
   myName: '',
   captureMic: true,
-  meetingLanguage: 'auto', // auto | hinglish | malayalam
+  meetingLanguages: [], // languages to expect (codes from languages.js); empty = automatic
+  meetingLanguage: 'auto', // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
   pillOnPage: false, // also show the pill inside the Meet page
   emailSecret: '', // made up by Debrief, never typed; the relay script locks itself to it on first use
   emailWebhook: '', // Google Apps Script web app URL (apps-script/Code.gs)

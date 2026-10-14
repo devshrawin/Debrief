@@ -4,6 +4,7 @@ import { getSettings, setSetting, DEFAULTS } from './store.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady, scriptWithAllowList, parseAddresses } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
+import { LANGUAGES, chosenLanguages, minutesLanguageOptions } from './languages.js';
 
 const GUIDE = 'https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md';
 const LOCAL_GUIDE = 'https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md';
@@ -163,23 +164,19 @@ const STEPS = [
     nodes: () => [
       card('',
         ...field('Your name', 't-name', S.myName, { placeholder: 'e.g. Shrawin Sisodiya' }),
-        h('label', { for: 't-lang' }, 'Language spoken in your meetings'),
-        h('select', { id: 't-lang' },
-          h('option', { value: 'auto' }, 'Automatic: Hindi, English and Malayalam, in any mix'),
-          h('option', { value: 'hinglish' }, 'Hindi and English (Hinglish)'),
-          h('option', { value: 'malayalam' }, 'Malayalam and English (Manglish)')),
+        h('label', {}, 'Languages spoken in your meetings (pick any number)'),
+        h('div', { class: 'chips', id: 't-langs' }, ...LANGUAGES.map((l) => h('label', { class: 'chip' }, h('input', { type: 'checkbox', 'data-lang': l.code }), l.name))),
+        p('Leave all unticked for automatic. Picking just the languages you really use makes the text more accurate.', 'hint'),
         h('label', { for: 't-mom' }, 'Language of the written minutes'),
-        h('select', { id: 't-mom' },
-          h('option', {}, 'English'),
-          h('option', {}, 'Hindi (Devanagari)'),
-          h('option', {}, 'Malayalam'),
-          h('option', { value: 'the same language mix used in the meeting' }, 'Same as the meeting'))),
+        h('select', { id: 't-mom' }, ...minutesLanguageOptions().map((o) => h('option', { value: o.value }, o.label)))),
+
     ],
     after: () => {
-      $('t-lang').value = S.meetingLanguage;
+      const chosen = new Set((chosenLanguages(S) || []).map((l) => l.code));
+      document.querySelectorAll('#t-langs input').forEach((c) => (c.checked = chosen.has(c.dataset.lang)));
       $('t-mom').value = S.momLanguage;
     },
-    save: async () => patch({ myName: $('t-name').value.trim(), meetingLanguage: $('t-lang').value, momLanguage: $('t-mom').value }),
+    save: async () => patch({ myName: $('t-name').value.trim(), meetingLanguages: [...document.querySelectorAll('#t-langs input:checked')].map((c) => c.dataset.lang), momLanguage: $('t-mom').value }),
   },
   {
     id: 'names',

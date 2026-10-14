@@ -63,8 +63,10 @@
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguages: [],
+    // languages to expect (codes from languages.js); empty = automatic
     meetingLanguage: "auto",
-    // auto | hinglish | malayalam
+    // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailSecret: "",

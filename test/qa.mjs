@@ -141,4 +141,50 @@ await test('mailer: addresses with quotes are rejected so the generated script s
   assert.match(out, /const ALLOWED = \['good@x\.com'\];/);
 });
 
+
+// ---- languages: any number, in any order ----
+const L = await import('../src/languages.js');
+const S = await import('../src/stt.js');
+
+await test('languages: the chosen list drives Gemini codes, hints and legacy settings still work', () => {
+  assert.equal(L.chosenLanguages({ meetingLanguages: [], meetingLanguage: 'auto' }), null);
+  assert.deepEqual(L.chosenLanguages({ meetingLanguage: 'malayalam' }).map((l) => l.code), ['ml', 'en']);
+  assert.deepEqual(L.chosenLanguages({ meetingLanguages: ['ta', 'te', 'en', 'xx'] }).map((l) => l.code), ['ta', 'te', 'en'], 'unknown codes are ignored');
+  assert.deepEqual(L.geminiCodes(L.chosenLanguages({ meetingLanguages: ['ta', 'en'] })), ['ta-IN', 'en-IN']);
+  assert.equal(L.geminiCodes(null), null);
+  const hint = L.languageHint(L.chosenLanguages({ meetingLanguages: ['ta', 'te', 'en'] }));
+  assert.match(hint, /Tamil, Telugu and English/);
+  assert.match(hint, /Tamil in Tamil script, Telugu in Telugu script and English words in English/);
+  assert.equal(L.languagesOf({}).length, 3, 'automatic describes Hindi, English and Malayalam');
+  assert.equal(L.minutesLanguageOptions().at(-1).label, 'Same as the meeting');
+  assert.ok(L.LANGUAGES.length >= 18);
+});
+
+await test('languages: providers that take one language are narrowed only when exactly one is chosen', async () => {
+  const seen = [];
+  globalThis.fetch = async (url, init = {}) => {
+    seen.push({ url: String(url), req: new Request(url, init) });
+    return Response.json({ transcript: 'x', text: 'y' });
+  };
+  const wav = (await import('../src/wav.js')).encodeWav(new Float32Array(16000), 16000);
+  const run = async (settings) => {
+    seen.length = 0;
+    await S.transcribe(wav, settings);
+    return seen[0].req.formData();
+  };
+  assert.equal((await run({ ...DEFAULTS, sttProvider: 'sarvam', sarvamKey: 'k', meetingLanguages: ['ta'] })).get('language_code'), 'ta-IN');
+  assert.equal((await run({ ...DEFAULTS, sttProvider: 'sarvam', sarvamKey: 'k', meetingLanguages: ['ta', 'en'] })).get('language_code'), 'ta-IN', 'English does not count as a second language');
+  assert.equal((await run({ ...DEFAULTS, sttProvider: 'sarvam', sarvamKey: 'k', meetingLanguages: ['ta', 'te'] })).get('language_code'), 'unknown');
+  assert.equal((await run({ ...DEFAULTS, sttProvider: 'sarvam', sarvamKey: 'k', meetingLanguages: ['fr'] })).get('language_code'), 'unknown', 'Sarvam only knows Indian languages');
+  const w = await run({ ...DEFAULTS, sttProvider: 'openai', sttBase: 'http://x/v1', meetingLanguages: ['te', 'en'] });
+  assert.equal(w.get('language'), 'te');
+  assert.match(w.get('prompt'), /Telugu and English office meeting/);
+  assert.equal((await run({ ...DEFAULTS, sttProvider: 'openai', sttBase: 'http://x/v1', meetingLanguages: ['hi', 'ml'] })).get('language'), null);
+});
+
+await test('languages: the minutes prompt names the chosen languages', () => {
+  assert.match(P.buildSystemPrompt('English', { languages: 'Tamil and English' }), /held in Tamil and English, or a mix of them/);
+  assert.match(P.buildSystemPrompt('English'), /Hindi, English, Malayalam/);
+});
+
 console.log(`\n${passed} passed`);

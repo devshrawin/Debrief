@@ -87,6 +87,13 @@
     .seg button.active { background: var(--brand-soft); color: var(--brand); }
     textarea.mono { width: 100%; max-width: 460px; min-height: 76px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--field); }
 
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 13px; cursor: pointer; user-select: none; }
+    .chip input { appearance: none; -webkit-appearance: none; width: 0; height: 0; margin: 0; padding: 0; border: 0; position: absolute; opacity: 0; max-width: none; }
+    .chip:has(input:checked) { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+    .chip:has(input:checked)::before { content: "\2713"; font-size: 11px; }
+    .chip:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+
     /* Save bar */
     .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--border); }
     .savebar .in { display: flex; align-items: center; gap: 14px; max-width: 1040px; margin: 0 auto; padding: 12px 30px 12px calc(232px + 30px); }
@@ -237,22 +244,13 @@
       <div class="card">
         <h2>Language</h2>
         <div class="row2">
-          <label for="meetingLanguage">Language spoken in meetings</label>
-          <select id="meetingLanguage">
-            <option value="auto">Automatic: Hindi, English and Malayalam, in any mix</option>
-            <option value="hinglish">Hindi and English (Hinglish)</option>
-            <option value="malayalam">Malayalam and English (Manglish)</option>
-          </select>
-          <p class="hint">Gemini and Sarvam handle Malayalam. Deepgram does not.</p>
+          <span class="lab">Languages spoken in your meetings</span>
+          <div id="langChips" class="chips"></div>
+          <p class="hint" id="langHint"></p>
         </div>
         <div class="row2">
           <label for="momLanguage">Language of the minutes</label>
-          <select id="momLanguage">
-            <option>English</option>
-            <option>Hindi (Devanagari)</option>
-            <option>Malayalam</option>
-            <option value="the same language mix used in the meeting">Same as the meeting</option>
-          </select>
+          <select id="momLanguage"></select>
         </div>
       </div>
     </section>
