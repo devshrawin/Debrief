@@ -187,4 +187,23 @@ await test('languages: the minutes prompt names the chosen languages', () => {
   assert.match(P.buildSystemPrompt('English'), /Hindi, English, Malayalam/);
 });
 
+await test('attendance: the table lists invitees present and absent; with no invite it says why instead of guessing', async () => {
+  const { attendanceMarkdown } = await import('../src/attendance.js');
+  const { noInviteReason } = await import('../src/minutes.js');
+  const invited = [{ name: 'Akash Behera', email: 'akash@co.com', status: 'yes' }, { name: 'Ankur Desai', email: 'ankur@co.com', status: 'yes' }, { name: 'Deep Patel', email: 'deep@co.com', status: 'invited' }];
+  const presence = { 'Akash Behera': [10, 400, 5], 'Ankur Desai': [200, 410, 5], Visitor: [50, 300, 3] };
+  const md = attendanceMarkdown({ invited, presence, durationSec: 420, entries: [], myName: '' });
+  assert.match(md, /\| Person \| Invite \| In the meeting \|/);
+  assert.match(md, /\| Akash Behera \| Accepted \| Yes \|/);
+  assert.match(md, /\| Deep Patel \| No reply \| \*\*Absent\*\* \|/);
+  assert.match(md, /\| Visitor \| Not invited \| Yes \|/);
+  assert.match(md, /2 of 3 invited people/);
+  assert.match(md, /Absent. means not seen/);
+  const none = attendanceMarkdown({ invited: [], presence, durationSec: 420, entries: [], myName: '', whyNoInvite: noInviteReason({ invitedNotFound: true }, { calendarLookup: true }) });
+  assert.match(none, /Nobody can be listed as absent because no calendar event with this meeting/);
+  assert.match(noInviteReason({ invitedError: 'locked' }, {}), /lookup failed \(locked\)/);
+  assert.match(noInviteReason({}, { calendarLookup: false }), /switched off/);
+  assert.match(noInviteReason({}, { calendarLookup: true }), /has not run/);
+});
+
 console.log(`\n${passed} passed`);

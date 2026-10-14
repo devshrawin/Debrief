@@ -175,5 +175,6 @@ export function scriptWithAllowList(scriptText, addresses, opts) {
 export async function lookupInvitees(meeting, settings) {
   const code = (meeting.url || '').match(/[a-z]{3}-[a-z]{4}-[a-z]{3}/)?.[0] || '';
   const j = await callRelay({ action: 'invitees', code, title: meeting.title, start: meeting.startedAt, end: meeting.endedAt || Date.now() }, settings);
-  return j.found ? j.guests : null;
+  // the list itself, with how it was found (code / title / similar title) and the event's name attached
+  return j.found ? Object.assign([...(j.guests || [])], { how: j.how || '', event: j.event || '' }) : null;
 }

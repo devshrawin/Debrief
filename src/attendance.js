@@ -90,7 +90,7 @@ const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String
 const RSVP = { yes: 'Accepted', no: 'Declined', maybe: 'Maybe', invited: 'No reply', owner: 'Organiser' };
 
 // Markdown section for the minutes, or '' if there is nothing to say.
-export function attendanceMarkdown({ invited, presence: presenceIn, durationSec, entries, myName }) {
+export function attendanceMarkdown({ invited, presence: presenceIn, durationSec, entries, myName, whyNoInvite = '' }) {
   const presence = cleanPresence(presenceIn);
   const hasInvited = (invited || []).length > 0;
   const hasPresence = Object.keys(presence || {}).length > 0;
@@ -117,11 +117,11 @@ export function attendanceMarkdown({ invited, presence: presenceIn, durationSec,
     const absent = rows.filter((r) => !r.present).map((r) => r.name);
     if (absent.length) lines.push('', `Not seen in the meeting: ${absent.join(', ')}. Action items for them need to be passed on.`);
   } else if (hasPresence) {
-    lines.push('People seen in the meeting (no calendar invite was available to compare):', '', '| Person | Joined | Left | Note |', '|---|---|---|---|');
+    lines.push(`People seen in the meeting. Nobody can be listed as absent because ${whyNoInvite || 'no calendar invite was found to compare with'}.`, '', '| Person | Joined | Left | Note |', '|---|---|---|---|');
     for (const [name, v] of Object.entries(presence)) lines.push(`| ${/^you$/i.test(name) && myName ? myName : name} | ${mmss(v[0])} | ${mmss(v[1])} | ${when({ first: v[0], last: v[1] })} |`);
   } else {
     lines.push('Invited:', '', ...rows.map((r) => `- ${r.name} (${RSVP[r.status] || r.status || 'invited'})`), '', '_Who actually attended could not be read from the meeting page._');
   }
-  lines.push('', '_Attendance is read from the meeting page and may miss people whose video tile was not on screen._');
+  lines.push('', hasInvited && hasPresence ? '_"Absent" means not seen: attendance is read from the call page (video tiles), and from speech and captions when those are on, so someone who joined without being on screen may be listed as absent. Check before acting._' : '_Who was in the call is read from the call page and may miss people whose video tile was not on screen._');
   return lines.join('\n');
 }

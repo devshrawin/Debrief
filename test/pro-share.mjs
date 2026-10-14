@@ -93,9 +93,9 @@ function loadScript(patch = (s) => s, events = []) {
   return { api, post, sent, props };
 }
 
-await test('script v6: owner by default, allowed people and domains only, cc/bcc, reply-to', () => {
+await test('script v7: owner by default, allowed people and domains only, cc/bcc, reply-to', () => {
   const { post, sent, api } = loadScript((s) => s.replace('const ALLOWED = [];', "const ALLOWED = ['team@co.com'];").replace('const ALLOWED_DOMAINS = [];', "const ALLOWED_DOMAINS = ['corp.com'];"));
-  assert.equal(JSON.parse(api.doGet().t).version, 6);
+  assert.equal(JSON.parse(api.doGet().t).version, 7);
   assert.equal(post({ subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
   const r = post({ to: 'team@co.com, evil@bad.com, anyone@corp.com', cc: 'x@corp.com', bcc: 'who@else.com', subject: 's' });
   assert.equal(r.to, 'team@co.com,anyone@corp.com');
@@ -108,14 +108,14 @@ await test('script v6: owner by default, allowed people and domains only, cc/bcc
   assert.equal(post({ to: 'evil@bad.com', subject: 's' }).to, 'Me@Co.com', 'a disallowed only-recipient falls back to the owner');
 });
 
-await test('script v6: bcc-only share still goes out and the owner is not forced into To', () => {
+await test('script v7: bcc-only share still goes out and the owner is not forced into To', () => {
   const { post, sent } = loadScript((s) => s.replace('const ALLOWED = [];', "const ALLOWED = ['team@co.com'];"));
   const r = post({ bcc: 'team@co.com', subject: 's' });
   assert.equal(r.ok, true);
   assert.equal(sent.at(-1).bcc, 'team@co.com');
 });
 
-await test('script v6: calendar lookup finds the event by Meet code, else by title', () => {
+await test('script v7: calendar lookup finds the event by Meet code, else by title', () => {
   const guest = (email, name, status) => ({ getEmail: () => email, getName: () => name, getGuestStatus: () => status });
   const ev = (title, where, guests, startMs = Date.now()) => ({ getTitle: () => title, getLocation: () => '', getDescription: () => where, getGuestList: () => guests, getStartTime: () => ({ getTime: () => startMs }) });
   const events = [
@@ -131,7 +131,7 @@ await test('script v6: calendar lookup finds the event by Meet code, else by tit
   assert.equal(post({ action: 'invitees', code: '', title: 'nothing', start: Date.now(), end: Date.now() }).found, false);
 });
 
-await test('script v6: PDF attachments are built from HTML', () => {
+await test('script v7: PDF attachments are built from HTML', () => {
   const { post, sent } = loadScript();
   post({ subject: 's', attachments: [{ name: 'MOM.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
   const att = sent.at(-1).attachments;
@@ -140,7 +140,7 @@ await test('script v6: PDF attachments are built from HTML', () => {
   assert.equal(att[1].name, 'a.md');
 });
 
-await test('script v6: locks to the first secret, refuses others, can be reset', () => {
+await test('script v7: locks to the first secret, refuses others, can be reset', () => {
   const { post, sent, props, api } = loadScript();
   assert.equal(JSON.parse(api.doGet().t).locked, false);
   assert.equal(post({ subject: 's' }, 'short').ok, false, 'a short secret cannot claim the script');
@@ -157,14 +157,14 @@ await test('script v6: locks to the first secret, refuses others, can be reset',
   assert.equal(post({ subject: 'new owner' }, 'f'.repeat(32)).ok, true, 'after a reset the next install can claim it');
 });
 
-await test('script v6: addresses must be exactly one clean address', () => {
+await test('script v7: addresses must be exactly one clean address', () => {
   const { post } = loadScript((s) => s.replace('const ALLOWED_DOMAINS = [];', "const ALLOWED_DOMAINS = ['co.com'];"));
   const r = post({ to: 'ok@co.com, a@co.com@evil.com, "x"@co.com, <b@co.com>, c@co.com;d@co.com', subject: 's' });
   assert.equal(r.to, 'ok@co.com');
   assert.ok(r.skipped.length >= 4);
 });
 
-await test('script v6: calendar lookup needs an exact Meet code, caps the window, never returns event text, picks the nearest event', () => {
+await test('script v7: calendar lookup needs an exact Meet code, caps the window, never returns event text, picks the nearest event', () => {
   const guest = (email, status) => ({ getEmail: () => email, getName: () => '', getGuestStatus: () => status });
   const now = Date.now();
   const ev = (title, where, guests, startMs) => ({ getTitle: () => title, getLocation: () => '', getDescription: () => where, getGuestList: () => guests, getStartTime: () => ({ getTime: () => startMs }) });
@@ -178,7 +178,7 @@ await test('script v6: calendar lookup needs an exact Meet code, caps the window
   assert.equal(post({ action: 'invitees', code: 'abc-defg-hij', start: -1, end: now }).found, false);
 });
 
-await test('script v6: remote resources are stripped from the PDF page', () => {
+await test('script v7: remote resources are stripped from the PDF page', () => {
   const html = '<h1>x</h1><img src="https://evil.example/?d=1"><div style="background:url(https://evil.example/a)">y</div><link rel="stylesheet" href="https://evil.example/c.css">';
   const fn = (s) => s.replace('return out({ ok: true, to: options.to,', 'return out({ ok: true, to: options.to, stripped: stripRemote(String(d.attachments && d.attachments[0] && d.attachments[0].fromHtml || "")),');
   const { post } = loadScript(fn);
@@ -207,6 +207,27 @@ await test('mail: company (Workspace) web app URLs with /a/macros/domain/ are ac
   assert.ok(!ok('http://script.google.com/macros/s/AKfy/exec'));
   assert.ok(!ok('https://evil.example.com/macros/s/AKfy/exec'));
   assert.ok(!ok(''));
+});
+
+await test('script v7: an event whose Meet link is not in the description is still found by its title (exact, then similar), code wins when present', () => {
+  const guest = (email, name, status) => ({ getEmail: () => email, getName: () => name, getGuestStatus: () => status });
+  const ev = (title, where, guests, startMs = Date.now()) => ({ getTitle: () => title, getLocation: () => '', getDescription: () => where, getGuestList: () => guests, getStartTime: () => ({ getTime: () => startMs }) });
+  const events = [
+    ev('Weekly review', '', [guest('w@x.com', 'W', 'YES')]),
+    ev('KERALA UR - Cadence Call', 'no link here', [guest('akash@co.com', 'Akash Behera', 'YES'), guest('ankur@co.com', 'Ankur Desai', 'YES')]),
+  ];
+  const { post } = loadScript((s) => s, events);
+  const a = post({ action: 'invitees', code: 'abc-defg-hij', title: 'KERALA UR - Cadence Call', start: Date.now(), end: Date.now() });
+  assert.equal(a.found, true);
+  assert.equal(a.how, 'title');
+  assert.ok(a.guests.some((g) => g.email === 'akash@co.com'));
+  const b = post({ action: 'invitees', code: 'abc-defg-hij', title: 'Kerala UR Cadence call (weekly)', start: Date.now(), end: Date.now() });
+  assert.equal(b.found, true);
+  assert.equal(b.how, 'similar title');
+  assert.equal(post({ action: 'invitees', code: 'abc-defg-hij', title: 'Totally different', start: Date.now(), end: Date.now() }).found, false);
+  const withCode = loadScript((s) => s, [...events, ev('Other thing', 'https://meet.google.com/abc-defg-hij', [guest('c@x.com', 'C', 'YES')])]).post({ action: 'invitees', code: 'abc-defg-hij', title: 'KERALA UR - Cadence Call', start: Date.now(), end: Date.now() });
+  assert.equal(withCode.how, 'code');
+  assert.ok(!('event' in withCode), 'no event text leaves the script');
 });
 
 console.log(`\n${passed} passed`);
