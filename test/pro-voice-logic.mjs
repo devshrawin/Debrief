@@ -231,4 +231,34 @@ await test('enrolment: add, name clash, re-record and add-a-language keep one pe
   assert.ok(!JSON.stringify(list).includes('pcm'), 'no audio field is ever stored');
 });
 
+const S = await import('../src/voice/share.js');
+
+await test('sharing: exported voices carry fingerprints only, import validates, merges and never overwrites silently', () => {
+  const text = S.exportVoices([{ id: 'a', ...amal, lang: 'en', secs: 20 }, { id: 'p', ...priya, lang: 'hi', langs: ['hi'], secs: 18 }]);
+  assert.ok(!/pcm|audio|"id"/.test(text));
+  const { people: got, problems } = S.parseImport(text);
+  assert.equal(got.length, 2);
+  assert.equal(problems.length, 0);
+  assert.equal(got[1].langs[0], 'hi');
+  const mine = E.upsertPerson([], { name: 'Amal Raj', lang: 'en', print: { centroid: priya.centroid, windows: [], speechSec: 5 } });
+  const keep = S.mergeImport(mine, got);
+  assert.deepEqual([keep.added, keep.skipped], [['Priya Nair'], ['Amal Raj']]);
+  assert.equal(keep.list.find((p) => p.name === 'Amal Raj').centroid, priya.centroid);
+  const rep = S.mergeImport(mine, got, { replace: true });
+  assert.deepEqual(rep.replaced, ['Amal Raj']);
+  assert.equal(rep.list.find((p) => p.name === 'Amal Raj').centroid, amal.centroid);
+  assert.equal(rep.list.length, 2);
+});
+
+await test('sharing: files that are not valid voices are refused or trimmed, with a reason', () => {
+  assert.match(S.parseImport('nope').problems[0], /could not be read/);
+  assert.match(S.parseImport('{"a":1}').problems[0], /not a Debrief voices file/);
+  assert.match(S.parseImport(JSON.stringify({ format: 'debrief-voices', model: 'other', people: [] })).problems[0], /different speaker model/);
+  const bad = JSON.stringify({ format: 'debrief-voices', model: 'wespeaker-resnet34-lm', people: [{ name: 'X', centroid: 'AAAA' }, { name: '', centroid: amal.centroid }, { name: 'Ok', centroid: amal.centroid, windows: ['zz', amal.windows[0]] }] });
+  const r = S.parseImport(bad);
+  assert.deepEqual(r.people.map((p) => p.name), ['Ok']);
+  assert.equal(r.people[0].windows.length, 1);
+  assert.equal(r.problems.length, 2);
+});
+
 console.log(`\n${passed} passed`);
