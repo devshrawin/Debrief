@@ -1206,6 +1206,8 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceLearn: false,
+    // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -1246,6 +1248,20 @@
     await chrome.storage.local.set({ settings: own });
   }
   var key = (id) => `meeting:${id}`;
+  async function listMeetings() {
+    const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
+    const r = await chrome.storage.local.get(meetingIds.map(key));
+    return meetingIds.map((id) => r[key(id)]).filter(Boolean);
+  }
+  function fmtTime(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor(sec % 3600 / 60);
+    const s = sec % 60;
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+    return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
   function errorDetail(text) {
     try {
       const j = JSON.parse(text);
@@ -14944,6 +14960,132 @@ function out(o) {
   var minutesLanguageOptions = () => [...LANGUAGES.map((l) => ({ value: l.code === "hi" ? "Hindi (Devanagari)" : l.name, label: l.code === "hi" ? "Hindi (Devanagari)" : l.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
   var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l) => l.name).join(", ")} and ${langs.at(-1).name}`;
 
+  // src/voice/match.js
+  var THRESHOLDS = {
+    accept: 0.42,
+    // a person must score at least this against the piece of speech
+    margin: 0.07,
+    // and beat the runner-up by this much, or the piece is "unknown"
+    strong: 0.6,
+    // at or above this a label is kept even if its neighbours disagree
+    mixedShare: 0.6,
+    // a sentence needs this share of its speech time from one voice to be labelled
+    gap: 2.5
+    // seconds: neighbours further apart than this do not vote for each other
+  };
+  function cosine(a, b) {
+    let s = 0;
+    let na = 0;
+    let nb = 0;
+    for (let i = 0; i < a.length; i++) {
+      s += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    return s / (Math.sqrt(na * nb) || 1);
+  }
+  function normalize(v) {
+    let n = 0;
+    for (const x of v) n += x * x;
+    n = Math.sqrt(n) || 1;
+    return Float32Array.from(v, (x) => x / n);
+  }
+  function mean(vectors) {
+    const out = new Float32Array(vectors[0].length);
+    for (const v of vectors) for (let i = 0; i < out.length; i++) out[i] += v[i];
+    return normalize(out);
+  }
+  function pack(emb) {
+    const bytes = new Int8Array(emb.length);
+    for (let i = 0; i < emb.length; i++) bytes[i] = Math.max(-127, Math.min(127, Math.round(emb[i] * 127)));
+    let bin = "";
+    for (const b of new Uint8Array(bytes.buffer)) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+  function unpack(b64) {
+    const bin = atob(b64);
+    const out = new Float32Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = (bin.charCodeAt(i) << 24 >> 24) / 127;
+    return normalize(out);
+  }
+  function prepared(person) {
+    if (!person._c) {
+      person._c = unpack(person.centroid);
+      person._w = (person.windows || []).map(unpack);
+    }
+    return person;
+  }
+  function personScore(emb, person) {
+    const p = prepared(person);
+    const c = cosine(emb, p._c);
+    const best = p._w.length ? Math.max(...p._w.map((w) => cosine(emb, w))) : c;
+    return 0.6 * c + 0.4 * best;
+  }
+  function classify(emb, people2, th = THRESHOLDS) {
+    if (!emb || !people2?.length) return { id: null, name: null, score: 0, margin: 0, why: "no voices enrolled" };
+    const scored = people2.map((p) => ({ id: p.id, name: p.name, score: personScore(emb, p) })).sort((a, b) => b.score - a.score);
+    const [top, second] = scored;
+    const margin = top.score - (second?.score ?? 0);
+    if (top.score < th.accept) return { id: null, name: null, score: top.score, margin, best: top.name, why: "too different from everyone enrolled" };
+    if (second && margin < th.margin && top.score < th.strong + 0.1) return { id: null, name: null, score: top.score, margin, best: top.name, why: "could be two people (or both talking)" };
+    return { id: top.id, name: top.name, score: top.score, margin };
+  }
+  function clusterVoices(segs, { threshold = 0.55 } = {}) {
+    const vecs = segs.map((s) => unpack(s.e));
+    let clusters = vecs.map((_, i) => ({ members: [i] }));
+    const sim = (a, b) => {
+      let s = 0;
+      for (const i of a.members) for (const j of b.members) s += cosine(vecs[i], vecs[j]);
+      return s / (a.members.length * b.members.length);
+    };
+    for (; ; ) {
+      let best = -1;
+      let pair = null;
+      for (let i2 = 0; i2 < clusters.length; i2++) {
+        for (let j2 = i2 + 1; j2 < clusters.length; j2++) {
+          const s = sim(clusters[i2], clusters[j2]);
+          if (s > best) [best, pair] = [s, [i2, j2]];
+        }
+      }
+      if (!pair || best < 1 - threshold) break;
+      const [i, j] = pair;
+      clusters[i] = { members: [...clusters[i].members, ...clusters[j].members] };
+      clusters.splice(j, 1);
+    }
+    return clusters.map((c) => ({ members: c.members.sort((a, b) => a - b), seconds: c.members.reduce((a, i) => a + (segs[i].t1 - segs[i].t0), 0), centroid: pack(mean(c.members.map((i) => vecs[i]))) })).sort((a, b) => b.seconds - a.seconds);
+  }
+
+  // src/voice/learn.js
+  var LEARN = {
+    lead: 2,
+    // seconds a caption may lag behind the speech (the speech started this much before it showed)
+    tail: 1,
+    clear: 1.5,
+    // seconds around a piece in which no other speaker's caption may appear
+    minPieces: 6,
+    // evidence needed from one meeting before it counts
+    minSecs: 15,
+    readySecs: 45,
+    // total clean speech before a learned voice is used
+    readyMeetings: 2,
+    // and it must have been seen in this many different meetings
+    outlier: 0.35,
+    // pieces below this similarity to the person's own average are dropped
+    twin: 0.8,
+    // two names this similar are ambiguous
+    keep: 12
+    // individual fingerprints kept
+  };
+  var usableVoices = (people2) => (people2 || []).filter((p) => !p.auto || p.ready);
+  function unnamedGroups(meeting, people2, { max = 4, minSecs = 15, cap = 300 } = {}) {
+    const usable = usableVoices(people2);
+    const segs = (meeting.voiceSegs || []).filter((s) => !usable.length || !classify(unpack(s.e), usable).id);
+    if (segs.length < 4) return [];
+    const step = Math.max(1, Math.ceil(segs.length / cap));
+    const sample = segs.filter((_, i) => i % step === 0);
+    return clusterVoices(sample).filter((g) => g.seconds * step >= minSecs).slice(0, max).map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_, k) => k % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)) }));
+  }
+
   // src/voice/client.js
   function createVoiceClient({ workerUrl, modelUrl, wasmPaths, maxQueue = 24 }) {
     const worker = new Worker(workerUrl);
@@ -15058,43 +15200,6 @@ function out(o) {
       if (this.cur.length) this.close(true);
     }
   };
-
-  // src/voice/match.js
-  function cosine(a, b) {
-    let s = 0;
-    let na = 0;
-    let nb = 0;
-    for (let i = 0; i < a.length; i++) {
-      s += a[i] * b[i];
-      na += a[i] * a[i];
-      nb += b[i] * b[i];
-    }
-    return s / (Math.sqrt(na * nb) || 1);
-  }
-  function normalize(v) {
-    let n = 0;
-    for (const x of v) n += x * x;
-    n = Math.sqrt(n) || 1;
-    return Float32Array.from(v, (x) => x / n);
-  }
-  function mean(vectors) {
-    const out = new Float32Array(vectors[0].length);
-    for (const v of vectors) for (let i = 0; i < out.length; i++) out[i] += v[i];
-    return normalize(out);
-  }
-  function pack(emb) {
-    const bytes = new Int8Array(emb.length);
-    for (let i = 0; i < emb.length; i++) bytes[i] = Math.max(-127, Math.min(127, Math.round(emb[i] * 127)));
-    let bin = "";
-    for (const b of new Uint8Array(bytes.buffer)) bin += String.fromCharCode(b);
-    return btoa(bin);
-  }
-  function unpack(b64) {
-    const bin = atob(b64);
-    const out = new Float32Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = (bin.charCodeAt(i) << 24 >> 24) / 127;
-    return normalize(out);
-  }
 
   // src/voice/enrol.js
   var ENROL = {
@@ -15318,7 +15423,7 @@ function out(o) {
         const langs = (p.langs || [p.lang || "en"]).map((l) => LANG_NAME[l] || l).join(" + ");
         who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
         who.querySelector(".vn").textContent = p.name;
-        who.querySelector(".vm").textContent = `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
+        who.querySelector(".vm").textContent = p.auto ? `Learned from meetings \xB7 ${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech \xB7 ${p.ready ? "in use" : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
         const btn = (label, fn, danger) => {
           const b = Object.assign(document.createElement("button"), { className: "btn", textContent: label });
           if (danger) b.style.color = "#b91c1c";
@@ -15340,6 +15445,40 @@ function out(o) {
   async function refresh() {
     people = await getVoices();
     renderList();
+    renderUnnamed().catch(() => {
+    });
+  }
+  async function renderUnnamed() {
+    const meetings = (await listMeetings()).filter((m2) => (m2.voiceSegs || []).length >= 20).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    const m = meetings[0];
+    const groups = m ? unnamedGroups(m, people) : [];
+    $("unnamedCard").hidden = !groups.length;
+    $("unnamedList").replaceChildren(
+      ...groups.map((g, i) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)";
+        const label = document.createElement("div");
+        label.style.cssText = "flex:1;min-width:200px";
+        label.innerHTML = '<b></b><div class="hint" style="margin:2px 0 0"></div>';
+        label.querySelector("b").textContent = `Voice ${i + 1}`;
+        label.querySelector(".hint").textContent = `${g.seconds} s of speech \xB7 for example at ${g.at.map(fmtTime).join(", ")}`;
+        const input = Object.assign(document.createElement("input"), { placeholder: "Who is this?", maxLength: 60 });
+        input.style.cssText = "padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--field);width:200px";
+        const save3 = Object.assign(document.createElement("button"), { className: "btn", textContent: "Save this voice" });
+        save3.onclick = async () => {
+          try {
+            people = upsertPerson(people, { name: input.value, lang: "free", print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
+            await saveVoices(people);
+            renderList();
+            renderUnnamed();
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+        row.append(label, input, save3);
+        return row;
+      })
+    );
   }
   async function rename(p) {
     const name = prompt("New name", p.name);

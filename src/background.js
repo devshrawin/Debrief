@@ -1,8 +1,9 @@
 import { isIconText } from './iconText.js';
+import { learnFromMeeting } from './voice/learn.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
-import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState } from './store.js';
+import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState, saveVoices } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -130,6 +131,19 @@ async function startInner(msg) {
   return { ok: true };
 }
 
+// Opt-in: learn who is who from this meeting's captions and voice fingerprints (see voice/learn.js).
+async function learnVoices(meetingId) {
+  const s = await getSettings();
+  if (!s.voiceLearn) return;
+  const m = await getMeeting(meetingId);
+  if (!m) return;
+  const r = learnFromMeeting(m, s.voices || [], { myName: s.myName });
+  if (r.changed) await saveVoices(r.list);
+  await updateMeeting(meetingId, (mm) => {
+    mm.voiceLearn = r.report;
+  });
+}
+
 let stopping = null;
 function stop(opts = {}) {
   // Popup click, tab close, and track-ended can all fire; only stop once.
@@ -144,6 +158,7 @@ function stop(opts = {}) {
       await chrome.runtime.sendMessage({ target: 'offscreen', type: 'stop' });
     } catch {}
     await updateMeeting(st.meetingId, (m) => (m.endedAt = Date.now()));
+    await learnVoices(st.meetingId).catch(() => {});
     await closeOffscreen();
     await mutateState(() => ({ recording: false }));
     chrome.action.setBadgeText({ text: '' });

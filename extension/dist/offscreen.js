@@ -130,6 +130,8 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceLearn: false,
+    // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -758,7 +760,7 @@
       rec.chunkers.me = new Chunker("me", onChunk, chunkSize(settings, onSkip));
       await tap(ctx, micStream, (b) => rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length)));
     }
-    if (settings.voiceOn && (settings.voices || []).length) {
+    if (settings.voiceOn && (settings.voices || []).length || settings.voiceLearn) {
       rec.voice = await startVoice(meetingId).catch(() => null);
       chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: rec.voice ? "voice recognition: on" : "voice recognition: could not start (recording continues without it)" });
     }

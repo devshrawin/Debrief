@@ -2,6 +2,147 @@
   // src/iconText.js
   var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
 
+  // src/voice/match.js
+  function cosine(a, b) {
+    let s = 0;
+    let na = 0;
+    let nb = 0;
+    for (let i = 0; i < a.length; i++) {
+      s += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    return s / (Math.sqrt(na * nb) || 1);
+  }
+  function normalize(v) {
+    let n = 0;
+    for (const x of v) n += x * x;
+    n = Math.sqrt(n) || 1;
+    return Float32Array.from(v, (x) => x / n);
+  }
+  function mean(vectors) {
+    const out = new Float32Array(vectors[0].length);
+    for (const v of vectors) for (let i = 0; i < out.length; i++) out[i] += v[i];
+    return normalize(out);
+  }
+  function pack(emb) {
+    const bytes = new Int8Array(emb.length);
+    for (let i = 0; i < emb.length; i++) bytes[i] = Math.max(-127, Math.min(127, Math.round(emb[i] * 127)));
+    let bin = "";
+    for (const b of new Uint8Array(bytes.buffer)) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+  function unpack(b64) {
+    const bin = atob(b64);
+    const out = new Float32Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = (bin.charCodeAt(i) << 24 >> 24) / 127;
+    return normalize(out);
+  }
+
+  // src/voice/learn.js
+  var LEARN = {
+    lead: 2,
+    // seconds a caption may lag behind the speech (the speech started this much before it showed)
+    tail: 1,
+    clear: 1.5,
+    // seconds around a piece in which no other speaker's caption may appear
+    minPieces: 6,
+    // evidence needed from one meeting before it counts
+    minSecs: 15,
+    readySecs: 45,
+    // total clean speech before a learned voice is used
+    readyMeetings: 2,
+    // and it must have been seen in this many different meetings
+    outlier: 0.35,
+    // pieces below this similarity to the person's own average are dropped
+    twin: 0.8,
+    // two names this similar are ambiguous
+    keep: 12
+    // individual fingerprints kept
+  };
+  var norm = (n) => String(n || "").toLowerCase().replace(/\s+/g, " ").trim();
+  var isMe = (n, myName) => /^you$/i.test(String(n).trim()) || myName && norm(n) === norm(myName);
+  function evidence(meeting, { myName = "" } = {}) {
+    const caps = (meeting.captions || []).filter((c) => c.name && !isIconText(c.name) && !isMe(c.name, myName));
+    const all = (meeting.captions || []).filter((c) => c.name && !isIconText(c.name));
+    const out = /* @__PURE__ */ new Map();
+    for (const s of meeting.voiceSegs || []) {
+      const mine = caps.filter((c) => c.t - LEARN.lead <= s.t0 && (c.t2 ?? c.t) + LEARN.tail >= s.t1);
+      if (new Set(mine.map((c) => norm(c.name))).size !== 1) continue;
+      const who = norm(mine[0].name);
+      const crowded = all.some((c) => norm(c.name) !== who && c.t - LEARN.lead - LEARN.clear <= s.t1 && (c.t2 ?? c.t) + LEARN.tail + LEARN.clear >= s.t0);
+      if (crowded) continue;
+      if (!out.has(who)) out.set(who, { name: mine[0].name, segs: [] });
+      out.get(who).segs.push(s);
+    }
+    return out;
+  }
+  function cleaned(segs) {
+    let vecs = segs.map((s) => ({ s, v: unpack(s.e) }));
+    for (let pass = 0; pass < 2 && vecs.length >= LEARN.minPieces; pass++) {
+      const c = mean(vecs.map((x) => x.v));
+      const kept = vecs.filter((x) => cosine(x.v, c) >= LEARN.outlier);
+      if (kept.length === vecs.length) break;
+      vecs = kept;
+    }
+    return vecs;
+  }
+  function learnFromMeeting(meeting, people, { myName = "" } = {}) {
+    const report = { meeting: meeting.id, learned: [], skipped: [] };
+    if (!meeting?.voiceSegs?.length || !meeting?.captions?.length) {
+      report.skipped.push({ why: !meeting?.captions?.length ? "no captions were read in this meeting" : "no voice pieces were recorded" });
+      return { list: people, changed: false, report };
+    }
+    const ev = evidence(meeting, { myName });
+    const found = [];
+    for (const [key2, { name, segs }] of ev) {
+      const vecs = cleaned(segs);
+      const secs = vecs.reduce((a, x) => a + (x.s.t1 - x.s.t0), 0);
+      if (vecs.length < LEARN.minPieces || secs < LEARN.minSecs) {
+        report.skipped.push({ name, why: `only ${vecs.length} clean pieces (${secs.toFixed(0)} s)` });
+        continue;
+      }
+      found.push({ key: key2, name, vecs, secs, centroid: mean(vecs.map((x) => x.v)) });
+    }
+    const bad = /* @__PURE__ */ new Set();
+    for (let i = 0; i < found.length; i++) for (let j = i + 1; j < found.length; j++) if (cosine(found[i].centroid, found[j].centroid) >= LEARN.twin) bad.add(i), bad.add(j);
+    let list = [...people];
+    found.forEach((f, i) => {
+      if (bad.has(i)) {
+        report.skipped.push({ name: f.name, why: "another speaker in this meeting sounded the same, so it was unclear who was who" });
+        return;
+      }
+      const idx = list.findIndex((p) => norm(p.name) === f.key);
+      const existing = idx >= 0 ? list[idx] : null;
+      if (existing && !existing.auto) {
+        report.skipped.push({ name: f.name, why: "you recorded this voice yourself, so it is left as it is" });
+        return;
+      }
+      const rival = list.find((p) => p !== existing && (!p.auto || p.ready) && cosine(unpack(p.centroid), f.centroid) >= LEARN.twin && norm(p.name) !== f.key);
+      if (rival) {
+        report.skipped.push({ name: f.name, why: `sounds the same as ${rival.name}, so it was not learned` });
+        return;
+      }
+      if (existing?.learnedFrom?.includes(meeting.id)) return;
+      const step = Math.max(1, Math.floor(f.vecs.length / LEARN.keep));
+      const fresh = f.vecs.filter((_, k) => k % step === 0).map((x) => pack(x.v)).slice(0, LEARN.keep);
+      let rec;
+      if (existing) {
+        const w = existing.secs || 1;
+        const c = mean([scale(unpack(existing.centroid), w), scale(f.centroid, f.secs)]);
+        rec = { ...existing, centroid: pack(c), windows: [...existing.windows || [], ...fresh].slice(-LEARN.keep * 2), secs: Math.round(w + f.secs), meetings: (existing.meetings || 1) + 1, learnedFrom: [...existing.learnedFrom || [], meeting.id].slice(-50), updated: Date.now() };
+      } else {
+        rec = { id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: f.name, lang: "free", langs: ["free"], centroid: pack(f.centroid), windows: fresh, secs: Math.round(f.secs), meetings: 1, auto: true, learnedFrom: [meeting.id], created: Date.now() };
+      }
+      rec.ready = rec.secs >= LEARN.readySecs && rec.meetings >= LEARN.readyMeetings;
+      if (existing) list[idx] = rec;
+      else list = [...list, rec];
+      report.learned.push({ name: f.name, secs: Math.round(f.secs), total: rec.secs, ready: rec.ready, isNew: !existing });
+    });
+    return { list, changed: report.learned.length > 0, report };
+  }
+  var scale = (v, k) => Float32Array.from(v, (x) => x * k);
+
   // src/alerts.js
   function classifyError(err) {
     const e = String(err || "");
@@ -110,6 +251,8 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
+    voiceLearn: false,
+    // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -174,6 +317,9 @@
     const { settings } = await chrome.storage.local.get("settings");
     const { learnedNames, voices, ...clean } = patch;
     await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
+  }
+  async function saveVoices(list) {
+    await chrome.storage.local.set({ voices: list });
   }
 
   // src/background.js
@@ -283,6 +429,17 @@
     chrome.action.setBadgeText({ tabId: msg.tabId, text: "REC" });
     return { ok: true };
   }
+  async function learnVoices(meetingId) {
+    const s = await getSettings();
+    if (!s.voiceLearn) return;
+    const m = await getMeeting(meetingId);
+    if (!m) return;
+    const r = learnFromMeeting(m, s.voices || [], { myName: s.myName });
+    if (r.changed) await saveVoices(r.list);
+    await updateMeeting(meetingId, (mm) => {
+      mm.voiceLearn = r.report;
+    });
+  }
   var stopping = null;
   function stop(opts = {}) {
     stopping ||= (async () => {
@@ -297,6 +454,8 @@
       } catch {
       }
       await updateMeeting(st.meetingId, (m) => m.endedAt = Date.now());
+      await learnVoices(st.meetingId).catch(() => {
+      });
       await closeOffscreen();
       await mutateState(() => ({ recording: false }));
       chrome.action.setBadgeText({ text: "" });

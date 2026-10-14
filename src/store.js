@@ -30,6 +30,7 @@ export const DEFAULTS = {
   meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
   otherSites: true, // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
   voiceOn: false, // recognise who is speaking, using voices enrolled in Settings
+  voiceLearn: false, // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
 
