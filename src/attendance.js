@@ -3,7 +3,7 @@
 // invited: [{ name?, email?, status? }]       from the calendar event (status: yes / no / maybe / invited)
 // presence: { "Display name": [firstSeenSec, lastSeenSec, samples] }   sampled from Meet while recording
 
-const norm = (s) => String(s || '').toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+const norm = (s) => String(s || '').toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 const tokens = (s) => norm(s).split(' ').filter(Boolean);
 
 function lev1(a, b) {
@@ -32,27 +32,41 @@ function identities(p, entries = []) {
   return [...ids];
 }
 
+// 1 = same name. Two different people must never be merged: a one-letter-off first name only counts
+// when the surnames agree, and a different surname is a different person.
 function score(a, b) {
   if (a === b) return 1;
   const ta = a.split(' ');
   const tb = b.split(' ');
   const fa = ta[0];
   const fb = tb[0];
-  const sameFirst = fa === fb || lev1(fa, fb);
-  if (!sameFirst) return 0;
-  if (ta.length === 1 || tb.length === 1) return fa === fb ? 0.7 : 0.55;
-  // "Aman S." vs "Aman Sharma": the later words match by prefix.
+  const sameFirst = fa === fb;
+  const closeFirst = !sameFirst && lev1(fa, fb);
+  if (!sameFirst && !closeFirst) return 0;
+  if (ta.length === 1 || tb.length === 1) return sameFirst ? 0.7 : 0; // first name only: handled with an ambiguity check
+  // "Aman S." vs "Aman Sharma": every later word of one must be a prefix of a word of the other.
   const rest = (x, y) => x.slice(1).every((w) => y.slice(1).some((v) => v === w || v.startsWith(w) || w.startsWith(v)));
-  return rest(ta, tb) || rest(tb, ta) ? 0.9 : 0.6;
+  const surnames = rest(ta, tb) || rest(tb, ta);
+  if (!surnames) return 0;
+  return sameFirst ? 0.9 : 0.6;
 }
 
 export function matchPeople(invited, presence, { entries = [], myName = '' } = {}) {
-  const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && myName ? myName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
+  // "You" is the person running Debrief: their name if known, else the organiser of the invite.
+  const owner = (invited || []).find((p) => p.status === 'owner');
+  const selfName = myName || owner?.name || owner?.email || '';
+  const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
   const rows = (invited || []).map((p) => ({ ...p, ids: identities(p, entries), match: null }));
   const pairs = [];
   rows.forEach((r, ri) => here.forEach((h, hi) => {
     const hid = identities({ name: h.name }, entries);
-    const best = Math.max(0, ...r.ids.flatMap((a) => hid.map((b) => score(a, b))));
+    let best = Math.max(0, ...r.ids.flatMap((a) => hid.map((b) => score(a, b))));
+    // A bare first name is only evidence if no other invitee shares that first name.
+    if (best > 0 && best < 0.9) {
+      const first = hid[0]?.split(' ')[0];
+      const sharing = rows.filter((x) => x.ids.some((id) => id.split(' ')[0] === first)).length;
+      if (sharing > 1) best = 0;
+    }
     if (best >= 0.55) pairs.push({ ri, hi, best });
   }));
   pairs.sort((a, b) => b.best - a.best);

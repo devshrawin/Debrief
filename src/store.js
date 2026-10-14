@@ -5,6 +5,7 @@ export const DEFAULTS = {
   captureMic: true,
   meetingLanguage: 'auto', // auto | hinglish | malayalam
   pillOnPage: false, // also show the pill inside the Meet page
+  emailSecret: '', // made up by Debrief, never typed; the relay script locks itself to it on first use
   emailWebhook: '', // Google Apps Script web app URL (apps-script/Code.gs)
   emailTo: '', // optional; the script only allows you and its ALLOWED list
   emailAuto: true, // email the MOM as soon as it is written
@@ -135,4 +136,22 @@ export function errorDetail(text) {
   } catch {
     return text;
   }
+}
+
+// Writes only the given keys into the stored settings. Pages that hold an old copy of the settings
+// (a tour, a settings tab, a minutes tab left open) must never save the whole copy back.
+export async function setSetting(patch) {
+  const { settings } = await chrome.storage.local.get('settings');
+  const { learnedNames, ...clean } = patch;
+  await chrome.storage.local.set({ settings: { ...(settings || {}), ...clean } });
+}
+
+// The relay secret: random, created once, stored with the settings, never shown.
+export async function ensureEmailSecret() {
+  const { settings } = await chrome.storage.local.get('settings');
+  if (settings?.emailSecret) return settings.emailSecret;
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const secret = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  await chrome.storage.local.set({ settings: { ...(settings || {}), emailSecret: secret } });
+  return secret;
 }

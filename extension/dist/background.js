@@ -57,6 +57,8 @@
     // auto | hinglish | malayalam
     pillOnPage: false,
     // also show the pill inside the Meet page
+    emailSecret: "",
+    // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
     emailTo: "",
@@ -136,10 +138,6 @@
     const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames };
   }
-  async function saveSettings(s) {
-    const { learnedNames, ...own } = s;
-    await chrome.storage.local.set({ settings: own });
-  }
   function sttReady(s) {
     if (s.sttProvider === "gemini") return !!s.geminiKey && !!s.sttGeminiModel;
     if (s.sttProvider === "sarvam") return !!s.sarvamKey;
@@ -165,12 +163,16 @@
   async function setState(rec) {
     await chrome.storage.session.set({ rec });
   }
+  async function setSetting(patch) {
+    const { settings } = await chrome.storage.local.get("settings");
+    const { learnedNames, ...clean } = patch;
+    await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
+  }
 
   // src/background.js
   chrome.runtime.onInstalled.addListener((d) => {
     if (d.reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html?restart=1") });
   });
-  chrome.storage.session.setAccessOptions?.({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" });
   var chain = Promise.resolve();
   var serial = (fn) => {
     const p = chain.then(fn, fn);
@@ -178,6 +180,11 @@
     });
     return p;
   };
+  var mutateState = (fn) => serial(async () => {
+    const next = await fn(await getState());
+    if (next) await setState(next);
+    return next;
+  });
   async function updateMeeting(id, fn) {
     return serial(async () => {
       const m = await getMeeting(id);
@@ -189,10 +196,12 @@
   async function raiseAlert(meetingId, err) {
     const a = classifyError(err);
     if (!a) return;
-    const st = await getState();
-    if (!st.recording) return;
-    const fresh = !st.alert || st.alert.kind !== a.kind || Date.now() - st.alert.notifiedAt > 10 * 60 * 1e3;
-    await setState({ ...st, alert: { ...a, at: Date.now(), notifiedAt: fresh ? Date.now() : st.alert.notifiedAt } });
+    let fresh = false;
+    await mutateState((st) => {
+      if (!st.recording || st.stopping) return null;
+      fresh = !st.alert || st.alert.kind !== a.kind || Date.now() - st.alert.notifiedAt > 10 * 60 * 1e3;
+      return { ...st, alert: { ...a, at: Date.now(), notifiedAt: fresh ? Date.now() : st.alert.notifiedAt } };
+    });
     if (fresh) {
       chrome.notifications?.create(`debrief-${a.kind}`, {
         type: "basic",
@@ -204,8 +213,7 @@
     }
   }
   async function clearAlert() {
-    const st = await getState();
-    if (st.alert) await setState({ ...st, alert: null });
+    await mutateState((st) => st.alert ? { ...st, alert: null } : null);
   }
   async function ensureOffscreen() {
     const ctxs = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
@@ -221,7 +229,17 @@
     if (ctxs.length) await chrome.offscreen.closeDocument();
   }
   var cleanTitle = (t = "") => t.replace(/^Meet\s*[-–]\s*/i, "").replace(/\s*[-–]\s*Google Meet$/i, "").trim() || "Meeting";
+  var starting = false;
   async function start(msg) {
+    if (starting) return { ok: false, error: "A recording is already starting." };
+    starting = true;
+    try {
+      return await startInner(msg);
+    } finally {
+      starting = false;
+    }
+  }
+  async function startInner(msg) {
     const st = await getState();
     if (st.recording) return { ok: false, error: "Already recording another tab." };
     const settings = await getSettings();
@@ -239,7 +257,7 @@
     });
     await addMeetingId(id);
     await ensureOffscreen();
-    const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "start", streamId: msg.streamId, settings, meetingId: id });
+    const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "start", streamId: msg.streamId, settings, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
     if (!r?.ok) {
       await closeOffscreen();
       await updateMeeting(id, (m) => {
@@ -248,8 +266,8 @@
       });
       return { ok: false, error: r?.error || "Recorder did not start." };
     }
-    await setState({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || "").match(MEET_CODE)?.[0] || null });
-    await chrome.storage.session.set({ quietSince: Date.now() });
+    await mutateState(() => ({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || "").match(MEET_CODE)?.[0] || null }));
+    await chrome.storage.session.set({ quietSince: null, heard: false });
     chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ["dist/pill.js"] }).catch(() => {
     });
     chrome.action.setBadgeBackgroundColor({ color: "#d93025" });
@@ -261,16 +279,19 @@
   var stopping = null;
   function stop(opts = {}) {
     stopping ||= (async () => {
-      const st = await getState();
-      if (!st.recording) return { ok: true };
-      await setState({ ...st, stopping: true });
+      let st;
+      await mutateState((cur) => {
+        st = cur;
+        return cur.recording && !cur.stopping ? { ...cur, stopping: true } : null;
+      });
+      if (!st?.recording) return { ok: true };
       try {
         await chrome.runtime.sendMessage({ target: "offscreen", type: "stop" });
       } catch {
       }
       await updateMeeting(st.meetingId, (m) => m.endedAt = Date.now());
       await closeOffscreen();
-      await setState({ recording: false });
+      await mutateState(() => ({ recording: false }));
       chrome.action.setBadgeText({ text: "" });
       chrome.action.setBadgeText({ tabId: st.tabId, text: "" }).catch(() => {
       });
@@ -280,17 +301,25 @@
     return stopping;
   }
   async function applyMic(patch = {}) {
-    const st = { ...await getState(), ...patch };
-    if (!st.recording || st.stopping) return { ok: false };
     const { followMeetMute } = await getSettings();
-    const eff = !!st.micWanted && !!st.mic && !(followMeetMute && st.meetMuted === true);
-    let micOn = st.micOn;
-    if (eff !== !!st.micOn) {
-      const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "mic", on: eff });
+    let eff = false;
+    let changed = false;
+    let cur = null;
+    await mutateState((st) => {
+      if (!st.recording || st.stopping) return null;
+      cur = { ...st, ...patch };
+      eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && cur.meetMuted === true);
+      changed = eff !== !!st.micOn;
+      return cur;
+    });
+    if (!cur) return { ok: false };
+    let micOn = cur.micOn;
+    if (changed) {
+      const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "mic", on: eff }).catch(() => null);
       micOn = r?.micOn ?? false;
+      await mutateState((st) => st.recording && !st.stopping ? { ...st, micOn } : null);
     }
-    await setState({ ...st, micOn });
-    return { ok: true, micOn, micWanted: !!st.micWanted };
+    return { ok: true, micOn, micWanted: !!cur.micWanted };
   }
   async function autoStop(reason) {
     const st = await getState();
@@ -304,8 +333,12 @@
       message: `${reason} Writing the minutes now.`
     });
   }
+  var PAGE_MAY = /* @__PURE__ */ new Set(["whoami", "meet-mute", "meet-ended", "meet-snap", "in-call", "pill-state", "mic", "stop", "set-follow", "dismiss-alert"]);
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.target !== "bg") return;
+    if (sender.id !== chrome.runtime.id) return;
+    const ownPage = !sender.tab || (sender.url || "").startsWith(chrome.runtime.getURL(""));
+    if (!ownPage && !PAGE_MAY.has(msg.type)) return;
     const handlers = {
       start: () => start(msg),
       stop: () => stop(),
@@ -316,11 +349,12 @@
       level: async () => {
         await chrome.storage.session.set({ levels: { tab: msg.tab, mic: msg.mic, ctx: msg.ctx, at: Date.now() } });
         const now = Date.now();
-        const { quietSince } = await chrome.storage.session.get("quietSince");
-        if (Math.max(msg.tab || 0, msg.mic || 0) >= 0.012 || !quietSince) {
-          await chrome.storage.session.set({ quietSince: now });
+        if (Math.max(msg.tab || 0, msg.mic || 0) >= 0.012) {
+          await chrome.storage.session.set({ quietSince: now, heard: true });
           return;
         }
+        const { quietSince, heard } = await chrome.storage.session.get(["quietSince", "heard"]);
+        if (!heard || !quietSince) return;
         const s = await getSettings();
         const mins = Number(s.autoStopQuietMin);
         if (s.autoStop !== false && mins > 0 && now - quietSince > mins * 6e4) await autoStop(`It was silent for ${mins} minutes.`);
@@ -368,7 +402,11 @@
           const caps = m.captions ||= [];
           for (const c of msg.captions || []) {
             const name = who(c.name);
-            const last = [...caps].reverse().find((x) => x.name === name);
+            let last = null;
+            for (let i = caps.length - 1; i >= 0 && i > caps.length - 40; i--) if (caps[i].name === name) {
+              last = caps[i];
+              break;
+            }
             if (last && c.t - last.t2 < 15 && (c.text.startsWith(last.text) || last.text.startsWith(c.text) || last.text.slice(0, 20) === c.text.slice(0, 20))) {
               last.text = c.text.length >= last.text.length ? c.text : last.text;
               last.t2 = c.t;
@@ -395,7 +433,7 @@
       },
       "dismiss-alert": () => clearAlert(),
       "set-follow": async () => {
-        await saveSettings({ ...await getSettings(), followMeetMute: !!msg.on });
+        await setSetting({ followMeetMute: !!msg.on });
         return applyMic();
       },
       "pill-state": async () => {

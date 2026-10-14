@@ -60,13 +60,14 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   onStatus('Writing the minutes…');
   stats.calls++;
   let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText));
+  if (!mom) throw new Error('The model returned an empty reply. Try again, or choose another model in Settings.');
 
   if (thorough && words <= (local ? 6000 : 24000)) {
     onStatus('Checking nothing was left out…');
     try {
       stats.calls++;
       const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom));
-      const missing = sanitizeMinutes(out).split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => l && !/^NONE\b/i.test(l));
+      const missing = sanitizeMinutes(out).split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => /^\[?\d{1,2}:\d{2}/.test(l)); // only real findings: a timestamp first; chatter like "Nothing is missing" is dropped
       stats.missed = missing.length;
       if (missing.length) {
         mom += `\n\n## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;

@@ -74,24 +74,28 @@ await test('share: the relay gets to, cc, bcc and the mail; calendar lookup send
 });
 
 // ---- the relay script, run against stand-ins for Google's services ----
+const SECRET = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+
 function loadScript(patch = (s) => s, events = []) {
   const src = patch(fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8'));
   const sent = [];
+  const props = {};
   const env = {
     Session: { getEffectiveUser: () => ({ getEmail: () => 'Me@Co.com' }) },
     MailApp: { sendEmail: (o) => sent.push(o), getRemainingDailyQuota: () => 100 },
     Utilities: { newBlob: (b, mime, name) => ({ b, mime, name, getAs(t) { return { ...this, mime: t, setName(n) { this.name = n; return this; } }; } }), base64Decode: (s) => s },
     ContentService: { createTextOutput: (t) => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
     CalendarApp: { getDefaultCalendar: () => ({ getEvents: () => events }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : null), setProperty: (k, v) => (props[k] = v), deleteProperty: (k) => delete props[k] }) },
   };
-  const api = new Function(...Object.keys(env), `${src}; return { doPost, doGet };`)(...Object.values(env));
-  const post = (o) => JSON.parse(api.doPost({ postData: { contents: JSON.stringify(o) } }).t);
-  return { api, post, sent };
+  const api = new Function(...Object.keys(env), `${src}; return { doPost, doGet, resetSecret };`)(...Object.values(env));
+  const post = (o, secret = SECRET) => JSON.parse(api.doPost({ postData: { contents: JSON.stringify({ secret, ...o }) } }).t);
+  return { api, post, sent, props };
 }
 
-await test('script v5: owner by default, allowed people and domains only, cc/bcc, reply-to', () => {
+await test('script v6: owner by default, allowed people and domains only, cc/bcc, reply-to', () => {
   const { post, sent, api } = loadScript((s) => s.replace('const ALLOWED = [];', "const ALLOWED = ['team@co.com'];").replace('const ALLOWED_DOMAINS = [];', "const ALLOWED_DOMAINS = ['corp.com'];"));
-  assert.equal(JSON.parse(api.doGet().t).version, 5);
+  assert.equal(JSON.parse(api.doGet().t).version, 6);
   assert.equal(post({ subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
   const r = post({ to: 'team@co.com, evil@bad.com, anyone@corp.com', cc: 'x@corp.com', bcc: 'who@else.com', subject: 's' });
   assert.equal(r.to, 'team@co.com,anyone@corp.com');
@@ -104,16 +108,16 @@ await test('script v5: owner by default, allowed people and domains only, cc/bcc
   assert.equal(post({ to: 'evil@bad.com', subject: 's' }).to, 'Me@Co.com', 'a disallowed only-recipient falls back to the owner');
 });
 
-await test('script v5: bcc-only share still goes out and the owner is not forced into To', () => {
+await test('script v6: bcc-only share still goes out and the owner is not forced into To', () => {
   const { post, sent } = loadScript((s) => s.replace('const ALLOWED = [];', "const ALLOWED = ['team@co.com'];"));
   const r = post({ bcc: 'team@co.com', subject: 's' });
   assert.equal(r.ok, true);
   assert.equal(sent.at(-1).bcc, 'team@co.com');
 });
 
-await test('script v5: calendar lookup finds the event by Meet code, else by title', () => {
+await test('script v6: calendar lookup finds the event by Meet code, else by title', () => {
   const guest = (email, name, status) => ({ getEmail: () => email, getName: () => name, getGuestStatus: () => status });
-  const ev = (title, where, guests) => ({ getTitle: () => title, getLocation: () => '', getDescription: () => where, getGuestList: () => guests });
+  const ev = (title, where, guests, startMs = Date.now()) => ({ getTitle: () => title, getLocation: () => '', getDescription: () => where, getGuestList: () => guests, getStartTime: () => ({ getTime: () => startMs }) });
   const events = [
     ev('Other', 'meet.google.com/zzz-zzzz-zzz', [guest('o@x.com', 'O', 'YES')]),
     ev('Cadence', 'Join: https://meet.google.com/abc-defg-hij', [guest('amal@co.com', 'Amal Raj', 'YES'), guest('p@co.com', '', 'NO'), guest('r@co.com', 'Ravi', 'MAYBE'), guest('q@co.com', 'Q', 'INVITED')]),
@@ -122,18 +126,74 @@ await test('script v5: calendar lookup finds the event by Meet code, else by tit
   const r = post({ action: 'invitees', code: 'abc-defg-hij', title: 'x', start: Date.now(), end: Date.now() });
   assert.equal(r.found, true);
   assert.deepEqual(r.guests.map((g) => [g.email, g.status]), [['amal@co.com', 'yes'], ['p@co.com', 'no'], ['r@co.com', 'maybe'], ['q@co.com', 'invited'], ['Me@Co.com', 'owner']]);
-  const byTitle = post({ action: 'invitees', code: 'nope-nope-nop', title: 'cadence', start: 0, end: 0 });
+  const byTitle = post({ action: 'invitees', code: '', title: 'cadence', start: Date.now(), end: Date.now() });
   assert.equal(byTitle.found, true);
-  assert.equal(post({ action: 'invitees', code: 'nope-nope-nop', title: 'nothing', start: 0, end: 0 }).found, false);
+  assert.equal(post({ action: 'invitees', code: '', title: 'nothing', start: Date.now(), end: Date.now() }).found, false);
 });
 
-await test('script v5: PDF attachments are built from HTML', () => {
+await test('script v6: PDF attachments are built from HTML', () => {
   const { post, sent } = loadScript();
   post({ subject: 's', attachments: [{ name: 'MOM.pdf', fromHtml: '<h1>x</h1>' }, { name: 'a.md', mime: 'text/markdown', base64: 'abc' }] });
   const att = sent.at(-1).attachments;
   assert.equal(att[0].mime, 'application/pdf');
   assert.equal(att[0].name, 'MOM.pdf');
   assert.equal(att[1].name, 'a.md');
+});
+
+await test('script v6: locks to the first secret, refuses others, can be reset', () => {
+  const { post, sent, props, api } = loadScript();
+  assert.equal(JSON.parse(api.doGet().t).locked, false);
+  assert.equal(post({ subject: 's' }, 'short').ok, false, 'a short secret cannot claim the script');
+  assert.equal(post({ subject: 's' }).ok, true, 'the first long secret claims it');
+  assert.equal(JSON.parse(api.doGet().t).locked, true);
+  const bad = post({ subject: 'spam', html: '<b>phish</b>' }, 'f'.repeat(32));
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /locked/);
+  assert.equal(sent.length, 1, 'the refused request sent nothing');
+  assert.equal(post({ action: 'invitees', code: 'abc-defg-hij', start: Date.now(), end: Date.now() }, 'f'.repeat(32)).ok, false, 'the calendar lookup is locked too');
+  assert.equal(post({ subject: 'again' }).ok, true);
+  api.resetSecret();
+  assert.equal(props.secret, undefined);
+  assert.equal(post({ subject: 'new owner' }, 'f'.repeat(32)).ok, true, 'after a reset the next install can claim it');
+});
+
+await test('script v6: addresses must be exactly one clean address', () => {
+  const { post } = loadScript((s) => s.replace('const ALLOWED_DOMAINS = [];', "const ALLOWED_DOMAINS = ['co.com'];"));
+  const r = post({ to: 'ok@co.com, a@co.com@evil.com, "x"@co.com, <b@co.com>, c@co.com;d@co.com', subject: 's' });
+  assert.equal(r.to, 'ok@co.com');
+  assert.ok(r.skipped.length >= 4);
+});
+
+await test('script v6: calendar lookup needs an exact Meet code, caps the window, never returns event text, picks the nearest event', () => {
+  const guest = (email, status) => ({ getEmail: () => email, getName: () => '', getGuestStatus: () => status });
+  const now = Date.now();
+  const ev = (title, where, guests, startMs) => ({ getTitle: () => title, getLocation: () => '', getDescription: () => where, getGuestList: () => guests, getStartTime: () => ({ getTime: () => startMs }) });
+  const asked = [];
+  const events = [ev('Secret board meeting', 'meet.google.com/abc-defg-hij', [guest('old@x.com', 'YES')], now - 40 * 60000), ev('Secret board meeting', 'meet.google.com/abc-defg-hij', [guest('near@x.com', 'OWNER')], now - 2 * 60000)];
+  const { post } = loadScript((s) => s, events);
+  assert.equal(post({ action: 'invitees', code: 'a', start: now, end: now }).found, false, 'a fragment of a code matches nothing');
+  const r = post({ action: 'invitees', code: 'abc-defg-hij', start: now, end: now });
+  assert.deepEqual(r.guests.map((g) => [g.email, g.status]), [['near@x.com', 'owner'], ['Me@Co.com', 'owner']]);
+  assert.equal(JSON.stringify(r).includes('Secret board'), false, 'no event title leaves the script');
+  assert.equal(post({ action: 'invitees', code: 'abc-defg-hij', start: -1, end: now }).found, false);
+});
+
+await test('script v6: remote resources are stripped from the PDF page', () => {
+  const html = '<h1>x</h1><img src="https://evil.example/?d=1"><div style="background:url(https://evil.example/a)">y</div><link rel="stylesheet" href="https://evil.example/c.css">';
+  const fn = (s) => s.replace('return out({ ok: true, to: options.to,', 'return out({ ok: true, to: options.to, stripped: stripRemote(String(d.attachments && d.attachments[0] && d.attachments[0].fromHtml || "")),');
+  const { post } = loadScript(fn);
+  const r = post({ subject: 's', attachments: [{ name: 'a.pdf', fromHtml: html }] });
+  assert.doesNotMatch(r.stripped, /evil\.example|<img|<link/);
+  assert.match(r.stripped, /<h1>x<\/h1>/);
+});
+
+await test('mailer: every relay call carries the secret, and the relay lock message is shown as is', async () => {
+  calls = [];
+  responder = () => new Response(JSON.stringify({ ok: true, to: 'me@x.com' }));
+  await M.sendMail({ subject: 's', html: 'h', text: 't', attachments: [] }, { ...settings, emailSecret: 'z'.repeat(40) });
+  assert.equal(JSON.parse(await calls[0].req.text()).secret, 'z'.repeat(40));
+  responder = () => new Response(JSON.stringify({ ok: false, error: 'This script is locked to a different Debrief install.' }));
+  await assert.rejects(() => M.sendMail({}, { ...settings, emailSecret: 'z'.repeat(40) }), /locked to a different Debrief install/);
 });
 
 console.log(`\n${passed} passed`);

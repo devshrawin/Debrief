@@ -1,6 +1,6 @@
 // First-run tour: teaches Debrief step by step, saves each answer, and tests the pieces that can be tested
 // (the Gemini key, the microphone, the email relay) so the user finds out now, not in the middle of a meeting.
-import { getSettings, saveSettings, DEFAULTS } from './store.js';
+import { getSettings, setSetting, DEFAULTS } from './store.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady, scriptWithAllowList, parseAddresses } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
@@ -34,10 +34,12 @@ const say = (el, text, kind) => {
   el.className = `status ${kind || ''}`;
 };
 
+// Writes only the keys given, on top of what is stored now, so an older copy of the settings held by this
+// page can never overwrite changes made elsewhere.
 async function patch(obj) {
   S = { ...S, ...obj };
-  const { shareAutoFlag, ...clean } = S; // shareAutoFlag is only a view of shareMode
-  await saveSettings(clean);
+  const { shareAutoFlag, ...clean } = obj; // shareAutoFlag is only a view of shareMode
+  await setSetting(clean);
 }
 async function saveTour() {
   await chrome.storage.local.set({ tour });

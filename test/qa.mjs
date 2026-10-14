@@ -1,0 +1,144 @@
+// Regression tests for defects found in the full QA pass. Each test is a case that failed before the fix.
+import assert from 'node:assert/strict';
+import { DEFAULTS } from '../src/store.js';
+
+let passed = 0;
+async function test(name, fn) {
+  try {
+    await fn();
+    passed++;
+    console.log(`ok   ${name}`);
+  } catch (e) {
+    console.log(`FAIL ${name}\n     ${e.stack.split('\n').slice(0, 4).join('\n     ')}`);
+    process.exitCode = 1;
+  }
+}
+
+const D = await import('../src/dictionary.js');
+const A = await import('../src/attendance.js');
+const P = await import('../src/prompt.js');
+const M = await import('../src/mailer.js');
+const { writeMinutes } = await import('../src/minutes.js');
+
+// ---- dictionary ----
+await test('dictionary: Devanagari and Malayalam words are not cut at vowel signs', () => {
+  assert.equal(D.applyDictionary('रामू और किराम', D.parseDictionary('Ram | राम')), 'रामू और किराम');
+  assert.equal(D.applyDictionary('राम आया', D.parseDictionary('Ram | राम')), 'Ram आया');
+  assert.equal(D.applyDictionary('ദീപു വന്നു', D.parseDictionary('Deepa | ദീപ')), 'ദീപു വന്നു');
+  assert.equal(D.replaceWord('रामू राम', 'राम', 'Ram'), 'रामू Ram');
+});
+
+await test('dictionary: replacement text is literal, never a $ pattern', () => {
+  assert.equal(D.replaceWord('hi Amal', 'Amal', '$&$&'), 'hi $&$&');
+  assert.equal(D.applyDictionary('amaal here', D.parseDictionary('R$&D | amaal')), 'R$&D here');
+});
+
+await test('dictionary: one correction is never corrected again by another entry', () => {
+  const e = D.parseDictionary('Amal | Aman\nAmar | Amal');
+  assert.equal(D.applyDictionary('Aman and Amal', e), 'Amal and Amar');
+});
+
+await test('dictionary: learnAlias keeps comments and refuses separators in names', () => {
+  assert.equal(D.learnAlias('# my team\nAmal | Aman', 'Priya', 'Priyaa'), '# my team\nAmal | Aman\nPriya | Priyaa');
+  assert.equal(D.learnAlias('Amal | Aman', 'Amal', 'a, b | c'), 'Amal | Aman, a b c');
+  assert.equal(D.learnAlias('', 'A | B', 'x\ny'), 'A B | x y');
+  assert.equal(D.learnAlias('Amal | Aman', 'amal', 'AMAN'), 'Amal | Aman');
+});
+
+await test('dictionary: a big dictionary over a long meeting stays fast', () => {
+  const entries = D.parseDictionary(Array.from({ length: 500 }, (_, i) => `Name${i} | Nam${i}a, Nme${i}, Nam${i}e`).join('\n'));
+  const text = 'we asked Nam7a and Nme9 about Nam499e today but also general words '.repeat(12);
+  const t0 = Date.now();
+  for (let i = 0; i < 2000; i++) D.applyDictionary(text, entries, ['Priya']);
+  assert.ok(Date.now() - t0 < 2500, `took ${Date.now() - t0} ms`);
+  assert.match(D.applyDictionary(text, entries), /Name7 and Name9 about Name499/);
+});
+
+// ---- attendance ----
+await test('attendance: different people with similar names are not merged', () => {
+  const m1 = A.matchPeople([{ name: 'Aman Sharma' }], { 'Amal Verma': [0, 10, 1] }, {});
+  assert.equal(m1.rows[0].present, null);
+  assert.equal(m1.uninvited.length, 1);
+  const m2 = A.matchPeople([{ name: 'Amal Rao' }], { 'Amal Raj': [0, 10, 1] }, {});
+  assert.equal(m2.rows[0].present, null);
+  const m3 = A.matchPeople([{ name: 'Amal Raj' }], { 'Amal R.': [0, 10, 1] }, {});
+  assert.ok(m3.rows[0].present, 'an initial still matches');
+});
+
+await test('attendance: a bare first name is ignored when two invitees share it', () => {
+  const m = A.matchPeople([{ name: 'Amal Raj' }, { name: 'Amal Rao' }], { Amal: [0, 10, 1] }, {});
+  assert.equal(m.rows.filter((r) => r.present).length, 0);
+  const one = A.matchPeople([{ name: 'Amal Raj' }, { name: 'Priya Nair' }], { Amal: [0, 10, 1] }, {});
+  assert.ok(one.rows[0].present);
+});
+
+await test('attendance: "You" maps to the organiser when no name is set', () => {
+  const m = A.matchPeople([{ name: 'Me Self', status: 'owner' }, { name: 'Priya' }], { You: [0, 100, 5] }, {});
+  assert.ok(m.rows[0].present);
+  assert.equal(m.uninvited.length, 0);
+});
+
+// ---- minutes pipeline ----
+await test('minutes: an empty model reply is an error, not blank minutes', async () => {
+  const meeting = { title: 't', startedAt: 0, endedAt: 60000, segments: [{ t: 1, src: 'others', text: 'hello there' }] };
+  await assert.rejects(() => writeMinutes({ meeting, settings: { ...DEFAULTS }, gen: async () => '   ', ctx: {} }), /empty reply/);
+});
+
+await test('minutes: completeness chatter is dropped, real findings kept', async () => {
+  const meeting = { title: 't', startedAt: 0, endedAt: 60000, segments: Array.from({ length: 30 }, (_, i) => ({ t: i * 60, src: 'others', text: `topic ${i} `.repeat(60) })) };
+  const gen = async (system) => (/audit/.test(system) ? 'Nothing is missing.\n[05:00] a forgotten decision | "we decided"' : /extract facts/.test(system) ? 'NONE' : '# T');
+  const r = await writeMinutes({ meeting, settings: { ...DEFAULTS }, gen, ctx: {} });
+  assert.match(r.mom, /a forgotten decision/);
+  assert.doesNotMatch(r.mom, /Nothing is missing/);
+});
+
+await test('prompt: owner guard works in Devanagari and keeps cross-script owners', () => {
+  const text = 'सुरेश यह रिपोर्ट कल तक भेज देगी। मीटिंग खत्म।';
+  const items = [{ type: 'ACTION', owner: 'प्रिया', due: '-', at: '[00:10]', text: 'x', quote: 'यह रिपोर्ट कल तक भेज देगी' }];
+  assert.equal(P.guardOwners(items, text)[0].owner, '-', 'an owner the sentence does not name is dropped');
+  const ok = [{ type: 'ACTION', owner: 'सुरेश', due: '-', at: '[00:10]', text: 'x', quote: 'यह रिपोर्ट कल तक भेज देगी' }];
+  assert.equal(P.guardOwners(ok, text)[0].owner, 'सुरेश');
+  const latin = [{ type: 'ACTION', owner: 'Amal', due: '-', at: '[00:10]', text: 'x', quote: 'यह रिपोर्ट कल तक भेज देगी' }];
+  assert.equal(P.guardOwners(latin, text)[0].owner, 'Amal', 'cannot compare scripts, so keep the owner');
+});
+
+await test('prompt: sanitize only unwraps a fully wrapped reply and keeps real code blocks', () => {
+  assert.equal(P.sanitizeMinutes('```markdown\n# T\n- a\n```'), '# T\n- a');
+  const withCode = '# T\n```sql\nselect 1;\n```';
+  assert.equal(P.sanitizeMinutes(withCode), withCode);
+  assert.equal(P.sanitizeMinutes('- Review the <checklist> section'), '- Review the <checklist> section');
+  assert.equal(P.sanitizeMinutes('# T\n<checklist>\nx\n</checklist>'), '# T\nx');
+});
+
+await test('prompt: windows never repeat a window made only of the overlap line', () => {
+  const lines = Array.from({ length: 4 }, (_, i) => `[0${i}:00] OTHERS: ${'word '.repeat(800)}`);
+  const w = P.splitWindows(lines, 1500);
+  assert.ok(w.every((x) => x.length > 1 || w.length === 1), JSON.stringify(w.map((x) => x.length)));
+  assert.equal(w.flat().filter((l, i, a) => a.indexOf(l) === i).length, 4, 'every line is covered');
+  assert.deepEqual(P.splitWindows([], 100), []);
+});
+
+await test('prompt: item parsing tolerates bold, colons and a pipe in the description', () => {
+  const items = P.parseItems('**ACTION** | Amal | Fri | [01:00] | send the file | "quote"\nDECISION: - | - | [02:00] | go ahead | "ok"\nACTION | | | |\nACTION | Ravi | - | [03:00] | fix a | b | "quote here"');
+  assert.equal(items.length, 3);
+  assert.equal(items[0].text, 'send the file');
+  assert.equal(items[1].type, 'DECISION');
+  assert.equal(items[2].text, 'fix a b');
+  assert.equal(items[2].quote, '"quote here"');
+});
+
+// ---- email builder ----
+await test('mailer: table cells get exactly one style and an existing style is kept', () => {
+  const html = M.buildEmail({ title: 't', startedAt: 0, mom: 'x' }, { ...DEFAULTS, emailPdf: false }, () => '<table><tr><th>A</th><td style="text-align:right">1</td><td>2</td></tr></table>', '').html;
+  assert.equal((html.match(/<td [^>]*style=/g) || []).length, 2);
+  assert.doesNotMatch(html, /style="[^"]*" style=/);
+  assert.match(html, /<td style="text-align:right">1<\/td>/);
+});
+
+await test('mailer: addresses with quotes are rejected so the generated script stays valid', () => {
+  assert.deepEqual(M.parseAddresses("o'brien@x.com, a']+Evil()+['b@c.co, good@x.com"), ['good@x.com']);
+  const out = M.scriptWithAllowList("const ALLOWED = [];\nconst ALLOWED_DOMAINS = [];", ['good@x.com'], {});
+  assert.match(out, /const ALLOWED = \['good@x\.com'\];/);
+});
+
+console.log(`\n${passed} passed`);

@@ -189,7 +189,7 @@ try {
     await new Promise((res) => { const sc = document.createElement('script'); sc.src = chrome.runtime.getURL('dist/pill.js'); sc.onload = res; document.head.append(sc); });
     await new Promise((r) => setTimeout(r, 1600));
     const host = document.querySelector('[data-debrief]');
-    const root = host.shadowRoot;
+    const root = host.__debriefRoot;
     const out = { shown: host.style.display !== 'none', time: root.querySelector('.time').textContent, mic: root.querySelector('.mic').textContent.trim() };
     root.querySelector('.mic').click();
     await new Promise((r) => setTimeout(r, 800));
@@ -209,7 +209,7 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 2, mobile: false }, popup.sessionId);
     fs.writeFileSync(`${process.env.SHOTS}/popup-recording.png`, Buffer.from((await send('Page.captureScreenshot', {}, popup.sessionId)).data, 'base64'));
     const tabId = await opts.evaluate(`chrome.runtime.sendMessage({ target: 'bg', type: 'whoami' }).then((r) => r.tabId)`);
-    await opts.evaluate(`(async () => { await ${alertRec(tabId)}; await new Promise((r) => setTimeout(r, 1300)); document.querySelector('[data-debrief]').shadowRoot.querySelector('.wrap').dispatchEvent(new MouseEvent('mouseenter')); await new Promise((r) => setTimeout(r, 400)); })()`);
+    await opts.evaluate(`(async () => { await ${alertRec(tabId)}; await new Promise((r) => setTimeout(r, 1300)); document.querySelector('[data-debrief]').__debriefRoot.querySelector('.wrap').dispatchEvent(new MouseEvent('mouseenter')); await new Promise((r) => setTimeout(r, 400)); })()`);
     await send('Emulation.setDeviceMetricsOverride', { width: 760, height: 640, deviceScaleFactor: 2, mobile: false }, opts.sessionId);
     fs.writeFileSync(`${process.env.SHOTS}/pill.png`, Buffer.from((await send('Page.captureScreenshot', {}, opts.sessionId)).data, 'base64'));
   }
@@ -231,12 +231,12 @@ try {
     await new Promise((r) => setTimeout(r, 1500));
     out.afterEnd = (await chrome.storage.session.get('rec')).rec.recording;
     await live();
-    await chrome.storage.session.set({ quietSince: Date.now() - 11 * 60000 });
+    await chrome.storage.session.set({ quietSince: Date.now() - 11 * 60000, heard: true });
     await send({ type: 'level', tab: 0.001, mic: null, ctx: 'running' });
     await new Promise((r) => setTimeout(r, 1500));
     out.afterQuiet = (await chrome.storage.session.get('rec')).rec.recording;
     await live();
-    await chrome.storage.session.set({ quietSince: Date.now() - 11 * 60000 });
+    await chrome.storage.session.set({ quietSince: Date.now() - 11 * 60000, heard: true });
     await send({ type: 'level', tab: 0.2, mic: null, ctx: 'running' });
     await new Promise((r) => setTimeout(r, 800));
     out.afterLoud = (await chrome.storage.session.get('rec')).rec.recording;

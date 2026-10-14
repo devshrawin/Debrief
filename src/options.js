@@ -1,4 +1,5 @@
 import { DEFAULTS, getSettings, saveSettings } from './store.js';
+import { isLocalBase } from './local.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, allowListLines } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
@@ -148,6 +149,8 @@ async function requestOrigins(s) {
   if (s.llmProvider === 'openai') urls.push(s.oaBase);
   const origins = [];
   for (const u of urls) {
+    // Keys travel in the request, so anything that is not this computer must use https.
+    if (u && !isLocalBase(u) && !/^https:\/\//i.test(u)) throw new Error(`Use an https address for ${u}. Only addresses on this computer may use http.`);
     try {
       origins.push(`${new URL(u).origin}/*`);
     } catch {
@@ -158,11 +161,20 @@ async function requestOrigins(s) {
   if (!(await chrome.permissions.request({ origins }))) throw new Error('Permission for the custom endpoint was denied.');
 }
 
+// Values as last loaded or saved. Only fields the user changed on this page are written, on top of the
+// latest stored settings, so an old open tab can never wipe a change made somewhere else (a remembered
+// name fix, the email secret, a mute switch).
+let loaded = {};
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 async function save() {
-  const s = { ...(await getSettings()), ...read() };
-  await requestOrigins(s);
-  await saveSettings(s);
-  return s;
+  const vals = read();
+  const out = { ...(await getSettings()) };
+  for (const k of Object.keys(vals)) if (!same(vals[k], loaded[k])) out[k] = vals[k];
+  await requestOrigins(out);
+  await saveSettings(out);
+  loaded = vals;
+  return out;
 }
 
 async function micStatus() {
@@ -331,6 +343,7 @@ $('testMail').onclick = async () => {
     else el.value = s[k];
   }
   $('shareAuto').checked = s.shareMode === 'auto';
+  loaded = read();
   showProviderFields();
   renderAllow();
   micStatus();
@@ -339,3 +352,19 @@ $('testMail').onclick = async () => {
   renderLearned();
   showTab(location.hash.slice(1) || 'start');
 })();
+
+// Settings changed somewhere else (a minutes tab, the popup): show the new values in every field this page
+// has not touched, so the page is never a stale picture of the real settings.
+chrome.storage.onChanged.addListener(async (changes) => {
+  if (!changes.settings) return;
+  const fresh = await getSettings();
+  for (const k of FIELDS) {
+    const el = $(k);
+    if (!el || !same(read()[k], loaded[k])) continue; // the user is editing this one
+    if (el.type === 'checkbox') el.checked = !!fresh[k];
+    else el.value = fresh[k];
+    loaded[k] = fresh[k];
+  }
+  $('shareAuto').checked = fresh.shareMode === 'auto';
+  loaded.shareMode = fresh.shareMode;
+});
