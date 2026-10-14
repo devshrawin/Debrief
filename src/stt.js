@@ -7,7 +7,7 @@ class SttError extends Error {
   }
 }
 
-import { geminiFetch, modelChain } from './gemini.js';
+import { geminiFetch, modelChain, usable, allExhausted, isCooling } from './gemini.js';
 import { isLoopNoise } from './noise.js';
 import { errorDetail, DEFAULTS } from './store.js';
 import { record } from './usage.js';
@@ -138,7 +138,8 @@ async function gemini(wav, s) {
   let first = '';
   let err;
   try {
-    first = await geminiCall(wav, s, s.sttGeminiModel);
+    // a transcription model that just reported its limit is skipped: go straight to the general models
+    if (!(await isCooling(s.sttGeminiModel))) first = await geminiCall(wav, s, s.sttGeminiModel);
   } catch (e) {
     err = e;
   }
@@ -149,7 +150,7 @@ async function gemini(wav, s) {
   // Empty reply, or the transcribe model is out of quota: try general models, which also have
   // separate quotas.
   let lastErr = err;
-  for (const m of modelChain(s.geminiModel)) {
+  for (const m of await usable(modelChain(s.geminiModel))) {
     try {
       // A model that answers, even with nothing, has judged the chunk: no speech.
       return await geminiCall(wav, s, m);
@@ -165,6 +166,15 @@ const PROVIDERS = { gemini, sarvam, deepgram, openai: openaiCompat };
 
 const sttModelName = (s) => ({ sarvam: s.sarvamModel, deepgram: s.deepgramModel, openai: s.sttModel })[s.sttProvider];
 
+// Some general models answer with a timestamp at the start of each line ("00:04Child Development,"). Debrief keeps
+// its own times, so when most lines carry one they are removed and the lines are joined into running text.
+export function stripTimestamps(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const stamp = /^[\[(]?\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?[\])]?\s*[-–:]?\s*/;
+  if (lines.length < 3 || lines.filter((l) => stamp.test(l)).length < lines.length * 0.6) return String(text || '');
+  return lines.map((l) => l.replace(stamp, '')).filter(Boolean).join(' ');
+}
+
 export async function transcribe(wav, settings) {
   const fn = PROVIDERS[settings.sttProvider];
   if (!fn) throw new Error(`Unknown STT provider ${settings.sttProvider}`);
@@ -173,12 +183,14 @@ export async function transcribe(wav, settings) {
     try {
       const raw = await fn(wav, settings);
       if (settings.sttProvider !== 'gemini') record({ provider: settings.sttProvider, model: sttModelName(settings), kind: 'stt', req: 1, audioSec: audioSeconds(wav) });
-      const text = raw.trim();
+      const text = stripTimestamps(raw).trim();
       return isLoopNoise(text) ? '' : text;
     } catch (e) {
       if (settings.sttProvider !== 'gemini') record({ provider: settings.sttProvider, model: sttModelName(settings), kind: 'stt', req: 1, fail: true, rl: e.status === 429 });
       const retryable = !(e instanceof SttError) || e.status === 429 || e.status >= 500;
       if (!retryable || attempt >= 3) throw e;
+      // Every model is over its daily limit: do not sit through minutes of backoff, keep the audio for later.
+      if (settings.sttProvider === 'gemini' && e.status === 429 && (await allExhausted([settings.sttGeminiModel, ...modelChain(settings.geminiModel)]))) throw e;
       // Free-tier rate limits reset per minute, so back off harder on 429.
       await new Promise((r) => setTimeout(r, e.status === 429 ? Math.max(delay, 20000) : delay));
       delay *= 2;

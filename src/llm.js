@@ -1,5 +1,4 @@
 // LLM providers. generate() streams text deltas to onText and resolves with the full text.
-import Anthropic from '@anthropic-ai/sdk';
 import { geminiChainFetch, modelChain } from './gemini.js';
 import { errorDetail } from './store.js';
 import { record } from './usage.js';
@@ -7,38 +6,52 @@ import { record } from './usage.js';
 // Models that support adaptive thinking, effort and server-side refusal fallbacks.
 const MODERN_CLAUDE = /^claude-(opus-5|fable-5|sonnet-5-5)/;
 
-async function anthropic({ settings, system, user, onText, signal }) {
-  const client = new Anthropic({ apiKey: settings.anthropicKey, dangerouslyAllowBrowser: true });
+// Claude through the Messages API with plain fetch (the official SDK added about 500 KB to every page).
+async function anthropic({ settings, system, user, onText, signal, temperature }) {
   const model = settings.anthropicModel;
-  const params = {
-    model,
-    max_tokens: 32000,
-    system,
-    messages: [{ role: 'user', content: user }],
+  const modern = MODERN_CLAUDE.test(model);
+  const headers = {
+    'content-type': 'application/json',
+    'x-api-key': settings.anthropicKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
   };
-  if (MODERN_CLAUDE.test(model)) {
-    Object.assign(params, {
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium' },
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-    });
-  }
-  const stream = client.beta.messages.stream(params, { signal });
-  stream.on('text', onText);
-  let msg;
+  const body = { model, max_tokens: 32000, system, messages: [{ role: 'user', content: user }], stream: true };
+  if (modern) {
+    // adaptive thinking does not accept a temperature, so none is sent for these models
+    Object.assign(body, { thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, fallbacks: 'default' });
+    headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+  } else if (temperature != null) body.temperature = temperature;
+  let res;
   try {
-    msg = await stream.finalMessage();
+    res = await fetch('https://api.anthropic.com/v1/messages?beta=true', { method: 'POST', headers, body: JSON.stringify(body), signal });
   } catch (e) {
-    record({ provider: 'anthropic', model, kind: 'llm', req: 1, fail: true, rl: e?.status === 429 });
+    if (e.name !== 'AbortError') record({ provider: 'anthropic', model, kind: 'llm', req: 1, fail: true });
     throw e;
   }
-  record({ provider: 'anthropic', model, kind: 'llm', req: 1, tin: msg.usage?.input_tokens, tout: msg.usage?.output_tokens });
-  if (msg.stop_reason === 'refusal') {
-    throw new Error(`Claude declined this request${msg.stop_details?.category ? ` (${msg.stop_details.category})` : ''}.`);
+  if (!res.ok) {
+    record({ provider: 'anthropic', model, kind: 'llm', req: 1, fail: true, rl: res.status === 429 });
+    throw await httpError(res, 'Claude');
   }
-  const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  if (msg.stop_reason === 'max_tokens') return `${text}\n\n_(Output hit the length limit and was cut off.)_`;
+  let text = '';
+  let tin = 0;
+  let tout = 0;
+  let stop = '';
+  let category = '';
+  await readSse(res, (ev) => {
+    if (ev.type === 'message_start') tin = ev.message?.usage?.input_tokens || 0;
+    else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta' && ev.delta.text) {
+      text += ev.delta.text;
+      onText(ev.delta.text);
+    } else if (ev.type === 'message_delta') {
+      stop = ev.delta?.stop_reason || stop;
+      category = ev.delta?.stop_details?.category || category;
+      tout = ev.usage?.output_tokens ?? tout;
+    } else if (ev.type === 'error') throw Object.assign(new Error(`Claude: ${ev.error?.message || 'stream error'}`), { status: ev.error?.type === 'overloaded_error' ? 529 : 500 });
+  });
+  record({ provider: 'anthropic', model, kind: 'llm', req: 1, tin, tout });
+  if (stop === 'refusal') throw new Error(`Claude declined this request${category ? ` (${category})` : ''}.`);
+  if (stop === 'max_tokens') return `${text}\n\n_(Output hit the length limit and was cut off.)_`;
   return text;
 }
 

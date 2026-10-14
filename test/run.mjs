@@ -213,6 +213,49 @@ await test('gemini backup key used on 429, not used on success', async () => {
   assert.equal(calls.length, 1);
 });
 
+await test('gemini: a model over its daily limit is skipped afterwards, and a fully exhausted chain stops at once', async () => {
+  const G = await import('../src/gemini.js');
+  G.resetCooldowns();
+  const day = 'Quota exceeded for metric: generate_content_free_tier_requests, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier, limit: 25, model: gemini-3.5-transcribe';
+  assert.ok(G.cooldownFor(day) - Date.now() > 60 * 60000, 'a daily limit cools until the quota day rolls over');
+  assert.ok(G.cooldownFor('Please retry in 18.5s') - Date.now() < 30000, 'a per-minute limit cools for the time Google gives');
+  assert.ok(G.cooldownFor('429') - Date.now() <= 61000);
+  // the first request hits the daily limit on the transcription model, then a general model answers
+  calls = [];
+  const s = { ...DEFAULTS, geminiKey: 'main', sttGeminiModel: 'gemini-3.5-transcribe', geminiModel: 'gemini-3.8-flash' };
+  responder = (req) => (/gemini-3\.5-transcribe/.test(req.url) ? new Response(JSON.stringify({ error: { message: day } }), { status: 429 }) : Response.json({ candidates: [{ content: { parts: [{ text: 'general model text' }] } }] }));
+  assert.equal(await transcribe(wav, s), 'general model text');
+  await new Promise((r) => setTimeout(r, 30));
+  assert.ok(await G.isCooling('gemini-3.5-transcribe'));
+  // the next chunk does not even try the exhausted model
+  calls = [];
+  assert.equal(await transcribe(wav, s), 'general model text');
+  assert.ok(!calls.some((c) => /gemini-3\.5-transcribe/.test(c.url)), calls.map((c) => c.url).join(' '));
+  // every model over its daily limit: fail straight away instead of minutes of retrying
+  G.resetCooldowns();
+  const all = ['gemini-3.5-transcribe', ...G.modelChain('gemini-3.8-flash')];
+  responder = (req) => new Response(JSON.stringify({ error: { message: day } }), { status: 429 });
+  calls = [];
+  const t0 = Date.now();
+  await assert.rejects(() => transcribe(wav, s), /429/);
+  assert.ok(Date.now() - t0 < 5000, 'no 20 second back-off');
+  assert.ok(await G.allExhausted(all));
+  const used = calls.length;
+  calls = [];
+  await assert.rejects(() => transcribe(wav, s), /429/);
+  assert.ok(calls.length <= used, 'later chunks do not make more failing requests than the first');
+  G.resetCooldowns();
+});
+
+await test('stt: timestamps that a fallback model puts at the start of each line are removed', async () => {
+  const { stripTimestamps } = await import('../src/stt.js');
+  assert.equal(stripTimestamps('00:01Okay.\n00:04Child Development, Community Development,\n00:07Disability, women.'), 'Okay. Child Development, Community Development, Disability, women.');
+  assert.equal(stripTimestamps('[00:01] Okay.\n[00:04] Next point\n[01:12] Done'), 'Okay. Next point Done');
+  const plain = 'We meet at 10:30 tomorrow.\nBring the files.\nThanks.';
+  assert.equal(stripTimestamps(plain), plain, 'times inside sentences are left alone');
+  assert.equal(stripTimestamps('00:01 Only one line'), '00:01 Only one line');
+});
+
 await test('gemini backup key used for MOM streaming when main key is invalid', async () => {
   calls = [];
   responder = (req, n) => (n === 1 ? new Response('{"error":{"message":"API key not valid"}}', { status: 400 }) : sse(['data: {"candidates":[{"content":{"parts":[{"text":"# MOM"}]}}]}\n\n']));
