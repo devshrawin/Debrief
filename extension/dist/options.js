@@ -1055,15 +1055,15 @@ function out(o) {
     const worker = new Worker(workerUrl);
     const pending = /* @__PURE__ */ new Map();
     let nextId = 1;
-    let ready;
+    let ready2;
     let readyFail;
     const readyP = new Promise((res, rej) => {
-      ready = res;
+      ready2 = res;
       readyFail = rej;
     });
     worker.onmessage = (e) => {
       const m = e.data;
-      if (m.ready) return ready();
+      if (m.ready) return ready2();
       const p = pending.get(m.id);
       if (!p) return;
       pending.delete(m.id);
@@ -1349,10 +1349,10 @@ function out(o) {
         resolve(out);
       };
       for (const b of buttons) {
-        const el = Object.assign(document.createElement("button"), { className: `btn${b.primary ? " primary" : ""}${b.danger ? " danger" : ""}`, textContent: b.label });
-        el.dataset.value = b.value;
-        el.onclick = () => done(b.value);
-        row.append(el);
+        const el3 = Object.assign(document.createElement("button"), { className: `btn${b.primary ? " primary" : ""}${b.danger ? " danger" : ""}`, textContent: b.label });
+        el3.dataset.value = b.value;
+        el3.onclick = () => done(b.value);
+        row.append(el3);
       }
       dlg.append(row);
       dlg.addEventListener("cancel", (e) => {
@@ -1378,10 +1378,25 @@ function out(o) {
   var audioUrl = "";
   var rec = null;
   var client = null;
-  var setMsg = (t, bad = false) => {
-    $("enrolMsg").textContent = t;
-    $("enrolMsg").style.color = bad ? "#b91c1c" : "";
+  var el = (tag, props = {}, ...kids) => {
+    const n = Object.assign(document.createElement(tag), props);
+    n.append(...kids);
+    return n;
   };
+  var setMsg = (t, kind = "") => {
+    $("enrolMsg").textContent = t;
+    $("enrolMsg").className = `msgbox ${kind === true ? "bad" : kind || ""}`.trim();
+  };
+  var READY_MSG = "Type a name, then press Record and read the text above. Use the mic you use in meetings.";
+  var clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+  var saving = false;
+  function syncEnrol() {
+    $("enrolRec").hidden = !!rec;
+    $("enrolStop").hidden = !rec;
+    $("enrolDot").hidden = !rec;
+    $("enrolPlay").disabled = !pcm;
+    $("enrolSave").disabled = !pcm || saving;
+  }
   function getClient() {
     if (!client) {
       client = createVoiceClient({
@@ -1400,42 +1415,89 @@ function out(o) {
   var LANG_NAME = { en: "English", hi: "Hindi", ml: "Malayalam", free: "free speech" };
   var ORDER = ["en", "hi", "ml", "free"];
   var fmtDate = (t) => new Date(t).toLocaleDateString(void 0, { day: "numeric", month: "short", year: "numeric" });
+  function badgeOf(p) {
+    if (!p.auto) return ["Recorded", "brand"];
+    if (isAnon(p)) return ["Unnamed voice", ""];
+    return p.ready ? ["Learned, in use", "ok"] : ["Learned, still learning", "warn"];
+  }
+  var openMenu = null;
+  function closeMenu(refocus) {
+    if (!openMenu) return;
+    const { menu, more } = openMenu;
+    openMenu = null;
+    menu.hidden = true;
+    more.setAttribute("aria-expanded", "false");
+    if (refocus) more.focus();
+  }
+  function moreMenu(p, items) {
+    const more = el("button", { type: "button", className: "btn sm", textContent: "More \u25BE" });
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", "false");
+    more.setAttribute("aria-label", `More actions for ${p.name}`);
+    const menu = el("div", { className: "menu", hidden: true });
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", `More actions for ${p.name}`);
+    const btns = items.map(({ label, fn, danger, aria }) => {
+      const b = el("button", { type: "button", className: danger ? "danger" : "", textContent: label });
+      b.setAttribute("role", "menuitem");
+      if (aria) b.setAttribute("aria-label", aria);
+      b.onclick = () => {
+        closeMenu(true);
+        fn();
+      };
+      return b;
+    });
+    menu.append(...btns);
+    menu.addEventListener("keydown", (e) => {
+      const i = btns.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") btns[(i + 1) % btns.length].focus();
+      else if (e.key === "ArrowUp") btns[(i - 1 + btns.length) % btns.length].focus();
+      else if (e.key === "Escape") closeMenu(true);
+      else if (e.key === "Tab") closeMenu(false);
+      else return;
+      if (e.key !== "Tab") e.preventDefault();
+    });
+    more.onclick = () => {
+      const wasOpen = openMenu?.menu === menu;
+      closeMenu(false);
+      if (wasOpen) return;
+      menu.hidden = false;
+      more.setAttribute("aria-expanded", "true");
+      openMenu = { menu, more };
+      btns[0].focus();
+    };
+    return [more, menu];
+  }
   function renderList() {
+    closeMenu(false);
     $("voiceEmpty").hidden = people.length > 0;
+    $("hPeople").textContent = people.length ? `Enrolled people \xB7 ${people.length}` : "Enrolled people";
     $("voiceList").replaceChildren(
       ...people.map((p) => {
-        const row = document.createElement("div");
-        row.className = "voice-row";
-        row.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)";
-        const who = document.createElement("div");
-        who.style.cssText = "flex:1;min-width:180px";
+        const anon = p.auto && isAnon(p);
+        const [badge, cls] = badgeOf(p);
         const langs = (p.langs || [p.lang || "en"]).map((l) => LANG_NAME[l] || l).join(" + ");
-        who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
-        who.querySelector(".vn").textContent = p.name;
-        who.querySelector(".vm").textContent = p.auto ? `${isAnon(p) ? "Heard in your meetings, not named yet. Rename it to say who it is \xB7 " : "Learned from meetings \xB7 "}${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech \xB7 ${p.ready ? "in use" : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
-        const btn = (label, fn, danger) => {
-          const b = Object.assign(document.createElement("button"), { className: "btn", textContent: label });
-          if (danger) b.style.color = "#b91c1c";
-          b.onclick = fn;
-          return b;
-        };
-        row.append(
-          who,
-          ...p.auto && isAnon(p) ? [sampleButton(p)] : [],
-          btn("Rename", () => rename(p)),
-          btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)),
-          btn("Add recording", () => begin({ kind: "add", id: p.id }, p)),
-          btn("Export", () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`)),
-          ...p.auto && people.length > 1 ? [btn("Merge into\u2026", () => mergeInto(p))] : [],
-          btn("Delete", () => remove(p), true)
-        );
+        const n = p.meetings || 1;
+        const meta = p.auto ? `${anon ? "Heard in your meetings, not named yet" : "Learned from your meetings"} \xB7 ${n} meeting${n === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech${p.ready ? "" : ` \xB7 not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
+        const row = el("li", { className: "voice-row" });
+        const initial = anon ? "?" : (Array.from(p.name.trim())[0] || "?").toUpperCase();
+        const avatar = el("span", { className: `avatar${anon ? " anon" : ""}`, textContent: initial });
+        avatar.setAttribute("aria-hidden", "true");
+        const who = el("div", { className: "vwho" }, el("div", { className: "vtop" }, el("strong", { className: "vn", textContent: p.name }), el("span", { className: `chip ${cls}`.trim(), textContent: badge })), el("p", { className: "hint vm", textContent: meta }));
+        const btn = (label, fn) => el("button", { type: "button", className: "btn sm", textContent: label, onclick: fn });
+        const items = [{ label: "Export this voice", fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`) }];
+        if (p.auto && people.length > 1) items.push({ label: "Merge into\u2026", fn: () => mergeInto(p) });
+        items.push({ label: "Delete", aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
+        const acts = el("div", { className: "vacts" }, ...anon ? [sampleButton(p)] : [], btn(anon ? "Name this voice" : "Rename", () => rename(p)), ...anon ? [] : [btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)), btn("Add recording", () => begin({ kind: "add", id: p.id }, p))], ...moreMenu(p, items));
+        row.append(avatar, who, acts);
         return row;
       })
     );
   }
   var playing = null;
   function sampleButton(p) {
-    const b = Object.assign(document.createElement("button"), { className: "btn", textContent: "\u25B6 Play sample", hidden: true });
+    const b = el("button", { type: "button", className: "btn sm primary", hidden: true }, el("span", { className: "tri" }), "Play sample");
+    b.setAttribute("aria-label", `Play sample of ${p.name}`);
     hasSample(p.id).then((yes) => b.hidden = !yes).catch(() => {
     });
     b.onclick = async () => {
@@ -1463,19 +1525,13 @@ function out(o) {
     const m = meetings[0];
     const groups = m ? unnamedGroups(m, people) : [];
     $("unnamedCard").hidden = !groups.length;
+    if (m) $("unnamedSub").textContent = `${m.title || "Your latest meeting"}${m.startedAt ? ` \xB7 ${fmtDate(m.startedAt)}` : ""}. Name a voice once and it is recognised next time.`;
     $("unnamedList").replaceChildren(
       ...groups.map((g, i) => {
-        const row = document.createElement("div");
-        row.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)";
-        const label = document.createElement("div");
-        label.style.cssText = "flex:1;min-width:200px";
-        label.innerHTML = '<b></b><div class="hint" style="margin:2px 0 0"></div>';
-        label.querySelector("b").textContent = `Voice ${i + 1}`;
-        label.querySelector(".hint").textContent = `${g.seconds} s of speech \xB7 for example at ${g.at.map(fmtTime).join(", ")}`;
-        const input = Object.assign(document.createElement("input"), { placeholder: "Who is this?", maxLength: 60 });
-        input.style.cssText = "padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--field);width:200px";
-        const save3 = Object.assign(document.createElement("button"), { className: "btn", textContent: "Save this voice" });
-        save3.onclick = async () => {
+        const label = el("label", { className: "sr-only", htmlFor: `unnamedName${i}`, textContent: `Name for Voice ${i + 1}` });
+        const input = el("input", { id: `unnamedName${i}`, placeholder: "Who is this?", maxLength: 60, autocomplete: "off" });
+        const save3 = el("button", { type: "button", className: "btn primary", textContent: "Name this voice" });
+        const doSave = async () => {
           try {
             people = upsertPerson(people, { name: input.value, lang: "free", print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
             await saveVoices(people);
@@ -1485,8 +1541,15 @@ function out(o) {
             tell(e.message);
           }
         };
-        row.append(label, input, save3);
-        return row;
+        save3.onclick = doSave;
+        input.onkeydown = (e) => e.key === "Enter" && doSave();
+        return el(
+          "li",
+          {},
+          el("div", { className: "ut" }, el("strong", { textContent: `Voice ${i + 1}` }), el("span", { className: "hint", textContent: `spoke ${g.seconds} s` })),
+          el("p", { className: "hint", textContent: `For example at ${g.at.map(fmtTime).join(", ")}` }),
+          el("div", { className: "name-row" }, label, input, save3)
+        );
       })
     );
   }
@@ -1549,13 +1612,17 @@ function out(o) {
     pcm = null;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = "";
-    $("enrolPlay").hidden = true;
-    $("enrolSave").hidden = true;
-    $("enrolStop").hidden = true;
-    $("enrolRec").hidden = false;
     $("enrolRec").textContent = "Record";
     $("enrolLevel").style.width = "0";
     $("enrolTime").textContent = "";
+    syncEnrol();
+  }
+  function blankForm() {
+    mode = { kind: "new", id: null };
+    resetRecording();
+    $("enrolName").value = "";
+    $("enrolName").disabled = false;
+    $("enrolTitle").textContent = "Add a person";
   }
   function begin(m, person) {
     resetRecording();
@@ -1563,15 +1630,22 @@ function out(o) {
     $("enrolTitle").textContent = m.kind === "new" ? "Add a person" : m.kind === "rerecord" ? `Re-record ${person.name}` : `Add another recording for ${person.name}`;
     $("enrolName").value = person ? person.name : "";
     $("enrolName").disabled = !!person;
-    $("enrolCancel").hidden = m.kind === "new";
     setLang(m.kind === "add" ? ORDER.find((l) => !(person.langs || [person.lang || "en"]).includes(l)) || "free" : lang);
-    setMsg(m.kind === "add" ? "Record in another language this person uses in meetings: it makes the voice recognisable in each." : "");
-    $("enrolName").scrollIntoView({ block: "center", behavior: "smooth" });
+    setMsg(m.kind === "add" ? "Record in another language this person uses in meetings: it makes the voice recognisable in each." : READY_MSG, m.kind === "add" ? "info" : "");
+    (person ? $("enrolRec") : $("enrolName")).scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" });
+    (person ? $("enrolRec") : $("enrolName")).focus({ preventScroll: true });
   }
+  var reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   function setLang(l) {
     lang = l;
     $("enrolPrompt").textContent = PROMPTS[l];
-    document.querySelectorAll("#enrolLang button").forEach((b) => b.classList.toggle("active", b.dataset.lang === l));
+    $("enrolPrompt").lang = l === "free" ? "en" : l;
+    document.querySelectorAll("#enrolLang button").forEach((b) => {
+      const on = b.dataset.lang === l;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
   }
   async function startCapture() {
     if (rec) return;
@@ -1597,10 +1671,11 @@ function out(o) {
     };
     r.timer = setInterval(() => {
       const sec = (Date.now() - r.started) / 1e3;
-      $("enrolTime").textContent = `${sec.toFixed(0)} s${sec < ENROL.targetSec ? ` (aim for about ${ENROL.targetSec})` : " \u2713"}`;
+      $("enrolTime").textContent = `${clock(sec)}${sec < ENROL.targetSec ? "" : " \u2713"}`;
       if (sec >= MAX_SEC2) finishCapture();
     }, 250);
     rec = r;
+    syncEnrol();
   }
   function stopCapture(discard) {
     if (!rec) return null;
@@ -1622,38 +1697,37 @@ function out(o) {
   }
   function finishCapture() {
     const got = stopCapture(false);
-    $("enrolStop").hidden = true;
-    $("enrolRec").hidden = false;
     $("enrolRec").textContent = "Record again";
     $("enrolLevel").style.width = "0";
+    syncEnrol();
     if (!got || got.pcm.length < SR * 3) {
-      setMsg("That was too short. Press Record and read the text above.", true);
+      setMsg("That was too short. Press Record and read the text above.", "warn");
       return;
     }
     if (got.peak < 5e-3) {
-      setMsg("Almost nothing was picked up. Check that the right microphone is selected in Chrome, then record again.", true);
+      setMsg("Almost nothing was picked up. Check that the right microphone is selected in Chrome, then record again.", "bad");
       return;
     }
     pcm = got.pcm;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = URL.createObjectURL(new Blob([encodeWav(pcm, SR)], { type: "audio/wav" }));
-    $("enrolPlay").hidden = false;
-    $("enrolSave").hidden = false;
-    $("enrolTime").textContent = `${(pcm.length / SR).toFixed(0)} s recorded`;
-    setMsg("Play it back to check it is clear, then save. Nothing is stored until you press Save.");
+    $("enrolTime").textContent = clock(pcm.length / SR);
+    syncEnrol();
+    setMsg("Play it back to check it is clear, then save. Nothing is stored until you press Save voice.", "ok");
   }
   async function save() {
     if (!pcm) return;
     const name = $("enrolName").value;
     try {
       if (mode.kind === "new") upsertPerson(people, { name, lang, print: { centroid: "", windows: [], speechSec: 0 } });
-      $("enrolSave").disabled = true;
-      setMsg("Working out the voice fingerprint\u2026 (the first time this loads the speaker model)");
+      saving = true;
+      syncEnrol();
+      setMsg("Working out the voice fingerprint\u2026 (the first time this loads the speaker model)", "info");
       const c = getClient();
       await Promise.race([c.ready, new Promise((_, rej) => setTimeout(() => rej(new Error("The speaker model did not load. Reload this page and try again.")), 6e4))]);
       const print = await buildPrint(pcm, (p) => c.embed(p));
       if (!print.ok) {
-        setMsg(print.reason, true);
+        setMsg(print.reason, "warn");
         return;
       }
       if (mode.kind === "new") people = upsertPerson(people, { name, lang, print });
@@ -1661,18 +1735,14 @@ function out(o) {
       else people = addRecording(people, mode.id, { lang, print });
       await saveVoices(people);
       const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. Only the fingerprint was stored.${print.warn ? ` ${print.warn}` : ""}`;
-      mode = { kind: "new", id: null };
-      resetRecording();
-      $("enrolName").value = "";
-      $("enrolName").disabled = false;
-      $("enrolTitle").textContent = "Add a person";
-      $("enrolCancel").hidden = true;
-      setMsg(done, false);
+      blankForm();
+      setMsg(done, "ok");
       renderList();
     } catch (e) {
-      setMsg(e.message, true);
+      setMsg(e.message, "bad");
     } finally {
-      $("enrolSave").disabled = false;
+      saving = false;
+      syncEnrol();
     }
   }
   function download(text, name) {
@@ -1707,38 +1777,52 @@ function out(o) {
   async function initVoices() {
     await refresh();
     setLang("en");
-    document.querySelectorAll("#enrolLang button").forEach((b) => b.onclick = () => setLang(b.dataset.lang));
+    const langBtns = [...document.querySelectorAll("#enrolLang button")];
+    langBtns.forEach((b, i) => {
+      b.onclick = () => setLang(b.dataset.lang);
+      b.addEventListener("keydown", (e) => {
+        const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        const next = langBtns[(i + d + langBtns.length) % langBtns.length];
+        setLang(next.dataset.lang);
+        next.focus();
+      });
+    });
+    document.addEventListener("click", (e) => {
+      if (openMenu && !openMenu.menu.contains(e.target) && !openMenu.more.contains(e.target)) closeMenu(false);
+    });
+    $("enrolJump").onclick = () => {
+      $("enrol").scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+      $("enrolName").focus({ preventScroll: true });
+    };
+    setMsg(READY_MSG);
+    syncEnrol();
     $("enrolRec").onclick = async () => {
       try {
-        if (pcm) {
-          pcm = null;
-          $("enrolPlay").hidden = true;
-          $("enrolSave").hidden = true;
-        }
+        if (pcm) pcm = null;
+        syncEnrol();
         if (mode.kind === "new" && !$("enrolName").value.trim()) {
-          setMsg("Type the person\u2019s name first.", true);
+          setMsg("Type the person\u2019s name first.", "bad");
           $("enrolName").focus();
           return;
         }
         await startCapture();
-        $("enrolRec").hidden = true;
-        $("enrolStop").hidden = false;
-        setMsg("Recording\u2026 read the text above at a normal pace.");
+        $("enrolStop").focus();
+        setMsg("Listening\u2026 keep going until about 20 seconds.", "info");
       } catch (e) {
-        setMsg(e.name === "NotAllowedError" ? "The microphone is blocked. Use \u201CAllow microphone\u201D on the General page, then try again." : `Could not start the microphone: ${e.message}`, true);
+        setMsg(e.name === "NotAllowedError" ? "The microphone is blocked. Use \u201CAllow microphone\u201D on the General page, then try again." : e.name === "NotFoundError" ? "No microphone is available. Allow it in General, under Microphone, or plug one in." : `Could not start the microphone: ${e.message}`, "bad");
       }
     };
-    $("enrolStop").onclick = finishCapture;
+    $("enrolStop").onclick = () => {
+      finishCapture();
+      $("enrolPlay").disabled ? $("enrolRec").focus() : $("enrolPlay").focus();
+    };
     $("enrolPlay").onclick = () => audioUrl && new Audio(audioUrl).play();
     $("enrolSave").onclick = save;
     $("enrolCancel").onclick = () => {
-      mode = { kind: "new", id: null };
-      resetRecording();
-      $("enrolName").value = "";
-      $("enrolName").disabled = false;
-      $("enrolTitle").textContent = "Add a person";
-      $("enrolCancel").hidden = true;
-      setMsg("");
+      blankForm();
+      setMsg(READY_MSG);
     };
     $("voiceExport").onclick = () => people.length ? download(exportVoices(people), "debrief-voices.json") : $("voiceShareMsg").textContent = "Nobody is enrolled yet.";
     $("voiceImport").onclick = () => $("voiceImportFile").click();
@@ -1759,7 +1843,7 @@ function out(o) {
       people = [];
       renderList();
       closeClient();
-      setMsg(`All voices forgotten${n ? ` (and fingerprints removed from ${n} saved meeting${n === 1 ? "" : "s"})` : ""}.`);
+      setMsg(`All voices forgotten${n ? ` (and fingerprints removed from ${n} saved meeting${n === 1 ? "" : "s"})` : ""}.`, "ok");
     };
     chrome.storage.onChanged.addListener((c) => {
       if (c.voices) refresh();
@@ -1776,10 +1860,10 @@ function out(o) {
   var BAD = "\u2717";
   async function runCheckup() {
     const rows = [];
-    const add = (level, title, detail = "") => rows.push({ level, title, detail });
+    const add = (level, title, detail = "", go = "", fixText = "") => rows.push({ level, title, detail, go, fixText });
     const s = await getSettings();
     if (s.sttProvider === "gemini" || s.llmProvider === "gemini") {
-      add(s.geminiKey ? OK : BAD, "Gemini key", s.geminiKey ? s.geminiKey2 ? "main and backup key are set" : "a key is set (no backup key)" : "missing: add it on the Get started page");
+      add(s.geminiKey ? OK : BAD, "Gemini key", s.geminiKey ? s.geminiKey2 ? "main and backup key are set" : "a key is set (no backup key)" : "missing: add it on the Get started page", "start", "Add key");
       try {
         const { usage, learnedLimits = {}, modelCooldown = {} } = await chrome.storage.local.get(["usage", "learnedLimits", "modelCooldown"]);
         const limits = { ...learnedLimits, ...parseLimits(s.usageLimits) };
@@ -1797,21 +1881,21 @@ function out(o) {
     }
     try {
       const p = await navigator.permissions.query({ name: "microphone" });
-      add(p.state === "granted" ? OK : s.captureMic === false ? OK : WARN, "Microphone permission", p.state === "granted" ? "allowed" : `${p.state}: only other people will be recorded until you press "Allow microphone" on the General page`);
+      add(p.state === "granted" ? OK : s.captureMic === false ? OK : WARN, "Microphone permission", p.state === "granted" ? "allowed" : `${p.state}: only other people will be recorded until you press "Allow microphone" on the General page`, "general", "Allow microphone");
     } catch {
     }
-    add(s.followMeetMute !== false ? OK : WARN, "Mic follows the call's mute button", s.followMeetMute !== false ? "on" : "off: your mic is recorded even when you are muted in the call");
+    add(s.followMeetMute !== false ? OK : WARN, "Mic follows the call's mute button", s.followMeetMute !== false ? "on" : "off: your mic is recorded even when you are muted in the call", "general", "Turn it on");
     add(OK, "Speaker names from Meet captions", { read: "used when captions are on", auto: "Debrief turns captions on while recording", off: "off" }[s.meetCaptions] || s.meetCaptions);
-    if (!s.emailWebhook) add(WARN, "Email relay", "not set up (optional)");
-    else if (!mailReady(s)) add(BAD, "Email relay", "the URL does not look like an Apps Script web app URL ending in /exec");
+    if (!s.emailWebhook) add(WARN, "Email relay", "not set up (optional)", "email", "Set up email");
+    else if (!mailReady(s)) add(BAD, "Email relay", "the URL does not look like an Apps Script web app URL ending in /exec", "email", "Fix email");
     else {
       try {
         const res = await fetch(s.emailWebhook, { redirect: "follow", signal: AbortSignal.timeout(15e3) });
         const j = await res.json();
         if (j?.ok) add(Number(j.version) >= 7 ? OK : WARN, "Email relay", `reachable, script version ${j.version}${j.locked ? ", locked to this Debrief" : ", not locked yet (send a test email)"}${Number(j.version) >= 7 ? "" : ". Attendance from the calendar needs version 7: copy the script again and deploy a new version"}`);
-        else add(BAD, "Email relay", 'answered, but not as the Debrief script (is it set to "Anyone"?)');
+        else add(BAD, "Email relay", 'answered, but not as the Debrief script (is it set to "Anyone"?)', "email", "Fix email");
       } catch (e) {
-        add(BAD, "Email relay", `could not be reached (${e.message}). Check the deployment is set to "Anyone"`);
+        add(BAD, "Email relay", `could not be reached (${e.message}). Check the deployment is set to "Anyone"`, "email", "Fix email");
       }
     }
     const voices = await getVoices();
@@ -1831,7 +1915,7 @@ function out(o) {
         const silent = dbg.find((x) => /^mic: the raw microphone/.test(x));
         add(OK, `Last meeting: ${m.title || m.id}`, `${(m.segments || []).length} transcript pieces, ${(m.errors || []).length} errors, ${Object.keys(m.presence || {}).length} people seen, ${(m.voiceSegs || []).length} voice pieces, ${(m.captions || []).length} caption lines`);
         add(muteLines.length ? OK : WARN, "Last meeting: the call's mute button", muteLines.length ? `${muteLines.length} changes seen; last: ${muteLines.at(-1)}` : "no mute changes were seen (either you never muted, or the mute button was not found on the page)");
-        if (silent) add(BAD, "Last meeting: microphone", "it delivered only silence: check the microphone chosen in General and Windows privacy settings");
+        if (silent) add(BAD, "Last meeting: microphone", "it delivered only silence: check the microphone chosen in General and Windows privacy settings", "general", "Open General");
         add(m.invited?.length ? OK : WARN, "Last meeting: calendar invite", m.invited?.length ? `${m.invited.length} invitees found${m.invitedHow ? ` (by ${m.invitedHow})` : ""}` : m.invitedError ? `lookup failed: ${String(m.invitedError).slice(0, 100)}` : m.invitedNotFound ? "no calendar event matched the Meet link or title" : "not looked up yet");
       }
     } catch {
@@ -1843,21 +1927,175 @@ function out(o) {
   // src/options.js
   var $2 = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
+  var el2 = (tag, props = {}, ...kids) => {
+    const n = Object.assign(document.createElement(tag), props);
+    n.append(...kids);
+    return n;
+  };
+  var SECRETS = ["geminiKey", "geminiKey2", "sarvamKey", "deepgramKey", "sttKey", "anthropicKey", "oaKey"];
+  var stored = {};
+  var removed = /* @__PURE__ */ new Set();
+  var editing = /* @__PURE__ */ new Set();
+  var secretUi = {};
+  function secretValue(k) {
+    const v = $2(k).value.trim();
+    return v || (removed.has(k) ? "" : stored[k] || "");
+  }
+  function renderSecret(k) {
+    const u = secretUi[k];
+    if (!u) return;
+    const input = $2(k);
+    const has = !!stored[k] && !removed.has(k);
+    const masked = has && !editing.has(k);
+    u.mask.hidden = !masked;
+    input.hidden = masked;
+    u.replace.hidden = !masked;
+    u.keep.hidden = !(has && editing.has(k) || removed.has(k));
+    u.keep.textContent = removed.has(k) ? "Undo remove" : "Keep current";
+    u.remove.hidden = !(has && editing.has(k));
+    u.note.hidden = false;
+    u.note.replaceChildren();
+    if (masked) u.note.append(el2("span", { className: "chip ok", textContent: "Saved" }), "On this computer only. Never shown again.");
+    else if (removed.has(k)) u.note.append("The key will be removed when you press Save changes.");
+    else if (has) u.note.append("Type the new key. Leave it empty, or press Escape, to keep the current one.");
+    else u.note.hidden = true;
+  }
+  function renderSecrets() {
+    SECRETS.forEach(renderSecret);
+  }
+  function initSecrets() {
+    for (const k of SECRETS) {
+      const input = $2(k);
+      if (!input) continue;
+      const label = document.querySelector(`label[for="${k}"]`);
+      if (label && !label.id) label.id = `${k}-lbl`;
+      const name = label ? label.firstChild.textContent.trim() : "key";
+      const mask = el2("div", { className: "secret-mask", textContent: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" });
+      mask.setAttribute("role", "img");
+      mask.setAttribute("aria-label", `${name}: saved, hidden`);
+      const replace = el2("button", { type: "button", className: "btn", textContent: "Replace" });
+      replace.setAttribute("aria-label", `Replace ${name.toLowerCase()}`);
+      const keep = el2("button", { type: "button", className: "btn ghost", textContent: "Keep current" });
+      const remove2 = el2("button", { type: "button", className: "btn ghost", textContent: "Remove" });
+      remove2.style.color = "var(--rec-ink)";
+      remove2.setAttribute("aria-label", `Remove ${name.toLowerCase()}`);
+      const note2 = el2("p", { className: "secret-note" });
+      input.before(mask);
+      input.after(replace, keep, remove2, note2);
+      secretUi[k] = { mask, replace, keep, remove: remove2, note: note2 };
+      replace.onclick = () => {
+        editing.add(k);
+        renderSecret(k);
+        input.focus();
+      };
+      const revert = () => {
+        removed.delete(k);
+        editing.delete(k);
+        input.value = "";
+        renderSecret(k);
+        replace.focus();
+        updateDirty();
+      };
+      keep.onclick = revert;
+      remove2.onclick = () => {
+        removed.add(k);
+        editing.add(k);
+        input.value = "";
+        renderSecret(k);
+        keep.focus();
+        updateDirty();
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && stored[k] && !input.hidden) {
+          e.preventDefault();
+          revert();
+        }
+      });
+    }
+  }
+  function clearSecret(k) {
+    $2(k).value = "";
+    if (stored[k]) {
+      removed.add(k);
+      editing.add(k);
+    }
+    renderSecret(k);
+  }
   function read() {
     const s = {};
     for (const k of FIELDS2) {
-      const el = $2(k);
-      if (!el) continue;
-      s[k] = el.type === "checkbox" ? el.checked : el.value.trim();
+      const f = $2(k);
+      if (!f) continue;
+      s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === "checkbox" ? f.checked : f.value.trim();
     }
     s.shareMode = $2("shareAuto").checked ? "auto" : "review";
     s.meetingLanguages = [...document.querySelectorAll("#langChips input:checked")].map((c) => c.dataset.lang);
     return s;
   }
+  function fill(s) {
+    for (const k of FIELDS2) {
+      const f = $2(k);
+      if (!f) continue;
+      if (SECRETS.includes(k)) {
+        stored[k] = s[k] || "";
+        f.value = "";
+      } else if (f.type === "checkbox") f.checked = !!s[k];
+      else f.value = s[k] ?? "";
+    }
+    removed.clear();
+    editing.clear();
+    $2("shareAuto").checked = s.shareMode === "auto";
+    renderSecrets();
+  }
+  var MODE_NOTE = {
+    thorough: "Finds every item first, writes the minutes, then checks that nothing was missed.",
+    quick: "One pass over the transcript. Lighter on a free quota; may miss small items in long meetings."
+  };
+  function arrowKeys(buttons, pick) {
+    buttons.forEach((b, i) => {
+      b.addEventListener("keydown", (e) => {
+        const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        const next = buttons[(i + d + buttons.length) % buttons.length];
+        next.focus();
+        pick(next);
+      });
+    });
+  }
+  function initSegs() {
+    document.querySelectorAll("[data-seg-for]").forEach((box) => {
+      const sel = $2(box.dataset.segFor);
+      const btns = [...box.querySelectorAll("button")];
+      const sync = () => {
+        btns.forEach((b) => {
+          const on = b.dataset.v === sel.value;
+          b.setAttribute("aria-checked", String(on));
+          b.tabIndex = on ? 0 : -1;
+        });
+        if (sel.id === "minutesMode") $2("minutesModeNote").textContent = MODE_NOTE[sel.value] || "";
+      };
+      const pick = (b) => {
+        sel.value = b.dataset.v;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      btns.forEach((b) => b.onclick = () => pick(b));
+      arrowKeys(btns, pick);
+      sel.addEventListener("change", sync);
+      box._sync = sync;
+      sync();
+    });
+  }
+  var syncSegs = () => document.querySelectorAll("[data-seg-for]").forEach((b) => b._sync());
   function showTab(name) {
     if (!document.getElementById(`page-${name}`)) name = "start";
     document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${name}`));
-    document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    document.querySelectorAll("#nav button").forEach((b) => {
+      const on = b.dataset.tab === name;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
     if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
     window.scrollTo(0, 0);
   }
@@ -1871,18 +2109,11 @@ function out(o) {
     $2("pendingEmpty").classList.toggle("hidden", pending.length > 0);
     $2("pendingList").replaceChildren(
       ...pending.map((p) => {
-        const row = document.createElement("div");
-        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap";
-        const t = document.createElement("span");
-        t.innerHTML = `<b></b> was heard as <b></b>`;
-        t.children[0].textContent = p.suggest;
-        t.children[1].textContent = p.found;
-        const meta = document.createElement("span");
-        meta.className = "hint";
-        meta.style.margin = "0";
-        meta.textContent = `${p.count}\xD7 \xB7 ${p.meeting || "a meeting"}`;
-        const ok = Object.assign(document.createElement("button"), { className: "btn", textContent: "Fix it from now on" });
-        const no = Object.assign(document.createElement("button"), { className: "btn", textContent: "Dismiss" });
+        const row = el2("div", { className: "prow" });
+        const t = el2("span", { className: "who" }, el2("b", { textContent: p.suggest }), " was heard as ", el2("b", { textContent: p.found }));
+        const meta = el2("span", { className: "hint", textContent: `${p.count}\xD7 \xB7 ${p.meeting || "a meeting"}` });
+        const ok = el2("button", { type: "button", className: "btn sm primary", textContent: "Fix it from now on" });
+        const no = el2("button", { type: "button", className: "btn sm", textContent: "Dismiss" });
         ok.onclick = async () => {
           $2("dictionary").value = learnAlias($2("dictionary").value, p.suggest, p.found);
           await save2();
@@ -1904,6 +2135,8 @@ function out(o) {
   var usageDays = 1;
   var fmtN = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n);
   var KIND = { stt: "Speech to text", llm: "Minutes" };
+  var RANGE = { 1: "today", 7: "in the last 7 days", 30: "in the last 30 days" };
+  var money = (usd) => usd < 0.01 && usd > 0 ? usd.toFixed(4) : usd.toFixed(2);
   async function renderUsage() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
@@ -1915,7 +2148,16 @@ function out(o) {
     const table = $2("usageTable");
     table.replaceChildren();
     const head = table.createTHead().insertRow();
-    ["Service", "Used for", "Requests", "Failed", "Tokens in / out", "Audio", "Cost if paid", usageDays === 1 ? "Left today (estimate)" : ""].forEach((h) => head.append(Object.assign(document.createElement("th"), { textContent: h })));
+    [
+      ["Service and model", ""],
+      ["Used for", ""],
+      ["Requests", "num"],
+      ["Failed (rate limit)", "num"],
+      ["Tokens in / out", "num"],
+      ["Audio", "num"],
+      ["Cost if paid", "num"],
+      [usageDays === 1 ? "Left today (estimate)" : "", ""]
+    ].forEach(([h, cls]) => head.append(Object.assign(document.createElement("th"), { textContent: h, className: cls })));
     const body = table.createTBody();
     if (!rows.length) {
       const r = body.insertRow();
@@ -1927,48 +2169,75 @@ function out(o) {
     for (const r of rows) {
       const tr = body.insertRow();
       const cell = (t, cls) => Object.assign(tr.insertCell(), { textContent: t, className: cls || "" });
-      cell(`${r.provider}${r.model && r.model !== "-" ? ` \xB7 ${r.model}` : ""}`);
+      const svc = tr.insertCell();
+      svc.append(el2("span", { className: "svc", textContent: r.provider }));
+      if (r.model && r.model !== "-") svc.append(el2("span", { className: "sr-only", textContent: " \xB7 " }), el2("div", { className: "hint", textContent: r.model }));
       cell(KIND[r.kind] || r.kind);
       cell(String(r.req), "num");
-      cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ""}` : "0", "num");
+      cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ""}` : "0", `num${r.fail ? " fail" : ""}`);
       cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : "-", "num");
       cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : "-", "num");
       const paid2 = paidCost(r, prices);
-      cell(paid2.usd == null ? "-" : r.fail && !r.tin && !r.tout ? "$0.00" : `${paid2.assumed ? "~" : ""}$${paid2.usd < 0.01 && paid2.usd > 0 ? paid2.usd.toFixed(4) : paid2.usd.toFixed(2)}`, "num");
+      cell(paid2.usd == null ? "-" : r.fail && !r.tin && !r.tout ? "$0.00" : `${paid2.assumed ? "~" : ""}$${money(paid2.usd)}`, "num cost");
       const left = tr.insertCell();
+      left.className = "usage-left";
       const limit = limits[r.model];
       if (usageDays === 1 && limit) {
         const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
-        const pct = Math.min(100, Math.round(used / limit * 100));
-        left.innerHTML = `<div>${Math.max(0, limit - used)} of ${limit}</div><div class="meterbar"><i class="${pct >= 100 ? "full" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>`;
-      }
+        const remaining = Math.max(0, limit - used);
+        const pct = Math.max(0, Math.min(100, Math.round(remaining / limit * 100)));
+        const meter = el2("div", { className: "meter" }, el2("i", { className: pct === 0 ? "s" : pct <= 20 ? "q" : "" }));
+        meter.firstChild.style.width = `${pct}%`;
+        meter.setAttribute("role", "meter");
+        meter.setAttribute("aria-valuemin", "0");
+        meter.setAttribute("aria-valuemax", "100");
+        meter.setAttribute("aria-valuenow", String(pct));
+        meter.setAttribute("aria-label", `${r.model} left today`);
+        left.append(meter, el2("div", { className: `hint${pct <= 20 ? " low" : ""}`, textContent: `${remaining} of ${limit} left` }));
+      } else if (usageDays === 1) left.append(el2("span", { className: "hint", textContent: "No daily limit" }));
     }
     const reqs = rows.reduce((a, r) => a + r.req, 0);
     const audio = rows.filter((r) => r.kind === "stt").reduce((a, r) => a + r.audioSec, 0);
     const cost = estimateCost(rows, prices);
     const paid = paidTotal(rows, prices);
-    $2("usageTotals").textContent = `${reqs} requests \xB7 ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` \xB7 about $${cost.toFixed(2)} at your prices` : ""} \xB7 if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""} \xB7 quota day ${dayKey()} (Pacific)`;
+    $2("usageTotals").replaceChildren(
+      el2("strong", { textContent: `Total ${RANGE[usageDays] || ""}`.trim() }),
+      el2("span", { textContent: `${reqs} requests` }),
+      el2("span", { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
+      ...cost != null ? [el2("span", { textContent: `about $${cost.toFixed(2)} at your prices` })] : [],
+      el2("span", { className: "paid", textContent: `if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""}` }),
+      el2("span", { className: "hint", style: "margin-left:auto", textContent: `Quota day ${dayKey()} (Pacific)` })
+    );
   }
-  document.querySelectorAll("#usageRange button").forEach((b) => {
-    b.onclick = () => {
-      usageDays = Number(b.dataset.days);
-      document.querySelectorAll("#usageRange button").forEach((x) => x.classList.toggle("active", x === b));
-      renderUsage();
-    };
+  var rangeBtns = [...document.querySelectorAll("#usageRange button")];
+  var pickRange = (b) => {
+    usageDays = Number(b.dataset.days);
+    rangeBtns.forEach((x) => {
+      x.classList.toggle("active", x === b);
+      x.setAttribute("aria-selected", String(x === b));
+      x.tabIndex = x === b ? 0 : -1;
+    });
+    renderUsage();
+  };
+  rangeBtns.forEach((b) => {
+    b.onclick = () => pickRange(b);
+    b.tabIndex = b.classList.contains("active") ? 0 : -1;
   });
+  arrowKeys(rangeBtns, pickRange);
   $2("usageReset").onclick = async () => {
-    if (!confirm("Reset all usage counters? This only clears Debrief's own tally.")) return;
+    const r = await modal({ text: "Reset all usage counters? This only clears Debrief's own tally.", buttons: [{ label: "Cancel", value: "no" }, { label: "Reset counters", value: "yes", danger: true }] });
+    if (r?.value !== "yes") return;
     await chrome.storage.local.remove(["usage", "learnedLimits"]);
     renderUsage();
   };
-  $2("usageLimits").oninput = renderUsage;
-  $2("usagePrices").oninput = renderUsage;
+  $2("usageLimits").addEventListener("input", renderUsage);
+  $2("usagePrices").addEventListener("input", renderUsage);
   chrome.storage.onChanged.addListener((c) => {
     if (c.usage || c.learnedLimits) renderUsage();
   });
   function showProviderFields() {
-    document.querySelectorAll("[data-stt]").forEach((el) => el.classList.toggle("hidden", el.dataset.stt !== $2("sttProvider").value));
-    document.querySelectorAll("[data-llm]").forEach((el) => el.classList.toggle("hidden", el.dataset.llm !== $2("llmProvider").value));
+    document.querySelectorAll("[data-stt]").forEach((f) => f.classList.toggle("hidden", f.dataset.stt !== $2("sttProvider").value));
+    document.querySelectorAll("[data-llm]").forEach((f) => f.classList.toggle("hidden", f.dataset.llm !== $2("llmProvider").value));
   }
   async function requestOrigins(s) {
     const urls = [];
@@ -1990,7 +2259,7 @@ function out(o) {
     $2("langChips").replaceChildren(
       ...LANGUAGES.map((l) => {
         const label = document.createElement("label");
-        label.className = "chip";
+        label.className = "pick";
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.dataset.lang = l.code;
@@ -2001,17 +2270,20 @@ function out(o) {
     );
     $2("momLanguage").replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement("option"), { value: o.value, textContent: o.label })));
   }
-  function setLanguages(s) {
-    const chosen = chosenLanguages(s);
-    const set = new Set((chosen || []).map((l) => l.code));
+  function setLanguageCodes(codes) {
+    const set = new Set(codes);
     document.querySelectorAll("#langChips input").forEach((c) => c.checked = set.has(c.dataset.lang));
     langHint();
+  }
+  function setLanguages(s) {
+    setLanguageCodes((chosenLanguages(s) || []).map((l) => l.code));
   }
   function langHint() {
     const picked = LANGUAGES.filter((l) => document.querySelector(`#langChips input[data-lang="${l.code}"]`)?.checked);
     $2("langHint").textContent = picked.length ? `Debrief will expect ${names(picked)}, in any mix. Fewer choices give more accurate text.` : "Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.";
   }
   var loaded = {};
+  var ready = false;
   var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   async function save2() {
     const vals = read();
@@ -2020,12 +2292,65 @@ function out(o) {
     await requestOrigins(out);
     await saveSettings(out);
     loaded = vals;
+    for (const k of SECRETS) if ($2(k)) stored[k] = vals[k];
+    removed.clear();
+    editing.clear();
+    for (const k of SECRETS) if ($2(k)) $2(k).value = "";
+    renderSecrets();
+    updateDirty();
     return out;
   }
+  var flash = null;
+  var flashTimer = 0;
+  var isDirty = () => {
+    if (!ready) return false;
+    const v = read();
+    return Object.keys(v).some((k) => !same(v[k], loaded[k]));
+  };
+  function updateDirty() {
+    const bar = $2("savebar");
+    const dirty = isDirty();
+    bar.classList.toggle("dirty", dirty && !flash);
+    bar.classList.toggle("saved", flash?.kind === "saved");
+    bar.classList.toggle("bad", flash?.kind === "bad");
+    $2("undo").hidden = !dirty;
+    $2("msg").textContent = flash ? flash.text : dirty ? "You have unsaved changes" : "All changes saved";
+  }
+  function showFlash(kind, text, ms) {
+    flash = { kind, text };
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      flash = null;
+      updateDirty();
+    }, ms);
+    updateDirty();
+  }
+  function applyValues(v) {
+    fill(v);
+    setLanguageCodes(v.meetingLanguages || []);
+    showProviderFields();
+    syncSegs();
+    renderAllow();
+    renderUsage();
+  }
+  document.querySelector(".content").addEventListener("input", () => {
+    if (flash?.kind === "saved") flash = null;
+    updateDirty();
+  });
+  document.querySelector(".content").addEventListener("change", () => {
+    if (flash?.kind === "saved") flash = null;
+    updateDirty();
+  });
+  $2("undo").onclick = () => {
+    applyValues(loaded);
+    updateDirty();
+    $2("save").focus();
+  };
   async function micStatus() {
     try {
       const p = await navigator.permissions.query({ name: "microphone" });
       $2("micStatus").textContent = p.state === "granted" ? "Microphone allowed \u2713" : `Microphone: ${p.state}`;
+      $2("micStatus").classList.toggle("ok", p.state === "granted");
     } catch {
     }
   }
@@ -2034,12 +2359,11 @@ function out(o) {
   $2("save").onclick = async () => {
     try {
       await save2();
-      $2("msg").textContent = "Saved \u2713";
+      showFlash("saved", "Saved \u2713", 3e3);
       updateGuide();
     } catch (e) {
-      $2("msg").textContent = e.message;
+      showFlash("bad", e.message, 7e3);
     }
-    setTimeout(() => $2("msg").textContent = "", 3e3);
   };
   $2("grantMic").onclick = async () => {
     try {
@@ -2050,13 +2374,15 @@ function out(o) {
       return;
     }
     micStatus();
+    updateGuide();
   };
   $2("useOllama").onclick = () => {
     $2("llmProvider").value = "openai";
     showProviderFields();
     $2("oaBase").value = OLLAMA_BASE;
-    $2("oaKey").value = "";
+    clearSecret("oaKey");
     $2("localStatus").textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
+    updateDirty();
   };
   $2("findOllama").onclick = async () => {
     $2("localStatus").textContent = "Looking for Ollama\u2026";
@@ -2074,6 +2400,7 @@ function out(o) {
     const pick = async () => {
       $2("oaBase").value = base;
       $2("oaModel").value = sel.value;
+      updateDirty();
       const ctx = await ollamaContext(sel.value, base);
       $2("localStatus").textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
     };
@@ -2084,8 +2411,9 @@ function out(o) {
     $2("sttProvider").value = "openai";
     showProviderFields();
     $2("sttBase").value = WHISPER_BASE;
-    $2("sttKey").value = "";
+    clearSecret("sttKey");
     $2("whisperStatus").textContent = "Set to http://localhost:8000/v1. Change the address if your server uses another port.";
+    updateDirty();
   };
   $2("testWhisper").onclick = async () => {
     $2("whisperStatus").textContent = "Testing\u2026";
@@ -2122,9 +2450,33 @@ function out(o) {
   async function updateGuide() {
     const s = await getSettings();
     const mic = await navigator.permissions.query({ name: "microphone" }).then((p) => p.state === "granted").catch(() => false);
-    const done = { g1: !!s.geminiKey || s.sttProvider !== "gemini" && s.llmProvider !== "gemini", g2: mic, g3: !!s.myName, g4: mailReady(s) };
-    for (const [id, ok] of Object.entries(done)) $2(id)?.classList.toggle("done", ok);
+    const needsGemini = s.sttProvider === "gemini" || s.llmProvider === "gemini";
+    const langs = (chosenLanguages(s) || []).map((l) => l.name).join(", ");
+    const done = { g1: !!s.geminiKey || !needsGemini, g2: mic, g3: !!s.myName, g4: mailReady(s) };
+    const text = {
+      g1: done.g1 ? s.geminiKey ? "Gemini key saved" : "No Gemini key needed: you use other services" : "Add your Gemini key",
+      g2: done.g2 ? "Microphone allowed" : "Allow your microphone",
+      g3: done.g3 ? `Name and languages: ${s.myName} \xB7 ${langs || "automatic"}` : "Set your name and languages",
+      g4: done.g4 ? "Email is set up" : "Email the minutes to yourself"
+    };
+    for (const [id, ok] of Object.entries(done)) {
+      const row = $2(id);
+      if (!row) continue;
+      row.classList.toggle("done", ok);
+      row.querySelector(".ic").textContent = ok ? "\u2713" : id.slice(1);
+      row.querySelector("[data-text]").textContent = text[id];
+      row.querySelector("[data-state]").textContent = ok ? "Done. " : "Not done. ";
+      const opt = row.querySelector("[data-opt]");
+      if (opt) opt.hidden = ok;
+    }
+    const n = Object.values(done).filter(Boolean).length;
+    $2("startLede").textContent = n === 4 ? "Everything is set up. Debrief is ready to record your next meeting." : `Four things make Debrief work. ${["None", "One", "Two", "Three"][n]} ${n === 1 ? "is" : "are"} done.`;
   }
+  $2("g1go").onclick = () => {
+    showTab("start");
+    const f = $2("geminiKey");
+    (f.hidden ? secretUi.geminiKey.replace : f).focus();
+  };
   function allAllowed() {
     return parseAddresses([$2("shareList").value, ...parseGroups($2("shareGroups").value).map((g) => g.list.join(","))].join(","));
   }
@@ -2133,8 +2485,8 @@ function out(o) {
     $2("allowLines").textContent = `const ALLOWED = ${l.allowed};
 const ALLOWED_DOMAINS = ${l.domains};`;
   }
-  ["shareList", "shareGroups"].forEach((id) => $2(id).oninput = renderAllow);
-  $2("shareDomains").onchange = renderAllow;
+  ["shareList", "shareGroups"].forEach((id) => $2(id).addEventListener("input", renderAllow));
+  $2("shareDomains").addEventListener("change", renderAllow);
   $2("copyScriptAllow").onclick = async () => {
     await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $2("shareDomains").checked }));
     $2("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
@@ -2146,22 +2498,44 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     $2("copyMsg").textContent = "Copied \u2713";
     setTimeout(() => $2("copyMsg").textContent = "", 1500);
   };
+  var LEVEL = { "\u2713": ["ok", "Working"], "!": ["warn", "Warning"], "\u2717": ["bad", "Not working"] };
+  function renderChecks(rows) {
+    $2("checkupOut").replaceChildren(
+      ...rows.map((r) => {
+        const [cls, sr] = LEVEL[r.level] || LEVEL["!"];
+        const ic = el2("span", { className: `ic ${cls}`, textContent: r.level });
+        ic.setAttribute("aria-label", sr);
+        const name = el2("b", {}, r.title, el2("span", { className: "sr-only", textContent: ": " }));
+        const body = el2("div", { className: "ck" }, name);
+        if (r.detail) body.append(el2("p", { className: "hint", textContent: r.detail }));
+        const li = el2("li", {}, ic, body);
+        if (r.go && r.level !== "\u2713") {
+          const fix = el2("button", { type: "button", className: "btn sm", textContent: r.fixText || "Open settings" });
+          fix.onclick = () => showTab(r.go);
+          li.append(fix);
+        }
+        return li;
+      })
+    );
+  }
   $2("checkup").onclick = async () => {
     $2("checkup").disabled = true;
     $2("checkupMsg").textContent = "Checking\u2026";
     try {
       const rows = await runCheckup();
       const text = checkupText(rows);
-      $2("checkupOut").textContent = text;
+      renderChecks(rows);
       $2("checkupOut").hidden = false;
       $2("checkupCopy").hidden = false;
-      $2("checkupCopy").onclick = async () => {
-        await navigator.clipboard.writeText(text);
-        $2("checkupMsg").textContent = "Copied \u2713";
-      };
+      $2("checkup").textContent = "Check again";
       const bad = rows.filter((r) => r.level === "\u2717").length;
       const warn = rows.filter((r) => r.level === "!").length;
-      $2("checkupMsg").textContent = bad ? `${bad} problem${bad === 1 ? "" : "s"}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : "All good";
+      const summary = bad ? `${bad} problem${bad === 1 ? "" : "s"}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : "All good";
+      $2("checkupMsg").textContent = summary;
+      $2("checkupCopy").onclick = async () => {
+        await navigator.clipboard.writeText(text);
+        $2("checkupMsg").textContent = `Copied \u2713 ${summary}`;
+      };
     } catch (e) {
       $2("checkupMsg").textContent = `Could not check: ${e.message}`;
     } finally {
@@ -2190,32 +2564,34 @@ const ALLOWED_DOMAINS = ${l.domains};`;
   (async () => {
     const s = await getSettings();
     buildLanguageUi();
-    for (const k of FIELDS2) {
-      const el = $2(k);
-      if (!el) continue;
-      if (el.type === "checkbox") el.checked = !!s[k];
-      else el.value = s[k];
-    }
-    $2("shareAuto").checked = s.shareMode === "auto";
+    initSecrets();
+    initSegs();
+    fill(s);
     setLanguages(s);
     loaded = read();
+    ready = true;
     showProviderFields();
+    syncSegs();
     renderAllow();
     micStatus();
     updateGuide();
     renderUsage();
     renderLearned();
     initVoices();
+    updateDirty();
     showTab(location.hash.slice(1) || "start");
   })();
   chrome.storage.onChanged.addListener(async (changes) => {
-    if (!changes.settings) return;
+    if (!changes.settings || !ready) return;
     const fresh = await getSettings();
     for (const k of FIELDS2) {
-      const el = $2(k);
-      if (!el || !same(read()[k], loaded[k])) continue;
-      if (el.type === "checkbox") el.checked = !!fresh[k];
-      else el.value = fresh[k];
+      const f = $2(k);
+      if (!f || !same(read()[k], loaded[k])) continue;
+      if (SECRETS.includes(k)) {
+        stored[k] = fresh[k] || "";
+        renderSecret(k);
+      } else if (f.type === "checkbox") f.checked = !!fresh[k];
+      else f.value = fresh[k];
       loaded[k] = fresh[k];
     }
     $2("shareAuto").checked = fresh.shareMode === "auto";
@@ -2224,5 +2600,8 @@ const ALLOWED_DOMAINS = ${l.domains};`;
       setLanguages(fresh);
       loaded.meetingLanguages = read().meetingLanguages;
     }
+    syncSegs();
+    updateDirty();
+    updateGuide();
   });
 })();
