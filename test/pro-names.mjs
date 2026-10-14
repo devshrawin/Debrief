@@ -118,6 +118,46 @@ await test('minutes: thorough mode extracts per window, writes with the checklis
   assert.equal(r.stats.missed, 1);
 });
 
+await test('minutes: writing again reuses the items found the first time, so the count cannot jump; re-read forces a fresh read', async () => {
+  let extractCalls = 0;
+  let temps = [];
+  let answer = 'ACTION | Amal | Friday | [01:00] | send file | "send file"';
+  const gen = async (system, user, onText, opts) => {
+    temps.push([/extract facts/.test(system) ? 'extract' : /audit meeting minutes/.test(system) ? 'check' : 'write', opts?.temperature]);
+    if (/extract facts/.test(system)) {
+      extractCalls++;
+      return answer;
+    }
+    if (/audit meeting minutes/.test(system)) return 'NONE';
+    return '# Title';
+  };
+  const settings = { ...DEFAULTS, momLanguage: 'English' };
+  const first = await writeMinutes({ meeting: long, settings, notes: '', gen, ctx: {} });
+  const firstCalls = extractCalls;
+  assert.ok(firstCalls >= 2 && first.extract?.items.length >= 2, 'a first read extracts and returns the items to keep');
+  assert.ok(temps.some(([k, t]) => k === 'extract' && t === 0), 'extraction asks for repeatable output');
+  assert.ok(temps.some(([k, t]) => k === 'check' && t === 0));
+  assert.ok(temps.some(([k, t]) => k === 'write' && t > 0 && t <= 0.3));
+  // the model would now answer differently (more items), but a rewrite must not re-extract
+  answer = ['ACTION | A | - | [01:00] | one | "x"', 'ACTION | B | - | [02:00] | two | "y"', 'ACTION | C | - | [03:00] | three | "z"'].join('\n');
+  const again = await writeMinutes({ meeting: { ...long, extract: first.extract }, settings, notes: '', gen, ctx: {} });
+  assert.equal(extractCalls, firstCalls, 'no new extraction calls');
+  assert.equal(again.stats.reused, true);
+  assert.equal(again.stats.items, first.stats.items, 'the same number of items');
+  const fresh = await writeMinutes({ meeting: { ...long, extract: first.extract }, settings, notes: '', gen, ctx: { reread: true } });
+  assert.ok(extractCalls > firstCalls);
+  assert.ok(fresh.stats.items > first.stats.items);
+  // a changed transcript is never served from the old read
+  const edited = { ...long, segments: [...long.segments, { t: 9999, src: 'others', text: 'a brand new sentence '.repeat(40) }], extract: first.extract };
+  const n0 = extractCalls;
+  await writeMinutes({ meeting: edited, settings, notes: '', gen, ctx: {} });
+  assert.ok(extractCalls > n0);
+  // a read with a failed part is not kept (it would lock in the gap)
+  let k = 0;
+  const flaky = await writeMinutes({ meeting: long, settings, notes: '', gen: async (s, u, o, p) => { if (/extract facts/.test(s) && k++ === 0) throw new Error('boom'); return gen(s, u, o, p); }, ctx: {} });
+  assert.equal(flaky.extract, null);
+});
+
 await test('minutes: quick mode and short meetings use a single pass', async () => {
   let n = 0;
   const gen = async () => (n++, '# Title');

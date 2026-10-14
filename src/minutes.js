@@ -38,6 +38,22 @@ export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 
 }
 
 // meeting: record; ctx: { entries, attendees, absent, captions, invited }
+// A short fingerprint of text, to tell whether the transcript changed since the items were extracted.
+export function textKey(text) {
+  let h1 = 5381;
+  let h2 = 52711;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = ((h1 << 5) + h1) ^ c;
+    h2 = ((h2 << 5) + h2 + c) | 0;
+  }
+  return `${text.length}.${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}`;
+}
+
+// Temperatures: extraction and the check are made as repeatable as the model allows (0); the writing keeps a little
+// freedom (0.2) so the prose reads naturally.
+export const TEMPERATURE = { extract: 0, write: 0.2, check: 0 };
+
 export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, onText = () => {}, onStatus = () => {}, coverage = {} }) {
   const lines = formatTranscript(meeting, settings.myName, ctx).split('\n').filter(Boolean);
   const transcript = lines.join('\n');
@@ -48,14 +64,24 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0 };
 
   let checklist = '';
+  let extract = null;
   if (thorough) {
     const windows = splitWindows(lines, local ? 1500 : 3200);
     const items = [];
-    for (let i = 0; i < windows.length; i++) {
+    // The same transcript gives the same list: items found once are reused when the minutes are written again,
+    // so a rewrite cannot suddenly find 12 action items where the first run found 4. "Re-read" forces a fresh read.
+    const key = textKey(`${local ? 'l' : 'c'}|${transcript}|${(ctx.entries || []).length}|${(ctx.attendees || []).join(',')}`);
+    const cached = !ctx.reread && meeting.extract?.key === key && Array.isArray(meeting.extract.items) ? meeting.extract.items : null;
+    if (cached) {
+      items.push(...cached);
+      stats.reused = true;
+      stats.extractWindows = windows.length;
+    }
+    for (let i = 0; !cached && i < windows.length; i++) {
       onStatus(`Reading the transcript carefully (part ${i + 1} of ${windows.length})…`);
       try {
         stats.calls++;
-        const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting, settings, windows[i].join('\n'), ctx));
+        const out = await gen(EXTRACT_SYSTEM, buildExtractPrompt(meeting, settings, windows[i].join('\n'), ctx), undefined, { temperature: TEMPERATURE.extract });
         items.push(...guardOwners(parseItems(out), windows[i].join('\n')));
         stats.extractWindows++;
       } catch (e) {
@@ -65,18 +91,20 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     }
     stats.items = items.length;
     checklist = itemsToChecklist(items);
+    // only a complete read is worth keeping: a read with failed parts would lock in the gaps
+    if (!cached && !stats.extractFailed) extract = { key, items };
   }
 
   onStatus('Writing the minutes…');
   stats.calls++;
-  let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages: joinNames(languagesOf(settings)) }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText));
+  let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages: joinNames(languagesOf(settings)) }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText, { temperature: TEMPERATURE.write }));
   if (!mom) throw new Error('The model returned an empty reply. Try again, or choose another model in Settings.');
 
   if (thorough && words <= (local ? 6000 : 24000)) {
     onStatus('Checking nothing was left out…');
     try {
       stats.calls++;
-      const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom));
+      const out = await gen(CHECK_SYSTEM, buildCheckPrompt(transcript, mom), undefined, { temperature: TEMPERATURE.check });
       const missing = sanitizeMinutes(out).split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => /^\[?\d{1,2}:\d{2}/.test(l)); // only real findings: a timestamp first; chatter like "Nothing is missing" is dropped
       stats.missed = missing.length;
       if (missing.length) {
@@ -94,5 +122,5 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   if (attendance) foot.push(attendance);
   if (cov) foot.push(cov);
   foot.push(`_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})` : 'a single pass'}._`);
-  return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist };
+  return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist, extract };
 }
