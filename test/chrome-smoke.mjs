@@ -347,7 +347,7 @@ try {
   const tour = await openPage(`chrome-extension://${id}/welcome.html?restart=1`);
   await sleep(800);
   const t0 = await tour.evaluate(`({ h1: document.querySelector('#stage h1').textContent, nav: document.querySelectorAll('#stepsNav button').length, next: document.getElementById('next').textContent, back: document.getElementById('back').style.visibility })`);
-  check('tour opens on the welcome step with every step listed', /minutes without taking notes/i.test(t0.h1) && t0.nav === 11 && /Start the tour/.test(t0.next) && t0.back === 'hidden', JSON.stringify(t0));
+  check('tour opens on the welcome step with every step listed', /minutes without taking notes/i.test(t0.h1) && t0.nav === 12 && /Start the tour/.test(t0.next) && t0.back === 'hidden', JSON.stringify(t0));
   if (process.env.SHOTS) {
     const fs = await import('node:fs');
     await send('Emulation.setDeviceMetricsOverride', { width: 1180, height: 760, deviceScaleFactor: 1.4, mobile: false }, tour.sessionId);
@@ -380,7 +380,7 @@ try {
     await wait(500);
     out.names = document.querySelector('#stage h1').textContent;
     document.getElementById('t-dict').value = 'Amal | Aman';
-    document.querySelectorAll('#stepsNav button')[10].click();
+    document.querySelectorAll('#stepsNav button')[11].click();
     await wait(600);
     const settings = (await chrome.storage.local.get('settings')).settings;
     out.saved = { name: settings.myName, lang: settings.meetingLanguages, dict: settings.dictionary, key: settings.geminiKey };

@@ -15035,9 +15035,37 @@ function out(o) {
       }
     },
     {
+      id: "voices",
+      label: "Who is speaking",
+      kicker: "Step 6",
+      title: "Put names to voices",
+      lede: 'Optional. Debrief can guess who is speaking from the sound of their voice, so the transcript and minutes can say "Priya" instead of "Others". It is a best guess and says "Unknown speaker" when unsure.',
+      optional: true,
+      nodes: () => [
+        card(
+          "How it works",
+          h(
+            "ul",
+            { class: "how" },
+            h("li", {}, "Everything happens in your browser. A small speaker model that ships with the extension (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) turns short stretches of speech into a list of 256 numbers. Audio is never saved or sent anywhere for this."),
+            h("li", {}, "You add people in ", h("b", {}, "Settings \u2192 Voices"), " by recording about 20 seconds of each person reading a short text, in the language they use in meetings (English, Hindi, Malayalam or free speech). Only the numbers are stored."),
+            h("li", {}, "Overlapping speech, unfamiliar voices and noisy stretches show as ", h("b", {}, "Unknown speaker"), ", and where Meet's captions name someone else, both names are shown."),
+            h("li", {}, "Accuracy depends on microphones and rooms. Check the names against what you remember before relying on them.")
+          )
+        ),
+        card(
+          "Turn it on",
+          toggle("voiceOn", "Name speakers by their voice (best guess)", "Uses the voices you add in Settings. Off by default."),
+          toggle("voiceLearn", "Learn voices on its own from Meet captions", "Builds voices over several meetings when Meet's captions name exactly one speaker. A learned voice is not used until it has been heard in two meetings. Tell your colleagues, and delete anyone any time."),
+          h("div", { class: "btnrow" }, h("a", { class: "btn", href: "options.html#voices", target: "_blank" }, "Open Voices settings")),
+          p('You can skip this and set it up later: Settings \u2192 Voices. "Forget all voices" there deletes every fingerprint.', "hint")
+        )
+      ]
+    },
+    {
       id: "email",
       label: "Email the minutes",
-      kicker: "Step 6",
+      kicker: "Step 7",
       title: "Get the minutes by email",
       lede: "Optional, and worth the two minutes. The minutes arrive in your inbox as soon as they are written, sent from your own Google account through a small script you control. No Debrief server is involved.",
       optional: true,
@@ -15092,7 +15120,7 @@ function out(o) {
     {
       id: "share",
       label: "Share and calendar",
-      kicker: "Step 7",
+      kicker: "Step 8",
       title: "Share with your team",
       lede: "Optional. Debrief can send the minutes to colleagues and show who was invited versus who actually came.",
       optional: true,
@@ -15128,7 +15156,7 @@ function out(o) {
     {
       id: "local",
       label: "Local models",
-      kicker: "Step 8",
+      kicker: "Step 9",
       title: "Keeping everything on your computer",
       lede: "Optional. If you do not want meeting text to leave your PC, Debrief can use models running locally instead of Gemini.",
       optional: true,
@@ -15153,7 +15181,7 @@ function out(o) {
     {
       id: "usage",
       label: "Limits and usage",
-      kicker: "Step 9",
+      kicker: "Step 10",
       title: "Keeping an eye on limits",
       lede: "Free services have daily limits. Debrief counts what it uses and tells you before and when you hit one.",
       optional: true,
