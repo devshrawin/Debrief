@@ -2475,8 +2475,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguages: [],
+    // languages to expect (codes from languages.js); empty = automatic
     meetingLanguage: "auto",
-    // auto | hinglish | malayalam
+    // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailSecret: "",
@@ -2737,16 +2739,16 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     return c && c.length <= 40 && new RegExp("^\\p{L}[\\p{L}\\p{M} .'-]*$", "u").test(c) && !/^(you|guest|unknown|presentation|presenting)$/i.test(c) ? c : "";
   }
   function learnFromMeeting(meeting2, { entries = [], myName = "" } = {}) {
-    const names = /* @__PURE__ */ new Set();
+    const names2 = /* @__PURE__ */ new Set();
     const add = (n) => {
       const c = cleanLearned(n);
-      if (c) names.add(c);
+      if (c) names2.add(c);
     };
     (meeting2.attendees || []).forEach(add);
     Object.keys(meeting2.presence || {}).forEach((n) => add(/^you$/i.test(n) ? myName : n));
     (meeting2.invited || []).filter((p) => p.status !== "no").forEach((p) => add(p.name || titleCase(String(p.email || "").split("@")[0].replace(/[._-]+/g, " "))));
     (meeting2.captions || []).forEach((c) => add(/^you$/i.test(c.name) ? myName : c.name));
-    const list = [...names];
+    const list = [...names2];
     const text = (meeting2.segments || []).map((s) => s.text).join(" ");
     return { names: list, candidates: suggestNames(text, list, entries).filter((c) => c.count >= 2) };
   }
@@ -2770,11 +2772,11 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   }
 
   // src/prompt.js
-  function buildSystemPrompt(language, { evidence = true } = {}) {
-    return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in Hindi, English, Malayalam, or a mix of them (Hinglish, Manglish).
+  function buildSystemPrompt(language, { evidence = true, languages = "Hindi, English, Malayalam" } = {}) {
+    return `You write Minutes of Meeting (MOM) from raw transcripts of online meetings held in ${languages}, or a mix of them (for example Hinglish or Manglish).
 
 About the transcript:
-- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Hindi or Malayalam written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
+- It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Indian or other non-English languages written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
 - Lines tagged ME come from the note-taker's own microphone. Lines tagged OTHERS are all remote participants mixed together, so you usually cannot tell which remote person spoke. Attribute statements to a named person only when the transcript itself makes it clear (someone is addressed by name, introduces themselves, or is assigned a task by name), or when a speaker timeline is provided below the transcript.
 - If the note-taker's microphone picked up speaker audio, the same sentence may appear under both ME and OTHERS. Count it once.
 
@@ -2843,8 +2845,8 @@ Do not write an Attendance section or notes about the recording: they are added 
   }
   function buildUserPrompt(meeting2, settings2, notes, ctx = {}) {
     const lines = header(meeting2, settings2);
-    const names = glossaryLine(ctx.entries || [], [...ctx.attendees || [], ...ctx.learned || []]);
-    if (names) lines.push("", `Names and terms (spell exactly like this): ${names}`);
+    const names2 = glossaryLine(ctx.entries || [], [...ctx.attendees || [], ...ctx.learned || []]);
+    if (names2) lines.push("", `Names and terms (spell exactly like this): ${names2}`);
     if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(", ")}`);
     if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
     if (notes?.trim()) lines.push("", "Context from the note-taker (attendees, agenda, spellings):", notes.trim());
@@ -2861,8 +2863,8 @@ TYPE | owner or - | due or - | [mm:ss] | short description | quote of at most 12
 TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. Use "-" when owner or due is not stated; never guess an owner. If there is nothing, output NONE. Output only the lines.`;
   function buildExtractPrompt(meeting2, settings2, windowText, ctx = {}) {
     const lines = header(meeting2, settings2);
-    const names = glossaryLine(ctx.entries || [], ctx.attendees || []);
-    if (names) lines.push(`Names and terms (spell exactly like this): ${names}`);
+    const names2 = glossaryLine(ctx.entries || [], ctx.attendees || []);
+    if (names2) lines.push(`Names and terms (spell exactly like this): ${names2}`);
     lines.push("", "<transcript>", windowText, "</transcript>");
     return lines.join("\n");
   }
@@ -2960,8 +2962,8 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     add(p.name);
     if (p.email) add(String(p.email).split("@")[0].replace(/[._-]+/g, " "));
     for (const e of entries) {
-      const names = [e.name, ...e.aliases].map((x2) => tokens(x2).join(" "));
-      for (const id2 of [...ids]) if (names.includes(id2)) names.forEach((n) => ids.add(n));
+      const names2 = [e.name, ...e.aliases].map((x2) => tokens(x2).join(" "));
+      for (const id2 of [...ids]) if (names2.includes(id2)) names2.forEach((n) => ids.add(n));
     }
     return [...ids];
   }
@@ -3057,6 +3059,52 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     }
   }
 
+  // src/languages.js
+  var LANGUAGES = [
+    { code: "en", name: "English", bcp: "en-IN", script: "Latin script" },
+    { code: "hi", name: "Hindi", bcp: "hi-IN", script: "Devanagari" },
+    { code: "ml", name: "Malayalam", bcp: "ml-IN", script: "Malayalam script" },
+    { code: "ta", name: "Tamil", bcp: "ta-IN", script: "Tamil script" },
+    { code: "te", name: "Telugu", bcp: "te-IN", script: "Telugu script" },
+    { code: "kn", name: "Kannada", bcp: "kn-IN", script: "Kannada script" },
+    { code: "mr", name: "Marathi", bcp: "mr-IN", script: "Devanagari" },
+    { code: "bn", name: "Bengali", bcp: "bn-IN", script: "Bengali script" },
+    { code: "gu", name: "Gujarati", bcp: "gu-IN", script: "Gujarati script" },
+    { code: "pa", name: "Punjabi", bcp: "pa-IN", script: "Gurmukhi" },
+    { code: "or", name: "Odia", bcp: "or-IN", script: "Odia script" },
+    { code: "ur", name: "Urdu", bcp: "ur-IN", script: "Urdu (Arabic) script" },
+    { code: "es", name: "Spanish", bcp: "es-ES", script: "Latin script" },
+    { code: "fr", name: "French", bcp: "fr-FR", script: "Latin script" },
+    { code: "de", name: "German", bcp: "de-DE", script: "Latin script" },
+    { code: "pt", name: "Portuguese", bcp: "pt-BR", script: "Latin script" },
+    { code: "ru", name: "Russian", bcp: "ru-RU", script: "Cyrillic" },
+    { code: "ar", name: "Arabic", bcp: "ar-XA", script: "Arabic script" },
+    { code: "zh", name: "Chinese (Mandarin)", bcp: "zh-CN", script: "Chinese characters" },
+    { code: "ja", name: "Japanese", bcp: "ja-JP", script: "Japanese script" }
+  ];
+  var BY_CODE = new Map(LANGUAGES.map((l3) => [l3.code, l3]));
+  var LEGACY = { auto: ["en", "hi", "ml"], hinglish: ["hi", "en"], malayalam: ["ml", "en"] };
+  function chosenLanguages(settings2) {
+    const list = settings2?.meetingLanguages;
+    if (Array.isArray(list) && list.length) return list.map((c) => BY_CODE.get(c)).filter(Boolean);
+    const legacy = settings2?.meetingLanguage;
+    return legacy && legacy !== "auto" && LEGACY[legacy] ? LEGACY[legacy].map((c) => BY_CODE.get(c)) : null;
+  }
+  var languagesOf = (settings2) => chosenLanguages(settings2) || LEGACY.auto.map((c) => BY_CODE.get(c));
+  var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l3) => l3.name).join(", ")} and ${langs.at(-1).name}`;
+  function languageHint(langs) {
+    if (!langs.length) return "";
+    const scripts = langs.filter((l3) => l3.code !== "en").map((l3) => `${l3.name} in ${l3.script}`);
+    const mix = langs.length > 1 ? `It may mix ${names(langs)}` : `It is in ${langs[0].name}`;
+    return `${mix}: write ${scripts.length ? scripts.join(", ") : "English"}${langs.some((l3) => l3.code === "en") && scripts.length ? " and English words in English" : ""}.`;
+  }
+  var geminiCodes = (langs) => langs?.length ? langs.map((l3) => l3.bcp) : null;
+  function singleLanguage(langs) {
+    const other = langs.filter((l3) => l3.code !== "en");
+    return other.length === 1 ? other[0] : null;
+  }
+  var SARVAM_CODES = /* @__PURE__ */ new Set(["hi", "ml", "ta", "te", "kn", "mr", "bn", "gu", "pa", "or", "en"]);
+
   // src/minutes.js
   var wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
   function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
@@ -3096,7 +3144,7 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     }
     onStatus("Writing the minutes\u2026");
     stats.calls++;
-    let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText));
+    let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings2.momLanguage, { evidence: true, languages: names(languagesOf(settings2)) }), buildUserPrompt(meeting2, settings2, notes, { ...ctx, checklist }), onText));
     if (!mom) throw new Error("The model returned an empty reply. Try again, or choose another model in Settings.");
     if (thorough && words <= (local ? 6e3 : 24e3)) {
       onStatus("Checking nothing was left out\u2026");
@@ -16431,29 +16479,16 @@ _(Output hit the length limit and was cut off.)_`;
     }
     throw new SttError(`${provider} HTTP ${res.status}: ${detail}`, res.status);
   }
-  var LANGUAGES = {
-    auto: {
-      codes: null,
-      hint: "It may mix Hindi, English and Malayalam: write Hindi in Devanagari, Malayalam in Malayalam script, and English words in English."
-    },
-    hinglish: {
-      codes: ["hi-IN", "en-IN"],
-      hint: "It mixes Hindi and English: write Hindi in Devanagari and English words in English."
-    },
-    malayalam: {
-      codes: ["ml-IN", "en-IN"],
-      hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
-    }
-  };
   var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
-  var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
+  var lang = (s) => ({ codes: geminiCodes(chosenLanguages(s)), hint: languageHint(languagesOf(s)) });
   async function sarvam(wav, s) {
     const fd = new FormData();
     fd.append("file", wav, "chunk.wav");
     fd.append("model", s.sarvamModel);
     fd.append("mode", s.sarvamMode);
-    fd.append("language_code", s.sarvamLanguage !== "unknown" ? s.sarvamLanguage : s.meetingLanguage === "malayalam" ? "ml-IN" : "unknown");
+    const only = singleLanguage(chosenLanguages(s) || []);
+    fd.append("language_code", s.sarvamLanguage !== "unknown" ? s.sarvamLanguage : only && SARVAM_CODES.has(only.code) ? only.bcp : "unknown");
     const res = await fetch("https://api.sarvam.ai/speech-to-text", {
       method: "POST",
       headers: { "api-subscription-key": s.sarvamKey },
@@ -16484,8 +16519,10 @@ _(Output hit the length limit and was cut off.)_`;
     fd.append("file", wav, "chunk.wav");
     fd.append("model", s.sttModel);
     fd.append("response_format", "json");
-    if (s.meetingLanguage === "malayalam") fd.append("language", "ml");
-    const base = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    const chosen = chosenLanguages(s);
+    const only = singleLanguage(chosen || []);
+    if (only) fd.append("language", only.code);
+    const base = chosen && s.sttPrompt === DEFAULT_STT_PROMPT ? `${names(chosen)} office meeting. ${languageHint(chosen)}` : s.sttPrompt;
     const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(", ")}.` : ""].filter(Boolean).join(" ");
     if (prompt) fd.append("prompt", prompt);
     const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
@@ -16974,14 +17011,14 @@ ${meeting2.mom || ""}
     if (meeting.attendees?.length) return;
     const entries = parseDictionary(settings.dictionary);
     const presence = Object.entries(meeting.presence || {}).map(([name]) => /^you$/i.test(name) && settings.myName ? settings.myName : name);
-    let names = [];
+    let names2 = [];
     if (presence.length) {
       const m = matchPeople(meeting.invited, meeting.presence, { entries, myName: settings.myName });
-      names = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
+      names2 = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
     } else if (meeting.invited?.length) {
-      names = meeting.invited.filter((p) => p.status !== "no").map((p) => p.name || p.email.split("@")[0]);
+      names2 = meeting.invited.filter((p) => p.status !== "no").map((p) => p.name || p.email.split("@")[0]);
     }
-    if (names.length) meeting.attendees = [...new Set(names)];
+    if (names2.length) meeting.attendees = [...new Set(names2)];
   }
   var sleep2 = (ms, signal) => new Promise((resolve, reject) => {
     const t = setTimeout(resolve, ms);

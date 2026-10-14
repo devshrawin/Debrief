@@ -5,6 +5,7 @@ import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, 
 import scriptText from '../apps-script/Code.gs';
 import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvice, explain } from './local.js';
 import { learnAlias } from './dictionary.js';
+import { LANGUAGES, chosenLanguages, minutesLanguageOptions, joinNames } from './languages.js';
 import { summarize, parseLimits, parsePrices, estimateCost, dayKey } from './usage.js';
 
 const $ = (id) => document.getElementById(id);
@@ -18,6 +19,7 @@ function read() {
     s[k] = el.type === 'checkbox' ? el.checked : el.value.trim();
   }
   s.shareMode = $('shareAuto').checked ? 'auto' : 'review';
+  s.meetingLanguages = [...document.querySelectorAll('#langChips input:checked')].map((c) => c.dataset.lang);
   return s;
 }
 
@@ -164,6 +166,35 @@ async function requestOrigins(s) {
 // Values as last loaded or saved. Only fields the user changed on this page are written, on top of the
 // latest stored settings, so an old open tab can never wipe a change made somewhere else (a remembered
 // name fix, the email secret, a mute switch).
+// ---- languages: pick any number ----
+function buildLanguageUi() {
+  $('langChips').replaceChildren(
+    ...LANGUAGES.map((l) => {
+      const label = document.createElement('label');
+      label.className = 'chip';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.lang = l.code;
+      cb.onchange = langHint;
+      label.append(cb, l.name);
+      return label;
+    })
+  );
+  $('momLanguage').replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement('option'), { value: o.value, textContent: o.label })));
+}
+function setLanguages(s) {
+  const chosen = chosenLanguages(s);
+  const set = new Set((chosen || []).map((l) => l.code));
+  document.querySelectorAll('#langChips input').forEach((c) => (c.checked = set.has(c.dataset.lang)));
+  langHint();
+}
+function langHint() {
+  const picked = LANGUAGES.filter((l) => document.querySelector(`#langChips input[data-lang="${l.code}"]`)?.checked);
+  $('langHint').textContent = picked.length
+    ? `Debrief will expect ${joinNames(picked)}, in any mix. Fewer choices give more accurate text.`
+    : 'Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.';
+}
+
 let loaded = {};
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -336,6 +367,7 @@ $('testMail').onclick = async () => {
 
 (async () => {
   const s = await getSettings();
+  buildLanguageUi();
   for (const k of FIELDS) {
     const el = $(k);
     if (!el) continue;
@@ -343,6 +375,7 @@ $('testMail').onclick = async () => {
     else el.value = s[k];
   }
   $('shareAuto').checked = s.shareMode === 'auto';
+  setLanguages(s);
   loaded = read();
   showProviderFields();
   renderAllow();
@@ -367,4 +400,8 @@ chrome.storage.onChanged.addListener(async (changes) => {
   }
   $('shareAuto').checked = fresh.shareMode === 'auto';
   loaded.shareMode = fresh.shareMode;
+  if (same(read().meetingLanguages, loaded.meetingLanguages)) {
+    setLanguages(fresh);
+    loaded.meetingLanguages = read().meetingLanguages;
+  }
 });

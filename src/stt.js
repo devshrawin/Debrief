@@ -12,6 +12,7 @@ import { isLoopNoise } from './noise.js';
 import { errorDetail, DEFAULTS } from './store.js';
 import { record } from './usage.js';
 import { parseDictionary, hintTerms } from './dictionary.js';
+import { chosenLanguages, languagesOf, languageHint, geminiCodes, singleLanguage, joinNames, SARVAM_CODES } from './languages.js';
 
 const DEFAULT_STT_PROMPT = DEFAULTS.sttPrompt;
 
@@ -24,25 +25,11 @@ async function check(res, provider) {
   throw new SttError(`${provider} HTTP ${res.status}: ${detail}`, res.status);
 }
 
-// What the meeting is spoken in. `codes` go to Gemini's transcription model; `hint` is the prompt for general models.
-export const LANGUAGES = {
-  auto: {
-    codes: null,
-    hint: 'It may mix Hindi, English and Malayalam: write Hindi in Devanagari, Malayalam in Malayalam script, and English words in English.',
-  },
-  hinglish: {
-    codes: ['hi-IN', 'en-IN'],
-    hint: 'It mixes Hindi and English: write Hindi in Devanagari and English words in English.',
-  },
-  malayalam: {
-    codes: ['ml-IN', 'en-IN'],
-    hint: 'It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (മലയാളം) and English words in English.',
-  },
-};
 // Names and terms from the personal dictionary, as spelling hints for the speech models.
 const sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
 const audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32000);
-const lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
+// `codes` go to Gemini's transcription model (none = it detects); `hint` is the prompt for general models.
+const lang = (s) => ({ codes: geminiCodes(chosenLanguages(s)), hint: languageHint(languagesOf(s)) });
 
 async function sarvam(wav, s) {
   const fd = new FormData();
@@ -50,7 +37,8 @@ async function sarvam(wav, s) {
   fd.append('model', s.sarvamModel);
   fd.append('mode', s.sarvamMode);
   // An explicit Sarvam language wins; otherwise follow the meeting language.
-  fd.append('language_code', s.sarvamLanguage !== 'unknown' ? s.sarvamLanguage : s.meetingLanguage === 'malayalam' ? 'ml-IN' : 'unknown');
+  const only = singleLanguage(chosenLanguages(s) || []);
+  fd.append('language_code', s.sarvamLanguage !== 'unknown' ? s.sarvamLanguage : only && SARVAM_CODES.has(only.code) ? only.bcp : 'unknown');
   const res = await fetch('https://api.sarvam.ai/speech-to-text', {
     method: 'POST',
     headers: { 'api-subscription-key': s.sarvamKey },
@@ -83,8 +71,10 @@ async function openaiCompat(wav, s) {
   fd.append('file', wav, 'chunk.wav');
   fd.append('model', s.sttModel);
   fd.append('response_format', 'json');
-  if (s.meetingLanguage === 'malayalam') fd.append('language', 'ml');
-  const base = s.meetingLanguage === 'malayalam' && s.sttPrompt === DEFAULT_STT_PROMPT ? 'Malayalam office meeting. Malayalam in Malayalam script, English words in English.' : s.sttPrompt;
+  const chosen = chosenLanguages(s);
+  const only = singleLanguage(chosen || []);
+  if (only) fd.append('language', only.code);
+  const base = chosen && s.sttPrompt === DEFAULT_STT_PROMPT ? `${joinNames(chosen)} office meeting. ${languageHint(chosen)}` : s.sttPrompt;
   const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(', ')}.` : ''].filter(Boolean).join(' ');
   if (prompt) fd.append('prompt', prompt);
   const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};

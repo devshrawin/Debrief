@@ -76,8 +76,10 @@
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguages: [],
+    // languages to expect (codes from languages.js); empty = automatic
     meetingLanguage: "auto",
-    // auto | hinglish | malayalam
+    // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailSecret: "",
@@ -195,6 +197,52 @@
   }
   var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
 
+  // src/languages.js
+  var LANGUAGES = [
+    { code: "en", name: "English", bcp: "en-IN", script: "Latin script" },
+    { code: "hi", name: "Hindi", bcp: "hi-IN", script: "Devanagari" },
+    { code: "ml", name: "Malayalam", bcp: "ml-IN", script: "Malayalam script" },
+    { code: "ta", name: "Tamil", bcp: "ta-IN", script: "Tamil script" },
+    { code: "te", name: "Telugu", bcp: "te-IN", script: "Telugu script" },
+    { code: "kn", name: "Kannada", bcp: "kn-IN", script: "Kannada script" },
+    { code: "mr", name: "Marathi", bcp: "mr-IN", script: "Devanagari" },
+    { code: "bn", name: "Bengali", bcp: "bn-IN", script: "Bengali script" },
+    { code: "gu", name: "Gujarati", bcp: "gu-IN", script: "Gujarati script" },
+    { code: "pa", name: "Punjabi", bcp: "pa-IN", script: "Gurmukhi" },
+    { code: "or", name: "Odia", bcp: "or-IN", script: "Odia script" },
+    { code: "ur", name: "Urdu", bcp: "ur-IN", script: "Urdu (Arabic) script" },
+    { code: "es", name: "Spanish", bcp: "es-ES", script: "Latin script" },
+    { code: "fr", name: "French", bcp: "fr-FR", script: "Latin script" },
+    { code: "de", name: "German", bcp: "de-DE", script: "Latin script" },
+    { code: "pt", name: "Portuguese", bcp: "pt-BR", script: "Latin script" },
+    { code: "ru", name: "Russian", bcp: "ru-RU", script: "Cyrillic" },
+    { code: "ar", name: "Arabic", bcp: "ar-XA", script: "Arabic script" },
+    { code: "zh", name: "Chinese (Mandarin)", bcp: "zh-CN", script: "Chinese characters" },
+    { code: "ja", name: "Japanese", bcp: "ja-JP", script: "Japanese script" }
+  ];
+  var BY_CODE = new Map(LANGUAGES.map((l) => [l.code, l]));
+  var LEGACY = { auto: ["en", "hi", "ml"], hinglish: ["hi", "en"], malayalam: ["ml", "en"] };
+  function chosenLanguages(settings) {
+    const list = settings?.meetingLanguages;
+    if (Array.isArray(list) && list.length) return list.map((c) => BY_CODE.get(c)).filter(Boolean);
+    const legacy = settings?.meetingLanguage;
+    return legacy && legacy !== "auto" && LEGACY[legacy] ? LEGACY[legacy].map((c) => BY_CODE.get(c)) : null;
+  }
+  var languagesOf = (settings) => chosenLanguages(settings) || LEGACY.auto.map((c) => BY_CODE.get(c));
+  var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l) => l.name).join(", ")} and ${langs.at(-1).name}`;
+  function languageHint(langs) {
+    if (!langs.length) return "";
+    const scripts = langs.filter((l) => l.code !== "en").map((l) => `${l.name} in ${l.script}`);
+    const mix = langs.length > 1 ? `It may mix ${names(langs)}` : `It is in ${langs[0].name}`;
+    return `${mix}: write ${scripts.length ? scripts.join(", ") : "English"}${langs.some((l) => l.code === "en") && scripts.length ? " and English words in English" : ""}.`;
+  }
+  var geminiCodes = (langs) => langs?.length ? langs.map((l) => l.bcp) : null;
+  function singleLanguage(langs) {
+    const other = langs.filter((l) => l.code !== "en");
+    return other.length === 1 ? other[0] : null;
+  }
+  var SARVAM_CODES = /* @__PURE__ */ new Set(["hi", "ml", "ta", "te", "kn", "mr", "bn", "gu", "pa", "or", "en"]);
+
   // src/stt.js
   var SttError = class extends Error {
     constructor(message, status) {
@@ -212,29 +260,16 @@
     }
     throw new SttError(`${provider} HTTP ${res.status}: ${detail}`, res.status);
   }
-  var LANGUAGES = {
-    auto: {
-      codes: null,
-      hint: "It may mix Hindi, English and Malayalam: write Hindi in Devanagari, Malayalam in Malayalam script, and English words in English."
-    },
-    hinglish: {
-      codes: ["hi-IN", "en-IN"],
-      hint: "It mixes Hindi and English: write Hindi in Devanagari and English words in English."
-    },
-    malayalam: {
-      codes: ["ml-IN", "en-IN"],
-      hint: "It is in Malayalam, often mixed with English: write Malayalam in Malayalam script (\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02) and English words in English."
-    }
-  };
   var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
-  var lang = (s) => LANGUAGES[s.meetingLanguage] || LANGUAGES.auto;
+  var lang = (s) => ({ codes: geminiCodes(chosenLanguages(s)), hint: languageHint(languagesOf(s)) });
   async function sarvam(wav, s) {
     const fd = new FormData();
     fd.append("file", wav, "chunk.wav");
     fd.append("model", s.sarvamModel);
     fd.append("mode", s.sarvamMode);
-    fd.append("language_code", s.sarvamLanguage !== "unknown" ? s.sarvamLanguage : s.meetingLanguage === "malayalam" ? "ml-IN" : "unknown");
+    const only = singleLanguage(chosenLanguages(s) || []);
+    fd.append("language_code", s.sarvamLanguage !== "unknown" ? s.sarvamLanguage : only && SARVAM_CODES.has(only.code) ? only.bcp : "unknown");
     const res = await fetch("https://api.sarvam.ai/speech-to-text", {
       method: "POST",
       headers: { "api-subscription-key": s.sarvamKey },
@@ -265,8 +300,10 @@
     fd.append("file", wav, "chunk.wav");
     fd.append("model", s.sttModel);
     fd.append("response_format", "json");
-    if (s.meetingLanguage === "malayalam") fd.append("language", "ml");
-    const base = s.meetingLanguage === "malayalam" && s.sttPrompt === DEFAULT_STT_PROMPT ? "Malayalam office meeting. Malayalam in Malayalam script, English words in English." : s.sttPrompt;
+    const chosen = chosenLanguages(s);
+    const only = singleLanguage(chosen || []);
+    if (only) fd.append("language", only.code);
+    const base = chosen && s.sttPrompt === DEFAULT_STT_PROMPT ? `${names(chosen)} office meeting. ${languageHint(chosen)}` : s.sttPrompt;
     const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(", ")}.` : ""].filter(Boolean).join(" ");
     if (prompt) fd.append("prompt", prompt);
     const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};

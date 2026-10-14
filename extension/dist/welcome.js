@@ -1152,8 +1152,10 @@
   var DEFAULTS = {
     myName: "",
     captureMic: true,
+    meetingLanguages: [],
+    // languages to expect (codes from languages.js); empty = automatic
     meetingLanguage: "auto",
-    // auto | hinglish | malayalam
+    // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
     emailSecret: "",
@@ -14731,6 +14733,39 @@ function out(o) {
 }
 `;
 
+  // src/languages.js
+  var LANGUAGES = [
+    { code: "en", name: "English", bcp: "en-IN", script: "Latin script" },
+    { code: "hi", name: "Hindi", bcp: "hi-IN", script: "Devanagari" },
+    { code: "ml", name: "Malayalam", bcp: "ml-IN", script: "Malayalam script" },
+    { code: "ta", name: "Tamil", bcp: "ta-IN", script: "Tamil script" },
+    { code: "te", name: "Telugu", bcp: "te-IN", script: "Telugu script" },
+    { code: "kn", name: "Kannada", bcp: "kn-IN", script: "Kannada script" },
+    { code: "mr", name: "Marathi", bcp: "mr-IN", script: "Devanagari" },
+    { code: "bn", name: "Bengali", bcp: "bn-IN", script: "Bengali script" },
+    { code: "gu", name: "Gujarati", bcp: "gu-IN", script: "Gujarati script" },
+    { code: "pa", name: "Punjabi", bcp: "pa-IN", script: "Gurmukhi" },
+    { code: "or", name: "Odia", bcp: "or-IN", script: "Odia script" },
+    { code: "ur", name: "Urdu", bcp: "ur-IN", script: "Urdu (Arabic) script" },
+    { code: "es", name: "Spanish", bcp: "es-ES", script: "Latin script" },
+    { code: "fr", name: "French", bcp: "fr-FR", script: "Latin script" },
+    { code: "de", name: "German", bcp: "de-DE", script: "Latin script" },
+    { code: "pt", name: "Portuguese", bcp: "pt-BR", script: "Latin script" },
+    { code: "ru", name: "Russian", bcp: "ru-RU", script: "Cyrillic" },
+    { code: "ar", name: "Arabic", bcp: "ar-XA", script: "Arabic script" },
+    { code: "zh", name: "Chinese (Mandarin)", bcp: "zh-CN", script: "Chinese characters" },
+    { code: "ja", name: "Japanese", bcp: "ja-JP", script: "Japanese script" }
+  ];
+  var BY_CODE = new Map(LANGUAGES.map((l) => [l.code, l]));
+  var LEGACY = { auto: ["en", "hi", "ml"], hinglish: ["hi", "en"], malayalam: ["ml", "en"] };
+  function chosenLanguages(settings) {
+    const list = settings?.meetingLanguages;
+    if (Array.isArray(list) && list.length) return list.map((c) => BY_CODE.get(c)).filter(Boolean);
+    const legacy = settings?.meetingLanguage;
+    return legacy && legacy !== "auto" && LEGACY[legacy] ? LEGACY[legacy].map((c) => BY_CODE.get(c)) : null;
+  }
+  var minutesLanguageOptions = () => [...LANGUAGES.map((l) => ({ value: l.code === "hi" ? "Hindi (Devanagari)" : l.name, label: l.code === "hi" ? "Hindi (Devanagari)" : l.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
+
   // src/welcome.js
   var GUIDE = "https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md";
   var LOCAL_GUIDE = "https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md";
@@ -14900,30 +14935,19 @@ function out(o) {
         card(
           "",
           ...field("Your name", "t-name", S.myName, { placeholder: "e.g. Shrawin Sisodiya" }),
-          h("label", { for: "t-lang" }, "Language spoken in your meetings"),
-          h(
-            "select",
-            { id: "t-lang" },
-            h("option", { value: "auto" }, "Automatic: Hindi, English and Malayalam, in any mix"),
-            h("option", { value: "hinglish" }, "Hindi and English (Hinglish)"),
-            h("option", { value: "malayalam" }, "Malayalam and English (Manglish)")
-          ),
+          h("label", {}, "Languages spoken in your meetings (pick any number)"),
+          h("div", { class: "chips", id: "t-langs" }, ...LANGUAGES.map((l) => h("label", { class: "chip" }, h("input", { type: "checkbox", "data-lang": l.code }), l.name))),
+          p("Leave all unticked for automatic. Picking just the languages you really use makes the text more accurate.", "hint"),
           h("label", { for: "t-mom" }, "Language of the written minutes"),
-          h(
-            "select",
-            { id: "t-mom" },
-            h("option", {}, "English"),
-            h("option", {}, "Hindi (Devanagari)"),
-            h("option", {}, "Malayalam"),
-            h("option", { value: "the same language mix used in the meeting" }, "Same as the meeting")
-          )
+          h("select", { id: "t-mom" }, ...minutesLanguageOptions().map((o) => h("option", { value: o.value }, o.label)))
         )
       ],
       after: () => {
-        $("t-lang").value = S.meetingLanguage;
+        const chosen = new Set((chosenLanguages(S) || []).map((l) => l.code));
+        document.querySelectorAll("#t-langs input").forEach((c) => c.checked = chosen.has(c.dataset.lang));
         $("t-mom").value = S.momLanguage;
       },
-      save: async () => patch({ myName: $("t-name").value.trim(), meetingLanguage: $("t-lang").value, momLanguage: $("t-mom").value })
+      save: async () => patch({ myName: $("t-name").value.trim(), meetingLanguages: [...document.querySelectorAll("#t-langs input:checked")].map((c) => c.dataset.lang), momLanguage: $("t-mom").value })
     },
     {
       id: "names",

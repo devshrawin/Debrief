@@ -332,7 +332,8 @@ try {
     await wait(300);
     out.you = document.querySelector('#stage h1').textContent;
     document.getElementById('t-name').value = 'Tour Tester';
-    document.getElementById('t-lang').value = 'malayalam';
+    document.querySelector('#t-langs input[data-lang=ml]').click();
+    document.querySelector('#t-langs input[data-lang=ta]').click();
     document.getElementById('next').click();
     await wait(500);
     out.names = document.querySelector('#stage h1').textContent;
@@ -340,16 +341,16 @@ try {
     document.querySelectorAll('#stepsNav button')[10].click();
     await wait(600);
     const settings = (await chrome.storage.local.get('settings')).settings;
-    out.saved = { name: settings.myName, lang: settings.meetingLanguage, dict: settings.dictionary, key: settings.geminiKey };
+    out.saved = { name: settings.myName, lang: settings.meetingLanguages, dict: settings.dictionary, key: settings.geminiKey };
     out.done = document.querySelector('#stage h1').textContent;
     out.items = [...document.querySelectorAll('.checklist li')].map((l) => l.textContent.slice(0, 30));
     out.finish = document.getElementById('next').textContent;
     return out;
   })()`);
   check('tour: key test reports a clear failure for a bad key', /did not work|invalid|API key/i.test(t1.status), t1.status);
-  check('tour: steps advance and answers are saved as you go', /Your microphone/.test(t1.mic) && /name and languages/i.test(t1.you) && /Teach Debrief your names/.test(t1.names) && t1.saved.name === 'Tour Tester' && t1.saved.lang === 'malayalam' && t1.saved.dict === 'Amal | Aman', JSON.stringify(t1));
+  check('tour: steps advance and answers are saved as you go', /Your microphone/.test(t1.mic) && /name and languages/i.test(t1.you) && /Teach Debrief your names/.test(t1.names) && t1.saved.name === 'Tour Tester' && JSON.stringify(t1.saved.lang) === JSON.stringify(['ml', 'ta']) && t1.saved.dict === 'Amal | Aman', JSON.stringify(t1));
   check('tour: the last step shows a setup checklist and Finish', /ready/i.test(t1.done) && t1.items.length === 7 && t1.finish === 'Finish', JSON.stringify([t1.done, t1.items, t1.finish]));
-  await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguage: 'auto', dictionary: '' } }))`);
+  await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguages: [], dictionary: '' } }))`);
   check('popup links to the tour', await popup.evaluate(`!!document.getElementById('openTour') && !!document.getElementById('openTour1')`));
 
   // The amber "a call is on" dot comes from the page script on any supported site.
