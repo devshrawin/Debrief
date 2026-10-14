@@ -77,7 +77,7 @@ Debrief Pro can put names to voices, as a **best guess**. Everything is switched
 **Using it.**
 1. **Settings → Voices → Add a person.** Type the name, pick the language they use in meetings, press *Record*, and read the text for about 20 seconds in a quiet room. Play it back, then *Save*. Add a second recording per language for someone who switches (*Add recording*), re-record, rename or delete at any time.
 2. Turn on **Name speakers by their voice** and Save. Names then appear in the minutes page transcript, the downloaded and emailed transcript, the prompts to the minutes writer and Ask, and attendance (people heard speaking count as present).
-3. **Learn from Meet captions (optional).** Debrief notes which voice is speaking whenever Meet's captions name exactly one person, and builds that fingerprint over several meetings. A learned voice is not used until it has about 45 seconds of clean speech from two meetings. It never changes a voice you recorded yourself, and drops a name that sounds the same as another.
+3. **Learn on its own (optional).** Voices that keep coming back across meetings are grouped as *Unnamed voice 1, 2…* (no captions, any language). Rename one once and it is named from then on. When Meet's captions name exactly one speaker, Debrief also uses that to name the voice. A learned voice is not used until it has about 45 seconds of clean speech from two meetings. It never changes a voice you recorded yourself, and leaves out groups that sound like two people or like someone already known.
 4. **Name an unknown voice.** *Unnamed voices in your latest meeting* lists voices that matched nobody, with example timestamps. Check the transcript at those times, type a name, save.
 5. **Share.** *Export voices* saves a file of fingerprints; *Import voices* adds them on another computer (the same model is required). Share only for people who agreed.
 
@@ -90,7 +90,7 @@ Debrief Pro can put names to voices, as a **best guess**. Everything is switched
 - Voice labels only cover the other participants (tab audio). Your own microphone lines carry your name.
 - The accuracy numbers on real meetings have not been established. Do not rely on names for anything important without checking.
 - Processing cost is about 16% of the speech duration on one CPU thread in a worker (measured on one laptop); a slow computer drops pieces rather than slowing the recording.
-- Learning from captions works only in Google Meet with captions on, and a wrong caption can teach a wrong voice. Check the names, and delete anyone who looks off.
+- Learning on its own can merge two similar people or split one person into two (for example on different microphones). Merging and splitting are not automatic: rename or delete voices that look wrong. The optional caption help works only in Google Meet with captions on, and a wrong caption can teach a wrong name.
 - A voice fingerprint identifies a person's voice. Tell people before you build profiles of them, and only share fingerprints with their agreement.
 
 

@@ -15057,7 +15057,7 @@ function out(o) {
         card(
           "Turn it on",
           toggle("voiceOn", "Name speakers by their voice (best guess)", "Uses the voices you add in Settings. Off by default."),
-          toggle("voiceLearn", "Learn voices on its own from Meet captions", "Builds voices over several meetings when Meet's captions name exactly one speaker. A learned voice is not used until it has been heard in two meetings. Tell your colleagues, and delete anyone any time."),
+          toggle("voiceLearn", "Learn voices on its own from my meetings", `Groups voices that keep coming back and lists them as "Unnamed voice" for you to rename once, in any language. Meet's captions help name them when available but are not needed. A learned voice is not used until it has been heard in two meetings. Tell your colleagues, and delete anyone any time.`),
           h("div", { class: "btnrow" }, h("a", { class: "btn", href: "options.html#voices", target: "_blank" }, "Open Voices settings")),
           p('You can skip this and set it up later: Settings \u2192 Voices. "Forget all voices" there deletes every fingerprint.', "hint")
         )

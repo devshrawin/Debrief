@@ -81,6 +81,14 @@ export function learnFromMeeting(meeting, people, { myName = '' } = {}) {
       return;
     }
     const idx = list.findIndex((p) => norm(p.name) === f.key);
+    if (idx < 0) {
+      const adopted = adoptName(list, f.centroid, f.name);
+      if (adopted) {
+        list = adopted;
+        report.learned.push({ name: f.name, secs: Math.round(f.secs), total: 0, ready: false, adopted: true });
+        return;
+      }
+    }
     const existing = idx >= 0 ? list[idx] : null;
     if (existing && !existing.auto) {
       report.skipped.push({ name: f.name, why: 'you recorded this voice yourself, so it is left as it is' });
@@ -114,6 +122,82 @@ export function learnFromMeeting(meeting, people, { myName = '' } = {}) {
 const scale = (v, k) => Float32Array.from(v, (x) => x * k);
 
 // The people whose voices may be used to name speakers: recorded by hand, or learned enough.
+
+// ---- no captions needed: recurring voices ----
+// Pieces that match nobody are grouped; a group heard for long enough becomes an "Unnamed voice N". Each later
+// meeting adds to the voice it sounds like (or starts a new one). A person is named by renaming it, or
+// automatically when the captions later name the same voice. Same safeguards: a voice is not used for naming
+// until it has enough clean speech from two meetings, and nothing here touches a voice you recorded yourself.
+export const isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || '');
+
+export function learnRecurring(meeting, people) {
+  const report = { meeting: meeting.id, updated: [], created: [], skipped: [] };
+  const segs = meeting.voiceSegs || [];
+  if (segs.length < 8) {
+    report.skipped.push({ why: 'too little speech was fingerprinted in this meeting' });
+    return { list: people, changed: false, report };
+  }
+  const assigned = new Map(); // auto person id -> [{ s, v }]
+  const unknown = [];
+  for (const s of segs) {
+    const v = unpack(s.e);
+    const r = people.length ? classify(v, people) : { id: null };
+    const owner = r.id ? people.find((p) => p.id === r.id) : null;
+    if (owner) {
+      if (owner.auto && r.score >= 0.5) (assigned.get(owner.id) || assigned.set(owner.id, []).get(owner.id)).push({ s, v });
+    } else unknown.push(s);
+  }
+  let list = [...people];
+  const secsOf = (xs) => xs.reduce((a, x) => a + (x.s.t1 - x.s.t0), 0);
+  // 1. voices we already have (learning or learned) hear more of themselves
+  for (const [id, items] of assigned) {
+    const i = list.findIndex((p) => p.id === id);
+    const p = list[i];
+    if (p.learnedFrom?.includes(meeting.id)) continue;
+    const vecs = cleaned(items.map((x) => x.s));
+    const secs = secsOf(vecs);
+    if (vecs.length < 4 || secs < 8) continue;
+    const w = p.secs || 1;
+    const c = mean([scale(unpack(p.centroid), w), scale(mean(vecs.map((x) => x.v)), secs)]);
+    const step = Math.max(1, Math.floor(vecs.length / 6));
+    const rec = { ...p, centroid: pack(c), windows: [...(p.windows || []), ...vecs.filter((_, k) => k % step === 0).map((x) => pack(x.v)).slice(0, 6)].slice(-LEARN.keep * 2), secs: Math.round(w + secs), meetings: (p.meetings || 1) + 1, learnedFrom: [...(p.learnedFrom || []), meeting.id].slice(-50), updated: Date.now() };
+    rec.ready = rec.secs >= LEARN.readySecs && rec.meetings >= LEARN.readyMeetings;
+    list[i] = rec;
+    report.updated.push({ name: p.name, secs: Math.round(secs), total: rec.secs, ready: rec.ready });
+  }
+  // 2. voices heard for the first time
+  if (unknown.length >= 6) {
+    const step = Math.max(1, Math.ceil(unknown.length / 300));
+    const sample = unknown.filter((_, i) => i % step === 0);
+    let next = Math.max(0, ...list.map((p) => Number((p.name.match(/^Unnamed voice (\d+)$/) || [])[1]) || 0)) + 1;
+    for (const g of clusterVoices(sample)) {
+      const members = g.members.map((i) => sample[i]);
+      const vecs = cleaned(members);
+      const secs = secsOf(vecs) * step;
+      if (vecs.length < LEARN.minPieces || secs < LEARN.minSecs) continue;
+      const c = mean(vecs.map((x) => x.v));
+      // a group sounding like a voice we have but did not match (borderline): leave it, it is likely the same person
+      if (list.some((p) => cosine(unpack(p.centroid), c) >= 0.6)) {
+        report.skipped.push({ why: 'a group of pieces sounded like an existing voice but not clearly enough, so it was left out' });
+        continue;
+      }
+      const stride = Math.max(1, Math.floor(vecs.length / LEARN.keep));
+      list = [...list, { id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: `Unnamed voice ${next++}`, lang: 'free', langs: ['free'], centroid: pack(c), windows: vecs.filter((_, k) => k % stride === 0).map((x) => pack(x.v)).slice(0, LEARN.keep), secs: Math.round(secs), meetings: 1, auto: true, ready: false, learnedFrom: [meeting.id], created: Date.now() }];
+      report.created.push({ name: list.at(-1).name, secs: Math.round(secs) });
+    }
+  }
+  return { list, changed: report.updated.length + report.created.length > 0, report };
+}
+
+// Captions later name a voice we only knew as "Unnamed voice N": give it the name.
+export function adoptName(list, centroid, name) {
+  const i = list.findIndex((p) => isAnon(p) && cosine(unpack(p.centroid), centroid) >= 0.6);
+  if (i < 0) return null;
+  const next = [...list];
+  next[i] = { ...next[i], name, updated: Date.now() };
+  return next;
+}
+
 export const usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready);
 
 // Voices in a meeting that match nobody enrolled, grouped, for "name this voice". At most `max` groups of

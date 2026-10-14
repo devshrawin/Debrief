@@ -15077,6 +15077,7 @@ function out(o) {
     keep: 12
     // individual fingerprints kept
   };
+  var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
   var usableVoices = (people2) => (people2 || []).filter((p) => !p.auto || p.ready);
   function unnamedGroups(meeting, people2, { max = 4, minSecs = 15, cap = 300 } = {}) {
     const usable = usableVoices(people2);
@@ -15424,7 +15425,7 @@ function out(o) {
         const langs = (p.langs || [p.lang || "en"]).map((l) => LANG_NAME[l] || l).join(" + ");
         who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
         who.querySelector(".vn").textContent = p.name;
-        who.querySelector(".vm").textContent = p.auto ? `Learned from meetings \xB7 ${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech \xB7 ${p.ready ? "in use" : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
+        who.querySelector(".vm").textContent = p.auto ? `${isAnon(p) ? "Heard in your meetings, not named yet. Rename it to say who it is \xB7 " : "Learned from meetings \xB7 "}${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech \xB7 ${p.ready ? "in use" : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
         const btn = (label, fn, danger) => {
           const b = Object.assign(document.createElement("button"), { className: "btn", textContent: label });
           if (danger) b.style.color = "#b91c1c";

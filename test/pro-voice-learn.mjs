@@ -132,4 +132,67 @@ await test('learn: unnamed voices in a meeting are grouped, known ones are left 
   assert.equal(L.unnamedGroups(m, [learning]).length, 2, 'a voice still learning is not used, so it is still unnamed');
 });
 
+// ---- recurring voices: no captions needed ----
+const talk = (id, whos, perVoice = 16, gap = 4) => ({
+  id,
+  captions: [],
+  voiceSegs: whos.flatMap((w, k) => [...Array(perVoice).keys()].map((i) => piece(k * 100 + i * gap, w))),
+});
+
+await test('recurring: voices heard without any captions become "Unnamed voice N", not used until seen in two meetings', () => {
+  const r = L.learnRecurring(talk('r1', [1, 2]), []);
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.list.map((p) => p.name), ['Unnamed voice 1', 'Unnamed voice 2']);
+  assert.ok(r.list.every((p) => p.auto && !p.ready && p.meetings === 1));
+  assert.deepEqual(L.usableVoices(r.list), []);
+  assert.ok(L.isAnon(r.list[0]));
+});
+
+await test('recurring: the same voices in later meetings are added to the same unnamed voices, then trusted', () => {
+  let list = L.learnRecurring(talk('r1', [1, 2]), []).list;
+  list = L.learnRecurring(talk('r2', [2, 1]), list).list;
+  assert.equal(list.length, 2, 'no duplicates');
+  assert.ok(list.every((p) => p.meetings === 2 && p.ready), JSON.stringify(list.map((p) => [p.name, p.meetings, p.secs, p.ready])));
+  assert.equal(L.usableVoices(list).length, 2);
+  const again = L.learnRecurring(talk('r2', [2, 1]), list).list;
+  assert.deepEqual(again.map((p) => p.meetings), [2, 2], 'a meeting is never counted twice');
+});
+
+await test('recurring: a new voice in a later meeting becomes the next unnamed voice; a few stray pieces do not', () => {
+  let list = L.learnRecurring(talk('r1', [1]), []).list;
+  list = L.learnRecurring(talk('r2', [1, 3]), list).list;
+  assert.deepEqual(list.map((p) => p.name), ['Unnamed voice 1', 'Unnamed voice 2']);
+  const stray = { id: 'r3', voiceSegs: [...talk('r3', [1]).voiceSegs, piece(500, 3), piece(504, 3)], captions: [] };
+  assert.equal(L.learnRecurring(stray, list).list.length, 2, 'two odd pieces are not a voice');
+});
+
+await test('recurring: renaming an unnamed voice keeps it learning under the new name, and manual voices are not touched', () => {
+  let list = L.learnRecurring(talk('r1', [1, 2]), []).list;
+  list = list.map((p) => (p.name === 'Unnamed voice 1' ? { ...p, name: 'Amal Raj' } : p));
+  list = L.learnRecurring(talk('r2', [1, 2]), list).list;
+  const amal = list.find((p) => p.name === 'Amal Raj');
+  assert.equal(amal.meetings, 2);
+  assert.ok(!list.some((p) => p.name === 'Unnamed voice 3'));
+  const mine = [{ id: 'm', name: 'Priya Nair', centroid: V.pack(B[2]), windows: [V.pack(B[2])], secs: 20 }];
+  const r = L.learnRecurring(talk('r4', [2]), mine);
+  assert.equal(r.list.length, 1);
+  assert.equal(r.list[0].centroid, mine[0].centroid, 'a voice you recorded is not updated');
+});
+
+await test('recurring: captions arriving later name an unnamed voice instead of making a second person', () => {
+  const list = L.learnRecurring(talk('r1', [1]), []).list;
+  const named = L.adoptName(list, V.unpack(list[0].centroid), 'Amal Raj');
+  assert.equal(named[0].name, 'Amal Raj');
+  assert.equal(L.adoptName(list, B[3], 'Someone'), null, 'a different voice is not adopted');
+  const m = meeting('c1');
+  const r = L.learnFromMeeting(m, list, {});
+  assert.ok(r.list.some((p) => p.name === 'Amal Raj'));
+  assert.ok(!r.list.some((p) => p.name === 'Unnamed voice 1'), 'the unnamed voice took the caption name');
+  assert.equal(r.list.filter((p) => p.name === 'Amal Raj').length, 1);
+});
+
+await test('recurring: too little speech creates nothing', () => {
+  assert.equal(L.learnRecurring({ id: 'x', voiceSegs: [piece(0, 1), piece(4, 1)] }, []).changed, false);
+});
+
 console.log(`\n${passed} passed`);

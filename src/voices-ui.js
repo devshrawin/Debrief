@@ -1,7 +1,7 @@
 // The Voices page in Settings: add people, record about 20 seconds, play it back, save only the fingerprint,
 // rename, re-record, delete, and forget everything. The recording lives in memory until saved or cancelled.
 import { getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime } from './store.js';
-import { unnamedGroups, LEARN } from './voice/learn.js';
+import { unnamedGroups, isAnon, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
 import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './voice/enrol.js';
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
@@ -57,7 +57,7 @@ function renderList() {
       who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
       who.querySelector('.vn').textContent = p.name;
       who.querySelector('.vm').textContent = p.auto
-        ? `Learned from meetings · ${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech · ${p.ready ? 'in use' : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}`
+        ? `${isAnon(p) ? 'Heard in your meetings, not named yet. Rename it to say who it is · ' : 'Learned from meetings · '}${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech · ${p.ready ? 'in use' : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}`
         : `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
       const btn = (label, fn, danger) => {
         const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: label });
