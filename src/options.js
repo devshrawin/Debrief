@@ -9,27 +9,196 @@ import { LANGUAGES, chosenLanguages, minutesLanguageOptions, joinNames } from '.
 import { initVoices } from './voices-ui.js';
 import { runCheckup, checkupText } from './checkup.js';
 import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, dayKey } from './usage.js';
+import { modal } from './modal.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
+const el = (tag, props = {}, ...kids) => {
+  const n = Object.assign(document.createElement(tag), props);
+  n.append(...kids);
+  return n;
+};
+
+// ---- secrets ----
+// A key that is already saved is never rendered: the field shows dots and a Replace button. `stored` holds the
+// keys as last loaded or saved, so saving without touching a field writes nothing and cannot erase a stored key.
+const SECRETS = ['geminiKey', 'geminiKey2', 'sarvamKey', 'deepgramKey', 'sttKey', 'anthropicKey', 'oaKey'];
+const stored = {};
+const removed = new Set(); // "Remove" pressed: the key is deleted on the next save
+const editing = new Set(); // "Replace" pressed: an empty field is open
+const secretUi = {};
+
+function secretValue(k) {
+  const v = $(k).value.trim();
+  return v || (removed.has(k) ? '' : stored[k] || '');
+}
+
+function renderSecret(k) {
+  const u = secretUi[k];
+  if (!u) return;
+  const input = $(k);
+  const has = !!stored[k] && !removed.has(k);
+  const masked = has && !editing.has(k);
+  u.mask.hidden = !masked;
+  input.hidden = masked;
+  u.replace.hidden = !masked;
+  u.keep.hidden = !((has && editing.has(k)) || removed.has(k));
+  u.keep.textContent = removed.has(k) ? 'Undo remove' : 'Keep current';
+  u.remove.hidden = !(has && editing.has(k));
+  u.note.hidden = false;
+  u.note.replaceChildren();
+  if (masked) u.note.append(el('span', { className: 'chip ok', textContent: 'Saved' }), 'On this computer only. Never shown again.');
+  else if (removed.has(k)) u.note.append('The key will be removed when you press Save changes.');
+  else if (has) u.note.append('Type the new key. Leave it empty, or press Escape, to keep the current one.');
+  else u.note.hidden = true;
+}
+
+function renderSecrets() {
+  SECRETS.forEach(renderSecret);
+}
+
+function initSecrets() {
+  for (const k of SECRETS) {
+    const input = $(k);
+    if (!input) continue;
+    const label = document.querySelector(`label[for="${k}"]`);
+    if (label && !label.id) label.id = `${k}-lbl`;
+    const name = label ? label.firstChild.textContent.trim() : 'key';
+    const mask = el('div', { className: 'secret-mask', textContent: '••••••••••••' });
+    mask.setAttribute('role', 'img');
+    mask.setAttribute('aria-label', `${name}: saved, hidden`);
+    const replace = el('button', { type: 'button', className: 'btn', textContent: 'Replace' });
+    replace.setAttribute('aria-label', `Replace ${name.toLowerCase()}`);
+    const keep = el('button', { type: 'button', className: 'btn ghost', textContent: 'Keep current' });
+    const remove = el('button', { type: 'button', className: 'btn ghost', textContent: 'Remove' });
+    remove.style.color = 'var(--rec-ink)';
+    remove.setAttribute('aria-label', `Remove ${name.toLowerCase()}`);
+    const note = el('p', { className: 'secret-note' });
+    input.before(mask);
+    input.after(replace, keep, remove, note);
+    secretUi[k] = { mask, replace, keep, remove, note };
+    replace.onclick = () => {
+      editing.add(k);
+      renderSecret(k);
+      input.focus();
+    };
+    const revert = () => {
+      removed.delete(k);
+      editing.delete(k);
+      input.value = '';
+      renderSecret(k);
+      replace.focus();
+      updateDirty();
+    };
+    keep.onclick = revert;
+    remove.onclick = () => {
+      removed.add(k);
+      editing.add(k);
+      input.value = '';
+      renderSecret(k);
+      keep.focus();
+      updateDirty();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && stored[k] && !input.hidden) {
+        e.preventDefault();
+        revert();
+      }
+    });
+  }
+}
+
+// Empty a saved key on purpose (for example when switching to a local server that needs none).
+function clearSecret(k) {
+  $(k).value = '';
+  if (stored[k]) {
+    removed.add(k);
+    editing.add(k);
+  }
+  renderSecret(k);
+}
 
 function read() {
   const s = {};
   for (const k of FIELDS) {
-    const el = $(k);
-    if (!el) continue;
-    s[k] = el.type === 'checkbox' ? el.checked : el.value.trim();
+    const f = $(k);
+    if (!f) continue;
+    s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === 'checkbox' ? f.checked : f.value.trim();
   }
   s.shareMode = $('shareAuto').checked ? 'auto' : 'review';
   s.meetingLanguages = [...document.querySelectorAll('#langChips input:checked')].map((c) => c.dataset.lang);
   return s;
 }
 
+// Put values into the fields (page load, and Undo).
+function fill(s) {
+  for (const k of FIELDS) {
+    const f = $(k);
+    if (!f) continue;
+    if (SECRETS.includes(k)) {
+      stored[k] = s[k] || '';
+      f.value = '';
+    } else if (f.type === 'checkbox') f.checked = !!s[k];
+    else f.value = s[k] ?? '';
+  }
+  removed.clear();
+  editing.clear();
+  $('shareAuto').checked = s.shareMode === 'auto';
+  renderSecrets();
+}
+
+// ---- segmented controls that drive a hidden <select> ----
+const MODE_NOTE = {
+  thorough: 'Finds every item first, writes the minutes, then checks that nothing was missed.',
+  quick: 'One pass over the transcript. Lighter on a free quota; may miss small items in long meetings.',
+};
+function arrowKeys(buttons, pick) {
+  buttons.forEach((b, i) => {
+    b.addEventListener('keydown', (e) => {
+      const d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      const next = buttons[(i + d + buttons.length) % buttons.length];
+      next.focus();
+      pick(next);
+    });
+  });
+}
+function initSegs() {
+  document.querySelectorAll('[data-seg-for]').forEach((box) => {
+    const sel = $(box.dataset.segFor);
+    const btns = [...box.querySelectorAll('button')];
+    const sync = () => {
+      btns.forEach((b) => {
+        const on = b.dataset.v === sel.value;
+        b.setAttribute('aria-checked', String(on));
+        b.tabIndex = on ? 0 : -1;
+      });
+      if (sel.id === 'minutesMode') $('minutesModeNote').textContent = MODE_NOTE[sel.value] || '';
+    };
+    const pick = (b) => {
+      sel.value = b.dataset.v;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    btns.forEach((b) => (b.onclick = () => pick(b)));
+    arrowKeys(btns, pick);
+    sel.addEventListener('change', sync);
+    box._sync = sync;
+    sync();
+  });
+}
+const syncSegs = () => document.querySelectorAll('[data-seg-for]').forEach((b) => b._sync());
+
 // Left-hand navigation: one page at a time, remembered in the URL hash.
 function showTab(name) {
   if (!document.getElementById(`page-${name}`)) name = 'start';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
-  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('#nav button').forEach((b) => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   window.scrollTo(0, 0);
 }
@@ -45,18 +214,11 @@ async function renderLearned() {
   $('pendingEmpty').classList.toggle('hidden', pending.length > 0);
   $('pendingList').replaceChildren(
     ...pending.map((p) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap';
-      const t = document.createElement('span');
-      t.innerHTML = `<b></b> was heard as <b></b>`;
-      t.children[0].textContent = p.suggest;
-      t.children[1].textContent = p.found;
-      const meta = document.createElement('span');
-      meta.className = 'hint';
-      meta.style.margin = '0';
-      meta.textContent = `${p.count}× · ${p.meeting || 'a meeting'}`;
-      const ok = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Fix it from now on' });
-      const no = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Dismiss' });
+      const row = el('div', { className: 'prow' });
+      const t = el('span', { className: 'who' }, el('b', { textContent: p.suggest }), ' was heard as ', el('b', { textContent: p.found }));
+      const meta = el('span', { className: 'hint', textContent: `${p.count}× · ${p.meeting || 'a meeting'}` });
+      const ok = el('button', { type: 'button', className: 'btn sm primary', textContent: 'Fix it from now on' });
+      const no = el('button', { type: 'button', className: 'btn sm', textContent: 'Dismiss' });
       ok.onclick = async () => {
         $('dictionary').value = learnAlias($('dictionary').value, p.suggest, p.found);
         await save();
@@ -80,6 +242,8 @@ chrome.storage.onChanged.addListener((c) => {
 let usageDays = 1;
 const fmtN = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 const KIND = { stt: 'Speech to text', llm: 'Minutes' };
+const RANGE = { 1: 'today', 7: 'in the last 7 days', 30: 'in the last 30 days' };
+const money = (usd) => (usd < 0.01 && usd > 0 ? usd.toFixed(4) : usd.toFixed(2));
 
 async function renderUsage() {
   const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);
@@ -92,7 +256,16 @@ async function renderUsage() {
   const table = $('usageTable');
   table.replaceChildren();
   const head = table.createTHead().insertRow();
-  ['Service', 'Used for', 'Requests', 'Failed', 'Tokens in / out', 'Audio', 'Cost if paid', usageDays === 1 ? 'Left today (estimate)' : ''].forEach((h) => head.append(Object.assign(document.createElement('th'), { textContent: h })));
+  [
+    ['Service and model', ''],
+    ['Used for', ''],
+    ['Requests', 'num'],
+    ['Failed (rate limit)', 'num'],
+    ['Tokens in / out', 'num'],
+    ['Audio', 'num'],
+    ['Cost if paid', 'num'],
+    [usageDays === 1 ? 'Left today (estimate)' : '', ''],
+  ].forEach(([h, cls]) => head.append(Object.assign(document.createElement('th'), { textContent: h, className: cls })));
   const body = table.createTBody();
   if (!rows.length) {
     const r = body.insertRow();
@@ -104,50 +277,77 @@ async function renderUsage() {
   for (const r of rows) {
     const tr = body.insertRow();
     const cell = (t, cls) => Object.assign(tr.insertCell(), { textContent: t, className: cls || '' });
-    cell(`${r.provider}${r.model && r.model !== '-' ? ` · ${r.model}` : ''}`);
+    const svc = tr.insertCell();
+    svc.append(el('span', { className: 'svc', textContent: r.provider }));
+    if (r.model && r.model !== '-') svc.append(el('span', { className: 'sr-only', textContent: ' · ' }), el('div', { className: 'hint', textContent: r.model }));
     cell(KIND[r.kind] || r.kind);
     cell(String(r.req), 'num');
-    cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ''}` : '0', 'num');
+    cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ''}` : '0', `num${r.fail ? ' fail' : ''}`);
     cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '-', 'num');
     cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '-', 'num');
     const paid = paidCost(r, prices);
-    cell(paid.usd == null ? '-' : r.fail && !r.tin && !r.tout ? '$0.00' : `${paid.assumed ? '~' : ''}$${paid.usd < 0.01 && paid.usd > 0 ? paid.usd.toFixed(4) : paid.usd.toFixed(2)}`, 'num');
+    cell(paid.usd == null ? '-' : r.fail && !r.tin && !r.tout ? '$0.00' : `${paid.assumed ? '~' : ''}$${money(paid.usd)}`, 'num cost');
     const left = tr.insertCell();
+    left.className = 'usage-left';
     const limit = limits[r.model];
     if (usageDays === 1 && limit) {
       const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
-      const pct = Math.min(100, Math.round((used / limit) * 100));
-      left.innerHTML = `<div>${Math.max(0, limit - used)} of ${limit}</div><div class="meterbar"><i class="${pct >= 100 ? 'full' : pct >= 80 ? 'warn' : ''}" style="width:${pct}%"></i></div>`;
-    }
+      const remaining = Math.max(0, limit - used);
+      const pct = Math.max(0, Math.min(100, Math.round((remaining / limit) * 100)));
+      const meter = el('div', { className: 'meter' }, el('i', { className: pct === 0 ? 's' : pct <= 20 ? 'q' : '' }));
+      meter.firstChild.style.width = `${pct}%`;
+      meter.setAttribute('role', 'meter');
+      meter.setAttribute('aria-valuemin', '0');
+      meter.setAttribute('aria-valuemax', '100');
+      meter.setAttribute('aria-valuenow', String(pct));
+      meter.setAttribute('aria-label', `${r.model} left today`);
+      left.append(meter, el('div', { className: `hint${pct <= 20 ? ' low' : ''}`, textContent: `${remaining} of ${limit} left` }));
+    } else if (usageDays === 1) left.append(el('span', { className: 'hint', textContent: 'No daily limit' }));
   }
   const reqs = rows.reduce((a, r) => a + r.req, 0);
   const audio = rows.filter((r) => r.kind === 'stt').reduce((a, r) => a + r.audioSec, 0);
   const cost = estimateCost(rows, prices);
   const paid = paidTotal(rows, prices);
-  $('usageTotals').textContent = `${reqs} requests · ${Math.round(audio / 60)} min of audio transcribed${cost != null ? ` · about $${cost.toFixed(2)} at your prices` : ''} · if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''} · quota day ${dayKey()} (Pacific)`;
+  $('usageTotals').replaceChildren(
+    el('strong', { textContent: `Total ${RANGE[usageDays] || ''}`.trim() }),
+    el('span', { textContent: `${reqs} requests` }),
+    el('span', { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
+    ...(cost != null ? [el('span', { textContent: `about $${cost.toFixed(2)} at your prices` })] : []),
+    el('span', { className: 'paid', textContent: `if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
+    el('span', { className: 'hint', style: 'margin-left:auto', textContent: `Quota day ${dayKey()} (Pacific)` })
+  );
 }
 
-document.querySelectorAll('#usageRange button').forEach((b) => {
-  b.onclick = () => {
-    usageDays = Number(b.dataset.days);
-    document.querySelectorAll('#usageRange button').forEach((x) => x.classList.toggle('active', x === b));
-    renderUsage();
-  };
+const rangeBtns = [...document.querySelectorAll('#usageRange button')];
+const pickRange = (b) => {
+  usageDays = Number(b.dataset.days);
+  rangeBtns.forEach((x) => {
+    x.classList.toggle('active', x === b);
+    x.setAttribute('aria-selected', String(x === b));
+    x.tabIndex = x === b ? 0 : -1;
+  });
+  renderUsage();
+};
+rangeBtns.forEach((b) => {
+  b.onclick = () => pickRange(b);
+  b.tabIndex = b.classList.contains('active') ? 0 : -1;
 });
+arrowKeys(rangeBtns, pickRange);
 $('usageReset').onclick = async () => {
-  if (!confirm("Reset all usage counters? This only clears Debrief's own tally.")) return;
+  const r = await modal({ text: "Reset all usage counters? This only clears Debrief's own tally.", buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Reset counters', value: 'yes', danger: true }] });
+  if (r?.value !== 'yes') return;
   await chrome.storage.local.remove(['usage', 'learnedLimits']);
   renderUsage();
 };
-$('usageLimits').oninput = renderUsage;
-$('usagePrices').oninput = renderUsage;
+$('usageLimits').addEventListener('input', renderUsage);
+$('usagePrices').addEventListener('input', renderUsage);
 chrome.storage.onChanged.addListener((c) => {
   if (c.usage || c.learnedLimits) renderUsage();
 });
 
 function showProviderFields() {
-  document.querySelectorAll('[data-stt]').forEach((el) => el.classList.toggle('hidden', el.dataset.stt !== $('sttProvider').value));
-  document.querySelectorAll('[data-llm]').forEach((el) => el.classList.toggle('hidden', el.dataset.llm !== $('llmProvider').value));
+  document.querySelectorAll('[data-stt]').forEach((f) => f.classList.toggle('hidden', f.dataset.stt !== $('sttProvider').value));
+  document.querySelectorAll('[data-llm]').forEach((f) => f.classList.toggle('hidden', f.dataset.llm !== $('llmProvider').value));
 }
 
 // Custom base URLs need a host permission so the extension can call them without CORS trouble.
@@ -169,15 +369,12 @@ async function requestOrigins(s) {
   if (!(await chrome.permissions.request({ origins }))) throw new Error('Permission for the custom endpoint was denied.');
 }
 
-// Values as last loaded or saved. Only fields the user changed on this page are written, on top of the
-// latest stored settings, so an old open tab can never wipe a change made somewhere else (a remembered
-// name fix, the email secret, a mute switch).
 // ---- languages: pick any number ----
 function buildLanguageUi() {
   $('langChips').replaceChildren(
     ...LANGUAGES.map((l) => {
       const label = document.createElement('label');
-      label.className = 'chip';
+      label.className = 'pick';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.dataset.lang = l.code;
@@ -188,11 +385,13 @@ function buildLanguageUi() {
   );
   $('momLanguage').replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement('option'), { value: o.value, textContent: o.label })));
 }
-function setLanguages(s) {
-  const chosen = chosenLanguages(s);
-  const set = new Set((chosen || []).map((l) => l.code));
+function setLanguageCodes(codes) {
+  const set = new Set(codes);
   document.querySelectorAll('#langChips input').forEach((c) => (c.checked = set.has(c.dataset.lang)));
   langHint();
+}
+function setLanguages(s) {
+  setLanguageCodes((chosenLanguages(s) || []).map((l) => l.code));
 }
 function langHint() {
   const picked = LANGUAGES.filter((l) => document.querySelector(`#langChips input[data-lang="${l.code}"]`)?.checked);
@@ -201,7 +400,11 @@ function langHint() {
     : 'Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.';
 }
 
+// Values as last loaded or saved. Only fields the user changed on this page are written, on top of the
+// latest stored settings, so an old open tab can never wipe a change made somewhere else (a remembered
+// name fix, the email secret, a mute switch).
 let loaded = {};
+let ready = false;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 async function save() {
@@ -211,13 +414,68 @@ async function save() {
   await requestOrigins(out);
   await saveSettings(out);
   loaded = vals;
+  for (const k of SECRETS) if ($(k)) stored[k] = vals[k];
+  removed.clear();
+  editing.clear();
+  for (const k of SECRETS) if ($(k)) $(k).value = '';
+  renderSecrets();
+  updateDirty();
   return out;
 }
+
+// ---- the sticky save bar: unsaved changes, Undo, Saved feedback ----
+let flash = null;
+let flashTimer = 0;
+const isDirty = () => {
+  if (!ready) return false;
+  const v = read();
+  return Object.keys(v).some((k) => !same(v[k], loaded[k]));
+};
+function updateDirty() {
+  const bar = $('savebar');
+  const dirty = isDirty();
+  bar.classList.toggle('dirty', dirty && !flash);
+  bar.classList.toggle('saved', flash?.kind === 'saved');
+  bar.classList.toggle('bad', flash?.kind === 'bad');
+  $('undo').hidden = !dirty;
+  $('msg').textContent = flash ? flash.text : dirty ? 'You have unsaved changes' : 'All changes saved';
+}
+function showFlash(kind, text, ms) {
+  flash = { kind, text };
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => {
+    flash = null;
+    updateDirty();
+  }, ms);
+  updateDirty();
+}
+function applyValues(v) {
+  fill(v);
+  setLanguageCodes(v.meetingLanguages || []);
+  showProviderFields();
+  syncSegs();
+  renderAllow();
+  renderUsage();
+}
+document.querySelector('.content').addEventListener('input', () => {
+  if (flash?.kind === 'saved') flash = null;
+  updateDirty();
+});
+document.querySelector('.content').addEventListener('change', () => {
+  if (flash?.kind === 'saved') flash = null;
+  updateDirty();
+});
+$('undo').onclick = () => {
+  applyValues(loaded);
+  updateDirty();
+  $('save').focus();
+};
 
 async function micStatus() {
   try {
     const p = await navigator.permissions.query({ name: 'microphone' });
     $('micStatus').textContent = p.state === 'granted' ? 'Microphone allowed ✓' : `Microphone: ${p.state}`;
+    $('micStatus').classList.toggle('ok', p.state === 'granted');
   } catch {}
 }
 
@@ -227,12 +485,11 @@ $('llmProvider').onchange = showProviderFields;
 $('save').onclick = async () => {
   try {
     await save();
-    $('msg').textContent = 'Saved ✓';
+    showFlash('saved', 'Saved ✓', 3000);
     updateGuide();
   } catch (e) {
-    $('msg').textContent = e.message;
+    showFlash('bad', e.message, 7000);
   }
-  setTimeout(() => ($('msg').textContent = ''), 3000);
 };
 
 $('grantMic').onclick = async () => {
@@ -244,6 +501,7 @@ $('grantMic').onclick = async () => {
     return;
   }
   micStatus();
+  updateGuide();
 };
 
 // ---- local models ----
@@ -251,8 +509,9 @@ $('useOllama').onclick = () => {
   $('llmProvider').value = 'openai';
   showProviderFields();
   $('oaBase').value = OLLAMA_BASE;
-  $('oaKey').value = '';
+  clearSecret('oaKey');
   $('localStatus').textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
+  updateDirty();
 };
 
 $('findOllama').onclick = async () => {
@@ -271,6 +530,7 @@ $('findOllama').onclick = async () => {
   const pick = async () => {
     $('oaBase').value = base;
     $('oaModel').value = sel.value;
+    updateDirty();
     const ctx = await ollamaContext(sel.value, base);
     $('localStatus').textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
   };
@@ -282,8 +542,9 @@ $('useWhisper').onclick = () => {
   $('sttProvider').value = 'openai';
   showProviderFields();
   $('sttBase').value = WHISPER_BASE;
-  $('sttKey').value = '';
+  clearSecret('sttKey');
   $('whisperStatus').textContent = 'Set to http://localhost:8000/v1. Change the address if your server uses another port.';
+  updateDirty();
 };
 
 $('testWhisper').onclick = async () => {
@@ -324,9 +585,33 @@ $('testLlm').onclick = async () => {
 async function updateGuide() {
   const s = await getSettings();
   const mic = await navigator.permissions.query({ name: 'microphone' }).then((p) => p.state === 'granted').catch(() => false);
-  const done = { g1: !!s.geminiKey || (s.sttProvider !== 'gemini' && s.llmProvider !== 'gemini'), g2: mic, g3: !!s.myName, g4: mailReady(s) };
-  for (const [id, ok] of Object.entries(done)) $(id)?.classList.toggle('done', ok);
+  const needsGemini = s.sttProvider === 'gemini' || s.llmProvider === 'gemini';
+  const langs = (chosenLanguages(s) || []).map((l) => l.name).join(', ');
+  const done = { g1: !!s.geminiKey || !needsGemini, g2: mic, g3: !!s.myName, g4: mailReady(s) };
+  const text = {
+    g1: done.g1 ? (s.geminiKey ? 'Gemini key saved' : 'No Gemini key needed: you use other services') : 'Add your Gemini key',
+    g2: done.g2 ? 'Microphone allowed' : 'Allow your microphone',
+    g3: done.g3 ? `Name and languages: ${s.myName} · ${langs || 'automatic'}` : 'Set your name and languages',
+    g4: done.g4 ? 'Email is set up' : 'Email the minutes to yourself',
+  };
+  for (const [id, ok] of Object.entries(done)) {
+    const row = $(id);
+    if (!row) continue;
+    row.classList.toggle('done', ok);
+    row.querySelector('.ic').textContent = ok ? '✓' : id.slice(1);
+    row.querySelector('[data-text]').textContent = text[id];
+    row.querySelector('[data-state]').textContent = ok ? 'Done. ' : 'Not done. ';
+    const opt = row.querySelector('[data-opt]');
+    if (opt) opt.hidden = ok;
+  }
+  const n = Object.values(done).filter(Boolean).length;
+  $('startLede').textContent = n === 4 ? 'Everything is set up. Debrief is ready to record your next meeting.' : `Four things make Debrief work. ${['None', 'One', 'Two', 'Three'][n]} ${n === 1 ? 'is' : 'are'} done.`;
 }
+$('g1go').onclick = () => {
+  showTab('start');
+  const f = $('geminiKey');
+  (f.hidden ? secretUi.geminiKey.replace : f).focus();
+};
 
 // People to allow in the script: default list plus every recurring-meeting list.
 function allAllowed() {
@@ -336,8 +621,8 @@ function renderAllow() {
   const l = allowListLines(allAllowed(), { domains: $('shareDomains').checked });
   $('allowLines').textContent = `const ALLOWED = ${l.allowed};\nconst ALLOWED_DOMAINS = ${l.domains};`;
 }
-['shareList', 'shareGroups'].forEach((id) => ($(id).oninput = renderAllow));
-$('shareDomains').onchange = renderAllow;
+['shareList', 'shareGroups'].forEach((id) => $(id).addEventListener('input', renderAllow));
+$('shareDomains').addEventListener('change', renderAllow);
 $('copyScriptAllow').onclick = async () => {
   await navigator.clipboard.writeText(scriptWithAllowList(scriptText, allAllowed(), { domains: $('shareDomains').checked }));
   $('copyAllowMsg').textContent = 'Copied. Paste it over your script, save, then deploy a new version.';
@@ -351,22 +636,45 @@ $('copyScript').onclick = async () => {
   setTimeout(() => ($('copyMsg').textContent = ''), 1500);
 };
 
+// ---- Check my setup ----
+const LEVEL = { '✓': ['ok', 'Working'], '!': ['warn', 'Warning'], '✗': ['bad', 'Not working'] };
+function renderChecks(rows) {
+  $('checkupOut').replaceChildren(
+    ...rows.map((r) => {
+      const [cls, sr] = LEVEL[r.level] || LEVEL['!'];
+      const ic = el('span', { className: `ic ${cls}`, textContent: r.level });
+      ic.setAttribute('aria-label', sr);
+      const name = el('b', {}, r.title, el('span', { className: 'sr-only', textContent: ': ' }));
+      const body = el('div', { className: 'ck' }, name);
+      if (r.detail) body.append(el('p', { className: 'hint', textContent: r.detail }));
+      const li = el('li', {}, ic, body);
+      if (r.go && r.level !== '✓') {
+        const fix = el('button', { type: 'button', className: 'btn sm', textContent: r.fixText || 'Open settings' });
+        fix.onclick = () => showTab(r.go);
+        li.append(fix);
+      }
+      return li;
+    })
+  );
+}
 $('checkup').onclick = async () => {
   $('checkup').disabled = true;
   $('checkupMsg').textContent = 'Checking…';
   try {
     const rows = await runCheckup();
     const text = checkupText(rows);
-    $('checkupOut').textContent = text;
+    renderChecks(rows);
     $('checkupOut').hidden = false;
     $('checkupCopy').hidden = false;
-    $('checkupCopy').onclick = async () => {
-      await navigator.clipboard.writeText(text);
-      $('checkupMsg').textContent = 'Copied ✓';
-    };
+    $('checkup').textContent = 'Check again';
     const bad = rows.filter((r) => r.level === '✗').length;
     const warn = rows.filter((r) => r.level === '!').length;
-    $('checkupMsg').textContent = bad ? `${bad} problem${bad === 1 ? '' : 's'}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : 'All good';
+    const summary = bad ? `${bad} problem${bad === 1 ? '' : 's'}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : 'All good';
+    $('checkupMsg').textContent = summary;
+    $('checkupCopy').onclick = async () => {
+      await navigator.clipboard.writeText(text);
+      $('checkupMsg').textContent = `Copied ✓ ${summary}`;
+    };
   } catch (e) {
     $('checkupMsg').textContent = `Could not check: ${e.message}`;
   } finally {
@@ -397,35 +705,37 @@ $('testMail').onclick = async () => {
 (async () => {
   const s = await getSettings();
   buildLanguageUi();
-  for (const k of FIELDS) {
-    const el = $(k);
-    if (!el) continue;
-    if (el.type === 'checkbox') el.checked = !!s[k];
-    else el.value = s[k];
-  }
-  $('shareAuto').checked = s.shareMode === 'auto';
+  initSecrets();
+  initSegs();
+  fill(s);
   setLanguages(s);
   loaded = read();
+  ready = true;
   showProviderFields();
+  syncSegs();
   renderAllow();
   micStatus();
   updateGuide();
   renderUsage();
   renderLearned();
   initVoices();
+  updateDirty();
   showTab(location.hash.slice(1) || 'start');
 })();
 
 // Settings changed somewhere else (a minutes tab, the popup): show the new values in every field this page
 // has not touched, so the page is never a stale picture of the real settings.
 chrome.storage.onChanged.addListener(async (changes) => {
-  if (!changes.settings) return;
+  if (!changes.settings || !ready) return;
   const fresh = await getSettings();
   for (const k of FIELDS) {
-    const el = $(k);
-    if (!el || !same(read()[k], loaded[k])) continue; // the user is editing this one
-    if (el.type === 'checkbox') el.checked = !!fresh[k];
-    else el.value = fresh[k];
+    const f = $(k);
+    if (!f || !same(read()[k], loaded[k])) continue; // the user is editing this one
+    if (SECRETS.includes(k)) {
+      stored[k] = fresh[k] || '';
+      renderSecret(k);
+    } else if (f.type === 'checkbox') f.checked = !!fresh[k];
+    else f.value = fresh[k];
     loaded[k] = fresh[k];
   }
   $('shareAuto').checked = fresh.shareMode === 'auto';
@@ -434,4 +744,7 @@ chrome.storage.onChanged.addListener(async (changes) => {
     setLanguages(fresh);
     loaded.meetingLanguages = read().meetingLanguages;
   }
+  syncSegs();
+  updateDirty();
+  updateGuide();
 });
