@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief minutes page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--brand,#3a33a8)}a:hover{color:var(--brand-hover,#2f2990)}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--line-strong:#c4c9d2;--brand:#3a33a8;--brand-hover:#2f2990;--on-brand:#ffffff;--tint:#eceafc;--tint-ink:#2c268a;--amber:#ff7a1a;--amber-bg:#fff3e4;--amber-line:#f2bf86;--amber-ink:#8a3a00;--rec:#c8281c;--on-rec:#fff;--rec-bg:#fdeceb;--rec-line:#efb0aa;--rec-ink:#99170c;--ok:#147a40;--ok-bg:#e6f5ec;--ok-line:#a8dcbc;--info-bg:#eef0fd;--info-line:#c9cef4;--shadow:0 1px 2px rgba(20,22,40,.05),0 2px 8px rgba(20,22,40,.04);--focus:#3a33a8;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page)}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--line-strong:#4a4f58;--brand:#9d97ff;--brand-hover:#b3aeff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff;--amber:#ff9a4d;--amber-bg:#352614;--amber-line:#6b4a1c;--amber-ink:#ffd3a3;--rec:#ff7b72;--on-rec:#2a0705;--rec-bg:#3b1b1a;--rec-line:#6e2f2b;--rec-ink:#ffc4bf;--ok:#6fd49a;--ok-bg:#15301f;--ok-line:#2b5b3c;--info-bg:#23264a;--info-line:#3b3f74;--shadow:0 1px 2px rgba(0,0,0,.35);--focus:#b9b4ff}
+.db *{box-sizing:border-box}
+.db :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.btn{font:inherit;font-weight:600;font-size:13.5px;min-height:36px;padding:6px 12px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;line-height:1.3;text-decoration:none;white-space:nowrap}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.danger{border-color:var(--rec-line);color:var(--rec-ink)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--brand)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;border:1px solid var(--line);background:var(--sunk);color:var(--text);line-height:1.6;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
+.chip.brand{background:var(--tint);border-color:transparent;color:var(--tint-ink)}
+.chip.warn{background:var(--amber-bg);border-color:var(--amber-line);color:var(--amber-ink)}
+.inp{font:inherit;width:100%;min-height:38px;padding:8px 12px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;gap:8px;list-style:none;padding:0 18px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;margin-right:4px}
+details[open]>summary::before{transform:rotate(45deg)}
+.mom h2{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand);margin:28px 0 10px}
+.mom p,.mom li{font-size:15px;line-height:1.75;text-wrap:pretty}
+.mom ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.mom table{width:100%;border-collapse:collapse;font-size:14px}
+.mom th{text-align:left;font-weight:600;font-size:12.5px;color:var(--muted);padding:8px 10px;border-bottom:2px solid var(--line);white-space:nowrap}
+.mom td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6}
+.ts{font:12.5px ui-monospace,Consolas,monospace;color:var(--brand);text-decoration:none;white-space:nowrap}
+.q{display:block;font-size:13px;color:var(--muted);font-style:italic;margin-top:2px}
+.spk{display:inline-flex;font-size:12.5px;font-weight:700;padding:1px 9px;border-radius:7px;white-space:nowrap}
+.caret{display:inline-block;width:8px;height:18px;background:var(--brand);vertical-align:text-bottom;animation:bl 1s steps(2) infinite}
+@keyframes bl{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.db *{animation:none!important}}
+</style>
+</helmet>
+<div class="db {{theme}}" style="min-height: 2700px">
+<main style="max-width: 980px; margin: 0 auto; padding: 32px 24px 64px; display: flex; flex-direction: column; gap: 18px">
+
+<header style="display: flex; flex-direction: column; gap: 10px">
+  <div style="display: flex; align-items: center; gap: 10px">
+    <svg width="26" height="26" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+    <span style="font-weight: 700">Debrief</span><span class="hint">/ Minutes</span>
+  </div>
+  <label for="title" style="position: absolute; left: -9999px">Meeting title</label>
+  <input id="title" value="Weekly sync: Kochi depot rollout" style="font: inherit; font-size: 30px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; border: 1px solid transparent; border-radius: 10px; padding: 4px 8px; margin: 0 -8px; background: transparent; color: var(--text); width: calc(100% + 16px)">
+  <div id="meta" style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--muted)">
+    <span>Tue 13 Oct 2026, 10:00</span><span>42 min</span><span style="min-width: 0">Akhil Nazim, Priya Nair, Ravi Menon, Anjali Krishnan, Suresh K, Meera Iyer</span>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 8px"><span class="chip brand">Emailed 10:44</span><span class="chip">Gemini 2.5 Flash</span><span class="chip">Thorough</span><span class="chip ok">Checked for completeness</span></div>
+</header>
+
+<details id="notesBox" class="card" open="{{peopleOpen}}">
+  <summary>People, names and context</summary>
+  <div style="padding: 0 18px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 18px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="attendees" style="font-weight: 600">Who was in the meeting <span class="hint" style="display: inline">one per line</span></label>
+      <textarea id="attendees" class="inp" rows="6" style="resize: vertical">Akhil Nazim
+Priya Nair
+Ravi Menon
+Anjali Krishnan
+Suresh K
+Meera Iyer</textarea>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-weight: 600">Fix a name everywhere</span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <input id="fixWrong" class="inp" aria-label="Heard as" value="Anjali Krishna" style="flex: 1 1 140px; width: auto">
+        <input id="fixRight" class="inp" aria-label="Should be" value="Anjali Krishnan" style="flex: 1 1 140px; width: auto">
+        <button id="fixApply" class="btn">Fix 7 places</button>
+      </div>
+      <label style="display: flex; gap: 8px; align-items: center; min-height: 32px"><input id="fixRemember" type="checkbox" checked>Remember for next time</label>
+      <div id="suggest" style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center"><span class="hint">Suggested:</span><button class="chip" style="cursor: pointer; font: inherit; font-size: 12.5px; min-height: 32px">“Kochi metro” → Kochi Metro</button><button class="chip" style="cursor: pointer; font: inherit; font-size: 12.5px; min-height: 32px">“UR masters” → UR Masters</button></div>
+    </div>
+    <div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px">
+      <label for="notes" style="font-weight: 600">Other context for the minutes</label>
+      <textarea id="notes" class="inp" rows="2" placeholder="Agenda, project names, anything the minutes should know."></textarea>
+    </div>
+  </div>
+</details>
+
+<div role="tablist" aria-label="View" style="display: flex; gap: 4px; border-bottom: 1px solid var(--line)">
+  <button role="tab" aria-selected="{{tabMom}}" onClick="{{showMom}}" style="min-height: 44px; padding: 0 18px; border: 0; background: none; font: inherit; font-weight: 700; color: {{momFg}}; border-bottom: 3px solid {{momBd}}; margin-bottom: -1px; cursor: pointer">Minutes</button>
+  <button role="tab" aria-selected="{{tabTr}}" onClick="{{showTr}}" style="min-height: 44px; padding: 0 18px; border: 0; background: none; font: inherit; font-weight: 700; color: {{trFg}}; border-bottom: 3px solid {{trBd}}; margin-bottom: -1px; cursor: pointer">Transcript <span class="hint" style="display: inline">182 lines</span></button>
+</div>
+
+<sc-if value="{{isMom}}" hint-placeholder-val="{{true}}">
+<div id="momTab" style="display: flex; flex-direction: column; gap: 14px">
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+    <button id="gen" class="btn primary">{{genLabel}}</button>
+    <button id="reread" class="btn">Re-read transcript</button>
+    <sc-if value="{{isGenerating}}" hint-placeholder-val="{{false}}"><button id="abort" class="btn">Stop</button></sc-if>
+    <span id="genStatus" role="status" class="hint">{{status}}</span>
+    <span style="flex: 1"></span>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px">
+      <button id="edit" class="btn">Edit</button><button id="copy" class="btn">Copy</button><button id="dlMd" class="btn">.md</button><button id="dlDoc" class="btn">Word</button><button id="print" class="btn">Print / PDF</button><button id="mail" class="btn">Email me</button>
+    </div>
+  </div>
+
+  <details id="shareBox" class="card" open>
+    <summary>Share these minutes with others</summary>
+    <div style="padding: 0 18px 18px; display: flex; flex-direction: column; gap: 10px">
+      <p id="shareSrc" class="hint">From your “Kochi weekly” list and the calendar invite.</p>
+      <label for="shareTo" style="position: absolute; left: -9999px">Recipients</label>
+      <textarea id="shareTo" class="inp" rows="2">priya@company.com, ravi@company.com, anjali@company.com</textarea>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <label for="shareHowSel" style="position: absolute; left: -9999px">Send as</label>
+        <select id="shareHowSel" class="inp" style="width: auto"><option>To</option><option>Cc</option><option>Bcc</option></select>
+        <button id="shareInvited" class="btn">Add everyone invited</button>
+        <button id="shareAbsent" class="btn">Add people who were absent (1)</button>
+        <span style="flex: 1"></span>
+        <span id="shareStatus" class="hint">3 people · from your Gmail</span>
+        <button id="shareSend" class="btn primary">Share</button>
+      </div>
+    </div>
+  </details>
+
+  <section id="askBox" class="card" style="padding: 12px; display: flex; gap: 8px; align-items: center">
+    <label for="askq" style="position: absolute; left: -9999px">Ask about this meeting</label>
+    <input id="askq" class="inp" placeholder="Ask about this meeting, e.g. what did Ravi agree to?" style="border: 0; background: transparent">
+    <button class="btn">Ask</button>
+  </section>
+
+  <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+    <div class="card" style="padding: 48px 24px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center">
+      <strong style="font-size: 16px">No minutes yet</strong><p class="hint">The transcript is ready. Generate the minutes when you are.</p><button class="btn primary" style="margin-top: 6px">Generate minutes</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{isFailed}}" hint-placeholder-val="{{false}}">
+    <div role="alert" style="padding: 16px 18px; border-radius: 14px; background: var(--rec-bg); border: 1px solid var(--rec-line); color: var(--rec-ink); display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap">
+      <div style="flex: 1 1 300px"><strong>The minutes couldn’t be written</strong><p style="margin: 2px 0 0">Gemini stopped at the daily limit after the summary. Your transcript is safe. Try again after 12:30, or switch Minutes to Claude in Settings.</p></div>
+      <button id="retry" class="btn">Try again</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{isRecovering}}" hint-placeholder-val="{{false}}">
+    <div id="pendingBox" role="status" style="padding: 14px 18px; border-radius: 14px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink)"><strong>Recovering missing audio</strong><p id="pendingText" style="margin: 2px 0 0">2 pieces (01:10 of audio) were not transcribed during the call. Sending them now; the minutes will update.</p></div>
+  </sc-if>
+
+  <sc-if value="{{hasArticle}}" hint-placeholder-val="{{true}}">
+  <article id="mom" class="card mom" style="padding: 8px 40px 32px">
+    <h2>Summary</h2>
+    <p style="margin: 0">The team agreed to start the Kochi pilot in three depots from 1 November and to freeze fare tables on 25 October. Validator stock is the main risk; Ravi will confirm numbers by Monday. Training for depot staff will be run in Malayalam.<sc-if value="{{isGenerating}}" hint-placeholder-val="{{false}}"><span class="caret" aria-hidden="true"></span></sc-if></p>
+    <sc-if value="{{isReady}}" hint-placeholder-val="{{true}}">
+    <h2>Discussion</h2>
+    <ul><li>Priya walked through the revised budget; depot fit-out is 12% over the March estimate, mainly cabling.<sup><a href="#fn1">1</a></sup></li><li>Ravi reported the vendor can ship 140 validators this month; the pilot needs 180.</li><li lang="ml">അഞ്ജലി: ജീവനക്കാർക്ക് മലയാളത്തിൽ പരിശീലനം നൽകണം, ഇംഗ്ലീഷ് മാനുവൽ മതിയാകില്ല.</li></ul>
+    <h2>Decisions</h2>
+    <ul><li>Pilot starts 1 November in Vyttila, Aluva and Kakkanad depots.</li><li>Fare tables freeze on 25 October; changes after that wait for phase 2.</li></ul>
+    <h2>Action items</h2>
+    <div style="overflow-x: auto"><table>
+      <thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>When said</th></tr></thead>
+      <tbody>
+        <tr><td>Send the revised depot budget<span class="q">“I’ll send the cleaned-up sheet by Friday.”</span></td><td>Priya Nair</td><td>Fri 16 Oct</td><td><a class="ts" href="#">08:42</a></td></tr>
+        <tr><td>Confirm validator numbers with the vendor<span class="q" lang="hi">“मैं सोमवार तक पक्का कर दूँगा।”</span></td><td>Ravi Menon</td><td>Mon 19 Oct</td><td><a class="ts" href="#">14:05</a></td></tr>
+        <tr><td>Plan Malayalam training for depot staff</td><td>Anjali Krishnan</td><td>Wed 21 Oct</td><td><a class="ts" href="#">22:30</a></td></tr>
+      </tbody>
+    </table></div>
+    <h2>Risks and open questions</h2>
+    <ul><li><strong>Risk:</strong> 40 validators short for the pilot.</li><li><strong>Open:</strong> who signs off the fare freeze if Suresh is away?</li></ul>
+    <div style="margin-top: 26px; padding: 16px 18px; border-radius: 12px; background: var(--info-bg); border: 1px dashed var(--info-line)">
+      <p class="lbl" style="color: var(--brand)">Added by the completeness check</p>
+      <ul style="margin-top: 8px"><li>Meera asked for the pilot dashboard link to be shared before Friday. No owner was named. <a class="ts" href="#">37:51</a></li></ul>
+      <p class="hint" style="margin-top: 6px">These were in the transcript but missed in the first pass. Check them before sharing.</p>
+    </div>
+    <h2>Attendance</h2>
+    <div style="overflow-x: auto"><table>
+      <thead><tr><th>Person</th><th>Invite</th><th>In the meeting</th><th>Joined</th><th>Left</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Akhil Nazim</td><td>Organiser</td><td><span class="chip ok">Yes</span></td><td>10:00</td><td>10:42</td><td></td></tr>
+        <tr><td>Priya Nair</td><td>Required</td><td><span class="chip ok">Yes</span></td><td>10:01</td><td>10:42</td><td></td></tr>
+        <tr><td>Ravi Menon</td><td>Required</td><td><span class="chip ok">Yes</span></td><td>10:04</td><td>10:39</td><td>Joined late</td></tr>
+        <tr><td>Anjali Krishnan</td><td>Optional</td><td><span class="chip ok">Yes</span></td><td>10:00</td><td>10:42</td><td></td></tr>
+        <tr><td>Deepak Rao</td><td>Required</td><td><span class="chip warn">Absent</span></td><td>—</td><td>—</td><td>Declined invite</td></tr>
+      </tbody>
+    </table></div>
+    <ol style="margin: 28px 0 0; padding: 14px 0 0 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted)"><li id="fn1">Priya said “twelve or thirteen percent”; the lower figure is used.</li></ol>
+    <p style="margin: 18px 0 0; font-size: 12.5px; color: var(--muted)">Written by Debrief with Gemini 2.5 Flash from a transcript of 42 min. Speaker names are a best guess. Check before you share.</p>
+    </sc-if>
+  </article>
+  </sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{isTr}}" hint-placeholder-val="{{false}}">
+<div id="trTab" style="display: flex; flex-direction: column; gap: 14px">
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+    <span id="trInfo" class="hint" style="flex: 1 1 300px">Speakers named by voice recognition are a best guess. “Unknown speaker” means Debrief was not sure.</span>
+    <button id="dlTxt" class="btn">Download .txt</button>
+    <button id="del" class="btn danger">Delete meeting…</button>
+  </div>
+  <div role="alert" style="padding: 12px 16px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); font-size: 13.5px"><strong>1 error during transcription.</strong> 24:10–24:40 could not be read (audio was silent). Nothing else is missing.</div>
+  <div id="transcript" class="card" style="padding: 8px 0">
+    <sc-for list="{{lines}}" as="l" hint-placeholder-count="8">
+      <div style="display: grid; grid-template-columns: 64px minmax(120px, 210px) 1fr; gap: 12px; padding: 10px 20px; border-top: {{l.bt}}; align-items: baseline">
+        <a class="ts" href="#">{{l.t}}</a>
+        <span><span class="spk" style="background: {{l.bg}}; color: {{l.fg}}; border: {{l.bd}}">{{l.who}}</span></span>
+        <span lang="{{l.lang}}" style="font-size: 15px; line-height: 1.75">{{l.text}}</span>
+      </div>
+    </sc-for>
+  </div>
+  <p class="hint">Speaker styles: <strong>you</strong> in indigo, a <strong>named person</strong> on the tint, <strong>others</strong> grey, <strong>Unknown speaker</strong> dashed, and a <strong>caption dispute</strong> in saffron.</p>
+</div>
+</sc-if>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"minutesState":{"editor":"enum","options":["ready","generating","empty","failed","recovering"],"default":"ready"},"$preview":{"width":1280,"height":2700}}'>
+class Component extends DCLogic {
+  constructor(p){ super(p); this.state = { tab: 'mom' }; }
+  renderVals() {
+    const st = this.props.minutesState ?? 'ready';
+    const tab = this.state.tab;
+    const K = {
+      you: ['var(--brand)', 'var(--on-brand)', '0'],
+      named: ['var(--tint)', 'var(--tint-ink)', '0'],
+      other: ['var(--sunk)', 'var(--text)', '1px solid var(--line)'],
+      unknown: ['transparent', 'var(--muted)', '1px dashed var(--line-strong)'],
+      dispute: ['var(--amber-bg)', 'var(--amber-ink)', '1px solid var(--amber-line)']
+    };
+    const L = [
+      ['08:42', 'named', 'Priya Nair', 'en', 'I’ll send the cleaned-up sheet by Friday, it has the cabling split out.'],
+      ['09:10', 'you', 'Akhil (you)', 'en', 'Good. Can we also see the March estimate next to it?'],
+      ['14:05', 'dispute', 'Priya (captions say Ravi)', 'hi', 'मैं सोमवार तक पक्का कर दूँगा, वेंडर से बात हो गई है।'],
+      ['14:31', 'named', 'Ravi Menon', 'en', 'They can ship 140 this month. We need 180 for three depots.'],
+      ['22:30', 'named', 'Anjali Krishnan', 'ml', 'ജീവനക്കാർക്ക് മലയാളത്തിൽ പരിശീലനം നൽകണം, ഇംഗ്ലീഷ് മാനുവൽ മതിയാകില്ല.'],
+      ['23:02', 'unknown', 'Unknown speaker', 'en', 'Sorry, can someone share the screen again?'],
+      ['31:18', 'other', 'Other participant', 'en', 'Sounds good to me.'],
+      ['37:51', 'named', 'Meera Iyer', 'en', 'Please share the dashboard link before Friday so I can check the depot list.']
+    ];
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      peopleOpen: true,
+      isMom: tab === 'mom', isTr: tab === 'tr', tabMom: tab === 'mom' ? 'true' : 'false', tabTr: tab === 'tr' ? 'true' : 'false',
+      momFg: tab === 'mom' ? 'var(--text)' : 'var(--muted)', momBd: tab === 'mom' ? 'var(--brand)' : 'transparent',
+      trFg: tab === 'tr' ? 'var(--text)' : 'var(--muted)', trBd: tab === 'tr' ? 'var(--brand)' : 'transparent',
+      showMom: () => this.setState({ tab: 'mom' }), showTr: () => this.setState({ tab: 'tr' }),
+      isGenerating: st === 'generating', isEmpty: st === 'empty', isFailed: st === 'failed', isRecovering: st === 'recovering',
+      isReady: st === 'ready' || st === 'recovering', hasArticle: st === 'ready' || st === 'generating' || st === 'recovering',
+      genLabel: st === 'empty' ? 'Generate minutes' : 'Regenerate',
+      status: { ready: 'Written 10:43 · edited by you 10:51', generating: 'Writing the minutes… summary done, decisions next', empty: 'Transcript ready', failed: 'Stopped with an error', recovering: 'Updating with recovered audio…' }[st],
+      lines: L.map(([t, kind, who, lang, text], i) => ({ t, who, lang, text, bg: K[kind][0], fg: K[kind][1], bd: K[kind][2], bt: i ? '1px solid var(--line)' : '0' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

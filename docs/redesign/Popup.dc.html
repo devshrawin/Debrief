@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief toolbar popup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--brand,#3a33a8)}a:hover{color:var(--brand-hover,#2f2990)}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--line-strong:#c4c9d2;--brand:#3a33a8;--brand-hover:#2f2990;--on-brand:#ffffff;--tint:#eceafc;--tint-ink:#2c268a;--amber:#ff7a1a;--amber-bg:#fff3e4;--amber-line:#f2bf86;--amber-ink:#8a3a00;--rec:#c8281c;--on-rec:#ffffff;--rec-bg:#fdeceb;--rec-line:#efb0aa;--rec-ink:#99170c;--ok:#147a40;--ok-bg:#e6f5ec;--ok-line:#a8dcbc;--info-bg:#eef0fd;--info-line:#c9cef4;--shadow:0 1px 2px rgba(20,22,40,.05),0 2px 8px rgba(20,22,40,.04);--focus:#3a33a8;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page)}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--line-strong:#4a4f58;--brand:#9d97ff;--brand-hover:#b3aeff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff;--amber:#ff9a4d;--amber-bg:#352614;--amber-line:#6b4a1c;--amber-ink:#ffd3a3;--rec:#ff7b72;--on-rec:#2a0705;--rec-bg:#3b1b1a;--rec-line:#6e2f2b;--rec-ink:#ffc4bf;--ok:#6fd49a;--ok-bg:#15301f;--ok-line:#2b5b3c;--info-bg:#23264a;--info-line:#3b3f74;--shadow:0 1px 2px rgba(0,0,0,.35);--focus:#b9b4ff}
+.db *{box-sizing:border-box}
+.db :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.btn{font:inherit;font-weight:600;font-size:14px;min-height:36px;padding:7px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.3;text-decoration:none}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--brand)}
+.sw{width:40px;height:24px;border-radius:999px;border:0;padding:0;background:var(--line-strong);position:relative;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sw[aria-checked="true"]{background:var(--brand)}.sw[aria-checked="true"]::after{transform:translateX(16px)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;border:1px solid var(--line);background:var(--sunk);color:var(--text);line-height:1.6;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
+.chip.warn{background:var(--amber-bg);border-color:var(--amber-line);color:var(--amber-ink)}
+.chip.brand{background:var(--tint);border-color:transparent;color:var(--tint-ink)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.meter{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden;border:1px solid var(--line)}
+.meter>i{display:block;height:100%;border-radius:99px;background:var(--ok)}.meter>i.q{background:var(--amber)}
+.pop{width:360px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px -12px rgba(20,22,40,.25);overflow:hidden;display:flex;flex-direction:column}
+.recdot{width:10px;height:10px;border-radius:50%;background:var(--rec);animation:rd 1.6s ease-out infinite;flex:none}
+@keyframes rd{0%{box-shadow:0 0 0 0 rgba(200,40,28,.55)}70%{box-shadow:0 0 0 7px rgba(200,40,28,0)}100%{box-shadow:0 0 0 0 rgba(200,40,28,0)}}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+@media (prefers-reduced-motion:reduce){.db *{animation:none!important}}
+</style>
+</helmet>
+<div class="db {{theme}}" style="width: 1640px; min-height: 900px; padding: 48px; display: flex; gap: 32px; align-items: flex-start">
+
+<!-- IDLE -->
+<div style="display: flex; flex-direction: column; gap: 12px">
+  <p class="lbl">1 · Idle, call detected</p>
+  <div class="pop">
+    <header style="display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px">
+      <svg width="32" height="32" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+      <strong style="font-size: 16px; flex: 1">Debrief</strong>
+      <a href="#" style="font-size: 13px; font-weight: 600; padding: 8px 6px; text-decoration: none">Tour</a>
+      <a href="#" style="font-size: 13px; font-weight: 600; padding: 8px 6px; text-decoration: none">Settings</a>
+    </header>
+    <div role="tablist" aria-label="Popup sections" style="display: flex; gap: 4px; margin: 0 16px; padding: 4px; border-radius: 11px; background: var(--sunk); border: 1px solid var(--line)">
+      <button role="tab" aria-selected="true" style="flex: 1; min-height: 34px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(20,22,40,.12); cursor: pointer">Home</button>
+      <button role="tab" aria-selected="false" style="flex: 1; min-height: 34px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; background: transparent; color: var(--muted); cursor: pointer">Meetings <span class="chip" style="margin-left: 4px; padding: 0 7px">14</span></button>
+    </div>
+    <div style="padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px">
+      <div role="status" style="display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink)">
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(255,122,26,.25); flex: none"></span>
+        <div style="flex: 1; font-size: 13.5px; line-height: 1.45"><strong>A call is on.</strong> Start recording?<br><span style="font-size: 12.5px">Google Meet · this tab</span></div>
+      </div>
+      <button id="start" class="btn primary" style="min-height: 52px; font-size: 15.5px; border-radius: 12px; width: 100%">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="currentColor"></circle></svg>Start recording this tab
+      </button>
+      <p class="hint" style="text-align: center">Tell people you are recording. <kbd style="font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px">Alt+Shift+M</kbd> also works.</p>
+      <div style="border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+        <p class="lbl">Last meeting</p>
+        <div class="trunc" style="font-weight: 600">Weekly sync: Kochi depot rollout and fare table freeze</div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><span class="hint">Yesterday · 42 min</span><span class="chip brand">Emailed</span><span style="flex: 1"></span><a href="#" class="btn ghost" style="min-height: 32px; padding: 4px 8px">Open minutes</a></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+        <a href="#" style="font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>Ask a question</a>
+        <button class="btn ghost" aria-expanded="true" style="min-height: 36px; padding: 4px 6px; font-size: 13px; color: var(--muted)">Check page detection</button>
+      </div>
+      <div role="region" aria-label="What Debrief can read from this page" style="border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px">
+        <span>Mute button</span><span class="chip ok">Found · unmuted</span>
+        <span>People list</span><span class="chip ok">6 names</span>
+        <span>Captions</span><span class="chip warn">Off · turn on for names</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RECORDING -->
+<div style="display: flex; flex-direction: column; gap: 12px">
+  <p class="lbl">2 · Recording, with an alert</p>
+  <div class="pop">
+    <header style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; background: var(--rec-bg); border-bottom: 1px solid var(--rec-line)">
+      <span class="recdot" aria-hidden="true"></span>
+      <strong style="color: var(--rec-ink); flex: 1">Recording</strong>
+      <span aria-label="Elapsed time 12 minutes 48 seconds" style="font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--rec-ink)">12:48</span>
+    </header>
+    <div style="padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px">
+      <div id="alert" role="alert" style="display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink)">
+        <div style="flex: 1; font-size: 13px; line-height: 1.45"><strong id="alertTitle" style="display: block">Gemini limit reached</strong>Recording continues. Audio is kept and transcribed when the limit resets at 13:30, or now with a backup key.<div style="margin-top: 6px"><a href="#" style="font-weight: 700; color: inherit">Add a backup key</a></div></div>
+        <button aria-label="Dismiss" style="align-self: flex-start; width: 32px; height: 32px; border: 0; background: none; color: inherit; border-radius: 8px; cursor: pointer; font-size: 18px">×</button>
+      </div>
+      <div id="live" style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center">
+          <span style="font-size: 13px">Meeting audio</span><span style="font-size: 13px; font-weight: 600">Good</span>
+          <div class="meter" style="grid-column: 1 / -1"><i style="width: 68%"></i></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center">
+          <span style="font-size: 13px">Your mic</span><span id="lvMicT" style="font-size: 13px; font-weight: 600">Quiet</span>
+          <div class="meter" style="grid-column: 1 / -1"><i id="lvMic" class="q" style="width: 14%"></i></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line)">
+        <div style="flex: 1; min-width: 0"><div style="font-weight: 600">Include my microphone</div><p id="micState" class="hint" style="display: flex; gap: 6px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none"></span>You are muted in the call, so Debrief ignores your mic.</p></div>
+        <button id="micToggle" class="sw" role="switch" aria-checked="true" aria-label="Include my microphone"></button>
+      </div>
+      <p class="hint" style="display: flex; gap: 14px"><span>38 transcript pieces</span><span>0 errors</span><span>Gemini 81% of today</span></p>
+      <button id="stop" style="min-height: 52px; border-radius: 12px; width: 100%; font: inherit; font-weight: 700; font-size: 15.5px; border: 1px solid var(--rec); background: var(--rec); color: var(--on-rec); display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="currentColor"></rect></svg>Stop and write minutes
+      </button>
+      <p class="hint" style="text-align: center">Nothing is lost when you stop. The last minute is still transcribed.</p>
+    </div>
+  </div>
+</div>
+
+<!-- FINISHING + small states -->
+<div style="display: flex; flex-direction: column; gap: 12px">
+  <p class="lbl">3 · Finishing</p>
+  <div class="pop">
+    <div style="padding: 20px 16px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; gap: 10px; align-items: center; color: var(--brand)"><span class="spin"></span><strong style="color: var(--text)">Finishing transcription…</strong></div>
+      <div class="meter" role="progressbar" aria-valuenow="3" aria-valuemin="0" aria-valuemax="4" aria-label="Transcription progress"><i style="width: 75%; background: var(--brand)"></i></div>
+      <p class="hint">3 of 4 pieces done. Then the minutes are written, about 30 s. You can close this popup.</p>
+      <a href="#" class="btn" style="width: 100%">Open the minutes page</a>
+    </div>
+  </div>
+  <p class="lbl" style="margin-top: 12px">Other states</p>
+  <div class="pop">
+    <div id="setup" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <strong>Add your free Gemini key first</strong>
+      <p class="hint" style="font-size: 13px">Debrief needs one key to transcribe. It takes two minutes and stays on this computer.</p>
+      <div style="display: flex; gap: 8px"><a href="#" class="btn primary" style="flex: 1">Take the 5-minute tour</a><a href="#" class="btn">Settings</a></div>
+    </div>
+  </div>
+  <div class="pop">
+    <div role="status" style="padding: 12px 16px; display: flex; gap: 10px; align-items: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 9-2.7M8.5 15.5a5 5 0 0 1 4-1.3M3 3l18 18"></path></svg>
+      <p style="margin: 0; font-size: 13px; flex: 1"><strong>You are offline.</strong> Recording works; audio waits here until you are back.</p>
+    </div>
+  </div>
+  <div class="pop">
+    <div role="alert" style="padding: 12px 16px; display: flex; gap: 10px; align-items: flex-start; background: var(--rec-bg); color: var(--rec-ink)">
+      <div style="flex: 1; font-size: 13px; line-height: 1.45"><strong style="display: block">Can’t record this tab</strong>Chrome blocks recording on its own pages. Open the meeting tab, then click Debrief again.</div>
+    </div>
+  </div>
+</div>
+
+<!-- MEETINGS -->
+<div style="display: flex; flex-direction: column; gap: 12px">
+  <p class="lbl">4 · Meetings tab</p>
+  <div class="pop">
+    <header style="display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px">
+      <svg width="32" height="32" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+      <strong style="font-size: 16px; flex: 1">Debrief</strong>
+      <a href="#" style="font-size: 13px; font-weight: 600; padding: 8px 6px; text-decoration: none">Tour</a>
+      <a href="#" style="font-size: 13px; font-weight: 600; padding: 8px 6px; text-decoration: none">Settings</a>
+    </header>
+    <div role="tablist" aria-label="Popup sections" style="display: flex; gap: 4px; margin: 0 16px; padding: 4px; border-radius: 11px; background: var(--sunk); border: 1px solid var(--line)">
+      <button role="tab" aria-selected="false" style="flex: 1; min-height: 34px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; background: transparent; color: var(--muted); cursor: pointer">Home</button>
+      <button role="tab" aria-selected="true" style="flex: 1; min-height: 34px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(20,22,40,.12); cursor: pointer">Meetings <span class="chip" style="margin-left: 4px; padding: 0 7px">14</span></button>
+    </div>
+    <div style="padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px">
+      <label for="q" style="position: absolute; left: -9999px">Search meetings</label>
+      <div style="position: relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 12px; top: 11px"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg><input id="q" placeholder="Search titles and people" style="font: inherit; width: 100%; min-height: 38px; padding: 8px 12px 8px 36px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--card); color: var(--text)"></div>
+      <sc-for list="{{meetings}}" as="m" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 6px; padding: 8px 6px 8px 10px; border-radius: 10px; background: {{m.bg}}">
+          <a href="#" style="flex: 1; min-width: 0; text-decoration: none; color: var(--text)">
+            <div class="trunc" style="font-weight: 600">{{m.title}}</div>
+            <div style="display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted)"><span>{{m.when}} · {{m.dur}}</span><sc-if value="{{m.mailed}}" hint-placeholder-val="{{false}}"><span class="chip brand" style="font-size: 11px; padding: 0 7px">Emailed</span></sc-if></div>
+          </a>
+          <sc-if value="{{m.armed}}" hint-placeholder-val="{{false}}">
+            <button style="min-height: 32px; padding: 4px 10px; border-radius: 8px; border: 0; background: var(--rec); color: var(--on-rec); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">Delete?</button>
+          </sc-if>
+          <sc-if value="{{m.idle}}" hint-placeholder-val="{{true}}">
+            <button aria-label="Delete {{m.title}}" style="width: 36px; height: 36px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+          </sc-if>
+        </div>
+      </sc-for>
+      <a href="#" style="font-size: 13px; font-weight: 600; margin-top: 6px; min-height: 36px; display: inline-flex; align-items: center">Ask a question across all 14 meetings</a>
+    </div>
+  </div>
+  <div class="pop">
+    <div style="padding: 24px 16px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center">
+      <strong>No meetings yet</strong>
+      <p class="hint">Recorded meetings and their minutes appear here.</p>
+    </div>
+  </div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1640,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ms = [
+      { title: 'Weekly sync: Kochi depot rollout and fare table freeze', when: 'Yesterday', dur: '42 min', mailed: true },
+      { title: 'Vendor call: validator firmware', when: 'Mon 12 Oct', dur: '28 min', mailed: true },
+      { title: 'साप्ताहिक समीक्षा: भुगतान गेटवे', when: 'Fri 9 Oct', dur: '55 min', mailed: false, armed: true },
+      { title: 'Design review, Trivandrum dashboard', when: 'Thu 8 Oct', dur: '1 h 04 min', mailed: false },
+      { title: 'Standup', when: 'Thu 8 Oct', dur: '12 min', mailed: false }
+    ];
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      meetings: ms.map(m => ({ ...m, armed: !!m.armed, idle: !m.armed, bg: m.armed ? 'var(--rec-bg)' : 'transparent' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

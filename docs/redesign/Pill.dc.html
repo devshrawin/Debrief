@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief recording pill</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#3a33a8}a:hover{color:#2f2990}
+.db{font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:#1d1f24;background:#f6f7f9}
+.db *{box-sizing:border-box}
+.db :focus-visible{outline:2px solid #b9b4ff;outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#565d68;margin:0}
+.pill{display:inline-flex;align-items:center;gap:10px;height:36px;padding:0 4px 0 12px;border-radius:999px;background:#16171c;border:1px solid rgba(255,255,255,.16);box-shadow:0 6px 20px -6px rgba(0,0,0,.55);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.rd{width:9px;height:9px;border-radius:50%;background:#ff5a4e;flex:none;animation:rd 1.6s ease-out infinite}
+@keyframes rd{0%{box-shadow:0 0 0 0 rgba(255,90,78,.6)}70%{box-shadow:0 0 0 6px rgba(255,90,78,0)}100%{box-shadow:0 0 0 0 rgba(255,90,78,0)}}
+.eq{display:flex;gap:2px;align-items:center;height:16px}
+.eq i{width:3px;border-radius:2px;background:#cfccff;display:block}
+.eq.live i{animation:eq .9s ease-in-out infinite}.eq.live i:nth-child(2){animation-delay:-.3s}.eq.live i:nth-child(3){animation-delay:-.6s}.eq.live i:nth-child(4){animation-delay:-.15s}
+@keyframes eq{0%,100%{height:4px}50%{height:15px}}
+.tm{font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.mic{height:28px;padding:0 10px 0 8px;border-radius:999px;border:0;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.mic.on{background:#1f5a37;color:#c9f3d8}.mic.off{background:#33353c;color:#d3d6dc}.mic.muted{background:#5a3610;color:#ffd3a3}
+.panel{width:260px;border-radius:14px;background:#16171c;border:1px solid rgba(255,255,255,.16);box-shadow:0 18px 40px -12px rgba(0,0,0,.7);color:#eceef2;padding:14px;display:flex;flex-direction:column;gap:12px;font-size:13px}
+.m{height:6px;border-radius:9px;background:#2b2d34;overflow:hidden}.m>i{display:block;height:100%;border-radius:9px;background:#6fd49a}.m>i.q{background:#ff9a4d}
+.psw{width:40px;height:24px;border-radius:999px;border:0;padding:0;background:#4a4f58;position:relative;cursor:pointer;flex:none}
+.psw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+.psw[aria-checked="true"]{background:#9d97ff}.psw[aria-checked="true"]::after{transform:translateX(16px)}
+.tile{border-radius:12px;background:#2a2c33;display:grid;place-items:center;position:relative}
+.av{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;font-size:26px;font-weight:600;color:#fff}
+@media (prefers-reduced-motion:reduce){.db *{animation:none!important}.eq i{height:9px}}
+</style>
+</helmet>
+<div class="db" style="width: 1280px; min-height: 1080px; padding: 40px; display: flex; flex-direction: column; gap: 28px">
+
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 24px">
+  <p class="lbl">Live: click the pill to open, click again, outside or press Escape to close. Click the mic button to cycle its three states.</p>
+  <p style="margin: 0; font-size: 13px; color: #565d68">The meeting UI below is a neutral stand-in, not any vendor’s design.</p>
+</div>
+
+<div onClick="{{closePanel}}" style="position: relative; width: 1200px; height: 600px; border-radius: 16px; background: #0f1013; overflow: hidden; padding: 16px 16px 88px">
+  <div aria-hidden="true" style="height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 10px">
+    <div class="tile"><div class="av" style="background: #5b4fc7">P</div><span style="position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 13px">Priya Nair</span></div>
+    <div class="tile"><div class="av" style="background: #2f7a6b">R</div><span style="position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 13px">Ravi Menon</span></div>
+    <div class="tile"><div class="av" style="background: #a24f2f">അ</div><span style="position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 13px">അഞ്ജലി</span></div>
+    <div class="tile"><div class="av" style="background: #6b6f2f">S</div><span style="position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 13px">Suresh K</span></div>
+    <div class="tile"><div class="av" style="background: #7a2f5f">म</div><span style="position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 13px">मीरा</span></div>
+    <div class="tile"><div class="av" style="background: #3a33a8">A</div><span style="position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 13px">You</span></div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; gap: 12px">
+    <span style="width: 48px; height: 48px; border-radius: 50%; background: #2a2c33"></span><span style="width: 48px; height: 48px; border-radius: 50%; background: #2a2c33"></span><span style="width: 48px; height: 48px; border-radius: 50%; background: #2a2c33"></span><span style="width: 64px; height: 48px; border-radius: 24px; background: #b3261e"></span>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 380px; right: 380px; bottom: 6px; height: 64px; border: 1px dashed rgba(255,255,255,.25); border-radius: 12px"></div>
+  <span aria-hidden="true" style="position: absolute; left: 380px; bottom: 74px; font-size: 11px; color: rgba(255,255,255,.55)">The meeting’s own controls: the pill never snaps here</span>
+
+  <div style="position: absolute; top: 18px; right: 18px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px" onClick="{{stop}}">
+    <div class="pill" style="cursor: default; padding-left: 4px">
+      <button aria-expanded="{{openStr}}" aria-controls="dbPanel" aria-label="Debrief recording, 12 minutes 48 seconds. Show details" onClick="{{togglePanel}}" style="display: inline-flex; align-items: center; gap: 10px; height: 30px; padding: 0 6px 0 8px; border: 0; border-radius: 999px; background: transparent; color: #fff; font: inherit; font-weight: 600; cursor: pointer">
+        <span class="rd" aria-hidden="true"></span>
+        <span class="eq live" aria-hidden="true"><i style="height: 6px"></i><i style="height: 12px"></i><i style="height: 8px"></i><i style="height: 14px"></i></span>
+        <span class="tm">12:48</span>
+      </button>
+      <button class="mic {{micCls}}" onClick="{{cycleMic}}" aria-label="Microphone: {{micLabel}}. Click to change">{{micLabel}}</button>
+    </div>
+    <sc-if value="{{open}}" hint-placeholder-val="{{true}}">
+      <div id="dbPanel" class="panel" role="dialog" aria-label="Recording details" onKeyDown="{{onKey}}" tabindex="-1">
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center">
+          <span>Meeting audio</span><span style="font-weight: 700">Good</span>
+          <div class="m" style="grid-column: 1 / -1"><i style="width: 70%"></i></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center">
+          <span>Your mic</span><span style="font-weight: 700">{{micLevelText}}</span>
+          <div class="m" style="grid-column: 1 / -1"><i class="{{micBarCls}}" style="width: {{micBarW}}"></i></div>
+        </div>
+        <p style="margin: 0; color: #b8bcc6">{{micLine}}</p>
+        <p style="margin: 0; color: #b8bcc6">38 pieces transcribed · 0 errors</p>
+        <div role="alert" style="padding: 10px 12px; border-radius: 10px; background: #3a2610; border: 1px solid #6b4a1c; color: #ffd3a3; line-height: 1.45"><strong style="display: block">Gemini limit reached</strong>Audio is kept and sent at 13:30. <a href="#" style="color: #ffd3a3; font-weight: 700">Add a backup key</a></div>
+        <div style="display: flex; align-items: center; gap: 10px"><span style="flex: 1; font-weight: 600">Include my microphone</span><button class="psw" role="switch" aria-checked="{{micIncluded}}" aria-label="Include my microphone" onClick="{{toggleInclude}}"></button></div>
+        <button style="min-height: 40px; border-radius: 10px; border: 0; background: #ff5a4e; color: #2a0705; font: inherit; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect width="12" height="12" rx="2.5" fill="currentColor"></rect></svg>Stop and write minutes</button>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px">
+  <p class="lbl">Pill states</p>
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+    <div style="border-radius: 12px; background: #2a2c33; height: 96px; display: grid; place-items: center">
+      <div class="pill" style="cursor: default"><span class="rd"></span><span class="eq"><i style="height: 4px"></i><i style="height: 5px"></i><i style="height: 4px"></i><i style="height: 5px"></i></span><span class="tm">00:41</span><span class="mic on">Mic on</span></div>
+    </div>
+    <div style="border-radius: 12px; background: #2a2c33; height: 96px; display: grid; place-items: center">
+      <div class="pill" style="cursor: default"><span class="rd"></span><span class="eq"><i style="height: 14px"></i><i style="height: 16px"></i><i style="height: 12px"></i><i style="height: 15px"></i></span><span class="tm">12:48</span><span class="mic off">Mic off</span></div>
+    </div>
+    <div style="border-radius: 12px; background: #2a2c33; height: 96px; display: grid; place-items: center">
+      <div class="pill" style="cursor: default"><span class="rd"></span><span class="eq"><i style="height: 6px"></i><i style="height: 11px"></i><i style="height: 7px"></i><i style="height: 13px"></i></span><span class="tm">48:02</span><span style="padding: 0 8px; border-radius: 999px; background: #5a3610; color: #ffd3a3; font-size: 11.5px; line-height: 20px">Limit</span><span class="mic muted">Muted in call</span></div>
+    </div>
+    <div style="border-radius: 12px; background: #2a2c33; height: 96px; display: grid; place-items: center">
+      <div class="pill" style="cursor: default; border-color: #ff9a4d"><span class="rd"></span><span style="font-size: 12.5px; color: #ffd3a3">No audio is arriving</span><span class="tm">03:12</span><span style="width: 4px"></span></div>
+    </div>
+    <span style="font-size: 12.5px; color: #565d68">Quiet room · bars rest low, never flat</span>
+    <span style="font-size: 12.5px; color: #565d68">Loud · mic deliberately off</span>
+    <span style="font-size: 12.5px; color: #565d68">Quota hit + muted in the call</span>
+    <span style="font-size: 12.5px; color: #565d68">Silent for 20 s · saffron edge, bars replaced by words</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+    <div style="border-radius: 12px; background: #ffffff; border: 1px solid #dfe2e8; height: 96px; display: grid; place-items: center">
+      <div class="pill" style="cursor: default"><span class="rd"></span><span class="eq"><i style="height: 6px"></i><i style="height: 11px"></i><i style="height: 7px"></i><i style="height: 13px"></i></span><span class="tm">12:48</span><span class="mic on">Mic on</span></div>
+    </div>
+    <div style="border-radius: 12px; height: 96px; display: grid; place-items: center; background: repeating-linear-gradient(45deg, #c9b79c 0 14px, #e9dcc7 14px 28px)">
+      <div class="pill" style="cursor: default"><span class="rd"></span><span class="eq"><i style="height: 6px"></i><i style="height: 11px"></i><i style="height: 7px"></i><i style="height: 13px"></i></span><span class="tm">12:48</span><span class="mic on">Mic on</span></div>
+    </div>
+    <div style="border-radius: 12px; background: #2a2c33; height: 96px; display: grid; place-items: center; position: relative">
+      <div class="pill" style="cursor: grabbing; transform: rotate(-2deg) scale(1.04); box-shadow: 0 16px 30px -8px rgba(0,0,0,.8); outline: 2px solid #b9b4ff; outline-offset: 2px"><span class="rd"></span><span class="eq"><i style="height: 6px"></i><i style="height: 11px"></i><i style="height: 7px"></i><i style="height: 13px"></i></span><span class="tm">12:48</span><span class="mic on">Mic on</span></div>
+      <span style="position: absolute; right: 10px; top: 0; bottom: 0; width: 2px; background: rgba(185,180,255,.6)"></span>
+    </div>
+    <div style="border-radius: 12px; background: #2a2c33; height: 96px; display: grid; place-items: center">
+      <div class="pill" style="cursor: default; outline: 2px solid #b9b4ff; outline-offset: 2px"><span class="rd"></span><span class="eq"><i style="height: 6px"></i><i style="height: 11px"></i><i style="height: 7px"></i><i style="height: 13px"></i></span><span class="tm">12:48</span><span class="mic on">Mic on</span></div>
+    </div>
+    <span style="font-size: 12.5px; color: #565d68">On a white page · same solid surface, no theme switch</span>
+    <span style="font-size: 12.5px; color: #565d68">On busy video · border keeps the edge</span>
+    <span style="font-size: 12.5px; color: #565d68">Dragging · lifts, snaps to the nearest edge on release</span>
+    <span style="font-size: 12.5px; color: #565d68">Keyboard focus · arrow keys nudge 8 px</span>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; font-size: 13.5px; color: #3b4048">
+  <p style="margin: 0"><strong style="color: #1d1f24">Never covers the call.</strong> Starts top right, 18 px in. Snapping excludes a band 96 px tall at the bottom where meeting toolbars live. Position is kept per site.</p>
+  <p style="margin: 0"><strong style="color: #1d1f24">Never steals clicks.</strong> Host is <code>pointer-events: none</code>; only the pill and the open panel take events. The panel is a dialog that opens on click only, never on hover.</p>
+  <p style="margin: 0"><strong style="color: #1d1f24">Full screen.</strong> Re-parents into <code>document.fullscreenElement</code> when the page goes full screen, so it stays visible. Closed shadow root, all CSS inside.</p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(p){ super(p); this.state = { open: true, mic: 'on', include: true }; }
+  renderVals() {
+    const s = this.state;
+    const M = { on: ['on','Mic on','Good','','62%','Your voice is going into the transcript.'], off: ['off','Mic off','Ignored','q','0%','Your mic is not recorded. The call still is.'], muted: ['muted','Muted in call','Paused','q','4%','You are muted in the call, so Debrief pauses your mic.'] }[s.mic];
+    const next = { on: 'off', off: 'muted', muted: 'on' };
+    return {
+      open: s.open,
+      openStr: s.open ? 'true' : 'false',
+      micCls: M[0], micLabel: M[1], micLevelText: M[2], micBarCls: M[3], micBarW: M[4], micLine: M[5],
+      micIncluded: s.include ? 'true' : 'false',
+      togglePanel: (e) => { e.stopPropagation(); this.setState({ open: !s.open }); },
+      closePanel: () => this.setState({ open: false }),
+      stop: (e) => e.stopPropagation(),
+      cycleMic: (e) => { e.stopPropagation(); this.setState({ mic: next[s.mic] }); },
+      toggleInclude: () => this.setState({ include: !s.include }),
+      onKey: (e) => { if (e.key === 'Escape') this.setState({ open: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

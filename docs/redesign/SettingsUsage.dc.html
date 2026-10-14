@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief settings: Usage</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:var(--brand,#3a33a8)}a:hover{color:var(--brand-hover,#2f2990)}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--line-strong:#c4c9d2;--brand:#3a33a8;--brand-hover:#2f2990;--on-brand:#ffffff;--tint:#eceafc;--tint-ink:#2c268a;--amber:#ff7a1a;--amber-bg:#fff3e4;--amber-line:#f2bf86;--amber-ink:#8a3a00;--rec:#c8281c;--rec-bg:#fdeceb;--rec-line:#efb0aa;--rec-ink:#99170c;--ok:#147a40;--ok-bg:#e6f5ec;--ok-line:#a8dcbc;--shadow:0 1px 2px rgba(20,22,40,.05),0 2px 8px rgba(20,22,40,.04);--focus:#3a33a8;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page)}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--line-strong:#4a4f58;--brand:#9d97ff;--brand-hover:#b3aeff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff;--amber:#ff9a4d;--amber-bg:#352614;--amber-line:#6b4a1c;--amber-ink:#ffd3a3;--rec:#ff7b72;--rec-bg:#3b1b1a;--rec-line:#6e2f2b;--rec-ink:#ffc4bf;--ok:#6fd49a;--ok-bg:#15301f;--ok-line:#2b5b3c;--shadow:0 1px 2px rgba(0,0,0,.35);--focus:#b9b4ff}
+.db *{box-sizing:border-box}
+.db :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.btn{font:inherit;font-weight:600;font-size:14px;min-height:36px;padding:7px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.3;text-decoration:none}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.danger{border-color:var(--rec-line);color:var(--rec-ink)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.nav a{display:flex;align-items:center;gap:10px;min-height:38px;padding:4px 10px;border-radius:9px;color:var(--text);text-decoration:none;font-weight:500}
+.nav a .n{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--sunk);color:var(--muted);flex:none}
+.nav a[aria-current="page"]{background:var(--tint);color:var(--tint-ink);font-weight:700}
+.nav a[aria-current="page"] .n{background:var(--brand);color:var(--on-brand)}
+th{padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600;color:var(--muted);font-size:12.5px;text-align:left;white-space:nowrap;vertical-align:bottom}
+td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ta{font:13px/1.6 ui-monospace,Consolas,monospace;width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);resize:vertical}
+</style>
+</helmet>
+<div class="db {{theme}}" style="min-height: 1080px; display: flex; flex-wrap: wrap; align-items: flex-start">
+
+<nav class="nav" aria-label="Settings" id="nav" style="flex: 1 1 232px; max-width: 280px; padding: 28px 16px; display: flex; flex-direction: column; gap: 2px">
+  <div style="display: flex; align-items: center; gap: 10px; padding: 0 10px 18px">
+    <svg width="30" height="30" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+    <strong style="font-size: 16px">Debrief settings</strong>
+  </div>
+  <a href="SettingsStart.dc.html"><span class="n">1</span>Get started</a>
+  <a href="#"><span class="n">2</span>General</a>
+  <a href="#"><span class="n">3</span>Speech to text</a>
+  <a href="#"><span class="n">4</span>Minutes</a>
+  <a href="#"><span class="n">5</span>Email</a>
+  <a href="SettingsVoices.dc.html"><span class="n">6</span>Voices</a>
+  <a href="#" aria-current="page"><span class="n">7</span>Usage</a>
+  <div style="border-top: 1px solid var(--line); margin: 14px 10px 8px"></div>
+  <a href="Tour.dc.html" style="color: var(--muted); font-size: 13px">Take the tour</a>
+  <a href="#" style="color: var(--muted); font-size: 13px">Setup guide</a>
+</nav>
+
+<main id="page-usage" style="flex: 999 1 560px; min-width: 0; padding: 36px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1000px">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+    <div>
+      <h1 style="margin: 0; font-size: 28px; line-height: 1.25; letter-spacing: -0.015em">Usage</h1>
+      <p style="margin: 4px 0 0; color: var(--muted); font-size: 15px">What Debrief asked each service for, and what it would cost on a paid plan. Counted on this computer.</p>
+    </div>
+    <div id="usageRange" role="tablist" aria-label="Time range" style="display: flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line)">
+      <sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
+        <button role="tab" aria-selected="{{r.on}}" onClick="{{r.pick}}" style="min-height: 34px; padding: 0 14px; border: 0; border-radius: 9px; font: inherit; font-weight: 600; cursor: pointer; background: {{r.bg}}; color: {{r.fg}}; box-shadow: {{r.sh}}">{{r.label}}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <section class="card" style="padding: 6px 0 0">
+    <div style="overflow-x: auto">
+      <table id="usageTable" style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 820px">
+        <thead><tr><th style="padding-left: 22px">Service and model</th><th>Used for</th><th class="n">Requests</th><th class="n">Failed<br><span style="font-weight: 400">(rate limit)</span></th><th class="n">Tokens in / out</th><th class="n">Audio</th><th class="n">Cost if paid</th><th style="padding-right: 22px; width: 150px">Left today</th></tr></thead>
+        <tbody>
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+            <tr>
+              <td style="padding-left: 22px"><strong>{{r.svc}}</strong><div class="hint">{{r.model}}</div></td>
+              <td>{{r.use}}</td>
+              <td class="n">{{r.req}}</td>
+              <td class="n" style="color: {{r.failC}}">{{r.fail}}</td>
+              <td class="n">{{r.tok}}</td>
+              <td class="n">{{r.min}}</td>
+              <td class="n" style="font-weight: 600">{{r.cost}}</td>
+              <td style="padding-right: 22px">
+                <sc-if value="{{r.hasLeft}}" hint-placeholder-val="{{true}}">
+                  <div role="meter" aria-valuenow="{{r.leftN}}" aria-valuemin="0" aria-valuemax="100" aria-label="{{r.svc}} left today" style="height: 8px; border-radius: 9px; background: var(--sunk); overflow: hidden; border: 1px solid var(--line)"><div style="height: 100%; width: {{r.leftW}}; background: {{r.leftC}}"></div></div>
+                  <div class="hint" style="margin-top: 4px; color: {{r.leftT}}">{{r.leftText}}</div>
+                </sc-if>
+                <sc-if value="{{r.noLeft}}" hint-placeholder-val="{{false}}"><span class="hint">No daily limit</span></sc-if>
+              </td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+    <div id="usageTotals" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: baseline; padding: 14px 22px; background: var(--sunk); border-radius: 0 0 14px 14px">
+      <strong>Total {{rangeLabel}}</strong><span>{{tReq}} requests</span><span>{{tMin}} of audio</span><span style="font-weight: 700">{{tCost}} if paid</span><span class="hint" style="margin-left: auto">You paid ₹0: all keys are on the free tier.</span>
+    </div>
+  </section>
+  <p class="hint" style="display: flex; gap: 8px; align-items: center"><span style="display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 6px; background: var(--tint); color: var(--tint-ink); font-weight: 800">~</span>“~” means an estimate from token and minute counts at the prices below. It is not a bill; your provider’s console is the source of truth.</p>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 20px">
+    <section class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+      <label for="usageLimits" class="lbl">Daily limits</label>
+      <textarea id="usageLimits" class="ta" rows="5">gemini-2.5-flash  requests/day = [YOUR QUOTA]
+gemini-2.5-pro    requests/day = [YOUR QUOTA]
+sarvam            minutes/day  = none</textarea>
+      <p class="hint">One per line. Debrief warns at 80% and switches to the backup key at 100%.</p>
+    </section>
+    <section class="card" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+      <label for="usagePrices" class="lbl">Prices for “cost if paid”</label>
+      <textarea id="usagePrices" class="ta" rows="5">gemini-2.5-flash  in=[PRICE]  out=[PRICE]  per 1M tokens, USD
+claude-sonnet     in=[PRICE]  out=[PRICE]  per 1M tokens, USD
+deepgram-nova     [PRICE] per audio minute, USD</textarea>
+      <p class="hint">Check your provider’s price page; prices change. Amounts are shown in ₹ at the rate in General.</p>
+    </section>
+  </div>
+  <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap"><button id="usageReset" class="btn danger">Reset counters…</button><span class="hint">Clears these numbers only. Meetings and settings are kept.</span></div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1280,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(p){ super(p); this.state = { range: 'today' }; }
+  renderVals() {
+    const r = this.state.range;
+    const k = { today: 1, d7: 5.6, d30: 21 }[r];
+    const fmt = (n) => Math.round(n).toLocaleString('en-IN');
+    const base = [
+      ['Gemini', 'gemini-2.5-flash', 'Transcription', 212, 3, 1.84e6, 0.21e6, 96, 41.2, 0.85],
+      ['Gemini', 'gemini-2.5-flash', 'Minutes (thorough)', 6, 0, 0.31e6, 0.04e6, 0, 17.8, 0.85],
+      ['Claude', 'claude-sonnet', 'Completeness check', 4, 0, 0.12e6, 0.02e6, 0, 55.4, null],
+      ['Debrief', 'on this computer', 'Voice recognition', 0, 0, 0, 0, 96, 0, null]
+    ];
+    const rows = base.map(([svc, model, use, req, fail, tin, tout, min, cost, used]) => {
+      const left = used == null ? null : Math.max(0, Math.round((1 - used) * 100));
+      const lc = left == null ? '' : left <= 20 ? 'var(--amber)' : 'var(--ok)';
+      return { svc, model, use, req: fmt(req * k), fail: fail ? `${fmt(fail * k)} (${fmt(fail * k)})` : '0', failC: fail ? 'var(--amber-ink)' : 'var(--muted)',
+        tok: tin ? `${(tin * k / 1e6).toFixed(2)}M / ${(tout * k / 1e6).toFixed(2)}M` : '—', min: min ? fmt(min * k) + ' min' : '—',
+        cost: cost ? '~ ₹' + fmt(cost * k) : '₹0', hasLeft: left != null && r === 'today', noLeft: left == null || r !== 'today',
+        leftN: left, leftW: (left ?? 0) + '%', leftC: lc, leftT: left != null && left <= 20 ? 'var(--amber-ink)' : 'var(--muted)', leftText: left != null ? `${left}% left · resets 13:30` : '' };
+    });
+    const R = [['today','Today'],['d7','7 days'],['d30','30 days']];
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      ranges: R.map(([id, label]) => { const on = id === r; return { label, on: on ? 'true' : 'false', bg: on ? 'var(--card)' : 'transparent', fg: on ? 'var(--text)' : 'var(--muted)', sh: on ? '0 1px 3px rgba(20,22,40,.15)' : 'none', pick: () => this.setState({ range: id }) }; }),
+      rows,
+      rangeLabel: { today: 'today', d7: 'last 7 days', d30: 'last 30 days' }[r],
+      tReq: fmt(222 * k), tMin: fmt(96 * k) + ' min', tCost: '~ ₹' + fmt(114.4 * k)
+    };
+  }
+}
+</script>
+</body>
+</html>

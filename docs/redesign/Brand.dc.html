@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief logo and icon states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#3a33a8}a:hover{color:#2f2990}
+.db{--page:#f6f7f9;--card:#ffffff;--sunk:#eef0f3;--text:#1d1f24;--muted:#565d68;--line:#dfe2e8;--brand:#3a33a8;--on-brand:#fff;--tint:#eceafc;--tint-ink:#2c268a;font-family:"Google Sans","Segoe UI",system-ui,"Nirmala UI","Kartika",sans-serif;font-size:14px;line-height:1.6;color:var(--text);background:var(--page)}
+.db.dark{--page:#1b1d21;--card:#24272c;--sunk:#1f2125;--text:#e8eaee;--muted:#a7adb7;--line:#353941;--brand:#9d97ff;--on-brand:#16133d;--tint:#25234a;--tint-ink:#d9d6ff}
+.db *{box-sizing:border-box}
+.lbl{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+.glow{animation:gl 2.4s ease-in-out infinite}
+@keyframes gl{0%,100%{box-shadow:0 0 0 2px #ffb347,0 0 10px 2px rgba(255,179,71,.55)}50%{box-shadow:0 0 0 2px #ff7a1a,0 0 18px 6px rgba(255,122,26,.45)}}
+@media (prefers-reduced-motion:reduce){.glow{animation:none;box-shadow:0 0 0 2px #ff7a1a,0 0 12px 3px rgba(255,122,26,.45)}}
+</style>
+</helmet>
+<div class="db {{theme}}" style="width: 1440px; min-height: 1640px; padding: 64px 72px; display: flex; flex-direction: column; gap: 32px">
+
+<div style="display: grid; grid-template-columns: 520px 1fr; gap: 24px">
+  <div class="card" style="padding: 40px; display: flex; flex-direction: column; gap: 24px; align-items: center; justify-content: center">
+    <svg width="256" height="256" viewBox="0 0 128 128" role="img" aria-label="Debrief logo: a speech bubble whose top line, like the Devanagari headline, holds a waveform that becomes lines of text"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+    <div style="display: flex; align-items: center; gap: 14px">
+      <svg width="44" height="44" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+      <span style="font-size: 34px; font-weight: 700; letter-spacing: -0.02em">Debrief</span>
+    </div>
+  </div>
+  <div class="card" style="padding: 36px; display: flex; flex-direction: column; gap: 22px">
+    <div>
+      <p class="lbl">The mark</p>
+      <h1 style="margin: 4px 0 0; font-size: 34px; line-height: 1.2; letter-spacing: -0.02em">A voice that hangs into lines of text</h1>
+    </div>
+    <p style="margin: 0; font-size: 15.5px; color: var(--muted); max-width: 640px">A speech bubble holds a short waveform. Its bars hang from a saffron top line, the way Devanagari letters hang from the shirorekha, so sound visibly becomes writing. Kept from the current icon and tightened: flat indigo instead of a gradient, one saffron stroke, four bars at fixed rhythm, nothing thinner than 2 px at 16 px.</p>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+      <div style="padding: 16px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 8px"><div style="height: 40px; border-radius: 8px; background: #3a33a8"></div><strong style="font-size: 13px">Indigo #3a33a8</strong><span style="font-size: 12.5px; color: var(--muted)">Field and bars</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 8px"><div style="height: 40px; border-radius: 8px; background: #ff7a1a"></div><strong style="font-size: 13px">Saffron #ff7a1a</strong><span style="font-size: 12.5px; color: var(--muted)">The top line only</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: var(--sunk); display: flex; flex-direction: column; gap: 8px"><div style="height: 40px; border-radius: 8px; background: #ffffff; border: 1px solid var(--line)"></div><strong style="font-size: 13px">White</strong><span style="font-size: 12.5px; color: var(--muted)">The bubble</span></div>
+    </div>
+    <div>
+      <p class="lbl" style="margin-bottom: 12px">Sizes · 512 down to the toolbar</p>
+      <div style="display: flex; align-items: flex-end; gap: 28px">
+        <sc-for list="{{sizes}}" as="z" hint-placeholder-count="5">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+            <svg width="{{z.px}}" height="{{z.px}}" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+            <span style="font-size: 12px; color: var(--muted)">{{z.px}} px</span>
+          </div>
+        </sc-for>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="4" fill="#3a33a8"></rect><rect x="2" y="2.5" width="12" height="9" rx="2.5" fill="#fff"></rect><path d="M4 11h3l-3 3z" fill="#fff"></path><rect x="3.5" y="4" width="9" height="1.6" rx=".8" fill="#ff7a1a"></rect><rect x="5" y="5" width="1.6" height="4" rx=".8" fill="#3a33a8"></rect><rect x="7.2" y="5" width="1.6" height="5" rx=".8" fill="#3a33a8"></rect><rect x="9.4" y="5" width="1.6" height="3" rx=".8" fill="#3a33a8"></rect></svg>
+          <span style="font-size: 12px; color: var(--muted)">16 px, hinted</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding: 32px; display: flex; flex-direction: column; gap: 22px">
+  <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 24px; flex-wrap: wrap"><p class="lbl">Toolbar icon states</p><span style="font-size: 13px; color: var(--muted)">Shown at 2× on a light and a dark Chrome toolbar. Badges use Chrome’s action badge; the glow is the icon image swapped every 600 ms (static under reduced motion).</span></div>
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+    <sc-for list="{{states}}" as="st" hint-placeholder-count="4">
+      <div style="border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+        <div style="display: grid; grid-template-columns: 1fr 1fr">
+          <div style="background: #f1f3f4; height: 120px; display: grid; place-items: center">
+            <div class="{{st.cls}}" style="position: relative; width: 48px; height: 48px; border-radius: 12px; opacity: {{st.op}}">
+              <svg width="48" height="48" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+              <sc-if value="{{st.badge}}" hint-placeholder-val="{{false}}"><span style="position: absolute; right: -10px; bottom: -6px; padding: 0 5px; min-width: 22px; height: 18px; border-radius: 5px; background: {{st.bbg}}; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; border: 2px solid #f1f3f4">{{st.badgeText}}</span></sc-if>
+            </div>
+          </div>
+          <div style="background: #35363a; height: 120px; display: grid; place-items: center">
+            <div class="{{st.cls}}" style="position: relative; width: 48px; height: 48px; border-radius: 12px; opacity: {{st.op}}">
+              <svg width="48" height="48" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#3a33a8"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#fff"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#3a33a8"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#3a33a8"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#3a33a8"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#3a33a8"></rect></svg>
+              <sc-if value="{{st.badge}}" hint-placeholder-val="{{false}}"><span style="position: absolute; right: -10px; bottom: -6px; padding: 0 5px; min-width: 22px; height: 18px; border-radius: 5px; background: {{st.bbg}}; color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; border: 2px solid #35363a">{{st.badgeText}}</span></sc-if>
+            </div>
+          </div>
+        </div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+          <strong>{{st.name}}</strong>
+          <span style="font-size: 13px; color: var(--muted)">{{st.desc}}</span>
+          <span style="font-size: 12.5px; font-family: ui-monospace, Consolas, monospace; color: var(--muted)">Tooltip: “{{st.tip}}”</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+
+<div class="card" style="padding: 32px; display: grid; grid-template-columns: 340px 1fr; gap: 32px">
+  <div style="display: flex; flex-direction: column; gap: 16px">
+    <p class="lbl">Chrome Web Store</p>
+    <div>
+      <p style="margin: 0 0 4px; font-size: 12.5px; color: var(--muted)">Short description · 115 / 132 characters</p>
+      <p style="margin: 0; font-size: 17px; font-weight: 600; line-height: 1.45">Records your Meet, Zoom or Teams tab and writes the minutes, in English, Hindi and Malayalam. Keys stay in your browser.</p>
+    </div>
+    <p style="margin: 0; font-size: 13.5px; color: var(--muted)">Screenshot 1 of 5 at 1280 × 800, shown here at 75%. One claim per screenshot, set in large type on the left; the real product UI on the right, never mocked browser chrome.</p>
+  </div>
+  <div style="width: 960px; height: 600px; border-radius: 10px; overflow: hidden; background: #2c268a; display: grid; grid-template-columns: 360px 1fr; position: relative">
+    <div style="padding: 54px 40px; color: #fff; display: flex; flex-direction: column; gap: 18px; justify-content: center">
+      <svg width="48" height="48" viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#fff"></rect><path d="M34 22h60a17 17 0 0 1 17 17v36a17 17 0 0 1-17 17H58l-19 16a3 3 0 0 1-5-2.3V92a17 17 0 0 1-17-17V39a17 17 0 0 1 17-17z" fill="#3a33a8"></path><rect x="31" y="38" width="66" height="9" rx="4.5" fill="#ff7a1a"></rect><rect x="38" y="44" width="9" height="22" rx="4.5" fill="#fff"></rect><rect x="52" y="44" width="9" height="34" rx="4.5" fill="#fff"></rect><rect x="66" y="44" width="9" height="16" rx="4.5" fill="#fff"></rect><rect x="80" y="44" width="9" height="28" rx="4.5" fill="#fff"></rect></svg>
+      <div style="font-size: 38px; font-weight: 700; line-height: 1.12; letter-spacing: -0.02em">Your meeting ends. The minutes are already written.</div>
+      <div style="font-size: 16px; line-height: 1.5; color: #d9d6ff">Decisions, action items with owners and dates, and who was there. Edit, share or email in one click.</div>
+    </div>
+    <div style="position: relative">
+      <div style="position: absolute; left: 0; top: 56px; width: 560px; height: 520px; border-radius: 12px; background: #fff; color: #1d1f24; box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); padding: 28px 30px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; gap: 8px; align-items: center"><span style="font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: #eceafc; color: #2c268a">Emailed</span><span style="font-size: 12px; color: #565d68">Tue 13 Oct · 42 min · 6 people</span></div>
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: -0.01em">Weekly sync: Kochi rollout</div>
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #565d68; text-transform: uppercase; margin-top: 4px">Decisions</div>
+        <div style="font-size: 14px; line-height: 1.6">Pilot moves to 3 depots from 1 November. Fare tables freeze on 25 October.</div>
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #565d68; text-transform: uppercase; margin-top: 4px">Action items</div>
+        <div style="display: grid; grid-template-columns: 1fr 90px 70px; font-size: 13px; border-top: 1px solid #dfe2e8">
+          <span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Send revised depot budget</span><span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Priya</span><span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Fri 16</span>
+          <span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Confirm validator stock</span><span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Ravi</span><span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Mon 19</span>
+          <span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8" lang="ml">ഡിപ്പോ ജീവനക്കാർക്ക് പരിശീലനം</span><span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Anjali</span><span style="padding: 8px 0; border-bottom: 1px solid #dfe2e8">Wed 21</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      sizes: [128, 64, 48, 32].map(px => ({ px })),
+      states: [
+        { name: 'Idle', desc: 'Nothing is happening. Plain mark.', tip: 'Debrief', cls: '', op: 1, badge: false },
+        { name: 'Call on, not recording', desc: 'A meeting tab is active and Debrief is idle. Saffron halo pulses slowly.', tip: 'A call is on. Click to record.', cls: 'glow', op: 1, badge: false },
+        { name: 'Recording', desc: 'Red REC badge. Never animated, so it stays calm next to the call.', tip: 'Recording · 12:48', cls: '', op: 1, badge: true, badgeText: 'REC', bbg: '#c8281c' },
+        { name: 'Needs attention', desc: 'Key rejected, quota hit or mic silent. Dark badge with “!”; text in the popup.', tip: 'Debrief needs attention', cls: '', op: 1, badge: true, badgeText: '!', bbg: '#1d1f24' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
