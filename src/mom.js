@@ -1,5 +1,5 @@
 import { marked } from 'marked';
-import { getSettings, saveSettings, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople } from './attendance.js';
@@ -18,7 +18,20 @@ let abortCtl = null;
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // Transcripts come from arbitrary speech, so never let raw HTML from the model through.
-marked.use({ gfm: true, renderer: { html: ({ text }) => escapeHtml(text) } });
+// Anything a speaker or the model slips in is neutralised: no raw HTML, no images (an image address can
+// carry data out to anyone's server), and only web or mail links.
+marked.use({
+  gfm: true,
+  renderer: {
+    html: ({ text }) => escapeHtml(text),
+    image: ({ text }) => escapeHtml(text || ''),
+    link(token) {
+      const inner = this.parser.parseInline(token.tokens);
+      const href = String(token.href || '');
+      return /^(https?:\/\/|mailto:)/i.test(href) ? `<a href="${escapeHtml(href)}" rel="noopener noreferrer" target="_blank">${inner}</a>` : inner;
+    },
+  },
+});
 
 const renderMd = (md) => marked.parse(md || '');
 
@@ -67,6 +80,15 @@ function renderErrors() {
   if (errs.length) {
     $('errors').textContent = `${errs.length} problem${errs.length > 1 ? 's' : ''} during transcription (some audio may be missing). Last: ${errs[errs.length - 1]}`;
   }
+}
+
+// Saves only the fields that changed onto the stored meeting, so another tab's or the recorder's newer
+// writes (segments, captions, emailedAt) are never overwritten by this page's older copy.
+async function patchMeeting(fields) {
+  const latest = (await getMeeting(id)) || meeting;
+  Object.assign(latest, fields);
+  Object.assign(meeting, fields);
+  await saveMeeting(latest);
 }
 
 async function runGenerate() {
@@ -127,13 +149,11 @@ async function runGenerate() {
       },
       coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length },
     });
-    meeting.mom = text;
-    meeting.model = modelLabel(settings);
-    await saveMeeting(meeting);
+    await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees });
     renderMom();
     $('genStatus').textContent = `Done · ${meeting.model}${stats.calls > 1 ? ` · ${stats.items} items found, ${stats.missed} added by the check` : ''}`;
     // First time only: regenerating or editing never re-sends by itself.
-    if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt) emailMom(true);
+    if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
   } catch (e) {
     $('genStatus').textContent = abortCtl.signal.aborted ? 'Stopped.' : `Failed: ${e.message}`;
     renderMom();
@@ -146,6 +166,7 @@ async function runGenerate() {
 }
 
 async function emailMom(auto) {
+  setEditing(false); // what is on screen is what gets sent, including unsaved edits
   if (!meeting.mom?.trim()) {
     $('mailStatus').textContent = 'No minutes to email yet.';
     return;
@@ -157,15 +178,25 @@ async function emailMom(auto) {
   $('mail').disabled = true;
   $('mailStatus').textContent = auto ? 'Emailing the minutes…' : 'Sending…';
   try {
-    const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
-    const r = await sendMail(mail, settings);
-    meeting.emailedAt = Date.now();
-    meeting.emailedTo = r.to;
-    if (auto && settings.shareMode === 'auto' && !meeting.sharedAt) shareMom(true).catch(() => {});
-    await saveMeeting(meeting);
-    $('mailStatus').textContent = `Emailed to ${r.to} ✓`;
-    $('mail').textContent = 'Email again';
-    chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Debrief: MOM emailed', message: `${meeting.title} was sent to ${r.to}.` });
+    // One tab at a time: two tabs finishing together (the one opened after Stop and one opened from the
+    // popup) must not both send the automatic email.
+    await navigator.locks.request(`debrief-email-${id}`, async () => {
+      if (auto) {
+        const latest = await getMeeting(id);
+        if (latest?.emailedAt) {
+          Object.assign(meeting, { emailedAt: latest.emailedAt, emailedTo: latest.emailedTo });
+          $('mailStatus').textContent = `Emailed to ${latest.emailedTo || 'you'} ✓`;
+          return;
+        }
+      }
+      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
+      const r = await sendMail(mail, settings);
+      await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
+      $('mailStatus').textContent = `Emailed to ${r.to} ✓`;
+      $('mail').textContent = 'Email again';
+      chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Debrief: minutes emailed', message: 'The minutes were sent.' });
+      if (auto && settings.shareMode === 'auto' && !meeting.sharedAt) shareMom(true).catch(() => {});
+    });
   } catch (e) {
     $('mailStatus').textContent = `Email failed: ${e.message}`;
   } finally {
@@ -191,6 +222,7 @@ function initShare() {
 }
 
 async function shareMom(auto) {
+  setEditing(false);
   if (!meeting.mom?.trim()) {
     $('shareStatus').textContent = 'No minutes to share yet.';
     return;
@@ -211,10 +243,7 @@ async function shareMom(auto) {
     const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
     const r = await sendMail(mail, settings, { to: how === 'to' ? list.join(',') : '', cc: how === 'cc' ? list.join(',') : '', bcc: how === 'bcc' ? list.join(',') : '' });
     const sent = [...(r.to && how === 'to' ? String(r.to).split(',') : []), ...(r.cc || []), ...(r.bcc || [])];
-    meeting.sharedAt = Date.now();
-    meeting.sharedTo = sent;
-    meeting.shareTo = list;
-    await saveMeeting(meeting);
+    await patchMeeting({ sharedAt: Date.now(), sharedTo: sent, shareTo: list });
     $('shareStatus').textContent = r.skipped?.length
       ? `Sent to ${sent.join(', ') || 'nobody'}. Not allowed by your script: ${r.skipped.join(', ')}. Add them under Settings → Email → Sharing, copy the updated script and deploy a new version.`
       : `Shared with ${sent.join(', ')} ✓`;
@@ -235,12 +264,10 @@ async function ensureInvited() {
   if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
   try {
     const guests = await lookupInvitees(meeting, settings);
-    if (guests) meeting.invited = guests;
-    meeting.invitedChecked = true;
+    await patchMeeting({ ...(guests ? { invited: guests } : {}), invitedChecked: true });
   } catch (e) {
-    meeting.invitedError = e.message;
+    await patchMeeting({ invitedError: e.message });
   }
-  await saveMeeting(meeting);
 }
 
 // Pre-fill the attendee list: who was actually seen (matched to calendar names), else who was invited.
@@ -326,13 +353,18 @@ $('gen').onclick = runGenerate;
 $('mail').onclick = () => emailMom(false);
 $('abort').onclick = () => abortCtl?.abort();
 $('edit').onclick = () => setEditing($('mdEdit').classList.contains('hidden'));
-$('print').onclick = () => window.print();
-$('dlMd').onclick = () => download(`${fileBase()}.md`, 'text/markdown', meeting.mom);
+$('print').onclick = () => {
+  setEditing(false);
+  window.print();
+};
+$('dlMd').onclick = () => (setEditing(false), download(`${fileBase()}.md`, 'text/markdown', meeting.mom));
 $('dlDoc').onclick = () => {
+  setEditing(false);
   const html = wordDocHtml(renderMd(meeting.mom));
   download(`${fileBase()}.doc`, 'application/msword', html);
 };
 $('copy').onclick = async () => {
+  setEditing(false);
   const html = renderMd(meeting.mom);
   await navigator.clipboard.write([
     new ClipboardItem({
@@ -380,10 +412,9 @@ async function learn() {
   const { learned } = await chrome.storage.local.get('learned');
   const { learned: next, accepted } = mergeLearned(learned, meeting.learnedAt ? { ...found, candidates: [] } : found, { auto: settings.dictAutoAlias, title: meeting.title });
   for (const a of accepted) settings.dictionary = learnAlias(settings.dictionary, a.suggest, a.found);
-  if (accepted.length) await saveSettings(settings);
+  if (accepted.length) await setSetting({ dictionary: settings.dictionary });
   await chrome.storage.local.set({ learned: next });
-  meeting.learnedAt = Date.now();
-  await saveMeeting(meeting);
+  await patchMeeting({ learnedAt: Date.now() });
 }
 
 async function fixName(wrong, right, remember) {
@@ -393,12 +424,14 @@ async function fixName(wrong, right, remember) {
     $('fixMsg').textContent = 'Enter both names.';
     return;
   }
-  for (const seg of meeting.segments) seg.text = replaceWord(seg.text, wrong, right);
-  if (meeting.mom) meeting.mom = replaceWord(meeting.mom, wrong, right);
-  await saveMeeting(meeting);
+  const latest = (await getMeeting(id)) || meeting;
+  for (const seg of latest.segments) seg.text = replaceWord(seg.text, wrong, right);
+  if (latest.mom) latest.mom = replaceWord(latest.mom, wrong, right);
+  await saveMeeting(latest);
+  meeting = latest;
   if (remember) {
     settings.dictionary = learnAlias(settings.dictionary, right, wrong);
-    await saveSettings(settings);
+    await setSetting({ dictionary: settings.dictionary });
   }
   $('fixMsg').textContent = `Replaced "${wrong}" with "${right}"${remember ? ' and remembered it' : ''}.`;
   $('fixWrong').value = '';
@@ -410,8 +443,7 @@ async function fixName(wrong, right, remember) {
 
 $('fixApply').onclick = () => fixName($('fixWrong').value, $('fixRight').value, $('fixRemember').checked);
 $('attendees').onchange = async () => {
-  meeting.attendees = parseAttendees($('attendees').value);
-  await saveMeeting(meeting);
+  await patchMeeting({ attendees: parseAttendees($('attendees').value) });
   renderTranscript();
   renderSuggestions();
   learn().catch(() => {});
@@ -454,6 +486,10 @@ document.querySelectorAll('.tabs button').forEach((b) => {
     $('mailStatus').textContent = `Emailed to ${meeting.emailedTo || 'you'} ✓`;
     $('mail').textContent = 'Email again';
   }
-  if (meeting.mom && !hadPending) $('gen').textContent = 'Regenerate';
-  else if (meeting.segments.length && (!meeting.mom || hadPending)) runGenerate();
+  if (meeting.mom) {
+    $('gen').textContent = 'Regenerate';
+    if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Regenerate to include it in the minutes.';
+  } else if (!meeting.endedAt) {
+    $('genStatus').textContent = 'This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.';
+  } else if (meeting.segments.length) runGenerate();
 })();

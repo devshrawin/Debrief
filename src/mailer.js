@@ -1,21 +1,26 @@
 // Emails the finished MOM through the user's own Google Apps Script relay (apps-script/Code.gs),
 // so it is sent from their Gmail account with no server of ours in the middle.
 
+import { ensureEmailSecret } from './store.js';
+
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export const mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || '');
 
 // Email clients drop <style> blocks, so give tables and headings inline styles.
 function inlineStyles(html) {
-  return html
-    .replace(/<table>/g, '<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:14px">')
-    .replace(/<th>/g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left">')
-    .replace(/<th /g, '<th style="border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left" ')
-    .replace(/<td>/g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top">')
-    .replace(/<td /g, '<td style="border:1px solid #d0d4da;padding:7px 10px;vertical-align:top" ')
-    .replace(/<h1>/g, '<h1 style="font-size:20px;margin:18px 0 8px">')
-    .replace(/<h2>/g, '<h2 style="font-size:17px;margin:18px 0 6px;color:#1e1b6b">')
-    .replace(/<h3>/g, '<h3 style="font-size:15px;margin:14px 0 4px">');
+  // Adds the style only to tags that have none yet (a tag the renderer already styled keeps its own).
+  const add = (tag, style) => (h) => h.replace(new RegExp(`<${tag}(?=[\\s>])(?![^>]*\\sstyle=)`, 'g'), `<${tag} style="${style}"`);
+  const th = 'border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left';
+  const td = 'border:1px solid #d0d4da;padding:7px 10px;vertical-align:top';
+  return [
+    add('table', 'border-collapse:collapse;width:100%;margin:12px 0;font-size:14px'),
+    add('th', th),
+    add('td', td),
+    add('h1', 'font-size:20px;margin:18px 0 8px'),
+    add('h2', 'font-size:17px;margin:18px 0 6px;color:#1e1b6b'),
+    add('h3', 'font-size:15px;margin:14px 0 4px'),
+  ].reduce((acc, fn) => fn(acc), html);
 }
 
 const safeName = (s) => String(s).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 120);
@@ -68,6 +73,8 @@ ${body}
 // One call to the user's relay script. `payload.action` selects what it does (default: send mail).
 export async function callRelay(payload, settings) {
   if (!mailReady(settings)) throw new Error('Email is not set up: add the Apps Script URL in Settings.');
+  // The relay locks itself to the first secret it sees, so every call carries Debrief's own random one.
+  const secret = settings.emailSecret || (typeof chrome !== 'undefined' && chrome.storage?.local ? await ensureEmailSecret() : '');
   let res;
   try {
     res = await fetch(settings.emailWebhook, {
@@ -76,7 +83,7 @@ export async function callRelay(payload, settings) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow',
       signal: AbortSignal.timeout(60000),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, secret }),
     });
   } catch (e) {
     throw new Error(e.name === 'TimeoutError' ? 'The mail relay did not answer in 60 s.' : `Could not reach the mail relay (${e.message}).`);
@@ -103,7 +110,7 @@ export function sendMail(mail, settings, who = {}) {
 
 // ---- sharing ----------------------------------------------------------------------------------
 
-const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+const EMAIL = /^[^\s@,;<>'"`\\()[\]]+@[^\s@,;<>'"`\\()[\]]+\.[^\s@,;<>'"`\\()[\]]+$/;
 
 export function parseAddresses(text) {
   const seen = new Set();

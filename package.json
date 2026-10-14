@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs"
+    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs"
   },
   "keywords": [],
   "author": "",

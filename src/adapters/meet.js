@@ -75,6 +75,7 @@ export function captionsButton(doc) {
 
 // ---- end of meeting ---------------------------------------------------------------------------
 export function endScreen(doc) {
+  if (micButton(doc) && [...doc.querySelectorAll('button[aria-label]')].some((b) => /leave call/i.test(b.getAttribute('aria-label')))) return false;
   const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map(text);
   return meetingEnded(texts);
 }

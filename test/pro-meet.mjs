@@ -112,7 +112,9 @@ await test('in-call detection: Zoom-like page, Meet lobby vs call, and the end s
   assert.equal(generic.micButton(zoomCall).muted, false);
   assert.equal(generic.inCall(page('<button aria-label="unmute my microphone"></button><button>Leave</button>')), true);
   assert.equal(generic.inCall(page('<button aria-label="Join audio"></button><button>Join</button>')), false, 'a lobby is not a call');
-  assert.equal(generic.inCall(page('<button aria-label="mute"></button><button>Leave</button><h2>You left the meeting</h2>')), false, 'end screen wins');
+  assert.equal(generic.inCall(page('<h2>You left the meeting</h2><button>Rejoin</button>')), false, 'end screen');
+  assert.equal(generic.endScreen(page('<h2>You left the meeting</h2><button>Rejoin</button>')), true);
+  assert.equal(generic.endScreen(page('<button aria-label="mute"></button><button>Leave</button><h2>Meeting ended notes</h2><button>Rejoin</button>')), false, 'while the call controls are on the page the call is not over');
   assert.equal(generic.inCall(page('<button aria-label="Mute"></button><div>Send message</div><button>Send</button>')), false, 'Send is not End');
   assert.equal(meet.inCall(page('<button data-is-muted="false" aria-label="Turn off microphone"></button><button aria-label="Leave call"></button>')), true);
   assert.equal(meet.inCall(page('<button data-is-muted="false" aria-label="Turn off microphone"></button><button>Join now</button>')), false);

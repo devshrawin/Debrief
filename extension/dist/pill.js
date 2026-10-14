@@ -89,6 +89,7 @@
     return [...doc.querySelectorAll("button[aria-label]")].find((b) => /turn on captions|captions \(c\)|show captions/i.test(b.getAttribute("aria-label") || "")) || null;
   }
   function endScreen(doc) {
+    if (micButton(doc) && [...doc.querySelectorAll("button[aria-label]")].some((b) => /leave call/i.test(b.getAttribute("aria-label")))) return false;
     const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, [role="heading"]')].slice(0, 300).map(text);
     return meetingEnded(texts);
   }
@@ -123,29 +124,32 @@
     snapshot: () => snapshot2
   });
   var text2 = (el) => (el?.innerText ?? el?.textContent ?? "").replace(/ /g, " ").trim();
-  var label = (el) => `${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""} ${el.getAttribute("data-tid") || ""}`.trim();
+  var MUTE_LABEL = /^(un-?mute|mute)( my| the)?( (microphone|mic|audio))?( \(.*\))?$/i;
+  var OUTSIDE = '[role="list"], [role="listitem"], [role="dialog"], [role="menu"], video, [class*="player" i]';
   function micButton2(doc) {
-    const candidates = [...doc.querySelectorAll('button, [role="button"], [role="switch"]')];
-    for (const b of candidates) {
-      const l = label(b);
-      if (/(^|\b)(un-?mute)\b.{0,20}(mic|audio)?/i.test(l) && !/camera|video/i.test(l)) return { el: b, muted: true };
-      if (/turn on (your )?(microphone|mic)/i.test(l)) return { el: b, muted: true };
-    }
-    for (const b of candidates) {
-      const l = label(b);
-      if (/(^|\b)mute\b.{0,20}(mic|audio)?/i.test(l) && !/camera|video|un-?mute/i.test(l)) return { el: b, muted: false };
-      if (/turn off (your )?(microphone|mic)/i.test(l)) return { el: b, muted: false };
-      if (/microphone/i.test(l) && b.getAttribute("aria-pressed") != null) return { el: b, muted: b.getAttribute("aria-pressed") === "false" };
+    const buttons = [...doc.querySelectorAll('button, [role="button"], [role="switch"]')].filter((b) => !b.closest(OUTSIDE));
+    const names = (b) => [b.getAttribute("aria-label"), b.getAttribute("title"), text2(b)].map((x) => (x || "").trim()).filter(Boolean);
+    for (const b of buttons) {
+      for (const n of names(b)) {
+        if (/^turn on (my |your )?(microphone|mic)\b/i.test(n)) return { el: b, muted: true };
+        if (/^turn off (my |your )?(microphone|mic)\b/i.test(n)) return { el: b, muted: false };
+        const m = n.match(MUTE_LABEL);
+        if (m) return { el: b, muted: /^un/i.test(m[1]) };
+      }
+      const l = (b.getAttribute("aria-label") || "").trim();
+      if (/^microphone$/i.test(l) && b.getAttribute("aria-pressed") != null) return { el: b, muted: b.getAttribute("aria-pressed") === "false" };
     }
     return null;
   }
+  var LEAVE_LABEL = /^(leave|end|leave (call|meeting|session)|hang up|end (call|meeting|session)|end for (me|everyone|all)|end meeting for all)( \(.*\))?$/i;
   function leaveButton(doc) {
-    return [...doc.querySelectorAll('button, [role="button"]')].find((b) => /(^|\b)(leave|hang\s*-?up|end)\b.{0,20}(call|meeting|session)?/i.test(`${label(b)} ${text2(b)}`.trim()) && !/leave a message|end of/i.test(label(b))) || null;
+    return [...doc.querySelectorAll('button, [role="button"]')].find((b) => !b.closest('[role="list"], [role="listitem"], [role="dialog"], [role="menu"]') && [b.getAttribute("aria-label"), b.getAttribute("title"), text2(b)].some((n) => LEAVE_LABEL.test((n || "").trim()))) || null;
   }
   function inCall2(doc) {
     return !!(micButton2(doc) && leaveButton(doc) && !endScreen2(doc));
   }
   function endScreen2(doc) {
+    if (micButton2(doc) && leaveButton(doc)) return false;
     const texts = [...doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"]')].slice(0, 300).map(text2);
     return meetingEnded(texts) || texts.some((t) => /^(this )?(meeting|call) (has )?(been )?ended( by (the )?host)?\.?$/i.test(t.trim()));
   }
@@ -314,7 +318,7 @@
       const s = String(sec % 60).padStart(2, "0");
       return h ? `${h}:${m}:${s}` : `${m}:${s}`;
     };
-    const meetMuted = () => app.micButton(document)?.muted ?? null;
+    const meetMuted = () => app.id === "generic" && !app.inCall(document) ? null : app.micButton(document)?.muted ?? null;
     let myTab = null;
     let S = { rec: { recording: false }, levels: null, counts: { segs: 0, errs: 0 }, follow: true };
     let host;
@@ -341,7 +345,8 @@
       } catch {
       }
       host.style.cssText = `position:fixed;right:${pos.right}px;bottom:${pos.bottom}px;z-index:2147483646;display:none;`;
-      const root = host.attachShadow({ mode: "open" });
+      const root = host.attachShadow({ mode: "closed" });
+      host.__debriefRoot = root;
       const style = el("style");
       style.textContent = CSS;
       const wrap = el("div", "wrap");
@@ -407,11 +412,11 @@
         st = null;
       });
     }
-    const label2 = (v) => v == null ? "off" : v < 3e-3 ? "silent" : v < 0.012 ? "very quiet" : "good";
+    const label = (v) => v == null ? "off" : v < 3e-3 ? "silent" : v < 0.012 ? "very quiet" : "good";
     function meter(name, v) {
       const box = el("div", "meter");
       const top = el("div", "top");
-      top.append(el("span", null, name), el("span", null, label2(v)));
+      top.append(el("span", null, name), el("span", null, label(v)));
       const b = el("div", "bar");
       const f = el("div", "fill" + (v != null && v < 3e-3 ? " dead" : v != null && v < 0.012 ? " low" : ""));
       f.style.width = (v == null ? 0 : Math.min(100, Math.round(Math.sqrt(v) * 160))) + "%";
@@ -514,7 +519,7 @@
         return;
       }
       endedHits = app.endScreen(document) ? endedHits + 1 : 0;
-      if (endedHits === 2) send({ type: "meet-ended" });
+      if (endedHits === 2 || endedHits > 2 && endedHits % 30 === 0) send({ type: "meet-ended" });
     }
     let lastPeople = "";
     let lastCaps = /* @__PURE__ */ new Map();
@@ -542,7 +547,7 @@
         for (const c of app.readCaptions(document)) {
           if (lastCaps.get(c.name) !== c.text) {
             lastCaps.set(c.name, c.text);
-            fresh.push({ name: c.name, text: c.text, t });
+            fresh.push({ name: String(c.name).slice(0, 60), text: String(c.text).slice(0, 600), t });
           }
         }
         if (fresh.length) payload.captions = fresh;

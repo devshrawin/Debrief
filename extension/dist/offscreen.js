@@ -80,6 +80,8 @@
     // auto | hinglish | malayalam
     pillOnPage: false,
     // also show the pill inside the Meet page
+    emailSecret: "",
+    // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
     emailTo: "",

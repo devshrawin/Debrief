@@ -191,7 +191,7 @@
   var node_browser_exports = {};
   __export(node_browser_exports, {
     child_process: () => child_process,
-    crypto: () => crypto,
+    crypto: () => crypto2,
     fs: () => fs,
     os: () => os,
     path: () => path,
@@ -207,12 +207,12 @@
       }
     });
   }
-  var child_process, crypto, fs, os, path, stream, util;
+  var child_process, crypto2, fs, os, path, stream, util;
   var init_node_browser = __esm({
     "node_modules/@anthropic-ai/sdk/internal/node.browser.mjs"() {
       init_error();
       child_process = /* @__PURE__ */ unavailable("child_process");
-      crypto = /* @__PURE__ */ unavailable("crypto");
+      crypto2 = /* @__PURE__ */ unavailable("crypto");
       fs = /* @__PURE__ */ unavailable("fs");
       os = /* @__PURE__ */ unavailable("os");
       path = /* @__PURE__ */ unavailable("path");
@@ -1156,6 +1156,8 @@
     // auto | hinglish | malayalam
     pillOnPage: false,
     // also show the pill inside the Meet page
+    emailSecret: "",
+    // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
     emailTo: "",
@@ -1235,10 +1237,6 @@
     const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames };
   }
-  async function saveSettings(s) {
-    const { learnedNames, ...own } = s;
-    await chrome.storage.local.set({ settings: own });
-  }
   function errorDetail(text) {
     try {
       const j = JSON.parse(text);
@@ -1247,6 +1245,19 @@
     } catch {
       return text;
     }
+  }
+  async function setSetting(patch2) {
+    const { settings } = await chrome.storage.local.get("settings");
+    const { learnedNames, ...clean } = patch2;
+    await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
+  }
+  async function ensureEmailSecret() {
+    const { settings } = await chrome.storage.local.get("settings");
+    if (settings?.emailSecret) return settings.emailSecret;
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const secret = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+    await chrome.storage.local.set({ settings: { ...settings || {}, emailSecret: secret } });
+    return secret;
   }
 
   // node_modules/@anthropic-ai/sdk/internal/tslib.mjs
@@ -2356,13 +2367,13 @@
 
   // node_modules/@anthropic-ai/sdk/internal/utils/uuid.mjs
   var uuid4 = function() {
-    const { crypto: crypto2 } = globalThis;
-    if (crypto2?.randomUUID) {
-      uuid4 = crypto2.randomUUID.bind(crypto2);
-      return crypto2.randomUUID();
+    const { crypto: crypto3 } = globalThis;
+    if (crypto3?.randomUUID) {
+      uuid4 = crypto3.randomUUID.bind(crypto3);
+      return crypto3.randomUUID();
     }
     const u8 = new Uint8Array(1);
-    const randomByte = crypto2 ? () => crypto2.getRandomValues(u8)[0] : () => Math.random() * 255 & 255;
+    const randomByte = crypto3 ? () => crypto3.getRandomValues(u8)[0] : () => Math.random() * 255 & 255;
     return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ randomByte() & 15 >> +c / 4).toString(16));
   };
 
@@ -14506,6 +14517,7 @@ _(Output hit the length limit and was cut off.)_`;
   var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
   async function callRelay(payload, settings) {
     if (!mailReady(settings)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
+    const secret = settings.emailSecret || (typeof chrome !== "undefined" && chrome.storage?.local ? await ensureEmailSecret() : "");
     let res;
     try {
       res = await fetch(settings.emailWebhook, {
@@ -14514,7 +14526,7 @@ _(Output hit the length limit and was cut off.)_`;
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         redirect: "follow",
         signal: AbortSignal.timeout(6e4),
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, secret })
       });
     } catch (e) {
       throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
@@ -14534,7 +14546,7 @@ _(Output hit the length limit and was cut off.)_`;
   function sendMail(mail, settings, who = {}) {
     return callRelay({ to: who.to ?? settings.emailTo ?? "", cc: who.cc || "", bcc: who.bcc || "", ...mail }, settings);
   }
-  var EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+  var EMAIL = /^[^\s@,;<>'"`\\()[\]]+@[^\s@,;<>'"`\\()[\]]+\.[^\s@,;<>'"`\\()[\]]+$/;
   function parseAddresses(text) {
     const seen = /* @__PURE__ */ new Set();
     const out = [];
@@ -14572,14 +14584,17 @@ _(Output hit the length limit and was cut off.)_`;
 // The first time (and whenever Google asks for new permissions), pick the function "authorize" in the
 // toolbar and press Run once, then allow access. That grants email sending and calendar reading.
 //
-// Safety: mail only ever goes to YOUR address plus the people you list below, whatever a request
-// says, and the web app URL is a long secret that only Debrief knows.
+// Security: "Anyone" can reach the URL, so the script locks itself to the Debrief install that talks to it
+// first. Debrief makes up a long random secret on its own (you never type it) and sends it with every
+// request; the script remembers the first one and refuses everything else. Mail only ever goes to YOUR
+// address plus the people you list below. If you reinstall Debrief or use a new browser profile and see
+// "locked", run the function "resetSecret" here once and send a test email again.
 
 const ALLOWED = []; // people you want to be able to share minutes with, e.g. ['priya@company.com']
 const ALLOWED_DOMAINS = []; // or everyone at a company, e.g. ['company.com']
 
 function doGet() {
-  return out({ ok: true, message: 'Debrief mail relay is live.', version: 5 });
+  return out({ ok: true, message: 'Debrief mail relay is live.', version: 6, locked: !!PropertiesService.getScriptProperties().getProperty('secret') });
 }
 
 function authorize() {
@@ -14587,9 +14602,36 @@ function authorize() {
   MailApp.getRemainingDailyQuota();
 }
 
+// Run this from the editor if Debrief says the relay is locked to another install.
+function resetSecret() {
+  PropertiesService.getScriptProperties().deleteProperty('secret');
+}
+
+function sameText(a, b) {
+  a = String(a);
+  b = String(b);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+// First secret seen is kept (trust on first use). Everything after must present the same one.
+function authorized(d) {
+  const props = PropertiesService.getScriptProperties();
+  const stored = props.getProperty('secret');
+  const given = typeof d.secret === 'string' ? d.secret : '';
+  if (!stored) {
+    if (given.length < 24) return false;
+    props.setProperty('secret', given);
+    return true;
+  }
+  return sameText(stored, given);
+}
+
 function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
+    if (!authorized(d)) return out({ ok: false, error: 'This script is locked to a different Debrief install. In the script editor run the function resetSecret once, then try again.' });
     if (d.action === 'invitees') return findInvitees(d);
 
     const me = Session.getEffectiveUser().getEmail();
@@ -14608,14 +14650,14 @@ function doPost(e) {
     const recipients = to.ok.length ? to.ok.join(',') : (cc.ok.length || bcc.ok.length ? '' : me);
 
     const attachments = (d.attachments || []).map(function (a) {
-      const name = a.name || 'attachment.txt';
-      // fromHtml: build a PDF from an HTML page (Apps Script converts it for us).
-      if (a.fromHtml) return Utilities.newBlob(a.fromHtml, 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);
+      const name = String(a.name || 'attachment.txt').slice(0, 150);
+      // fromHtml: build a PDF from an HTML page. Remote resources are stripped so the page cannot call out.
+      if (a.fromHtml) return Utilities.newBlob(stripRemote(a.fromHtml), 'text/html', name.replace(/\\.pdf$/i, '') + '.html').getAs('application/pdf').setName(name);
       return Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'text/plain', name);
     });
     const options = {
       to: recipients || me,
-      subject: String(d.subject || 'Debrief MOM').slice(0, 250),
+      subject: String(d.subject || 'Debrief MOM').replace(/[\\r\\n]+/g, ' ').slice(0, 250),
       body: String(d.text || ''),
       htmlBody: String(d.html || ''),
       attachments: attachments,
@@ -14631,38 +14673,57 @@ function doPost(e) {
   }
 }
 
+function stripRemote(html) {
+  return String(html)
+    .replace(/<(img|link|script|iframe|object|embed|video|audio|source)\\b[^>]*>/gi, '')
+    .replace(/url\\s*\\([^)]*\\)/gi, 'none')
+    .replace(/@import[^;]*;/gi, '');
+}
+
 function isAllowed(address, me) {
-  const a = String(address).toLowerCase();
+  const a = String(address).trim().toLowerCase();
+  if (!/^[^\\s@,;<>"'\`()\\[\\]\\\\]+@[^\\s@,;<>"'\`()\\[\\]\\\\]+\\.[^\\s@,;<>"'\`()\\[\\]\\\\]+$/.test(a) || a.split('@').length !== 2) return false;
   if (a === String(me).toLowerCase()) return true;
   if (ALLOWED.some(function (x) { return String(x).toLowerCase() === a; })) return true;
-  const domain = a.split('@')[1] || '';
+  const domain = a.split('@')[1];
   return ALLOWED_DOMAINS.some(function (x) { return String(x).toLowerCase() === domain; });
 }
 
-// Finds the calendar event for this meeting (by Meet code in its description or location, else by title)
-// and returns who was invited and what they replied.
+// Finds the calendar event for this meeting by its exact Meet code (else by exact title) and returns who
+// was invited and what they replied. Only names, emails and replies leave the script, never the event text.
 function findInvitees(d) {
-  const start = new Date(Number(d.start) - 45 * 60000);
-  const end = new Date(Number(d.end) + 45 * 60000);
   const code = String(d.code || '').toLowerCase();
+  const codeOk = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(code);
+  const startMs = Number(d.start);
+  const endMs = Number(d.end);
+  if (!(startMs > 0)) return out({ ok: true, found: false, guests: [] });
+  const dayMs = 24 * 3600 * 1000;
+  const start = new Date(startMs - 45 * 60000);
+  const end = new Date(Math.min(isFinite(endMs) && endMs > startMs ? endMs : startMs, startMs + dayMs) + 45 * 60000);
   const title = String(d.title || '').toLowerCase();
   let best = null;
+  let bestGap = Infinity;
   CalendarApp.getDefaultCalendar().getEvents(start, end).forEach(function (ev) {
     const where = (ev.getLocation() + ' ' + ev.getDescription()).toLowerCase();
-    if (code && where.indexOf(code) >= 0) best = ev;
-    else if (!best && title && ev.getTitle().toLowerCase() === title) best = ev;
+    const gap = Math.abs(ev.getStartTime().getTime() - startMs);
+    const byCode = codeOk && where.indexOf(code) >= 0;
+    const byTitle = !codeOk && title && ev.getTitle().toLowerCase() === title;
+    if ((byCode || byTitle) && gap < bestGap) {
+      best = ev;
+      bestGap = gap;
+    }
   });
   if (!best) return out({ ok: true, found: false, guests: [] });
   const status = function (g) {
     const s = String(g.getGuestStatus()).toLowerCase();
-    return s.indexOf('yes') >= 0 ? 'yes' : s.indexOf('no') >= 0 && s.indexOf('not') < 0 ? 'no' : s.indexOf('maybe') >= 0 ? 'maybe' : 'invited';
+    return s.indexOf('owner') >= 0 ? 'owner' : s.indexOf('yes') >= 0 ? 'yes' : s.indexOf('maybe') >= 0 ? 'maybe' : s === 'no' || s.indexOf('.no') >= 0 ? 'no' : 'invited';
   };
   const guests = best.getGuestList(true).map(function (g) {
     return { name: g.getName() || '', email: g.getEmail(), status: status(g) };
   });
   const me = Session.getEffectiveUser().getEmail();
   if (!guests.some(function (g) { return String(g.email).toLowerCase() === String(me).toLowerCase(); })) guests.push({ name: '', email: me, status: 'owner' });
-  return out({ ok: true, found: true, title: best.getTitle(), guests: guests });
+  return out({ ok: true, found: true, guests: guests });
 }
 
 function out(o) {
@@ -14699,8 +14760,8 @@ function out(o) {
   };
   async function patch(obj) {
     S = { ...S, ...obj };
-    const { shareAutoFlag, ...clean } = S;
-    await saveSettings(clean);
+    const { shareAutoFlag, ...clean } = obj;
+    await setSetting(clean);
   }
   async function saveTour() {
     await chrome.storage.local.set({ tour });

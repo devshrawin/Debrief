@@ -130,7 +130,7 @@ import { adapterFor } from './adapters/index.js';
   };
 
   // null = could not tell. The page readers live in adapters/ (Meet has its own, other sites share a generic one).
-  const meetMuted = () => app.micButton(document)?.muted ?? null;
+  const meetMuted = () => (app.id === 'generic' && !app.inCall(document) ? null : app.micButton(document)?.muted ?? null);
 
   let myTab = null;
   let S = { rec: { recording: false }, levels: null, counts: { segs: 0, errs: 0 }, follow: true };
@@ -159,7 +159,9 @@ import { adapterFor } from './adapters/index.js';
       pos = JSON.parse(localStorage.getItem(POS_KEY)) || pos;
     } catch {}
     host.style.cssText = `position:fixed;right:${pos.right}px;bottom:${pos.bottom}px;z-index:2147483646;display:none;`;
-    const root = host.attachShadow({ mode: 'open' });
+    // Closed, so the meeting page's own scripts cannot reach in and press Stop or read the alerts.
+    const root = host.attachShadow({ mode: 'closed' });
+    host.__debriefRoot = root; // an expando is invisible to page scripts; the tests read it
     const style = el('style');
     style.textContent = CSS;
     const wrap = el('div', 'wrap');
@@ -348,7 +350,7 @@ import { adapterFor } from './adapters/index.js';
     }
     endedHits = app.endScreen(document) ? endedHits + 1 : 0;
     // Two checks in a row (about 2 s) so a flicker during a screen change can't stop a live meeting.
-    if (endedHits === 2) send({ type: 'meet-ended' });
+    if (endedHits === 2 || (endedHits > 2 && endedHits % 30 === 0)) send({ type: 'meet-ended' });
   }
 
   // Who is in the call and who is speaking, sampled once per second but only sent when it changes.
@@ -378,7 +380,7 @@ import { adapterFor } from './adapters/index.js';
       for (const c of app.readCaptions(document)) {
         if (lastCaps.get(c.name) !== c.text) {
           lastCaps.set(c.name, c.text);
-          fresh.push({ name: c.name, text: c.text, t });
+          fresh.push({ name: String(c.name).slice(0, 60), text: String(c.text).slice(0, 600), t });
         }
       }
       if (fresh.length) payload.captions = fresh;

@@ -5,7 +5,8 @@
 //   Unified Registry          a plain term: only used as a spelling hint
 // Lines starting with # are comments.
 
-const WORD = '\\p{L}\\p{N}_';
+// Marks (Devanagari matras, Malayalam vowel signs) belong to the word, or a name ends up replaced inside a longer word.
+const WORD = '\\p{L}\\p{M}\\p{N}_';
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKC').trim();
 
@@ -27,13 +28,27 @@ export function serializeDictionary(entries) {
   return entries.map((e) => (e.aliases.length ? `${e.name} | ${e.aliases.join(', ')}` : e.name)).join('\n');
 }
 
-// Adds "wrong" as an alias of "right", creating the entry if needed.
+// Adds "wrong" as an alias of "right", creating the line if needed. The rest of the text, comments
+// included, is left exactly as the user wrote it.
+const oneLine = (x) => String(x || '').replace(/[\r\n,|]+/g, ' ').replace(/\s+/g, ' ').trim();
 export function learnAlias(text, right, wrong) {
-  const entries = parseDictionary(text);
-  let e = entries.find((x) => norm(x.name) === norm(right));
-  if (!e) entries.push((e = { name: right.trim(), aliases: [] }));
-  if (wrong && !e.aliases.some((a) => norm(a) === norm(wrong)) && norm(wrong) !== norm(right)) e.aliases.push(wrong.trim());
-  return serializeDictionary(entries);
+  const r = oneLine(right);
+  const w = oneLine(wrong);
+  if (!r) return String(text || '');
+  const lines = String(text || '').split(/\r?\n/);
+  const at = lines.findIndex((l) => {
+    const t = l.trim();
+    return t && !t.startsWith('#') && norm(t.split('|')[0]) === norm(r);
+  });
+  if (at < 0) {
+    const add = w && norm(w) !== norm(r) ? `${r} | ${w}` : r;
+    return [...lines.filter((l, i) => !(i === lines.length - 1 && !l.trim())), add].join('\n');
+  }
+  const [name, rest = ''] = lines[at].split('|');
+  const aliases = rest.split(',').map((a) => a.trim()).filter(Boolean);
+  if (w && norm(w) !== norm(r) && !aliases.some((a) => norm(a) === norm(w))) aliases.push(w);
+  lines[at] = aliases.length ? `${name.trim()} | ${aliases.join(', ')}` : name.trim();
+  return lines.join('\n');
 }
 
 // Names of attendees and their first names, for the "is this alias a real person here?" test.
@@ -48,20 +63,32 @@ function attendeeKeys(attendees) {
   return keys;
 }
 
-// Replaces misheard aliases by the right spelling. An alias that is itself somebody in this meeting
-// is left alone: if Aman is on the attendee list, "Aman" really is Aman.
+// Replaces misheard aliases by the right spelling, in a single pass so one correction can never be
+// corrected again by another entry. An alias that is itself somebody in this meeting is left alone:
+// if Aman is on the attendee list, "Aman" really is Aman.
+const compiled = new WeakMap();
+function compile(entries) {
+  let c = compiled.get(entries);
+  if (c) return c;
+  const map = new Map();
+  for (const e of entries) for (const a of e.aliases) if (!map.has(norm(a))) map.set(norm(a), e.name);
+  const keys = [...map.keys()].sort((a, b) => b.length - a.length);
+  // Aliases keep their own case in the text, so match case-insensitively on the original spellings.
+  const source = entries.flatMap((e) => e.aliases).sort((a, b) => b.length - a.length).map(esc);
+  c = { map, re: source.length ? new RegExp(`(?<![${WORD}])(?:${source.join('|')})(?![${WORD}])`, 'giu') : null, keys };
+  compiled.set(entries, c);
+  return c;
+}
+
 export function applyDictionary(text, entries, attendees = []) {
   if (!text || !entries?.length) return text;
+  const { map, re } = compile(entries);
+  if (!re) return text;
   const present = attendeeKeys(attendees);
-  let out = text;
-  for (const e of entries) {
-    for (const alias of e.aliases) {
-      if (present.has(norm(alias))) continue;
-      const re = new RegExp(`(?<![${WORD}])${esc(alias)}(?![${WORD}])`, 'giu');
-      out = out.replace(re, e.name);
-    }
-  }
-  return out;
+  return text.replace(re, (m) => {
+    const k = norm(m);
+    return present.has(k) || !map.has(k) ? m : map.get(k);
+  });
 }
 
 // Terms to give the speech and minutes models as spelling hints.
@@ -100,7 +127,7 @@ export function suggestNames(text, attendees, entries = []) {
   if (!first.length) return [];
   const known = new Set([...first, ...entries.flatMap((e) => [norm(e.name), ...e.aliases.map(norm)])]);
   const counts = new Map();
-  for (const m of String(text || '').matchAll(/(?<![\p{L}\p{N}_])\p{Lu}[\p{L}]{2,}(?![\p{L}\p{N}_])/gu)) {
+  for (const m of String(text || '').matchAll(/(?<![\p{L}\p{M}\p{N}_])\p{Lu}[\p{L}\p{M}]{2,}(?![\p{L}\p{M}\p{N}_])/gu)) {
     const w = m[0];
     const k = norm(w);
     if (known.has(k) || COMMON.has(k)) continue;
@@ -124,7 +151,7 @@ export function glossaryLine(entries, attendees) {
 // Whole-word, case-insensitive replace used by the "Fix a name" tool.
 export function replaceWord(text, wrong, right) {
   if (!wrong) return text;
-  return String(text).replace(new RegExp(`(?<![${WORD}])${esc(wrong)}(?![${WORD}])`, 'giu'), right);
+  return String(text).replace(new RegExp(`(?<![${WORD}])${esc(wrong)}(?![${WORD}])`, 'giu'), () => right);
 }
 
 // ---- learning from meetings -------------------------------------------------------------------

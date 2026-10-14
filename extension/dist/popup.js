@@ -67,6 +67,8 @@
     // auto | hinglish | malayalam
     pillOnPage: false,
     // also show the pill inside the Meet page
+    emailSecret: "",
+    // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
     // Google Apps Script web app URL (apps-script/Code.gs)
     emailTo: "",
@@ -376,6 +378,8 @@
     const s = await getSettings();
     const ready = sttReady(s) && llmReady(s);
     $("setup").classList.toggle("hidden", ready);
+    const needGemini = (s.sttProvider === "gemini" || s.llmProvider === "gemini") && !s.geminiKey;
+    $("setupMsg").textContent = needGemini ? "Add your free Gemini key first." : !sttReady(s) ? "Add your speech-to-text key in Settings." : "Add your minutes writer key in Settings.";
     $("start").disabled = !sttReady(s);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     let host = "";

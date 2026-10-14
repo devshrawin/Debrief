@@ -207,6 +207,8 @@ for (const id of ['openSettings', 'openSettings1']) {
   const s = await getSettings();
   const ready = sttReady(s) && llmReady(s);
   $('setup').classList.toggle('hidden', ready);
+  const needGemini = (s.sttProvider === 'gemini' || s.llmProvider === 'gemini') && !s.geminiKey;
+  $('setupMsg').textContent = needGemini ? 'Add your free Gemini key first.' : !sttReady(s) ? 'Add your speech-to-text key in Settings.' : 'Add your minutes writer key in Settings.';
   $('start').disabled = !sttReady(s);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let host = '';
