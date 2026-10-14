@@ -29,13 +29,16 @@
     });
   }
 
+  // src/iconText.js
+  var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+
   // src/adapters/meet.js
   var text = (el) => (el?.innerText ?? el?.textContent ?? "").replace(/ /g, " ").trim();
   var lines = (el) => text(el).split(/\n+/).map((l) => l.trim()).filter(Boolean);
   var NOT_A_NAME = /^(you|your|presenting|pinned|unpin|pin|mute|unmute|muted|more options|more|host|co-host|\d+|\d+ more|\+\d+|raised hand|lower hand|audio|video|camera|microphone|remove|admit|deny|in the meeting|contributors|people|participants|visible|backgrounds?)$/i;
   function cleanName(raw) {
     const n = String(raw || "").replace(/\s*\((you|host|presenting|co-host)\)\s*$/i, "").replace(/\s+/g, " ").trim();
-    if (!n || n.length > 60 || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return "";
+    if (!n || n.length > 60 || isIconText(n) || NOT_A_NAME.test(n) || /^[\d\s:.-]+$/.test(n)) return "";
     return n;
   }
   function micButton(doc) {

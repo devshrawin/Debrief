@@ -1,4 +1,7 @@
 (() => {
+  // src/iconText.js
+  var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+
   // src/alerts.js
   function classifyError(err) {
     const e = String(err || "");
@@ -393,7 +396,7 @@
         const who = (n) => /^you$/i.test(n) && me ? me : n;
         await updateMeeting(st.meetingId, (m) => {
           const pres = m.presence ||= {};
-          for (const n of msg.names || []) {
+          for (const n of (msg.names || []).filter((x) => !isIconText(x))) {
             const k = who(n);
             const p = pres[k];
             if (p) {

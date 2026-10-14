@@ -142,4 +142,20 @@ await test('popular meeting apps are covered by the page script from install', a
   assert.equal(generic.inCall(page('<button data-tid="toggle-mute" aria-label="Mute mic"></button><button data-tid="hangup-button" aria-label="Leave"></button>')), true, 'Teams-like call');
 });
 
+await test('meet: icon-font names (frame_person, keep_off, zoom_in...) are never read as participants', async () => {
+  const doc = page(`
+    <div data-participant-id="a"><div>Amal Raj</div><div>frame_person</div><div>keep_off</div></div>
+    <div data-participant-id="b"><span>keep_outline</span><span>zoom_in</span></div>
+    <div data-participant-id="c"><div>more_vert</div><div>Priya Nair</div></div>`);
+  assert.deepEqual(meet.readParticipants(doc).sort(), ['Amal Raj', 'Priya Nair']);
+  const { cleanPresence, isIconText } = await import('../src/iconText.js');
+  assert.ok(['frame_person', 'keep_off', 'keep_outline', 'zoom_in', 'push_pin'].every(isIconText));
+  assert.ok(!['Amal Raj', 'Mary-Ann', "D'Souza", 'o_connor', 'Ravi K.'].some((n) => n !== 'o_connor' && isIconText(n)));
+  // meetings saved before the fix still show clean names
+  const { attendanceMarkdown } = await import('../src/attendance.js');
+  const md = attendanceMarkdown({ invited: [], presence: { 'Akash Behera': [0, 300, 5], frame_person: [0, 300, 5], zoom_in: [0, 10, 1] }, durationSec: 420, entries: [], myName: '' });
+  assert.ok(/Akash Behera/.test(md) && !/frame_person|zoom_in/.test(md), md);
+  assert.deepEqual(Object.keys(cleanPresence({ a_b: [1], Real: [1] })), ['Real']);
+});
+
 console.log(`\n${passed} passed`);
