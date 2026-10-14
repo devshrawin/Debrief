@@ -274,6 +274,15 @@ try {
   check('settings has dictionary, sharing, local presets, other sites, minutes mode', proOpts.dict && proOpts.share && proOpts.local && proOpts.sites && proOpts.mode);
   check('usage table has a cost-if-paid column and total', proOpts.rows.length > 0 && /if this were paid: about \$[0-9.]+/.test(proOpts.totals), proOpts.totals);
 
+  // ---- Pro: the setup check ----
+  const chk = await opts.evaluate(`(async () => {
+    document.querySelector('#nav button[data-tab=start]').click();
+    document.getElementById('checkup').click();
+    await new Promise((r) => setTimeout(r, 2500));
+    return { out: document.getElementById('checkupOut').textContent, msg: document.getElementById('checkupMsg').textContent, copy: !document.getElementById('checkupCopy').hidden };
+  })()`);
+  check('setup check lists keys, quota, microphone, voices and the last meeting without printing a key', /Gemini key/.test(chk.out) && /Voice recognition/.test(chk.out) && /Speaker model file: present/.test(chk.out) && !/AIza|sk-ant/.test(chk.out) && chk.copy, JSON.stringify(chk).slice(0, 600));
+
   // ---- Pro: the Voices page (no microphone in headless Chrome, so recording itself is not driven here) ----
   const vui = await opts.evaluate(`(async () => {
     const fp = 'A'.repeat(344);

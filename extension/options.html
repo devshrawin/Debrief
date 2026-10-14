@@ -159,6 +159,19 @@
         </div>
       </div>
 
+      <div class="card">
+        <h2>Check my setup</h2>
+        <div class="row2">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <button class="btn" id="checkup">Check my setup</button>
+            <button class="btn" id="checkupCopy" hidden>Copy the result</button>
+            <span id="checkupMsg" class="hint" style="margin:0"></span>
+          </div>
+          <pre id="checkupOut" style="margin:12px 0 0;white-space:pre-wrap;font:12.5px/1.6 ui-monospace,Consolas,monospace;max-width:760px" hidden></pre>
+          <p class="hint">Lists what is ready and what is not: keys, today's quota, microphone, the mute button, email relay, voices and what happened in your last meeting. Nothing secret is shown, so it is safe to paste when asking for help.</p>
+        </div>
+      </div>
+
       <div class="callout warnc">On Google's free tier, audio and transcripts may be used to improve Google's products and read by reviewers. For confidential meetings, enable billing on the key or choose another provider.</div>
       <p class="hint" style="color:var(--muted);font-size:12.5px">Keys stay in this browser profile. Audio and transcripts go directly from Chrome to the providers you choose; there is no Debrief server.</p>
     </section>
@@ -486,6 +499,13 @@
         <label class="toggle"><span class="t"><b>Learn who is who from my meetings (best guess)</b><span>Off by default. Works without captions or any particular language. Click Save changes after switching.</span></span><input type="checkbox" id="voiceLearn"></label>
         <div class="row2">
           <p class="hint" style="margin-top:0">While you record, Debrief fingerprints the other participants' speech and groups voices that keep coming back. A voice heard enough in two or more meetings shows up in the list below as <b>Unnamed voice 1, 2&hellip;</b>: you rename it once (check the transcript at the times shown to see who it is) and from then on it is named in every meeting, in any language. If Meet's captions are on and name exactly one speaker, Debrief also uses that to name the voice for you, but captions are optional. A voice is <b>not used</b> until it has about 45 seconds of clean speech from at least two meetings, and a group that sounds like two people or like someone already known is left out. Voices you record yourself are never changed. Similar voices can be merged or split wrongly, so check the names and delete anything that looks off. This builds a voice profile of the people on your calls: tell your colleagues, and you can delete anyone, or everyone, at any time.</p>
+        </div>
+      </div>
+
+      <div class="card" id="voiceBlockedRow" hidden>
+        <div class="row2" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <span id="voiceBlockedMsg" class="hint" style="margin:0"></span>
+          <button class="btn" id="voiceAllowAgain">Allow learning them again</button>
         </div>
       </div>
 

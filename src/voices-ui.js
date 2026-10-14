@@ -1,7 +1,7 @@
 // The Voices page in Settings: add people, record about 20 seconds, play it back, save only the fingerprint,
 // rename, re-record, delete, and forget everything. The recording lives in memory until saved or cancelled.
-import { getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime } from './store.js';
-import { unnamedGroups, isAnon, LEARN } from './voice/learn.js';
+import { getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
+import { unnamedGroups, isAnon, mergePeople, blockEntry, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
 import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './voice/enrol.js';
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
@@ -71,6 +71,7 @@ function renderList() {
         btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)),
         btn('Add recording', () => begin({ kind: 'add', id: p.id }, p)),
         btn('Export', () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, '_')}.json`)),
+        ...(p.auto && people.length > 1 ? [btn('Merge into…', () => mergeInto(p))] : []),
         btn('Delete', () => remove(p), true)
       );
       return row;
@@ -135,9 +136,35 @@ async function rename(p) {
 
 async function remove(p) {
   if (!confirm(`Delete the voice of ${p.name}? Their fingerprint is removed from this browser.`)) return;
+  if (p.auto && confirm(`${p.name} was learned from your meetings and would be learned again.\n\nOK = also never learn this voice again.\nCancel = just delete it for now.`)) {
+    await saveBlockedVoices([...(await getBlockedVoices()), blockEntry(p)]);
+    renderBlocked();
+  }
   people = people.filter((x) => x.id !== p.id);
   await saveVoices(people);
   renderList();
+}
+
+// Two learned voices that are really one person (for example a laptop and a headset): fold one into the other.
+async function mergeInto(p) {
+  const others = people.filter((x) => x.id !== p.id);
+  const pick = prompt(`Merge ${p.name} into which voice? Type the number:\n\n${others.map((x, i) => `${i + 1}. ${x.name}`).join('\n')}`);
+  const target = others[Number(pick) - 1];
+  if (!target) return;
+  if (!confirm(`Merge ${p.name} into ${target.name}? The result is called ${target.name}.`)) return;
+  try {
+    people = mergePeople(people, p.id, target.id);
+    await saveVoices(people);
+    renderList();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function renderBlocked() {
+  const blocked = await getBlockedVoices();
+  $('voiceBlockedRow').hidden = !blocked.length;
+  $('voiceBlockedMsg').textContent = `${blocked.length} learned voice${blocked.length === 1 ? ' is' : 's are'} set never to be learned again.`;
 }
 
 function resetRecording() {
@@ -351,6 +378,11 @@ export async function initVoices() {
     const f = e.target.files[0];
     e.target.value = '';
     if (f) importFile(f);
+  };
+  renderBlocked();
+  $('voiceAllowAgain').onclick = async () => {
+    await saveBlockedVoices([]);
+    renderBlocked();
   };
   $('voiceForget').onclick = async () => {
     if (!confirm('Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.')) return;

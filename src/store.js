@@ -186,3 +186,13 @@ export async function forgetAllVoices() {
   if (Object.keys(changed).length) await chrome.storage.local.set(changed);
   return Object.keys(changed).length;
 }
+
+// Learned voices the user deleted and asked not to learn again: [{ name, centroid }].
+export async function getBlockedVoices() {
+  const { voiceBlock } = await chrome.storage.local.get('voiceBlock');
+  return voiceBlock || [];
+}
+
+export async function saveBlockedVoices(list) {
+  await chrome.storage.local.set({ voiceBlock: list.slice(-100) });
+}
