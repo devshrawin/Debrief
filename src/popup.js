@@ -162,6 +162,8 @@ $('diagnose').onclick = async (e) => {
   }
 };
 
+$('askAll').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('ask.html') });
+
 $('alertX').onclick = () => send({ type: 'dismiss-alert' }).then(refresh);
 
 $('start').onclick = async () => {

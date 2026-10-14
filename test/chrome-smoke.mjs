@@ -369,6 +369,27 @@ try {
   })()`);
   check('amber reminder dot shows during a call on any supported site and clears after', dot.on === '\u25cf' && dot.off === '' && /Zoom/.test(dot.title), JSON.stringify(dot));
 
+  // ---- ask about the minutes ----
+  const askPage = await openPage(`chrome-extension://${id}/ask.html`);
+  await sleep(900);
+  const ask1 = await askPage.evaluate(`({ box: !!document.querySelector('#askBox .ask-row input'), chips: document.querySelectorAll('#askBox .chipbtn').length, count: document.getElementById('count').textContent, scope: document.getElementById('scope').options.length })`);
+  check('ask page lists the scope, suggestions and a question box', ask1.box && ask1.chips >= 3 && /meeting/.test(ask1.count) && ask1.scope === 3, JSON.stringify(ask1));
+  const askMom = await mom.evaluate(`({ box: !!document.querySelector('#askBox .ask-row input'), title: document.querySelector('#askBox h3')?.textContent })`);
+  check('minutes page has an Ask about this meeting box', askMom.box && /Ask about this meeting/.test(askMom.title), JSON.stringify(askMom));
+  const askNoKey = await askPage.evaluate(`(async () => {
+    const cur = (await chrome.storage.local.get('settings')).settings;
+    await chrome.storage.local.set({ settings: { ...cur, geminiKey: '' } });
+    const input = document.querySelector('#askBox .ask-row input');
+    input.value = 'what was decided?';
+    document.querySelector('#askBox .ask-row button').click();
+    await new Promise((r) => setTimeout(r, 600));
+    const msg = document.querySelector('#askBox .hint').textContent;
+    await chrome.storage.local.set({ settings: cur });
+    return msg;
+  })()`);
+  check('asking without a configured model explains what to set up', /Settings/.test(askNoKey), askNoKey);
+  check('popup has an Ask a question link on the Meetings tab', await popup.evaluate(`!!document.getElementById('askAll')`));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);

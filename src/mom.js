@@ -1,4 +1,5 @@
-import { marked } from 'marked';
+import { renderMd } from './md.js';
+import { mountAsk } from './askui.js';
 import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
@@ -14,26 +15,6 @@ const id = new URLSearchParams(location.search).get('id');
 let meeting = null;
 let settings = null;
 let abortCtl = null;
-
-const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-// Transcripts come from arbitrary speech, so never let raw HTML from the model through.
-// Anything a speaker or the model slips in is neutralised: no raw HTML, no images (an image address can
-// carry data out to anyone's server), and only web or mail links.
-marked.use({
-  gfm: true,
-  renderer: {
-    html: ({ text }) => escapeHtml(text),
-    image: ({ text }) => escapeHtml(text || ''),
-    link(token) {
-      const inner = this.parser.parseInline(token.tokens);
-      const href = String(token.href || '');
-      return /^(https?:\/\/|mailto:)/i.test(href) ? `<a href="${escapeHtml(href)}" rel="noopener noreferrer" target="_blank">${inner}</a>` : inner;
-    },
-  },
-});
-
-const renderMd = (md) => marked.parse(md || '');
 
 // Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
 const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
@@ -202,6 +183,19 @@ async function emailMom(auto) {
   } finally {
     $('mail').disabled = false;
   }
+}
+
+// ---- ask about this meeting ----
+function mountAskBox() {
+  const box = $('askBox');
+  box.replaceChildren(Object.assign(document.createElement('h3'), { textContent: 'Ask about this meeting' }));
+  mountAsk(box, {
+    getMeetings: async () => [(await getMeeting(id)) || meeting],
+    getCtx: () => ({ ...nameCtx(), myName: settings.myName }),
+    history: meeting.qa || [],
+    onEntry: (entry) => patchMeeting({ qa: [...(meeting.qa || []), entry].slice(-10) }),
+    placeholder: 'Ask about these minutes, e.g. "who owns the Kerala mapping?"',
+  });
 }
 
 // ---- sharing with other people ----
@@ -470,6 +464,7 @@ document.querySelectorAll('.tabs button').forEach((b) => {
   $('notes').value = meeting.notes || '';
   $('attendees').value = (meeting.attendees || []).join('\n');
   initShare();
+  mountAskBox();
   renderMeta();
   renderErrors();
   renderTranscript();

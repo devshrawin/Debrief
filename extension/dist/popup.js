@@ -341,6 +341,7 @@
       $("diagResult").textContent = "Open a Meet (or enabled meeting site) tab and reload it once, then try again.";
     }
   };
+  $("askAll").onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL("ask.html") });
   $("alertX").onclick = () => send({ type: "dismiss-alert" }).then(refresh);
   $("start").onclick = async () => {
     $("start").disabled = true;
