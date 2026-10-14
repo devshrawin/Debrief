@@ -15179,6 +15179,75 @@ function out(o) {
     return next;
   }
 
+  // src/voice/share.js
+  var SHARE_FORMAT = "debrief-voices";
+  var MODEL_ID = "wespeaker-resnet34-lm";
+  var B64_256 = /^(?:[A-Za-z0-9+/]{4}){85}[A-Za-z0-9+/]{2}==$|^(?:[A-Za-z0-9+/]{4}){85}[A-Za-z0-9+/]{3}=$/;
+  function exportVoices(list, ids) {
+    const pick = ids ? list.filter((p) => ids.includes(p.id)) : list;
+    return JSON.stringify(
+      {
+        format: SHARE_FORMAT,
+        version: 1,
+        model: MODEL_ID,
+        exported: (/* @__PURE__ */ new Date()).toISOString(),
+        people: pick.map((p) => ({ name: p.name, lang: p.lang || "en", langs: p.langs || [p.lang || "en"], secs: p.secs || 0, centroid: p.centroid, windows: p.windows || [] }))
+      },
+      null,
+      1
+    );
+  }
+  function parseImport(text) {
+    let o;
+    try {
+      o = JSON.parse(text);
+    } catch {
+      return { people: [], problems: ["This is not a Debrief voices file (it could not be read)."] };
+    }
+    if (o?.format !== SHARE_FORMAT || !Array.isArray(o.people)) return { people: [], problems: ["This is not a Debrief voices file."] };
+    if (o.model !== MODEL_ID) return { people: [], problems: [`These voices were made with a different speaker model (${String(o.model).slice(0, 40)}), so they cannot be matched here.`] };
+    const people2 = [];
+    const problems = [];
+    for (const p of o.people.slice(0, 200)) {
+      const name = String(p?.name || "").trim().replace(/\s+/g, " ").slice(0, 60);
+      if (!name) {
+        problems.push("A person without a name was skipped.");
+        continue;
+      }
+      if (typeof p.centroid !== "string" || !B64_256.test(p.centroid)) {
+        problems.push(`${name}: the fingerprint is damaged, skipped.`);
+        continue;
+      }
+      const windows = Array.isArray(p.windows) ? p.windows.filter((w) => typeof w === "string" && B64_256.test(w)).slice(0, ENROL.maxWindows * 2) : [];
+      const lang2 = String(p.lang || "en").slice(0, 8);
+      const langs = Array.isArray(p.langs) ? p.langs.filter((l) => typeof l === "string").map((l) => l.slice(0, 8)).slice(0, 6) : [];
+      people2.push({ name, lang: lang2, langs: langs.length ? langs : [lang2], secs: Math.max(0, Math.min(3600, Number(p.secs) || 0)), centroid: p.centroid, windows });
+    }
+    return { people: people2, problems };
+  }
+  function mergeImport(list, incoming, { replace = false } = {}) {
+    const next = [...list];
+    const added = [];
+    const replaced = [];
+    const skipped = [];
+    for (const p of incoming) {
+      const i = next.findIndex((x) => x.name.toLowerCase() === p.name.toLowerCase());
+      if (i >= 0 && !replace) {
+        skipped.push(p.name);
+        continue;
+      }
+      const rec2 = { ...p, id: i >= 0 ? next[i].id : newId(), created: i >= 0 ? next[i].created : Date.now(), updated: Date.now(), imported: true };
+      if (i >= 0) {
+        next[i] = rec2;
+        replaced.push(p.name);
+      } else {
+        next.push(rec2);
+        added.push(p.name);
+      }
+    }
+    return { list: next, added, replaced, skipped };
+  }
+
   // src/wav.js
   function encodeWav(samples, sampleRate) {
     const buf = new ArrayBuffer(44 + samples.length * 2);
@@ -15261,6 +15330,7 @@ function out(o) {
           btn("Rename", () => rename(p)),
           btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)),
           btn("Add recording", () => begin({ kind: "add", id: p.id }, p)),
+          btn("Export", () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`)),
           btn("Delete", () => remove(p), true)
         );
         return row;
@@ -15422,6 +15492,36 @@ function out(o) {
       $("enrolSave").disabled = false;
     }
   }
+  function download(text, name) {
+    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5e3);
+  }
+  async function importFile(file) {
+    const out = $("voiceShareMsg");
+    try {
+      if (file.size > 2e6) throw new Error("That file is too large to be a voices file.");
+      const { people: incoming, problems } = parseImport(await file.text());
+      if (!incoming.length) {
+        out.textContent = problems[0] || "Nothing to import.";
+        return;
+      }
+      const clash = incoming.filter((p) => people.some((x) => x.name.toLowerCase() === p.name.toLowerCase())).map((p) => p.name);
+      const replace = clash.length > 0 && confirm(`${clash.join(", ")} already enrolled here. Replace with the imported voice?
+
+OK = replace, Cancel = keep what you have.`);
+      const r = mergeImport(people, incoming, { replace });
+      people = r.list;
+      await saveVoices(people);
+      renderList();
+      out.textContent = `Imported ${r.added.length} new${r.replaced.length ? `, replaced ${r.replaced.length}` : ""}${r.skipped.length ? `, kept your existing ${r.skipped.join(", ")}` : ""}.${problems.length ? ` ${problems.join(" ")}` : ""} Imported voices are only as good as the original recording: check them on a real meeting.`;
+    } catch (e) {
+      out.textContent = e.message;
+    }
+  }
   async function initVoices() {
     await refresh();
     setLang("en");
@@ -15457,6 +15557,13 @@ function out(o) {
       $("enrolTitle").textContent = "Add a person";
       $("enrolCancel").hidden = true;
       setMsg("");
+    };
+    $("voiceExport").onclick = () => people.length ? download(exportVoices(people), "debrief-voices.json") : $("voiceShareMsg").textContent = "Nobody is enrolled yet.";
+    $("voiceImport").onclick = () => $("voiceImportFile").click();
+    $("voiceImportFile").onchange = (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (f) importFile(f);
     };
     $("voiceForget").onclick = async () => {
       if (!confirm("Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.")) return;

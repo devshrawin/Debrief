@@ -294,6 +294,15 @@ try {
     document.getElementById('enrolRec').click();
     await new Promise((r) => setTimeout(r, 300));
     out.needName = /name first/i.test(document.getElementById('enrolMsg').textContent);
+    // importing a shared file adds the person; a broken file is refused with a reason
+    const real = 'A'.repeat(342) + '==';
+    const good = JSON.stringify({ format: 'debrief-voices', version: 1, model: 'wespeaker-resnet34-lm', people: [{ name: 'Imported One', lang: 'hi', centroid: real, windows: [real] }] });
+    const inp = document.getElementById('voiceImportFile');
+    const feed = async (text) => { const dt = new DataTransfer(); dt.items.add(new File([text], 'v.json', { type: 'application/json' })); inp.files = dt.files; inp.dispatchEvent(new Event('change')); await new Promise((r) => setTimeout(r, 500)); };
+    await feed(good);
+    out.imported = (await chrome.storage.local.get('voices')).voices.some((p) => p.name === 'Imported One') && /Imported 1 new/.test(document.getElementById('voiceShareMsg').textContent);
+    await feed('not json');
+    out.refused = /not a Debrief voices file/.test(document.getElementById('voiceShareMsg').textContent);
     window.confirm = () => true;
     document.getElementById('voiceForget').click();
     await new Promise((r) => setTimeout(r, 600));
@@ -304,7 +313,7 @@ try {
     await chrome.storage.local.set({ meetingIds: [] });
     return out;
   })()`);
-  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.forgot && vui.listEmpty, JSON.stringify(vui));
+  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.imported && vui.refused && vui.forgot && vui.listEmpty, JSON.stringify(vui));
 
   const popupWarn = await popup.evaluate(`(async () => { await new Promise((r) => setTimeout(r, 300)); location.reload(); })()`);
   await sleep(1500);

@@ -523,6 +523,19 @@
       </div>
 
       <div class="card">
+        <h2>Share voices</h2>
+        <div class="row2">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <button class="btn" id="voiceExport">Export voices…</button>
+            <button class="btn" id="voiceImport">Import voices…</button>
+            <input type="file" id="voiceImportFile" accept=".json,application/json" hidden>
+          </div>
+          <p class="hint" id="voiceShareMsg" role="status"></p>
+          <p class="hint">Lets a colleague use the voices you already enrolled instead of recording everyone again. The file holds fingerprints only (numbers, no audio), but a fingerprint still identifies a person's voice: share it only for people who have agreed, and only with someone you trust. Debrief checks that the same speaker model was used. Each person also has their own <b>Export</b> button in the list above.</p>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Forget</h2>
         <div class="row2">
           <button class="btn" id="voiceForget" style="color:#b91c1c">Forget all voices</button>
