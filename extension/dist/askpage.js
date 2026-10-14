@@ -447,6 +447,11 @@ _(Output hit the length limit and was cut off.)_`;
     return text;
   }
   var PROVIDERS = { anthropic, openai: openaiCompat, gemini };
+  function modelLabel(s) {
+    if (s.llmProvider === "anthropic") return `Claude \xB7 ${s.anthropicModel}`;
+    if (s.llmProvider === "gemini") return `Gemini \xB7 ${s.geminiModel}`;
+    return `${new URL(s.oaBase).host} \xB7 ${s.oaModel}`;
+  }
   function generate(opts) {
     const fn2 = PROVIDERS[opts.settings.llmProvider];
     if (!fn2) throw new Error(`Unknown LLM provider ${opts.settings.llmProvider}`);
@@ -1905,22 +1910,138 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     return e;
   };
   var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  var CSS = `
+.ask { padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chipbtn { font-size: 13px; font-weight: 600; min-height: 32px; padding: 3px 12px; border-radius: 999px; }
+.ask-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.ask-row input { flex: 1; min-width: 0; }
+.ask > .hint { margin-top: 8px; }
+.ask > .hint:empty { display: none; }
+.ask .hint.busy { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.ask .hint.busy::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--brand); border-right-color: transparent; animation: sp 0.8s linear infinite; flex: none; }
+.ask-log { margin-top: 10px; }
+.ask-log:empty { display: none; }
+.ask-turn { margin: 12px 0 0; }
+.ask-q { font-weight: 600; overflow-wrap: anywhere; }
+.ask-a { margin: 6px 0 0; padding: 10px 14px; border-left: 3px solid var(--brand); background: var(--sunk); border-radius: 0 10px 10px 0; font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+.ask-a p { margin: 4px 0; }
+.ask-a ul, .ask-a ol { margin: 4px 0; padding-left: 22px; }
+.ask-a li { margin: 4px 0; }
+.ask-a.live > :last-child::after { content: ""; display: inline-block; width: 8px; height: 18px; margin-left: 3px; background: var(--brand); vertical-align: text-bottom; animation: bl 1s steps(2) infinite; }
+@keyframes bl { 50% { opacity: 0; } }
+.ask-a .src, .ask-srcs .src { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; background: var(--tint); color: var(--tint-ink); font-size: 11.5px; font-weight: 800; text-decoration: none; vertical-align: 2px; margin-left: 2px; }
+.ask-a a.src:hover { background: var(--brand); color: var(--on-brand); }
+.ask-src { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.ask-srcs { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.ask-srcs li { display: flex; gap: 10px; align-items: baseline; min-height: 32px; flex-wrap: wrap; }
+.ask-srcs .src { margin: 0; vertical-align: baseline; }
+.ask-srcs a { font-weight: 600; overflow-wrap: anywhere; }
+.ask-a.nomatch { border: 1px solid var(--line); border-radius: 14px; background: var(--card); text-align: center; padding: 28px; }
+.ask-a.err { border: 1px solid var(--rec-line); border-radius: 14px; background: var(--rec-bg); color: var(--rec-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ask-a.err > div { flex: 1 1 260px; }
+.ask-a.err p { margin: 2px 0 0; }
+.ask-notice { margin-top: 10px; padding: 14px 16px; border-radius: 14px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ask-notice > div { flex: 1 1 260px; }
+.ask-notice p { margin: 2px 0 0; }
+.ask-lbl { margin: 14px 0 6px; }
+
+/* the big version on the all-meetings page */
+.ask.large { display: flex; flex-direction: column; gap: 16px; padding: 0; background: none; border: 0; box-shadow: none; }
+.ask.large > * { margin: 0; }
+.ask.large .ask-row { order: 1; padding: 8px 8px 8px 18px; gap: 10px; background: var(--card); border: 1px solid var(--brand); border-radius: 14px; box-shadow: 0 0 0 3px var(--tint); }
+.ask.large .ask-row input { border: 0; background: transparent; font-size: 17px; min-height: 44px; padding: 8px 0; box-shadow: none; }
+.ask.large .ask-row input:focus-visible { outline: none; }
+.ask.large .ask-row .primary { width: 44px; height: 44px; padding: 0; border-radius: 12px; flex: none; }
+.ask.large > .hint { order: 2; font-size: 14px; }
+.ask.large .ask-notice { order: 3; }
+.ask.large .ask-log { order: 4; }
+.ask.large .ask-lbl { order: 5; }
+.ask.large .ask-chips { order: 6; }
+.ask.large .ask-turn { margin: 0 0 16px; }
+.ask.large .ask-q { font-size: 13px; color: var(--muted); }
+.ask.large .ask-a { border-left: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 20px 26px; font-size: 15.5px; }
+.ask.large .ask-a.nomatch { padding: 28px; }
+.ask.large .ask-a.err { background: var(--rec-bg); border-color: var(--rec-line); }
+.ask-lbl.hidden, .ask.large .ask-chips.hidden { display: none; }
+`;
+  function injectStyle() {
+    if (document.getElementById("askui-style")) return;
+    const s = h2("style", null, CSS);
+    s.id = "askui-style";
+    document.head.append(s);
+  }
+  function linkCitations(root, sources, prefix) {
+    const index = /* @__PURE__ */ new Map();
+    for (const s of sources || []) if (!index.has(s.label)) index.set(s.label, index.size + 1);
+    if (!index.size) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      if (!node.nodeValue.includes("[")) continue;
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const m of text.matchAll(/\[([^\[\]]+)\]/g)) {
+        const n = index.get(m[1].trim());
+        if (!n) continue;
+        frag.append(text.slice(last, m.index));
+        const a = h2("a", "src", String(n));
+        a.href = `#${prefix}${n}`;
+        a.setAttribute("aria-label", `Source ${n}`);
+        frag.append(a);
+        last = m.index + m[0].length;
+      }
+      if (!last) continue;
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  }
+  var turnNo = 0;
   function mountAsk(root, opts) {
+    injectStyle();
     const history = [...opts.history || []];
     root.classList.add("ask");
+    if (opts.large) root.classList.add("large");
     const log = h2("div", "ask-log");
+    log.setAttribute("aria-live", "polite");
+    const label2 = h2("p", "lbl ask-lbl", "Try asking");
     const chips = h2("div", "ask-chips");
     const row = h2("div", "ask-row");
     const input = h2("input");
     input.type = "text";
     input.placeholder = opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the Kerala mapping?"';
     input.setAttribute("aria-label", "Your question");
-    const go = h2("button", "primary", "Ask");
+    const go = h2("button", "primary");
+    if (opts.large) {
+      go.setAttribute("aria-label", "Ask");
+      go.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>';
+    } else go.textContent = "Ask";
     const stop = h2("button", "hidden", "Stop");
     const status = h2("span", "hint");
+    status.setAttribute("role", "status");
+    const notice = h2("div", "ask-notice hidden");
+    notice.setAttribute("role", "alert");
     row.append(input, go, stop);
-    root.append(chips, row, status, log);
+    if (opts.large) root.append(row, status, notice, log, label2, chips);
+    else root.append(chips, row, status, notice, log);
+    if (!opts.large) label2.remove();
     let abort = null;
+    const setBusy = (text) => {
+      status.textContent = text;
+      status.classList.toggle("busy", !!text);
+    };
+    const showNotice = (on) => {
+      notice.classList.toggle("hidden", !on);
+      if (!on) return;
+      notice.replaceChildren();
+      const d = h2("div");
+      d.append(h2("strong", null, "Choose a model for answers first"), h2("p", null, "Asking uses the same service as your minutes. None is set up yet."));
+      const b = h2("button", null, "Open Settings");
+      b.onclick = () => chrome.runtime?.openOptionsPage ? chrome.runtime.openOptionsPage() : window.open("options.html");
+      notice.append(d, b);
+    };
     const addTurn = (q2, a, sources) => {
       const turn = h2("div", "ask-turn");
       const qEl = h2("div", "ask-q", q2);
@@ -1931,23 +2052,39 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       return { turn, aEl };
     };
     const fill = (aEl, answer, sources) => {
+      aEl.classList.remove("live", "err");
       aEl.innerHTML = renderMd(answer);
-      if (sources?.length) {
-        const seen = /* @__PURE__ */ new Set();
-        const src = h2("div", "ask-src");
-        src.append(h2("span", "hint", "Sources: "));
-        for (const s of sources) {
-          if (seen.has(s.label)) continue;
-          seen.add(s.label);
-          if (opts.openLink && s.meetingId) {
-            const a = h2("a", null, s.label);
-            a.href = `mom.html?id=${s.meetingId}`;
-            a.target = "_blank";
-            src.append(a, " \xB7 ");
-          } else src.append(h2("span", "hint", `${s.label} \xB7 `));
-        }
-        aEl.append(src);
+      const uniq = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const s of sources || []) {
+        if (seen.has(s.label)) continue;
+        seen.add(s.label);
+        uniq.push(s);
       }
+      if (!uniq.length) {
+        aEl.classList.toggle("nomatch", !(sources && sources.length) && /^(Nothing in these|There are no)/.test(answer));
+        return;
+      }
+      const prefix = `ask-s${++turnNo}-`;
+      linkCitations(aEl, uniq, prefix);
+      const src = h2("div", "ask-src");
+      src.append(h2("p", "lbl", "Sources"));
+      const list = h2("ol", "ask-srcs");
+      uniq.forEach((s, i) => {
+        const li = h2("li");
+        li.id = `${prefix}${i + 1}`;
+        li.append(h2("span", "src", String(i + 1)));
+        if (opts.openLink && s.meetingId) {
+          const a = h2("a", null, s.label);
+          a.href = `mom.html?id=${encodeURIComponent(s.meetingId)}`;
+          a.target = "_blank";
+          a.rel = "noopener";
+          li.append(a);
+        } else li.append(h2("span", "hint", s.label));
+        list.append(li);
+      });
+      src.append(list);
+      aEl.append(src);
     };
     history.slice(-6).reverse().forEach((e) => addTurn(e.q, e.a, e.sources));
     for (const s of opts.suggestions || SUGGESTIONS) {
@@ -1958,27 +2095,32 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       };
       chips.append(b);
     }
-    async function ask() {
-      const question = input.value.trim();
+    async function ask(again) {
+      const question = (again || input.value).trim();
       if (!question || abort) return;
       const settings = await getSettings();
       if (!llmReady(settings)) {
         status.textContent = "Set up a minutes writer (LLM) in Settings first.";
+        status.classList.remove("busy");
+        showNotice(true);
         return;
       }
+      showNotice(false);
+      if (opts.large) label2.classList.add("hidden"), chips.classList.add("hidden");
       input.value = "";
-      status.textContent = "Searching the meeting\u2026";
+      setBusy("Searching the meeting\u2026");
       abort = new AbortController();
       go.disabled = true;
       stop.classList.remove("hidden");
       stop.onclick = () => abort?.abort();
-      const { aEl } = addTurn(question, null);
+      const { turn, aEl } = addTurn(question, null);
+      aEl.classList.add("live");
       aEl.textContent = "\u2026";
       let buf = "";
       let queued = false;
       const paint = () => {
         queued = false;
-        aEl.textContent = buf;
+        if (abort) aEl.innerHTML = renderMd(buf);
       };
       const gen = async (system, user, onText) => {
         for (let i = 0; ; i++) {
@@ -1987,7 +2129,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
             }) });
           } catch (e) {
             if (i >= 2 || !isRetryable(e)) throw e;
-            status.textContent = `Busy (${e.message.slice(0, 60)}). Trying again\u2026`;
+            setBusy(`Busy (${e.message.slice(0, 60)}). Trying again\u2026`);
             await sleep([4e3, 12e3][i]);
           }
         }
@@ -2002,7 +2144,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
           gen,
           onText: (d) => {
             buf += d;
-            status.textContent = "Answering\u2026";
+            setBusy("Answering\u2026");
             if (!queued) {
               queued = true;
               requestAnimationFrame(paint);
@@ -2013,10 +2155,22 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         const entry = { q: question, a: r.answer, sources: r.sources.slice(0, 8), at: Date.now() };
         history.push(entry);
         opts.onEntry?.(entry);
-        status.textContent = "";
+        setBusy("");
       } catch (e) {
-        aEl.textContent = abort.signal.aborted ? "Stopped." : `Could not answer: ${e.message}`;
-        status.textContent = "";
+        aEl.classList.remove("live");
+        if (abort.signal.aborted) aEl.textContent = "Stopped.";
+        else {
+          aEl.classList.add("err");
+          const d = h2("div");
+          d.append(h2("strong", null, "No answer this time"), h2("p", null, `Could not answer: ${e.message}`), h2("p", "hint", "Your question is kept."));
+          const retry = h2("button", null, "Try again");
+          retry.onclick = () => {
+            turn.remove();
+            ask(question);
+          };
+          aEl.replaceChildren(d, retry);
+        }
+        setBusy("");
       } finally {
         abort = null;
         go.disabled = false;
@@ -2024,9 +2178,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         input.focus();
       }
     }
-    go.onclick = ask;
+    go.onclick = () => ask();
     input.onkeydown = (e) => {
-      if (e.key === "Enter") ask();
+      if (e.key === "Enter" && !e.isComposing) ask();
     };
     return { ask, history };
   }
@@ -2039,15 +2193,24 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const cutoff = days === "all" ? 0 : Date.now() - Number(days) * 864e5;
     return all.filter((m) => m.startedAt >= cutoff);
   }
+  var seconds = (m) => m.endedAt ? (m.endedAt - m.startedAt) / 1e3 : Math.max(0, ...(m.segments || []).map((s) => s.t || 0));
+  var span = (sec) => {
+    const min = Math.round(sec / 60);
+    return min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`;
+  };
   (async () => {
     const settings = await getSettings();
+    if (llmReady(settings)) $2("modelName").textContent = modelLabel(settings);
     const refresh = async () => {
-      const n = (await scoped()).length;
-      $2("count").textContent = `${n} meeting${n === 1 ? "" : "s"}`;
+      const list = await scoped();
+      const n = list.length;
+      const total = list.reduce((a, m) => a + seconds(m), 0);
+      $2("count").textContent = `${n} meeting${n === 1 ? "" : "s"}${total >= 60 ? `, ${span(total)} of transcript` : ""}`;
     };
     $2("scope").onchange = refresh;
     await refresh();
     mountAsk($2("askBox"), {
+      large: true,
       getMeetings: scoped,
       getCtx: () => ({ entries: parseDictionary(settings.dictionary), attendees: [], learned: (settings.learnedNames || []).slice(-40), myName: settings.myName }),
       openLink: true,

@@ -201,18 +201,18 @@
       if (existing?.learnedFrom?.includes(meeting.id)) return;
       const step = Math.max(1, Math.floor(f.vecs.length / LEARN.keep));
       const fresh = f.vecs.filter((_, k) => k % step === 0).map((x) => pack(x.v)).slice(0, LEARN.keep);
-      let rec;
+      let rec2;
       if (existing) {
         const w = existing.secs || 1;
         const c = mean([scale(unpack(existing.centroid), w), scale(f.centroid, f.secs)]);
-        rec = { ...existing, centroid: pack(c), windows: [...existing.windows || [], ...fresh].slice(-LEARN.keep * 2), secs: Math.round(w + f.secs), meetings: (existing.meetings || 1) + 1, learnedFrom: [...existing.learnedFrom || [], meeting.id].slice(-50), updated: Date.now() };
+        rec2 = { ...existing, centroid: pack(c), windows: [...existing.windows || [], ...fresh].slice(-LEARN.keep * 2), secs: Math.round(w + f.secs), meetings: (existing.meetings || 1) + 1, learnedFrom: [...existing.learnedFrom || [], meeting.id].slice(-50), updated: Date.now() };
       } else {
-        rec = { id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: f.name, lang: "free", langs: ["free"], centroid: pack(f.centroid), windows: fresh, secs: Math.round(f.secs), meetings: 1, auto: true, learnedFrom: [meeting.id], created: Date.now() };
+        rec2 = { id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: f.name, lang: "free", langs: ["free"], centroid: pack(f.centroid), windows: fresh, secs: Math.round(f.secs), meetings: 1, auto: true, learnedFrom: [meeting.id], created: Date.now() };
       }
-      rec.ready = rec.secs >= LEARN.readySecs && rec.meetings >= LEARN.readyMeetings;
-      if (existing) list[idx] = rec;
-      else list = [...list, rec];
-      report.learned.push({ name: f.name, secs: Math.round(f.secs), total: rec.secs, ready: rec.ready, isNew: !existing });
+      rec2.ready = rec2.secs >= LEARN.readySecs && rec2.meetings >= LEARN.readyMeetings;
+      if (existing) list[idx] = rec2;
+      else list = [...list, rec2];
+      report.learned.push({ name: f.name, secs: Math.round(f.secs), total: rec2.secs, ready: rec2.ready, isNew: !existing });
     });
     return { list, changed: report.learned.length > 0, report };
   }
@@ -247,10 +247,10 @@
       const w = p.secs || 1;
       const c = mean([scale(unpack(p.centroid), w), scale(mean(vecs.map((x) => x.v)), secs)]);
       const step = Math.max(1, Math.floor(vecs.length / 6));
-      const rec = { ...p, centroid: pack(c), windows: [...p.windows || [], ...vecs.filter((_, k) => k % step === 0).map((x) => pack(x.v)).slice(0, 6)].slice(-LEARN.keep * 2), secs: Math.round(w + secs), meetings: (p.meetings || 1) + 1, learnedFrom: [...p.learnedFrom || [], meeting.id].slice(-50), updated: Date.now() };
-      rec.ready = rec.secs >= LEARN.readySecs && rec.meetings >= LEARN.readyMeetings;
-      list[i] = rec;
-      report.updated.push({ name: p.name, secs: Math.round(secs), total: rec.secs, ready: rec.ready });
+      const rec2 = { ...p, centroid: pack(c), windows: [...p.windows || [], ...vecs.filter((_, k) => k % step === 0).map((x) => pack(x.v)).slice(0, 6)].slice(-LEARN.keep * 2), secs: Math.round(w + secs), meetings: (p.meetings || 1) + 1, learnedFrom: [...p.learnedFrom || [], meeting.id].slice(-50), updated: Date.now() };
+      rec2.ready = rec2.secs >= LEARN.readySecs && rec2.meetings >= LEARN.readyMeetings;
+      list[i] = rec2;
+      report.updated.push({ name: p.name, secs: Math.round(secs), total: rec2.secs, ready: rec2.ready });
     }
     if (unknown.length >= 6) {
       const step = Math.max(1, Math.ceil(unknown.length / 300));
@@ -572,11 +572,11 @@
     await chrome.storage.local.set({ meetingIds: [id, ...meetingIds] });
   }
   async function getState() {
-    const { rec } = await chrome.storage.session.get("rec");
-    return rec || { recording: false };
+    const { rec: rec2 } = await chrome.storage.session.get("rec");
+    return rec2 || { recording: false };
   }
-  async function setState(rec) {
-    await chrome.storage.session.set({ rec });
+  async function setState(rec2) {
+    await chrome.storage.session.set({ rec: rec2 });
   }
   async function setSetting(patch) {
     const { settings } = await chrome.storage.local.get("settings");
@@ -594,6 +594,93 @@
   // src/background.js
   chrome.runtime.onInstalled.addListener((d) => {
     if (d.reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html?restart=1") });
+  });
+  var quiet = (p) => Promise.resolve(p).catch(() => {
+  });
+  var TIP_IDLE = "Debrief";
+  var TIP_CALL = "A call is on. Click to record.";
+  var TIP_ATTN = "Debrief needs attention";
+  var ICON_IDLE = { 16: "icons/icon16.png", 32: "icons/icon32.png", 48: "icons/icon48.png" };
+  var ICON_GLOW = { 16: "icons/icon16-glow.png", 32: "icons/icon32-glow.png", 48: "icons/icon48-glow.png" };
+  var setIcon = (tabId, glow) => quiet(chrome.action.setIcon({ tabId, path: glow ? ICON_GLOW : ICON_IDLE }));
+  var setBadge = (tabId, text, color) => {
+    const t = tabId == null ? {} : { tabId };
+    if (color) quiet(chrome.action.setBadgeBackgroundColor({ ...t, color }));
+    quiet(chrome.action.setBadgeText({ ...t, text }));
+  };
+  var setTip = (tabId, title) => quiet(chrome.action.setTitle(tabId == null ? { title } : { tabId, title }));
+  var GLOW_MS = 600;
+  var glowTabs = /* @__PURE__ */ new Set();
+  var glowTimer = null;
+  var glowPhase = false;
+  function endGlowTimer() {
+    if (glowTabs.size || !glowTimer) return;
+    clearInterval(glowTimer);
+    glowTimer = null;
+    glowPhase = false;
+  }
+  function startGlow(tabId) {
+    if (glowTabs.has(tabId)) return;
+    if (!glowTimer) glowPhase = true;
+    glowTabs.add(tabId);
+    setIcon(tabId, glowPhase);
+    glowTimer ||= setInterval(() => {
+      glowPhase = !glowPhase;
+      for (const t of glowTabs) setIcon(t, glowPhase);
+    }, GLOW_MS);
+  }
+  function stopGlow(tabId) {
+    if (!glowTabs.delete(tabId)) return;
+    setIcon(tabId, false);
+    endGlowTimer();
+  }
+  function showCallOn(tabId) {
+    setBadge(tabId, "\u25CF", "#F59E0B");
+    setTip(tabId, TIP_CALL);
+    startGlow(tabId);
+  }
+  function showCallOff(tabId) {
+    stopGlow(tabId);
+    setBadge(tabId, "");
+    setTip(tabId, TIP_IDLE);
+  }
+  var fmtElapsed = (ms) => {
+    const s = Math.max(0, Math.floor(ms / 1e3));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+  var rec = null;
+  var recTimer = null;
+  function paintRec() {
+    if (!rec) return;
+    const bad = rec.attention;
+    const tip = bad ? TIP_ATTN : `Recording \xB7 ${fmtElapsed(Date.now() - rec.startedAt)}`;
+    for (const t of [null, rec.tabId]) {
+      setBadge(t, bad ? "!" : "REC", bad ? "#1d1f24" : "#c8281c");
+      setTip(t, tip);
+    }
+  }
+  function showRec(tabId, startedAt, attention = false) {
+    stopGlow(tabId);
+    rec = { tabId, startedAt, attention };
+    paintRec();
+    clearInterval(recTimer);
+    recTimer = setInterval(paintRec, 5e3);
+  }
+  function setAttention(on) {
+    if (!rec || rec.attention === on) return;
+    rec.attention = on;
+    paintRec();
+  }
+  function hideRec(tabId) {
+    clearInterval(recTimer);
+    recTimer = null;
+    rec = null;
+    for (const t of [null, tabId]) {
+      setBadge(t, "");
+      setTip(t, TIP_IDLE);
+    }
+  }
+  getState().then((st) => st.recording && !st.stopping && showRec(st.tabId, st.startedAt, !!st.alert), () => {
   });
   var chain = Promise.resolve();
   var serial = (fn) => {
@@ -624,6 +711,7 @@
       fresh = !st.alert || st.alert.kind !== a.kind || Date.now() - st.alert.notifiedAt > 10 * 60 * 1e3;
       return { ...st, alert: { ...a, at: Date.now(), notifiedAt: fresh ? Date.now() : st.alert.notifiedAt } };
     });
+    setAttention(true);
     if (fresh) {
       chrome.notifications?.create(`debrief-${a.kind}`, {
         type: "basic",
@@ -635,7 +723,9 @@
     }
   }
   async function clearAlert() {
-    await mutateState((st) => st.alert ? { ...st, alert: null } : null);
+    let had = false;
+    await mutateState((st) => (had = !!st.alert, st.alert ? { ...st, alert: null } : null));
+    if (had) setAttention(false);
   }
   async function ensureOffscreen() {
     const ctxs = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
@@ -692,10 +782,7 @@
     await chrome.storage.session.set({ quietSince: null, heard: false });
     chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ["dist/pill.js"] }).catch(() => {
     });
-    chrome.action.setBadgeBackgroundColor({ color: "#d93025" });
-    chrome.action.setBadgeText({ text: "REC" });
-    chrome.action.setBadgeBackgroundColor({ tabId: msg.tabId, color: "#d93025" });
-    chrome.action.setBadgeText({ tabId: msg.tabId, text: "REC" });
+    showRec(msg.tabId, Date.now());
     return { ok: true };
   }
   async function learnVoices(meetingId) {
@@ -734,9 +821,7 @@
       });
       await closeOffscreen();
       await mutateState(() => ({ recording: false }));
-      chrome.action.setBadgeText({ text: "" });
-      chrome.action.setBadgeText({ tabId: st.tabId, text: "" }).catch(() => {
-      });
+      hideRec(st.tabId);
       await chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${st.meetingId}`), active: !opts.background });
       return { ok: true };
     })().finally(() => stopping = null);
@@ -869,13 +954,8 @@
         if (tabId == null) return { ok: false };
         const st = await getState();
         if (st.recording && st.tabId === tabId) return { ok: true };
-        if (msg.on) {
-          chrome.action.setBadgeBackgroundColor({ tabId, color: "#F59E0B" });
-          chrome.action.setBadgeText({ tabId, text: "\u25CF" });
-          chrome.action.setTitle({ tabId, title: `Debrief: a ${msg.site || "meeting"} call is on. Click (or press Alt+Shift+M) to record it` });
-        } else {
-          chrome.action.setBadgeText({ tabId, text: "" });
-        }
+        if (msg.on) showCallOn(tabId);
+        else showCallOff(tabId);
         return { ok: true };
       },
       // Voice fingerprints of the meeting's speech, made by the recorder. Only fingerprints, never audio.
@@ -896,10 +976,10 @@
         return applyMic();
       },
       "pill-state": async () => {
-        const rec = await getState();
+        const rec2 = await getState();
         const { levels } = await chrome.storage.session.get("levels");
-        const m = rec.meetingId ? await getMeeting(rec.meetingId) : null;
-        return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || "read", otherSites: (await getSettings()).otherSites !== false };
+        const m = rec2.meetingId ? await getMeeting(rec2.meetingId) : null;
+        return { ok: true, rec: rec2, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || "read", otherSites: (await getSettings()).otherSites !== false };
       }
     };
     const h = handlers[msg.type];
@@ -926,9 +1006,9 @@
       const r = await start({ streamId, tabId: tab.id, title: tab.title, url: tab.url });
       if (!r.ok) throw new Error(r.error);
     } catch (e) {
-      chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#d93025" });
-      chrome.action.setBadgeText({ tabId: tab.id, text: "ERR" });
-      chrome.action.setTitle({ tabId: tab.id, title: `Debrief could not start: ${e.message}` });
+      stopGlow(tab.id);
+      setBadge(tab.id, "!", "#1d1f24");
+      setTip(tab.id, `${TIP_ATTN}: could not start (${e.message})`);
     }
   });
   var MEET_CALL = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:[?#]|$)/;
@@ -936,11 +1016,7 @@
     if (!info.url && info.status !== "complete") return;
     const st = await getState();
     if (st.recording && st.tabId === tabId) return;
-    if (MEET_CALL.test(tab.url || "")) {
-      chrome.action.setBadgeBackgroundColor({ tabId, color: "#F59E0B" });
-      chrome.action.setBadgeText({ tabId, text: "\u25CF" });
-      chrome.action.setTitle({ tabId, title: "Debrief: click (or press Alt+Shift+M) to record this meeting" });
-    }
+    if (MEET_CALL.test(tab.url || "")) showCallOn(tabId);
   });
   chrome.tabs.onUpdated.addListener(async (tabId, info) => {
     if (!info.url) return;
@@ -951,6 +1027,8 @@
     await autoStop("You left the meeting page.");
   });
   chrome.tabs.onRemoved.addListener(async (tabId) => {
+    glowTabs.delete(tabId);
+    endGlowTimer();
     const st = await getState();
     if (st.recording && st.tabId === tabId) stop();
   });

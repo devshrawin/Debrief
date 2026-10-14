@@ -1337,6 +1337,40 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     }
   });
   var renderMd = (md) => k.parse(md || "");
+  function decorateMinutes(root) {
+    for (const t of root.querySelectorAll("table")) {
+      if (t.parentElement.classList.contains("tablewrap")) continue;
+      const w = document.createElement("div");
+      w.className = "tablewrap";
+      t.replaceWith(w);
+      w.append(t);
+    }
+    for (const td of root.querySelectorAll("td")) {
+      const v = td.textContent.trim();
+      if (/^(absent|yes)$/i.test(v)) {
+        const chip = document.createElement("span");
+        chip.className = `chip ${/^yes$/i.test(v) ? "ok" : "warn"}`;
+        chip.textContent = v;
+        td.replaceChildren(chip);
+      }
+    }
+    const head = [...root.querySelectorAll("h2")].find((h3) => /^added by the completeness check/i.test(h3.textContent.trim()));
+    if (head) {
+      const box = document.createElement("div");
+      box.className = "added";
+      head.before(box);
+      let n = head;
+      while (n && (n === head || !/^(H[12]|HR)$/.test(n.tagName))) {
+        const next = n.nextElementSibling;
+        box.append(n);
+        n = next;
+      }
+      const first2 = box.querySelector("p");
+      if (first2 && first2.children.length === 1 && first2.firstElementChild.tagName === "EM") first2.className = "note";
+    }
+    const last = root.lastElementChild;
+    if (last?.tagName === "P" && last.children.length === 1 && last.firstElementChild.tagName === "EM" && /^written (with|by)/i.test(last.textContent.trim())) last.className = "foot";
+  }
 
   // src/store.js
   var DEFAULTS = {
@@ -2030,22 +2064,138 @@ Rules:
     return e;
   };
   var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  var CSS = `
+.ask { padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chipbtn { font-size: 13px; font-weight: 600; min-height: 32px; padding: 3px 12px; border-radius: 999px; }
+.ask-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.ask-row input { flex: 1; min-width: 0; }
+.ask > .hint { margin-top: 8px; }
+.ask > .hint:empty { display: none; }
+.ask .hint.busy { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.ask .hint.busy::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--brand); border-right-color: transparent; animation: sp 0.8s linear infinite; flex: none; }
+.ask-log { margin-top: 10px; }
+.ask-log:empty { display: none; }
+.ask-turn { margin: 12px 0 0; }
+.ask-q { font-weight: 600; overflow-wrap: anywhere; }
+.ask-a { margin: 6px 0 0; padding: 10px 14px; border-left: 3px solid var(--brand); background: var(--sunk); border-radius: 0 10px 10px 0; font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+.ask-a p { margin: 4px 0; }
+.ask-a ul, .ask-a ol { margin: 4px 0; padding-left: 22px; }
+.ask-a li { margin: 4px 0; }
+.ask-a.live > :last-child::after { content: ""; display: inline-block; width: 8px; height: 18px; margin-left: 3px; background: var(--brand); vertical-align: text-bottom; animation: bl 1s steps(2) infinite; }
+@keyframes bl { 50% { opacity: 0; } }
+.ask-a .src, .ask-srcs .src { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; background: var(--tint); color: var(--tint-ink); font-size: 11.5px; font-weight: 800; text-decoration: none; vertical-align: 2px; margin-left: 2px; }
+.ask-a a.src:hover { background: var(--brand); color: var(--on-brand); }
+.ask-src { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.ask-srcs { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.ask-srcs li { display: flex; gap: 10px; align-items: baseline; min-height: 32px; flex-wrap: wrap; }
+.ask-srcs .src { margin: 0; vertical-align: baseline; }
+.ask-srcs a { font-weight: 600; overflow-wrap: anywhere; }
+.ask-a.nomatch { border: 1px solid var(--line); border-radius: 14px; background: var(--card); text-align: center; padding: 28px; }
+.ask-a.err { border: 1px solid var(--rec-line); border-radius: 14px; background: var(--rec-bg); color: var(--rec-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ask-a.err > div { flex: 1 1 260px; }
+.ask-a.err p { margin: 2px 0 0; }
+.ask-notice { margin-top: 10px; padding: 14px 16px; border-radius: 14px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ask-notice > div { flex: 1 1 260px; }
+.ask-notice p { margin: 2px 0 0; }
+.ask-lbl { margin: 14px 0 6px; }
+
+/* the big version on the all-meetings page */
+.ask.large { display: flex; flex-direction: column; gap: 16px; padding: 0; background: none; border: 0; box-shadow: none; }
+.ask.large > * { margin: 0; }
+.ask.large .ask-row { order: 1; padding: 8px 8px 8px 18px; gap: 10px; background: var(--card); border: 1px solid var(--brand); border-radius: 14px; box-shadow: 0 0 0 3px var(--tint); }
+.ask.large .ask-row input { border: 0; background: transparent; font-size: 17px; min-height: 44px; padding: 8px 0; box-shadow: none; }
+.ask.large .ask-row input:focus-visible { outline: none; }
+.ask.large .ask-row .primary { width: 44px; height: 44px; padding: 0; border-radius: 12px; flex: none; }
+.ask.large > .hint { order: 2; font-size: 14px; }
+.ask.large .ask-notice { order: 3; }
+.ask.large .ask-log { order: 4; }
+.ask.large .ask-lbl { order: 5; }
+.ask.large .ask-chips { order: 6; }
+.ask.large .ask-turn { margin: 0 0 16px; }
+.ask.large .ask-q { font-size: 13px; color: var(--muted); }
+.ask.large .ask-a { border-left: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 20px 26px; font-size: 15.5px; }
+.ask.large .ask-a.nomatch { padding: 28px; }
+.ask.large .ask-a.err { background: var(--rec-bg); border-color: var(--rec-line); }
+.ask-lbl.hidden, .ask.large .ask-chips.hidden { display: none; }
+`;
+  function injectStyle() {
+    if (document.getElementById("askui-style")) return;
+    const s = h2("style", null, CSS);
+    s.id = "askui-style";
+    document.head.append(s);
+  }
+  function linkCitations(root, sources, prefix) {
+    const index = /* @__PURE__ */ new Map();
+    for (const s of sources || []) if (!index.has(s.label)) index.set(s.label, index.size + 1);
+    if (!index.size) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      if (!node.nodeValue.includes("[")) continue;
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const m of text.matchAll(/\[([^\[\]]+)\]/g)) {
+        const n = index.get(m[1].trim());
+        if (!n) continue;
+        frag.append(text.slice(last, m.index));
+        const a = h2("a", "src", String(n));
+        a.href = `#${prefix}${n}`;
+        a.setAttribute("aria-label", `Source ${n}`);
+        frag.append(a);
+        last = m.index + m[0].length;
+      }
+      if (!last) continue;
+      frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  }
+  var turnNo = 0;
   function mountAsk(root, opts) {
+    injectStyle();
     const history = [...opts.history || []];
     root.classList.add("ask");
+    if (opts.large) root.classList.add("large");
     const log = h2("div", "ask-log");
+    log.setAttribute("aria-live", "polite");
+    const label2 = h2("p", "lbl ask-lbl", "Try asking");
     const chips = h2("div", "ask-chips");
     const row = h2("div", "ask-row");
     const input = h2("input");
     input.type = "text";
     input.placeholder = opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the Kerala mapping?"';
     input.setAttribute("aria-label", "Your question");
-    const go = h2("button", "primary", "Ask");
+    const go = h2("button", "primary");
+    if (opts.large) {
+      go.setAttribute("aria-label", "Ask");
+      go.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>';
+    } else go.textContent = "Ask";
     const stop = h2("button", "hidden", "Stop");
     const status = h2("span", "hint");
+    status.setAttribute("role", "status");
+    const notice = h2("div", "ask-notice hidden");
+    notice.setAttribute("role", "alert");
     row.append(input, go, stop);
-    root.append(chips, row, status, log);
+    if (opts.large) root.append(row, status, notice, log, label2, chips);
+    else root.append(chips, row, status, notice, log);
+    if (!opts.large) label2.remove();
     let abort = null;
+    const setBusy = (text) => {
+      status.textContent = text;
+      status.classList.toggle("busy", !!text);
+    };
+    const showNotice = (on) => {
+      notice.classList.toggle("hidden", !on);
+      if (!on) return;
+      notice.replaceChildren();
+      const d = h2("div");
+      d.append(h2("strong", null, "Choose a model for answers first"), h2("p", null, "Asking uses the same service as your minutes. None is set up yet."));
+      const b = h2("button", null, "Open Settings");
+      b.onclick = () => chrome.runtime?.openOptionsPage ? chrome.runtime.openOptionsPage() : window.open("options.html");
+      notice.append(d, b);
+    };
     const addTurn = (q2, a, sources) => {
       const turn = h2("div", "ask-turn");
       const qEl = h2("div", "ask-q", q2);
@@ -2056,23 +2206,39 @@ Rules:
       return { turn, aEl };
     };
     const fill = (aEl, answer, sources) => {
+      aEl.classList.remove("live", "err");
       aEl.innerHTML = renderMd(answer);
-      if (sources?.length) {
-        const seen = /* @__PURE__ */ new Set();
-        const src = h2("div", "ask-src");
-        src.append(h2("span", "hint", "Sources: "));
-        for (const s of sources) {
-          if (seen.has(s.label)) continue;
-          seen.add(s.label);
-          if (opts.openLink && s.meetingId) {
-            const a = h2("a", null, s.label);
-            a.href = `mom.html?id=${s.meetingId}`;
-            a.target = "_blank";
-            src.append(a, " \xB7 ");
-          } else src.append(h2("span", "hint", `${s.label} \xB7 `));
-        }
-        aEl.append(src);
+      const uniq = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const s of sources || []) {
+        if (seen.has(s.label)) continue;
+        seen.add(s.label);
+        uniq.push(s);
       }
+      if (!uniq.length) {
+        aEl.classList.toggle("nomatch", !(sources && sources.length) && /^(Nothing in these|There are no)/.test(answer));
+        return;
+      }
+      const prefix = `ask-s${++turnNo}-`;
+      linkCitations(aEl, uniq, prefix);
+      const src = h2("div", "ask-src");
+      src.append(h2("p", "lbl", "Sources"));
+      const list = h2("ol", "ask-srcs");
+      uniq.forEach((s, i) => {
+        const li = h2("li");
+        li.id = `${prefix}${i + 1}`;
+        li.append(h2("span", "src", String(i + 1)));
+        if (opts.openLink && s.meetingId) {
+          const a = h2("a", null, s.label);
+          a.href = `mom.html?id=${encodeURIComponent(s.meetingId)}`;
+          a.target = "_blank";
+          a.rel = "noopener";
+          li.append(a);
+        } else li.append(h2("span", "hint", s.label));
+        list.append(li);
+      });
+      src.append(list);
+      aEl.append(src);
     };
     history.slice(-6).reverse().forEach((e) => addTurn(e.q, e.a, e.sources));
     for (const s of opts.suggestions || SUGGESTIONS) {
@@ -2083,27 +2249,32 @@ Rules:
       };
       chips.append(b);
     }
-    async function ask() {
-      const question = input.value.trim();
+    async function ask(again) {
+      const question = (again || input.value).trim();
       if (!question || abort) return;
       const settings2 = await getSettings();
       if (!llmReady(settings2)) {
         status.textContent = "Set up a minutes writer (LLM) in Settings first.";
+        status.classList.remove("busy");
+        showNotice(true);
         return;
       }
+      showNotice(false);
+      if (opts.large) label2.classList.add("hidden"), chips.classList.add("hidden");
       input.value = "";
-      status.textContent = "Searching the meeting\u2026";
+      setBusy("Searching the meeting\u2026");
       abort = new AbortController();
       go.disabled = true;
       stop.classList.remove("hidden");
       stop.onclick = () => abort?.abort();
-      const { aEl } = addTurn(question, null);
+      const { turn, aEl } = addTurn(question, null);
+      aEl.classList.add("live");
       aEl.textContent = "\u2026";
       let buf = "";
       let queued = false;
       const paint = () => {
         queued = false;
-        aEl.textContent = buf;
+        if (abort) aEl.innerHTML = renderMd(buf);
       };
       const gen = async (system, user, onText) => {
         for (let i = 0; ; i++) {
@@ -2112,7 +2283,7 @@ Rules:
             }) });
           } catch (e) {
             if (i >= 2 || !isRetryable(e)) throw e;
-            status.textContent = `Busy (${e.message.slice(0, 60)}). Trying again\u2026`;
+            setBusy(`Busy (${e.message.slice(0, 60)}). Trying again\u2026`);
             await sleep([4e3, 12e3][i]);
           }
         }
@@ -2127,7 +2298,7 @@ Rules:
           gen,
           onText: (d) => {
             buf += d;
-            status.textContent = "Answering\u2026";
+            setBusy("Answering\u2026");
             if (!queued) {
               queued = true;
               requestAnimationFrame(paint);
@@ -2138,10 +2309,22 @@ Rules:
         const entry = { q: question, a: r.answer, sources: r.sources.slice(0, 8), at: Date.now() };
         history.push(entry);
         opts.onEntry?.(entry);
-        status.textContent = "";
+        setBusy("");
       } catch (e) {
-        aEl.textContent = abort.signal.aborted ? "Stopped." : `Could not answer: ${e.message}`;
-        status.textContent = "";
+        aEl.classList.remove("live");
+        if (abort.signal.aborted) aEl.textContent = "Stopped.";
+        else {
+          aEl.classList.add("err");
+          const d = h2("div");
+          d.append(h2("strong", null, "No answer this time"), h2("p", null, `Could not answer: ${e.message}`), h2("p", "hint", "Your question is kept."));
+          const retry = h2("button", null, "Try again");
+          retry.onclick = () => {
+            turn.remove();
+            ask(question);
+          };
+          aEl.replaceChildren(d, retry);
+        }
+        setBusy("");
       } finally {
         abort = null;
         go.disabled = false;
@@ -2149,11 +2332,60 @@ Rules:
         input.focus();
       }
     }
-    go.onclick = ask;
+    go.onclick = () => ask();
     input.onkeydown = (e) => {
-      if (e.key === "Enter") ask();
+      if (e.key === "Enter" && !e.isComposing) ask();
     };
     return { ask, history };
+  }
+
+  // src/modal.js
+  function modal({ title = "", text = "", input = null, select = null, buttons = [{ label: "OK", value: "ok", primary: true }] } = {}) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement("dialog");
+      dlg.className = "dbmodal";
+      const h3 = document.createElement("div");
+      h3.style.cssText = "white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)";
+      h3.textContent = [title, text].filter(Boolean).join("\n\n");
+      dlg.append(h3);
+      let inp = null;
+      let sel = null;
+      if (input) {
+        inp = Object.assign(document.createElement("input"), { value: input.value || "", placeholder: input.placeholder || "", maxLength: input.maxLength || 80 });
+        inp.style.marginTop = "12px";
+        dlg.append(inp);
+      }
+      if (select) {
+        sel = document.createElement("select");
+        sel.style.marginTop = "12px";
+        for (const o of select) sel.append(Object.assign(document.createElement("option"), { value: o.value, textContent: o.label }));
+        dlg.append(sel);
+      }
+      const row = document.createElement("div");
+      row.className = "dbbtns";
+      row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px";
+      const done = (value) => {
+        const out = value == null ? null : { value, input: inp?.value ?? "", select: sel?.value ?? "" };
+        dlg.close();
+        dlg.remove();
+        resolve(out);
+      };
+      for (const b of buttons) {
+        const el = Object.assign(document.createElement("button"), { className: `btn${b.primary ? " primary" : ""}${b.danger ? " danger" : ""}`, textContent: b.label });
+        el.dataset.value = b.value;
+        el.onclick = () => done(b.value);
+        row.append(el);
+      }
+      dlg.append(row);
+      dlg.addEventListener("cancel", (e) => {
+        e.preventDefault();
+        done(null);
+      });
+      if (inp) inp.addEventListener("keydown", (e) => e.key === "Enter" && done(buttons.find((b) => b.primary)?.value ?? buttons.at(-1).value));
+      document.body.append(dlg);
+      dlg.showModal();
+      (inp || row.querySelector(".primary") || row.lastChild)?.focus();
+    });
   }
 
   // src/prompt.js
@@ -3126,6 +3358,7 @@ ${meeting2.mom || ""}
   var meeting = null;
   var settings = null;
   var abortCtl = null;
+  var genFail = "";
   var attendeeList = () => (meeting?.attendees || []).filter(Boolean);
   var labelCache = { key: "", lines: null };
   function labeledLines() {
@@ -3142,20 +3375,49 @@ ${meeting2.mom || ""}
   var parseAttendees = (text) => text.split(/[\n,]+/).map((x2) => x2.trim()).filter(Boolean);
   function renderMom() {
     $2("mom").innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
+    if (meeting.mom) decorateMinutes($2("mom"));
+    $2("mom").classList.remove("streaming");
+    syncState();
+  }
+  function syncState() {
+    const busy = !!abortCtl;
+    const empty = !meeting.mom && !busy && !genFail;
+    $2("failBox").classList.toggle("hidden", !genFail || busy);
+    $2("failText").textContent = genFail ? `${genFail} Your transcript is safe.` : "";
+    $2("emptyBox").classList.toggle("hidden", !empty);
+    $2("mom").hidden = !meeting.mom && !busy;
+    $2("emptyText").textContent = !meeting.segments.length ? "No speech was transcribed, so there is nothing to summarise yet." : !meeting.endedAt ? "This meeting is still being recorded. The minutes are written when it ends." : "The transcript is ready. Generate the minutes when you are.";
+  }
+  function showSkeleton() {
+    $2("mom").innerHTML = '<div class="skel" aria-hidden="true"><div class="busy"><span class="spin"></span>Writing the minutes\u2026</div><div class="sk h"></div><div class="sk" style="width:96%"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:92%"></div><div class="sk h"></div><div class="sk" style="width:70%"></div><div class="sk" style="width:82%"></div></div>';
+    $2("mom").hidden = false;
   }
   function renderMeta() {
     const start = new Date(meeting.startedAt);
     const dur = meeting.endedAt ? `${Math.max(1, Math.round((meeting.endedAt - meeting.startedAt) / 6e4))} min` : "in progress";
-    $2("meta").textContent = `${start.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} \xB7 ${dur} \xB7 STT: ${meeting.stt}`;
+    const bits = [start.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }), dur];
+    if (attendeeList().length) bits.push(attendeeList().join(", "));
+    $2("meta").replaceChildren(...bits.map((b, i) => Object.assign(document.createElement("span"), { textContent: b, className: i === 2 ? "who-list" : "" })));
+    renderChips();
     $2("title").value = meeting.title;
     document.title = `${meeting.title} \xB7 Debrief`;
+  }
+  function renderChips() {
+    const chip = (text, cls = "") => Object.assign(document.createElement("span"), { className: `chip ${cls}`.trim(), textContent: text });
+    const list = [];
+    if (meeting.emailedAt) list.push(chip(`Emailed ${new Date(meeting.emailedAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}`, "brand"));
+    if (meeting.mom && meeting.model) list.push(chip(meeting.model));
+    if (meeting.stt) list.push(chip(`STT: ${meeting.stt}`));
+    if (meeting.mom && meeting.extract) list.push(chip("Checked for completeness", "ok"));
+    $2("chips").replaceChildren(...list);
   }
   function renderTranscript() {
     const ctx = nameCtx();
     const rows = ctx.labeled ? ctx.labeled.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? settings.myName || "Me" : "Others", text: s.text, flag: "" }));
     $2("trInfo").textContent = `${rows.length} ${ctx.labeled ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
+    $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {
-      $2("transcript").innerHTML = '<p class="muted">No speech was transcribed.</p>';
+      $2("transcript").innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
       return;
     }
     $2("transcript").replaceChildren(
@@ -3165,7 +3427,7 @@ ${meeting2.mom || ""}
         row.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
         row.children[0].textContent = fmtTime(r.t);
         row.children[1].textContent = r.who;
-        row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ""}`;
+        row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ctx.labeled ? " named" : ""}`;
         row.children[2].textContent = r.src === "me" && !ctx.labeled ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
         return row;
       })
@@ -3195,15 +3457,21 @@ ${meeting2.mom || ""}
     }
     setEditing(false);
     abortCtl = new AbortController();
+    genFail = "";
     $2("gen").disabled = true;
     $2("reread").disabled = true;
     $2("abort").classList.remove("hidden");
+    $2("genStatus").classList.add("busy");
     $2("genStatus").textContent = `Writing with ${modelLabel(settings)}\u2026`;
+    showSkeleton();
+    syncState();
     let buf = "";
     let queued = false;
     const paint = () => {
       queued = false;
       $2("mom").innerHTML = renderMd(buf);
+      decorateMinutes($2("mom"));
+      $2("mom").classList.add("streaming");
     };
     const gen = async (system, user, onText, opts = {}) => {
       for (let i = 0; ; i++) {
@@ -3245,13 +3513,18 @@ ${meeting2.mom || ""}
       });
       await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...extract ? { extract } : {} });
       renderMom();
+      renderChips();
       $2("genStatus").textContent = `Done \xB7 ${meeting.model}${stats.calls > 1 ? ` \xB7 ${stats.items} items ${stats.reused ? "reused from the earlier read of this transcript (press Re-read transcript for a fresh read)" : "found"}, ${stats.missed} added by the check` : ""}`;
       if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
     } catch (e) {
+      genFail = abortCtl.signal.aborted ? "" : e.message;
       $2("genStatus").textContent = abortCtl.signal.aborted ? "Stopped." : `Failed: ${e.message}`;
+      abortCtl = null;
       renderMom();
     } finally {
       abortCtl = null;
+      syncState();
+      $2("genStatus").classList.remove("busy");
       $2("gen").disabled = false;
       $2("reread").disabled = false;
       $2("reread").classList.toggle("hidden", !meeting.extract);
@@ -3284,6 +3557,7 @@ ${meeting2.mom || ""}
         const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
         const r = await sendMail(mail, settings);
         await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
+        renderChips();
         $2("mailStatus").textContent = `Emailed to ${r.to} \u2713`;
         $2("mail").textContent = "Email again";
         chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: "basic", iconUrl: "icons/icon128.png", title: "Debrief: minutes emailed", message: "The minutes were sent." });
@@ -3463,7 +3737,8 @@ ${meeting2.mom || ""}
   };
   $2("dlTxt").onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, "text/plain", formatTranscript(meeting, settings.myName, nameCtx()));
   $2("del").onclick = async () => {
-    if (!confirm("Delete this meeting, its transcript and MOM? This cannot be undone.")) return;
+    const ok = await modal({ title: "Delete this meeting?", text: "Its transcript and minutes are removed from this computer. This cannot be undone.", buttons: [{ label: "Cancel", value: "no" }, { label: "Delete meeting", value: "yes", danger: true }] });
+    if (ok?.value !== "yes") return;
     await deleteMeeting(id);
     await deleteAllPending(id);
     window.close();
@@ -3482,8 +3757,8 @@ ${meeting2.mom || ""}
       Object.assign(document.createElement("span"), { className: "hint", textContent: "Possible misheard names: " }),
       ...list.map((x2) => {
         const b = document.createElement("button");
+        b.className = "chip";
         b.textContent = `${x2.found} \u2192 ${x2.suggest} (${x2.count}\xD7)`;
-        b.style.margin = "0 6px 4px 0";
         b.onclick = () => fixName(x2.found, x2.suggest, true);
         return b;
       })
@@ -3525,16 +3800,32 @@ ${meeting2.mom || ""}
   $2("fixApply").onclick = () => fixName($2("fixWrong").value, $2("fixRight").value, $2("fixRemember").checked);
   $2("attendees").onchange = async () => {
     await patchMeeting({ attendees: parseAttendees($2("attendees").value) });
+    renderMeta();
     renderTranscript();
     renderSuggestions();
     learn().catch(() => {
     });
   };
-  document.querySelectorAll(".tabs button").forEach((b) => {
-    b.onclick = () => {
-      document.querySelectorAll(".tabs button").forEach((x2) => x2.classList.toggle("active", x2 === b));
-      $2("momTab").classList.toggle("hidden", b.dataset.tab !== "momTab");
-      $2("trTab").classList.toggle("hidden", b.dataset.tab !== "trTab");
+  $2("genEmpty").onclick = () => runGenerate();
+  $2("failRetry").onclick = () => runGenerate();
+  var tabBtns = [...document.querySelectorAll(".tabs button")];
+  var showTab = (b, focus) => {
+    tabBtns.forEach((x2) => {
+      x2.classList.toggle("active", x2 === b);
+      x2.setAttribute("aria-selected", String(x2 === b));
+      x2.tabIndex = x2 === b ? 0 : -1;
+    });
+    $2("momTab").classList.toggle("hidden", b.dataset.tab !== "momTab");
+    $2("trTab").classList.toggle("hidden", b.dataset.tab !== "trTab");
+    if (focus) b.focus();
+  };
+  tabBtns.forEach((b, i) => {
+    b.onclick = () => showTab(b);
+    b.onkeydown = (e) => {
+      const to = { ArrowRight: (i + 1) % tabBtns.length, ArrowLeft: (i + tabBtns.length - 1) % tabBtns.length, Home: 0, End: tabBtns.length - 1 }[e.key];
+      if (to == null) return;
+      e.preventDefault();
+      showTab(tabBtns[to], true);
     };
   });
   (async () => {
