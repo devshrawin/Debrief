@@ -1,6 +1,11 @@
 (() => {
   // src/iconText.js
   var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+  var MENU = /^(?:(?:un)?pin|spotlight|remove|mute|unmute|reframe|zoom (?:in|out)|minimi[sz]e|maximi[sz]e|full screen|more actions|add (?:a )?(?:person|people)|keep|send a message)\b.*$/i;
+  var isMenuText = (s) => {
+    const t = String(s || "").trim();
+    return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
+  };
 
   // src/voice/match.js
   var THRESHOLDS = {
@@ -697,7 +702,7 @@
         const who = (n) => /^you$/i.test(n) && me ? me : n;
         await updateMeeting(st.meetingId, (m) => {
           const pres = m.presence ||= {};
-          for (const n of (msg.names || []).filter((x) => !isIconText(x))) {
+          for (const n of (msg.names || []).filter((x) => !isIconText(x) && !isMenuText(x))) {
             const k = who(n);
             const p = pres[k];
             if (p) {

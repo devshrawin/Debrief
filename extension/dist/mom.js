@@ -16469,8 +16469,13 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
 
   // src/iconText.js
   var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+  var MENU = /^(?:(?:un)?pin|spotlight|remove|mute|unmute|reframe|zoom (?:in|out)|minimi[sz]e|maximi[sz]e|full screen|more actions|add (?:a )?(?:person|people)|keep|send a message)\b.*$/i;
+  var isMenuText = (s) => {
+    const t = String(s || "").trim();
+    return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
+  };
   function cleanPresence(presence) {
-    return Object.fromEntries(Object.entries(presence || {}).filter(([n]) => !isIconText(n)));
+    return Object.fromEntries(Object.entries(presence || {}).filter(([n]) => !isIconText(n) && !isMenuText(n)));
   }
 
   // src/attendance.js
