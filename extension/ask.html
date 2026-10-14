@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,35 +7,34 @@
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
   <style>
-    main { max-width: 820px; margin: 0 auto; padding: 28px 18px 80px; }
-    h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -.02em; }
-    .lede { color: var(--muted); margin: 0 0 18px; }
-    .scope { display: flex; gap: 10px; align-items: center; margin: 0 0 12px; }
+    main { max-width: 820px; margin: 0 auto; padding: 48px 16px 64px; display: flex; flex-direction: column; gap: 20px; }
+    .crumb { display: flex; align-items: center; gap: 10px; }
+    .crumb img { width: 26px; height: 26px; border-radius: 7px; }
+    .crumb b { font-weight: 700; }
+    h1 { margin: 0; font-size: 34px; line-height: 1.2; letter-spacing: -0.02em; }
+    .lede { margin: 6px 0 0; font-size: 16px; color: var(--muted); }
+    .scope { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .scope label { margin: 0; }
     .scope select { width: auto; }
-    .ask { padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
-    .ask-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
-    .ask-row input { flex: 1; }
-    .ask-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .chipbtn { font-size: 12.5px; padding: 5px 11px; border-radius: 999px; }
-    .ask-log { margin-top: 14px; }
-    .ask-turn { margin: 14px 0; }
-    .ask-q { font-weight: 650; }
-    .ask-a { margin: 6px 0 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 0 10px 10px 0; }
-    .ask-a p { margin: 5px 0; }
-    .ask-src { margin-top: 8px; font-size: 12.5px; }
-    .note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+    .scope .hint { margin: 0; }
+    .privacy { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 0; }
+    .privacy svg { flex: none; margin-top: 3px; }
+    @media (max-width: 600px) { main { padding: 24px 16px 48px; } h1 { font-size: 26px; } }
   </style>
 </head>
 <body>
 <main>
-  <h1 class="brand"><img src="icons/icon48.png" alt=""><span>Ask your meetings</span></h1>
-  <p class="lede">Ask a question and Debrief searches your minutes and transcripts and answers with the source of every point.</p>
-  <div class="scope"><label for="scope" style="margin:0">Look in</label>
-    <select id="scope"><option value="all">All meetings</option><option value="7">The last 7 days</option><option value="30">The last 30 days</option></select>
-    <span class="hint" id="count"></span>
+  <div class="crumb"><img src="icons/icon48.png" alt=""><b>Debrief</b></div>
+  <div>
+    <h1>Ask your meetings</h1>
+    <p class="lede">Ask anything that was said. Every point in the answer links to the meeting and the moment it came from.</p>
+  </div>
+  <div class="scope"><label for="scope">Search</label>
+    <select id="scope"><option value="all">All meetings</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+    <span class="hint" id="count" role="status"></span>
   </div>
   <div id="askBox"></div>
-  <p class="note">Only the best-matching excerpts are sent to the model you chose for the minutes, the same service that writes them. Answers can be wrong: check the sources.</p>
+  <p class="hint privacy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><span>Searching happens on this computer. Only the passages that match, about 2 to 6 short pieces, are sent with your question to <strong id="modelName">the model you chose for the minutes</strong>, your minutes service. No audio is sent. Answers can be wrong: check the sources.</span></p>
 </main>
 <script src="dist/askpage.js"></script>
 </body>
