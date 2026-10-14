@@ -233,3 +233,19 @@ export function clusterVoices(segs, { threshold = 0.55 } = {}) {
     .map((c) => ({ members: c.members.sort((a, b) => a - b), seconds: c.members.reduce((a, i) => a + (segs[i].t1 - segs[i].t0), 0), centroid: pack(mean(c.members.map((i) => vecs[i]))) }))
     .sort((a, b) => b.seconds - a.seconds);
 }
+
+// People heard speaking, as { name: [firstSeenSec, lastSeenSec, count] }: the same shape as the participant
+// list, so attendance can treat "heard in the meeting" as evidence of presence.
+export function voicePresence(lines) {
+  const out = {};
+  for (const l of lines || []) {
+    if (!l.name || l.src === 'me' || l.source === 'mic') continue;
+    const end = l.t + Math.max(3, Math.min(30, l.text.length / 14));
+    const p = out[l.name];
+    if (p) {
+      p[1] = Math.max(p[1], end);
+      p[2]++;
+    } else out[l.name] = [l.t, end, 1];
+  }
+  return out;
+}
