@@ -303,6 +303,18 @@ try {
     document.getElementById('enrolRec').click();
     await new Promise((r) => setTimeout(r, 300));
     out.needName = /name first/i.test(document.getElementById('enrolMsg').textContent);
+    // deleting a learned voice works, with and without "never learn again"
+    const real0 = 'A'.repeat(342) + '==';
+    await chrome.storage.local.set({ voices: [...(await chrome.storage.local.get('voices')).voices, { id: 'au1', name: 'Unnamed voice 1', auto: true, ready: false, centroid: real0, windows: [real0], secs: 20, meetings: 1, created: Date.now() }] });
+    await new Promise((r) => setTimeout(r, 400));
+    const press = async (label) => { await new Promise((r) => setTimeout(r, 150)); const b = [...document.querySelectorAll('dialog.dbmodal button')].find((x) => x.textContent === label); if (!b) throw new Error('no dialog button ' + label); b.click(); await new Promise((r) => setTimeout(r, 400)); };
+    const row = [...document.querySelectorAll('#voiceList .voice-row')].find((r) => /Unnamed voice 1/.test(r.textContent));
+    out.autoRow = !!row;
+    [...row.querySelectorAll('button')].find((b) => b.textContent === 'Delete').click();
+    await press('Delete and never learn it again');
+    const st = await chrome.storage.local.get(['voices', 'voiceBlock']);
+    out.autoDeleted = !st.voices.some((v) => v.id === 'au1') && (st.voiceBlock || []).length === 1;
+    await chrome.storage.local.remove('voiceBlock');
     // importing a shared file adds the person; a broken file is refused with a reason
     const real = 'A'.repeat(342) + '==';
     const good = JSON.stringify({ format: 'debrief-voices', version: 1, model: 'wespeaker-resnet34-lm', people: [{ name: 'Imported One', lang: 'hi', centroid: real, windows: [real] }] });
@@ -312,9 +324,8 @@ try {
     out.imported = (await chrome.storage.local.get('voices')).voices.some((p) => p.name === 'Imported One') && /Imported 1 new/.test(document.getElementById('voiceShareMsg').textContent);
     await feed('not json');
     out.refused = /not a Debrief voices file/.test(document.getElementById('voiceShareMsg').textContent);
-    window.confirm = () => true;
     document.getElementById('voiceForget').click();
-    await new Promise((r) => setTimeout(r, 600));
+    await press('Forget all voices');
     const after = await chrome.storage.local.get(['voices', 'meeting:vtest']);
     out.forgot = after.voices === undefined && after['meeting:vtest'].voiceSegs === undefined;
     out.listEmpty = document.querySelectorAll('#voiceList .voice-row').length === 0;
@@ -322,7 +333,7 @@ try {
     await chrome.storage.local.set({ meetingIds: [] });
     return out;
   })()`);
-  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.imported && vui.refused && vui.forgot && vui.listEmpty, JSON.stringify(vui));
+  check('voices page: list, enrolment prompts in both languages, privacy text, name required, forget-all wipes voices and meeting fingerprints', vui.page && vui.rows.length === 2 && /Amal Raj/.test(vui.rows[0]) && /Malayalam/.test(vui.rows[1]) && vui.toggle && vui.privacy && vui.promptEn && vui.promptMl && vui.emptyHidden && vui.needName && vui.autoRow && vui.autoDeleted && vui.imported && vui.refused && vui.forgot && vui.listEmpty, JSON.stringify(vui));
 
   const popupWarn = await popup.evaluate(`(async () => { await new Promise((r) => setTimeout(r, 300)); location.reload(); })()`);
   await sleep(1500);

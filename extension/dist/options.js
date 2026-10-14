@@ -1278,7 +1278,59 @@ function out(o) {
     return new Blob([buf], { type: "audio/wav" });
   }
 
+  // src/modal.js
+  function modal({ title = "", text = "", input = null, select = null, buttons = [{ label: "OK", value: "ok", primary: true }] } = {}) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement("dialog");
+      dlg.className = "dbmodal";
+      dlg.style.cssText = "border:1px solid var(--border,#d0d4da);border-radius:14px;padding:20px 22px;max-width:460px;width:calc(100% - 40px);background:var(--card,#fff);color:var(--text,inherit);box-shadow:0 12px 40px rgba(0,0,0,.25)";
+      const h = document.createElement("div");
+      h.style.cssText = "white-space:pre-wrap;line-height:1.55;font-size:14px";
+      h.textContent = [title, text].filter(Boolean).join("\n\n");
+      dlg.append(h);
+      let inp = null;
+      let sel = null;
+      if (input) {
+        inp = Object.assign(document.createElement("input"), { value: input.value || "", placeholder: input.placeholder || "", maxLength: input.maxLength || 80 });
+        inp.style.cssText = "display:block;width:100%;margin-top:12px;padding:9px 11px;border-radius:9px;border:1px solid var(--border,#d0d4da);box-sizing:border-box";
+        dlg.append(inp);
+      }
+      if (select) {
+        sel = document.createElement("select");
+        sel.style.cssText = "display:block;width:100%;margin-top:12px;padding:9px 11px;border-radius:9px;border:1px solid var(--border,#d0d4da);box-sizing:border-box";
+        for (const o of select) sel.append(Object.assign(document.createElement("option"), { value: o.value, textContent: o.label }));
+        dlg.append(sel);
+      }
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px";
+      const done = (value) => {
+        const out = value == null ? null : { value, input: inp?.value ?? "", select: sel?.value ?? "" };
+        dlg.close();
+        dlg.remove();
+        resolve(out);
+      };
+      for (const b of buttons) {
+        const el = Object.assign(document.createElement("button"), { className: `btn${b.primary ? " primary" : ""}`, textContent: b.label });
+        el.dataset.value = b.value;
+        if (b.danger) el.style.color = "#b91c1c";
+        el.onclick = () => done(b.value);
+        row.append(el);
+      }
+      dlg.append(row);
+      dlg.addEventListener("cancel", (e) => {
+        e.preventDefault();
+        done(null);
+      });
+      if (inp) inp.addEventListener("keydown", (e) => e.key === "Enter" && done(buttons.find((b) => b.primary)?.value ?? buttons.at(-1).value));
+      document.body.append(dlg);
+      dlg.showModal();
+      (inp || row.querySelector(".primary") || row.lastChild)?.focus();
+    });
+  }
+
   // src/voices-ui.js
+  var OKBTN = [{ label: "OK", value: "ok", primary: true }];
+  var tell = (text) => modal({ text, buttons: OKBTN });
   var $ = (id) => document.getElementById(id);
   var MAX_SEC2 = 40;
   var people = [];
@@ -1372,7 +1424,7 @@ function out(o) {
             renderList();
             renderUnnamed();
           } catch (e) {
-            alert(e.message);
+            tell(e.message);
           }
         };
         row.append(label, input, save3);
@@ -1381,46 +1433,46 @@ function out(o) {
     );
   }
   async function rename(p) {
-    const name = prompt("New name", p.name);
-    if (name == null) return;
+    const r = await modal({ text: `New name for ${p.name}`, input: { value: isAnon(p) ? "" : p.name, placeholder: "Their name", maxLength: 60 }, buttons: [{ label: "Cancel", value: "no" }, { label: "Rename", value: "ok", primary: true }] });
+    if (!r || r.value !== "ok") return;
     try {
-      const clean = name.trim().replace(/\s+/g, " ").slice(0, 60);
+      const clean = r.input.trim().replace(/\s+/g, " ").slice(0, 60);
       if (!clean) throw new Error("A name cannot be empty.");
       if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
       people = people.map((x) => x.id === p.id ? { ...x, name: clean } : x);
       await saveVoices(people);
       renderList();
     } catch (e) {
-      alert(e.message);
+      tell(e.message);
     }
   }
   async function remove(p) {
-    if (!confirm(`Delete the voice of ${p.name}? Their fingerprint is removed from this browser.`)) return;
-    if (p.auto && confirm(`${p.name} was learned from your meetings and would be learned again.
-
-OK = also never learn this voice again.
-Cancel = just delete it for now.`)) {
-      await saveBlockedVoices([...await getBlockedVoices(), blockEntry(p)]);
-      renderBlocked();
-    }
-    people = people.filter((x) => x.id !== p.id);
-    await saveVoices(people);
-    renderList();
-  }
-  async function mergeInto(p) {
-    const others = people.filter((x) => x.id !== p.id);
-    const pick = prompt(`Merge ${p.name} into which voice? Type the number:
-
-${others.map((x, i) => `${i + 1}. ${x.name}`).join("\n")}`);
-    const target = others[Number(pick) - 1];
-    if (!target) return;
-    if (!confirm(`Merge ${p.name} into ${target.name}? The result is called ${target.name}.`)) return;
+    const buttons = [{ label: "Cancel", value: "no" }, { label: "Delete", value: "del", danger: true }];
+    if (p.auto) buttons.push({ label: "Delete and never learn it again", value: "block", danger: true });
+    const r = await modal({ text: `Delete the voice of ${p.name}? Their fingerprint is removed from this browser.${p.auto ? '\n\nThis voice was learned from your meetings, so Debrief may learn it again after another meeting unless you choose "never learn it again".' : ""}`, buttons });
+    if (!r || r.value === "no") return;
     try {
-      people = mergePeople(people, p.id, target.id);
+      if (r.value === "block") {
+        await saveBlockedVoices([...await getBlockedVoices(), blockEntry(p)]);
+        renderBlocked();
+      }
+      people = people.filter((x) => x.id !== p.id);
       await saveVoices(people);
       renderList();
     } catch (e) {
-      alert(e.message);
+      tell(`Could not delete: ${e.message}`);
+    }
+  }
+  async function mergeInto(p) {
+    const others = people.filter((x) => x.id !== p.id);
+    const r = await modal({ text: `Merge ${p.name} into which voice? The result keeps that voice's name.`, select: others.map((x) => ({ value: x.id, label: x.name })), buttons: [{ label: "Cancel", value: "no" }, { label: "Merge", value: "ok", primary: true }] });
+    if (!r || r.value !== "ok") return;
+    try {
+      people = mergePeople(people, p.id, r.select);
+      await saveVoices(people);
+      renderList();
+    } catch (e) {
+      tell(e.message);
     }
   }
   async function renderBlocked() {
@@ -1577,9 +1629,8 @@ ${others.map((x, i) => `${i + 1}. ${x.name}`).join("\n")}`);
         return;
       }
       const clash = incoming.filter((p) => people.some((x) => x.name.toLowerCase() === p.name.toLowerCase())).map((p) => p.name);
-      const replace = clash.length > 0 && confirm(`${clash.join(", ")} already enrolled here. Replace with the imported voice?
-
-OK = replace, Cancel = keep what you have.`);
+      const ans = clash.length ? await modal({ text: `${clash.join(", ")} ${clash.length === 1 ? "is" : "are"} already enrolled here. Replace with the imported voice?`, buttons: [{ label: "Keep mine", value: "keep" }, { label: "Replace", value: "replace", primary: true }] }) : null;
+      const replace = ans?.value === "replace";
       const r = mergeImport(people, incoming, { replace });
       people = r.list;
       await saveVoices(people);
@@ -1638,7 +1689,8 @@ OK = replace, Cancel = keep what you have.`);
       renderBlocked();
     };
     $("voiceForget").onclick = async () => {
-      if (!confirm("Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.")) return;
+      const ok = await modal({ text: "Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.", buttons: [{ label: "Cancel", value: "no" }, { label: "Forget all voices", value: "yes", danger: true }] });
+      if (ok?.value !== "yes") return;
       const n = await forgetAllVoices();
       people = [];
       renderList();
