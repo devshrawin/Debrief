@@ -16552,7 +16552,7 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
   }
   var mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
   var RSVP = { yes: "Accepted", no: "Declined", maybe: "Maybe", invited: "No reply", owner: "Organiser" };
-  function attendanceMarkdown({ invited, presence: presenceIn, durationSec, entries, myName }) {
+  function attendanceMarkdown({ invited, presence: presenceIn, durationSec, entries, myName, whyNoInvite = "" }) {
     const presence = cleanPresence(presenceIn);
     const hasInvited = (invited || []).length > 0;
     const hasPresence = Object.keys(presence || {}).length > 0;
@@ -16579,12 +16579,12 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
       const absent = rows.filter((r) => !r.present).map((r) => r.name);
       if (absent.length) lines.push("", `Not seen in the meeting: ${absent.join(", ")}. Action items for them need to be passed on.`);
     } else if (hasPresence) {
-      lines.push("People seen in the meeting (no calendar invite was available to compare):", "", "| Person | Joined | Left | Note |", "|---|---|---|---|");
+      lines.push(`People seen in the meeting. Nobody can be listed as absent because ${whyNoInvite || "no calendar invite was found to compare with"}.`, "", "| Person | Joined | Left | Note |", "|---|---|---|---|");
       for (const [name, v] of Object.entries(presence)) lines.push(`| ${/^you$/i.test(name) && myName ? myName : name} | ${mmss(v[0])} | ${mmss(v[1])} | ${when2({ first: v[0], last: v[1] })} |`);
     } else {
       lines.push("Invited:", "", ...rows.map((r) => `- ${r.name} (${RSVP[r.status] || r.status || "invited"})`), "", "_Who actually attended could not be read from the meeting page._");
     }
-    lines.push("", "_Attendance is read from the meeting page and may miss people whose video tile was not on screen._");
+    lines.push("", hasInvited && hasPresence ? '_"Absent" means not seen: attendance is read from the call page (video tiles), and from speech and captions when those are on, so someone who joined without being on screen may be listed as absent. Check before acting._' : "_Who was in the call is read from the call page and may miss people whose video tile was not on screen._");
     return lines.join("\n");
   }
 
@@ -16646,6 +16646,13 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
 
   // src/minutes.js
   var wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
+  function noInviteReason(meeting2, settings2) {
+    if (settings2.calendarLookup === false) return "looking up who was invited is switched off in Settings";
+    if (meeting2.invitedError) return `the calendar lookup failed (${String(meeting2.invitedError).slice(0, 120)})`;
+    if (meeting2.invitedNotFound) return "no calendar event with this meeting's Meet link or title was found";
+    if (!meeting2.invitedChecked) return "the calendar lookup has not run (email relay not set up, or the meeting has not ended)";
+    return "no calendar invite was found to compare with";
+  }
   function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
     if (pendingCount > 0) {
       return `**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? "s" : ""}) could not be transcribed, so some points may be missing from these minutes.`;
@@ -16705,7 +16712,7 @@ ${missing.map((m) => `- ${m}`).join("\n")}`;
       }
     }
     const durationSec = meeting2.endedAt ? (meeting2.endedAt - meeting2.startedAt) / 1e3 : 0;
-    const attendance = attendanceMarkdown({ invited: meeting2.invited, presence: { ...ctx.voicePresence || {}, ...meeting2.presence || {} }, durationSec, entries: ctx.entries, myName: settings2.myName });
+    const attendance = attendanceMarkdown({ invited: meeting2.invited, presence: { ...ctx.voicePresence || {}, ...meeting2.presence || {} }, durationSec, entries: ctx.entries, myName: settings2.myName, whyNoInvite: noInviteReason(meeting2, settings2) });
     const cov = coverageMarkdown(coverage);
     const foot = [];
     if (attendance) foot.push(attendance);
@@ -17220,7 +17227,7 @@ ${meeting2.mom || ""}
   async function lookupInvitees(meeting2, settings2) {
     const code = (meeting2.url || "").match(/[a-z]{3}-[a-z]{4}-[a-z]{3}/)?.[0] || "";
     const j2 = await callRelay({ action: "invitees", code, title: meeting2.title, start: meeting2.startedAt, end: meeting2.endedAt || Date.now() }, settings2);
-    return j2.found ? j2.guests : null;
+    return j2.found ? Object.assign([...j2.guests || []], { how: j2.how || "", event: j2.event || "" }) : null;
   }
 
   // src/mom.js
@@ -17459,7 +17466,7 @@ ${meeting2.mom || ""}
     if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
     try {
       const guests = await lookupInvitees(meeting, settings);
-      await patchMeeting({ ...guests ? { invited: guests } : {}, invitedChecked: true });
+      await patchMeeting({ ...guests ? { invited: [...guests], invitedHow: guests.how, invitedEvent: guests.event, invitedError: null } : { invitedNotFound: true }, invitedChecked: true });
     } catch (e) {
       await patchMeeting({ invitedError: e.message });
     }

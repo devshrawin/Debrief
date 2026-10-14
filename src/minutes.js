@@ -20,6 +20,15 @@ import { languagesOf, joinNames } from './languages.js';
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
+// Why the table cannot list invitees and absentees, in words for the minutes.
+export function noInviteReason(meeting, settings) {
+  if (settings.calendarLookup === false) return 'looking up who was invited is switched off in Settings';
+  if (meeting.invitedError) return `the calendar lookup failed (${String(meeting.invitedError).slice(0, 120)})`;
+  if (meeting.invitedNotFound) return 'no calendar event with this meeting\'s Meet link or title was found';
+  if (!meeting.invitedChecked) return 'the calendar lookup has not run (email relay not set up, or the meeting has not ended)';
+  return 'no calendar invite was found to compare with';
+}
+
 export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
   if (pendingCount > 0) {
     return `**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? 's' : ''}) could not be transcribed, so some points may be missing from these minutes.`;
@@ -79,7 +88,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   }
 
   const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
-  const attendance = attendanceMarkdown({ invited: meeting.invited, presence: { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, durationSec, entries: ctx.entries, myName: settings.myName });
+  const attendance = attendanceMarkdown({ invited: meeting.invited, presence: { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, durationSec, entries: ctx.entries, myName: settings.myName, whyNoInvite: noInviteReason(meeting, settings) });
   const cov = coverageMarkdown(coverage);
   const foot = [];
   if (attendance) foot.push(attendance);

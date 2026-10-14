@@ -112,6 +112,8 @@ Debrief can read each meeting's invite from your Google Calendar through the sam
 
 The minutes then include an attendance table, and the attendee list on the minutes page is filled in for you.
 
+The table lists every invitee with their reply, whether they were seen in the call (**Yes** or **Absent**), when they joined and left, plus anyone seen who was not invited. Debrief finds the calendar event by its Meet link, then by its exact title, then by a similar title (Meet links added with "Add Google Meet" are often not stored in the event text). The script must be **version 7 or newer**: copy the script again from Settings → Email and deploy a **new version** (Deploy → Manage deployments → pencil → New version). If no event can be found, the minutes say why instead of guessing. "Absent" means not seen: attendance is read from the video tiles on the call page, plus speech and captions when those are on, so someone who joined without being on screen can be shown as absent.
+
 ### Who is speaking: voice recognition (optional)
 Names the speakers in the transcript and minutes by their voice. It is a best guess, off by default, and everything happens in your browser.
 1. Open **Settings → Voices** and click **Allow microphone** on the General page if Chrome has not asked yet.

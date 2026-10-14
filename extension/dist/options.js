@@ -14766,7 +14766,7 @@ const ALLOWED = []; // people you want to be able to share minutes with, e.g. ['
 const ALLOWED_DOMAINS = []; // or everyone at a company, e.g. ['company.com']
 
 function doGet() {
-  return out({ ok: true, message: 'Debrief mail relay is live.', version: 6, locked: !!PropertiesService.getScriptProperties().getProperty('secret') });
+  return out({ ok: true, message: 'Debrief mail relay is live.', version: 7, locked: !!PropertiesService.getScriptProperties().getProperty('secret') });
 }
 
 function authorize() {
@@ -14872,17 +14872,36 @@ function findInvitees(d) {
   const dayMs = 24 * 3600 * 1000;
   const start = new Date(startMs - 45 * 60000);
   const end = new Date(Math.min(isFinite(endMs) && endMs > startMs ? endMs : startMs, startMs + dayMs) + 45 * 60000);
-  const title = String(d.title || '').toLowerCase();
+  const title = String(d.title || '').toLowerCase().trim();
+  // Meet links added with "Add Google Meet" are often not in the event's location or description, so the code
+  // alone misses them. Three tiers: the code, the exact title, then a title that mostly matches.
+  const words = function (t) {
+    return t.split(/[^a-z0-9\\u0900-\\u097f\\u0d00-\\u0d7f]+/).filter(function (w) { return w.length >= 3; });
+  };
+  const near = function (a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (a.length >= 6 && b.length >= 6 && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0)) return true;
+    const wa = words(a);
+    const wb = words(b);
+    if (wa.length < 2 || wb.length < 2) return false;
+    const common = wa.filter(function (w) { return wb.indexOf(w) >= 0; }).length;
+    return common / Math.min(wa.length, wb.length) >= 0.67;
+  };
   let best = null;
+  let bestRank = 9;
   let bestGap = Infinity;
+  let how = '';
   CalendarApp.getDefaultCalendar().getEvents(start, end).forEach(function (ev) {
     const where = (ev.getLocation() + ' ' + ev.getDescription()).toLowerCase();
     const gap = Math.abs(ev.getStartTime().getTime() - startMs);
-    const byCode = codeOk && where.indexOf(code) >= 0;
-    const byTitle = !codeOk && title && ev.getTitle().toLowerCase() === title;
-    if ((byCode || byTitle) && gap < bestGap) {
+    const t = ev.getTitle().toLowerCase().trim();
+    const rank = codeOk && where.indexOf(code) >= 0 ? 0 : title && t === title ? 1 : title && near(t, title) ? 2 : 9;
+    if (rank < 9 && (rank < bestRank || (rank === bestRank && gap < bestGap))) {
       best = ev;
+      bestRank = rank;
       bestGap = gap;
+      how = rank === 0 ? 'code' : rank === 1 ? 'title' : 'similar title';
     }
   });
   if (!best) return out({ ok: true, found: false, guests: [] });
@@ -14895,7 +14914,7 @@ function findInvitees(d) {
   });
   const me = Session.getEffectiveUser().getEmail();
   if (!guests.some(function (g) { return String(g.email).toLowerCase() === String(me).toLowerCase(); })) guests.push({ name: '', email: me, status: 'owner' });
-  return out({ ok: true, found: true, guests: guests });
+  return out({ ok: true, found: true, how: how, guests: guests });
 }
 
 function out(o) {

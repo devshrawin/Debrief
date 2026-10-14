@@ -274,7 +274,7 @@ async function ensureInvited() {
   if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
   try {
     const guests = await lookupInvitees(meeting, settings);
-    await patchMeeting({ ...(guests ? { invited: guests } : {}), invitedChecked: true });
+    await patchMeeting({ ...(guests ? { invited: [...guests], invitedHow: guests.how, invitedEvent: guests.event, invitedError: null } : { invitedNotFound: true }), invitedChecked: true });
   } catch (e) {
     await patchMeeting({ invitedError: e.message });
   }
