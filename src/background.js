@@ -1,5 +1,5 @@
 import { isIconText } from './iconText.js';
-import { learnFromMeeting } from './voice/learn.js';
+import { learnFromMeeting, learnRecurring } from './voice/learn.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
@@ -138,9 +138,10 @@ async function learnVoices(meetingId) {
   const m = await getMeeting(meetingId);
   if (!m) return;
   const r = learnFromMeeting(m, s.voices || [], { myName: s.myName });
-  if (r.changed) await saveVoices(r.list);
+  const r2 = learnRecurring(m, r.list);
+  if (r.changed || r2.changed) await saveVoices(r2.list);
   await updateMeeting(meetingId, (mm) => {
-    mm.voiceLearn = r.report;
+    mm.voiceLearn = { ...r.report, recurring: r2.report };
   });
 }
 

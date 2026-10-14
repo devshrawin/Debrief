@@ -3,6 +3,18 @@
   var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
 
   // src/voice/match.js
+  var THRESHOLDS = {
+    accept: 0.42,
+    // a person must score at least this against the piece of speech
+    margin: 0.07,
+    // and beat the runner-up by this much, or the piece is "unknown"
+    strong: 0.6,
+    // at or above this a label is kept even if its neighbours disagree
+    mixedShare: 0.6,
+    // a sentence needs this share of its speech time from one voice to be labelled
+    gap: 2.5
+    // seconds: neighbours further apart than this do not vote for each other
+  };
   function cosine(a, b) {
     let s = 0;
     let na = 0;
@@ -37,6 +49,52 @@
     const out = new Float32Array(bin.length);
     for (let i = 0; i < bin.length; i++) out[i] = (bin.charCodeAt(i) << 24 >> 24) / 127;
     return normalize(out);
+  }
+  function prepared(person) {
+    if (!person._c) {
+      person._c = unpack(person.centroid);
+      person._w = (person.windows || []).map(unpack);
+    }
+    return person;
+  }
+  function personScore(emb, person) {
+    const p = prepared(person);
+    const c = cosine(emb, p._c);
+    const best = p._w.length ? Math.max(...p._w.map((w) => cosine(emb, w))) : c;
+    return 0.6 * c + 0.4 * best;
+  }
+  function classify(emb, people, th = THRESHOLDS) {
+    if (!emb || !people?.length) return { id: null, name: null, score: 0, margin: 0, why: "no voices enrolled" };
+    const scored = people.map((p) => ({ id: p.id, name: p.name, score: personScore(emb, p) })).sort((a, b) => b.score - a.score);
+    const [top, second] = scored;
+    const margin = top.score - (second?.score ?? 0);
+    if (top.score < th.accept) return { id: null, name: null, score: top.score, margin, best: top.name, why: "too different from everyone enrolled" };
+    if (second && margin < th.margin && top.score < th.strong + 0.1) return { id: null, name: null, score: top.score, margin, best: top.name, why: "could be two people (or both talking)" };
+    return { id: top.id, name: top.name, score: top.score, margin };
+  }
+  function clusterVoices(segs, { threshold = 0.55 } = {}) {
+    const vecs = segs.map((s) => unpack(s.e));
+    let clusters = vecs.map((_, i) => ({ members: [i] }));
+    const sim = (a, b) => {
+      let s = 0;
+      for (const i of a.members) for (const j of b.members) s += cosine(vecs[i], vecs[j]);
+      return s / (a.members.length * b.members.length);
+    };
+    for (; ; ) {
+      let best = -1;
+      let pair = null;
+      for (let i2 = 0; i2 < clusters.length; i2++) {
+        for (let j2 = i2 + 1; j2 < clusters.length; j2++) {
+          const s = sim(clusters[i2], clusters[j2]);
+          if (s > best) [best, pair] = [s, [i2, j2]];
+        }
+      }
+      if (!pair || best < 1 - threshold) break;
+      const [i, j] = pair;
+      clusters[i] = { members: [...clusters[i].members, ...clusters[j].members] };
+      clusters.splice(j, 1);
+    }
+    return clusters.map((c) => ({ members: c.members.sort((a, b) => a - b), seconds: c.members.reduce((a, i) => a + (segs[i].t1 - segs[i].t0), 0), centroid: pack(mean(c.members.map((i) => vecs[i]))) })).sort((a, b) => b.seconds - a.seconds);
   }
 
   // src/voice/learn.js
@@ -113,6 +171,14 @@
         return;
       }
       const idx = list.findIndex((p) => norm(p.name) === f.key);
+      if (idx < 0) {
+        const adopted = adoptName(list, f.centroid, f.name);
+        if (adopted) {
+          list = adopted;
+          report.learned.push({ name: f.name, secs: Math.round(f.secs), total: 0, ready: false, adopted: true });
+          return;
+        }
+      }
       const existing = idx >= 0 ? list[idx] : null;
       if (existing && !existing.auto) {
         report.skipped.push({ name: f.name, why: "you recorded this voice yourself, so it is left as it is" });
@@ -142,6 +208,69 @@
     return { list, changed: report.learned.length > 0, report };
   }
   var scale = (v, k) => Float32Array.from(v, (x) => x * k);
+  var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
+  function learnRecurring(meeting, people) {
+    const report = { meeting: meeting.id, updated: [], created: [], skipped: [] };
+    const segs = meeting.voiceSegs || [];
+    if (segs.length < 8) {
+      report.skipped.push({ why: "too little speech was fingerprinted in this meeting" });
+      return { list: people, changed: false, report };
+    }
+    const assigned = /* @__PURE__ */ new Map();
+    const unknown = [];
+    for (const s of segs) {
+      const v = unpack(s.e);
+      const r = people.length ? classify(v, people) : { id: null };
+      const owner = r.id ? people.find((p) => p.id === r.id) : null;
+      if (owner) {
+        if (owner.auto && r.score >= 0.5) (assigned.get(owner.id) || assigned.set(owner.id, []).get(owner.id)).push({ s, v });
+      } else unknown.push(s);
+    }
+    let list = [...people];
+    const secsOf = (xs) => xs.reduce((a, x) => a + (x.s.t1 - x.s.t0), 0);
+    for (const [id, items] of assigned) {
+      const i = list.findIndex((p2) => p2.id === id);
+      const p = list[i];
+      if (p.learnedFrom?.includes(meeting.id)) continue;
+      const vecs = cleaned(items.map((x) => x.s));
+      const secs = secsOf(vecs);
+      if (vecs.length < 4 || secs < 8) continue;
+      const w = p.secs || 1;
+      const c = mean([scale(unpack(p.centroid), w), scale(mean(vecs.map((x) => x.v)), secs)]);
+      const step = Math.max(1, Math.floor(vecs.length / 6));
+      const rec = { ...p, centroid: pack(c), windows: [...p.windows || [], ...vecs.filter((_, k) => k % step === 0).map((x) => pack(x.v)).slice(0, 6)].slice(-LEARN.keep * 2), secs: Math.round(w + secs), meetings: (p.meetings || 1) + 1, learnedFrom: [...p.learnedFrom || [], meeting.id].slice(-50), updated: Date.now() };
+      rec.ready = rec.secs >= LEARN.readySecs && rec.meetings >= LEARN.readyMeetings;
+      list[i] = rec;
+      report.updated.push({ name: p.name, secs: Math.round(secs), total: rec.secs, ready: rec.ready });
+    }
+    if (unknown.length >= 6) {
+      const step = Math.max(1, Math.ceil(unknown.length / 300));
+      const sample = unknown.filter((_, i) => i % step === 0);
+      let next = Math.max(0, ...list.map((p) => Number((p.name.match(/^Unnamed voice (\d+)$/) || [])[1]) || 0)) + 1;
+      for (const g of clusterVoices(sample)) {
+        const members = g.members.map((i) => sample[i]);
+        const vecs = cleaned(members);
+        const secs = secsOf(vecs) * step;
+        if (vecs.length < LEARN.minPieces || secs < LEARN.minSecs) continue;
+        const c = mean(vecs.map((x) => x.v));
+        if (list.some((p) => cosine(unpack(p.centroid), c) >= 0.6)) {
+          report.skipped.push({ why: "a group of pieces sounded like an existing voice but not clearly enough, so it was left out" });
+          continue;
+        }
+        const stride = Math.max(1, Math.floor(vecs.length / LEARN.keep));
+        list = [...list, { id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: `Unnamed voice ${next++}`, lang: "free", langs: ["free"], centroid: pack(c), windows: vecs.filter((_, k) => k % stride === 0).map((x) => pack(x.v)).slice(0, LEARN.keep), secs: Math.round(secs), meetings: 1, auto: true, ready: false, learnedFrom: [meeting.id], created: Date.now() }];
+        report.created.push({ name: list.at(-1).name, secs: Math.round(secs) });
+      }
+    }
+    return { list, changed: report.updated.length + report.created.length > 0, report };
+  }
+  function adoptName(list, centroid, name) {
+    const i = list.findIndex((p) => isAnon(p) && cosine(unpack(p.centroid), centroid) >= 0.6);
+    if (i < 0) return null;
+    const next = [...list];
+    next[i] = { ...next[i], name, updated: Date.now() };
+    return next;
+  }
 
   // src/alerts.js
   function classifyError(err) {
@@ -435,9 +564,10 @@
     const m = await getMeeting(meetingId);
     if (!m) return;
     const r = learnFromMeeting(m, s.voices || [], { myName: s.myName });
-    if (r.changed) await saveVoices(r.list);
+    const r2 = learnRecurring(m, r.list);
+    if (r.changed || r2.changed) await saveVoices(r2.list);
     await updateMeeting(meetingId, (mm) => {
-      mm.voiceLearn = r.report;
+      mm.voiceLearn = { ...r.report, recurring: r2.report };
     });
   }
   var stopping = null;
