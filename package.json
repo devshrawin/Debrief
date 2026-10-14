@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
-    "marked": "^18.0.14"
+    "marked": "^18.0.14",
+    "onnxruntime-web": "^1.30.0"
   }
 }

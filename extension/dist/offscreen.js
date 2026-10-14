@@ -128,6 +128,8 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+    voiceOn: false,
+    // recognise who is speaking, using voices enrolled in Settings
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -516,6 +518,126 @@
   }
   var savePending = (item) => run("readwrite", (s) => s.add({ ...item, savedAt: Date.now() }));
 
+  // src/voice/tracker.js
+  var SR2 = 16e3;
+  var MIN_SEC = 1.5;
+  var MAX_SEC = 4;
+  var PAUSE_BLOCKS = 3;
+  var VoiceTracker = class {
+    // onSegment({ t0, t1, pcm }) is called for each piece. t0 and t1 are seconds since the recording began.
+    constructor(onSegment) {
+      this.onSegment = onSegment;
+      this.floor = -60;
+      this.samples = 0;
+      this.cur = [];
+      this.curStart = 0;
+      this.quiet = 0;
+      this.speechBlocks = 0;
+    }
+    push(block) {
+      let sum = 0;
+      for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
+      const db = 10 * Math.log10(sum / block.length + 1e-12);
+      this.floor = db < this.floor ? db : db < this.floor + 6 ? this.floor * 0.98 + db * 0.02 : this.floor;
+      const speech = db > Math.max(this.floor + 9, -52);
+      const at = this.samples;
+      this.samples += block.length;
+      if (speech) {
+        if (!this.cur.length) this.curStart = at;
+        this.cur.push(block);
+        this.speechBlocks++;
+        this.quiet = 0;
+      } else if (this.cur.length) {
+        this.quiet++;
+        this.cur.push(block);
+        if (this.quiet >= PAUSE_BLOCKS) this.close(true);
+      }
+      if (this.cur.length && (this.samples - this.curStart) / SR2 >= MAX_SEC) this.close(false);
+    }
+    close(trimQuiet) {
+      const blocks = trimQuiet ? this.cur.slice(0, this.cur.length - this.quiet) : this.cur;
+      const speech = this.speechBlocks;
+      this.cur = [];
+      this.quiet = 0;
+      this.speechBlocks = 0;
+      const len = blocks.reduce((a, b) => a + b.length, 0);
+      if (len / SR2 < MIN_SEC || speech * (blocks[0]?.length || 2048) / len < 0.6) return;
+      const pcm = new Float32Array(len);
+      let o = 0;
+      for (const b of blocks) {
+        pcm.set(b, o);
+        o += b.length;
+      }
+      this.onSegment({ t0: this.curStart / SR2, t1: this.curStart / SR2 + len / SR2, pcm });
+    }
+    flush() {
+      if (this.cur.length) this.close(true);
+    }
+  };
+
+  // src/voice/client.js
+  function createVoiceClient({ workerUrl, modelUrl, wasmPaths, maxQueue = 24 }) {
+    const worker = new Worker(workerUrl);
+    const pending = /* @__PURE__ */ new Map();
+    let nextId = 1;
+    let ready;
+    let readyFail;
+    const readyP = new Promise((res, rej) => {
+      ready = res;
+      readyFail = rej;
+    });
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.ready) return ready();
+      const p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      m.error ? p.reject(new Error(m.error)) : p.resolve(m.emb);
+    };
+    worker.onerror = (e) => readyFail(new Error(e.message || "voice worker failed"));
+    (async () => {
+      try {
+        const bytes = new Uint8Array(await (await fetch(modelUrl)).arrayBuffer());
+        worker.postMessage({ type: "init", model: bytes, wasmPaths }, [bytes.buffer]);
+      } catch (e) {
+        readyFail(e);
+      }
+    })();
+    return {
+      ready: readyP,
+      get backlog() {
+        return pending.size;
+      },
+      // Resolves with a unit-length Float32Array(256), null (too short / dropped), or rejects.
+      embed(pcm) {
+        if (pending.size >= maxQueue) return Promise.resolve(null);
+        const id = nextId++;
+        return new Promise((resolve, reject) => {
+          pending.set(id, { resolve, reject });
+          worker.postMessage({ id, pcm }, [pcm.buffer]);
+        });
+      },
+      async drain(ms = 2e4) {
+        const end = Date.now() + ms;
+        while (pending.size && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+      },
+      close() {
+        worker.terminate();
+        for (const p of pending.values()) p.resolve(null);
+        pending.clear();
+      }
+    };
+  }
+
+  // src/voice/match.js
+  function pack(emb) {
+    const bytes = new Int8Array(emb.length);
+    for (let i = 0; i < emb.length; i++) bytes[i] = Math.max(-127, Math.min(127, Math.round(emb[i] * 127)));
+    let bin = "";
+    for (const b of new Uint8Array(bytes.buffer)) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+
   // src/offscreen.js
   var CONCURRENCY = 3;
   var chunkSize = (s, onSkip) => ({ ...s.sttProvider === "gemini" ? { minSec: 100, maxSec: 150 } : { minSec: 18, maxSec: 28 }, onSkip });
@@ -554,6 +676,26 @@
     mute.gain.value = 0;
     src.connect(node).connect(mute).connect(ctx.destination);
   }
+  async function startVoice(meetingId) {
+    const client = createVoiceClient({
+      workerUrl: chrome.runtime.getURL("dist/worker.js"),
+      modelUrl: chrome.runtime.getURL("models/wespeaker_resnet34_lm.onnx"),
+      wasmPaths: chrome.runtime.getURL("vendor/ort/")
+    });
+    await Promise.race([client.ready, new Promise((_, rej) => setTimeout(() => rej(new Error("model load timed out")), 45e3))]);
+    const out = [];
+    const flush = () => {
+      if (!out.length) return;
+      chrome.runtime.sendMessage({ target: "bg", type: "voice-seg", meetingId, segs: out.splice(0) }).catch(() => {
+      });
+    };
+    const tracker = new VoiceTracker((seg) => {
+      client.embed(seg.pcm).then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e) })).catch(() => {
+      });
+    });
+    const timer = setInterval(flush, 1e4);
+    return { client, tracker, flush, timer };
+  }
   async function start({ streamId, settings, meetingId }) {
     if (rec) throw new Error("Already recording");
     const tabStream = await navigator.mediaDevices.getUserMedia({
@@ -584,7 +726,7 @@
       try {
         const text = await transcribe(wav, settings);
         chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: `chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1e3).toFixed(1)}s` });
-        if (text) chrome.runtime.sendMessage({ target: "bg", type: "segment", meetingId, seg: { t, src, text } });
+        if (text) chrome.runtime.sendMessage({ target: "bg", type: "segment", meetingId, seg: { t, src, text, dur: Math.round(pcm.length / SR * 10) / 10 } });
       } catch (e) {
         let saved = false;
         try {
@@ -604,10 +746,17 @@
     });
     rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
     rec.chunkers.others = new Chunker("others", onChunk, chunkSize(settings, onSkip));
-    await tap(ctx, tabStream, (b) => rec?.chunkers.others.push(b));
+    await tap(ctx, tabStream, (b) => {
+      rec?.chunkers.others.push(b);
+      rec?.voice?.tracker.push(b);
+    });
     if (micStream) {
       rec.chunkers.me = new Chunker("me", onChunk, chunkSize(settings, onSkip));
       await tap(ctx, micStream, (b) => rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length)));
+    }
+    if (settings.voiceOn && (settings.voices || []).length) {
+      rec.voice = await startVoice(meetingId).catch(() => null);
+      chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: rec.voice ? "voice recognition: on" : "voice recognition: could not start (recording continues without it)" });
     }
     tabStream.getAudioTracks()[0].addEventListener("ended", () => chrome.runtime.sendMessage({ target: "bg", type: "stop" }));
     rec.levelTimer = setInterval(() => {
@@ -643,6 +792,13 @@
     [r.tabStream, r.micStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
     await Promise.allSettled([r.ctx.close(), r.playCtx.close()]);
     await r.pool.drain();
+    if (r.voice) {
+      r.voice.tracker.flush();
+      await r.voice.client.drain(2e4);
+      clearInterval(r.voice.timer);
+      r.voice.flush();
+      r.voice.client.close();
+    }
   }
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.target !== "offscreen") return;

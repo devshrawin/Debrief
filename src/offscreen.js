@@ -4,6 +4,9 @@ import { transcribe } from './stt.js';
 import { encodeWav } from './wav.js';
 import { Chunker, SR } from './chunker.js';
 import { savePending } from './audiostore.js';
+import { VoiceTracker } from './voice/tracker.js';
+import { createVoiceClient } from './voice/client.js';
+import { pack } from './voice/match.js';
 
 const CONCURRENCY = 3;
 
@@ -50,6 +53,29 @@ async function tap(ctx, stream, onBlock) {
   src.connect(node).connect(mute).connect(ctx.destination);
 }
 
+async function startVoice(meetingId) {
+  const client = createVoiceClient({
+    workerUrl: chrome.runtime.getURL('dist/worker.js'),
+    modelUrl: chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx'),
+    wasmPaths: chrome.runtime.getURL('vendor/ort/'),
+  });
+  await Promise.race([client.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('model load timed out')), 45000))]);
+  const out = [];
+  const flush = () => {
+    if (!out.length) return;
+    chrome.runtime.sendMessage({ target: 'bg', type: 'voice-seg', meetingId, segs: out.splice(0) }).catch(() => {});
+  };
+  const tracker = new VoiceTracker((seg) => {
+    // A slow computer drops pieces here (the client queue is bounded) instead of slowing the recording.
+    client
+      .embed(seg.pcm)
+      .then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e) }))
+      .catch(() => {});
+  });
+  const timer = setInterval(flush, 10000);
+  return { client, tracker, flush, timer };
+}
+
 async function start({ streamId, settings, meetingId }) {
   if (rec) throw new Error('Already recording');
 
@@ -89,7 +115,7 @@ async function start({ streamId, settings, meetingId }) {
       try {
         const text = await transcribe(wav, settings);
         chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: `chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1000).toFixed(1)}s` });
-        if (text) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { t, src, text } });
+        if (text) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { t, src, text, dur: Math.round((pcm.length / SR) * 10) / 10 } });
       } catch (e) {
         // Keep the audio so the MOM page can retry it after the meeting.
         let saved = false;
@@ -113,11 +139,21 @@ async function start({ streamId, settings, meetingId }) {
 
   rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
   rec.chunkers.others = new Chunker('others', onChunk, chunkSize(settings, onSkip));
-  await tap(ctx, tabStream, (b) => rec?.chunkers.others.push(b));
+  await tap(ctx, tabStream, (b) => {
+    rec?.chunkers.others.push(b);
+    rec?.voice?.tracker.push(b);
+  });
   if (micStream) {
     rec.chunkers.me = new Chunker('me', onChunk, chunkSize(settings, onSkip));
     // While the mic is paused, feed silence so timestamps stay aligned.
     await tap(ctx, micStream, (b) => rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length)));
+  }
+
+  // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
+  // Only the fingerprints leave this document; the audio is never stored and never sent anywhere.
+  if (settings.voiceOn && (settings.voices || []).length) {
+    rec.voice = await startVoice(meetingId).catch(() => null);
+    chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: rec.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
   }
 
   // Stop if the tab stops sharing audio (tab closed or navigated away).
@@ -161,6 +197,13 @@ async function stop() {
   [r.tabStream, r.micStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
   await Promise.allSettled([r.ctx.close(), r.playCtx.close()]);
   await r.pool.drain();
+  if (r.voice) {
+    r.voice.tracker.flush();
+    await r.voice.client.drain(20000);
+    clearInterval(r.voice.timer);
+    r.voice.flush();
+    r.voice.client.close();
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

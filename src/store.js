@@ -29,6 +29,7 @@ export const DEFAULTS = {
   calendarLookup: true, // ask the relay who was invited (needs the calendar permission)
   meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
   otherSites: true, // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+  voiceOn: false, // recognise who is speaking, using voices enrolled in Settings
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
 
@@ -57,14 +58,15 @@ export const DEFAULTS = {
 };
 
 export async function getSettings() {
-  const { settings, learned } = await chrome.storage.local.get(['settings', 'learned']);
+  const { settings, learned, voices } = await chrome.storage.local.get(['settings', 'learned', 'voices']);
   // Names learned from past meetings (not part of what the user typed) are used as spelling hints.
   const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
-  return { ...DEFAULTS, ...(settings || {}), learnedNames };
+  // Enrolled voice fingerprints ride along for matching but are never saved into the settings.
+  return { ...DEFAULTS, ...(settings || {}), learnedNames, voices: voices || [] };
 }
 
 export async function saveSettings(s) {
-  const { learnedNames, ...own } = s;
+  const { learnedNames, voices, ...own } = s;
   await chrome.storage.local.set({ settings: own });
 }
 
@@ -143,7 +145,7 @@ export function errorDetail(text) {
 // (a tour, a settings tab, a minutes tab left open) must never save the whole copy back.
 export async function setSetting(patch) {
   const { settings } = await chrome.storage.local.get('settings');
-  const { learnedNames, ...clean } = patch;
+  const { learnedNames, voices, ...clean } = patch;
   await chrome.storage.local.set({ settings: { ...(settings || {}), ...clean } });
 }
 
