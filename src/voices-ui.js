@@ -23,10 +23,29 @@ let audioUrl = '';
 let rec = null; // { ctx, stream, node, blocks, started, timer }
 let client = null;
 
-const setMsg = (t, bad = false) => {
-  $('enrolMsg').textContent = t;
-  $('enrolMsg').style.color = bad ? '#b91c1c' : '';
+const el = (tag, props = {}, ...kids) => {
+  const n = Object.assign(document.createElement(tag), props);
+  n.append(...kids);
+  return n;
 };
+
+// kind: '' (neutral) | 'info' | 'warn' | 'bad' | 'ok'. `true` means 'bad', as older callers pass it.
+const setMsg = (t, kind = '') => {
+  $('enrolMsg').textContent = t;
+  $('enrolMsg').className = `msgbox ${kind === true ? 'bad' : kind || ''}`.trim();
+};
+const READY_MSG = 'Type a name, then press Record and read the text above. Use the mic you use in meetings.';
+const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+
+// The recorder buttons follow the state: nothing to play or save until there is a recording.
+let saving = false;
+function syncEnrol() {
+  $('enrolRec').hidden = !!rec;
+  $('enrolStop').hidden = !rec;
+  $('enrolDot').hidden = !rec;
+  $('enrolPlay').disabled = !pcm;
+  $('enrolSave').disabled = !pcm || saving;
+}
 
 function getClient() {
   if (!client) {
@@ -49,37 +68,87 @@ const LANG_NAME = { en: 'English', hi: 'Hindi', ml: 'Malayalam', free: 'free spe
 const ORDER = ['en', 'hi', 'ml', 'free'];
 const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
+function badgeOf(p) {
+  if (!p.auto) return ['Recorded', 'brand'];
+  if (isAnon(p)) return ['Unnamed voice', ''];
+  return p.ready ? ['Learned, in use', 'ok'] : ['Learned, still learning', 'warn'];
+}
+
+// One "More" menu open at a time: Export, Merge, Delete.
+let openMenu = null;
+function closeMenu(refocus) {
+  if (!openMenu) return;
+  const { menu, more } = openMenu;
+  openMenu = null;
+  menu.hidden = true;
+  more.setAttribute('aria-expanded', 'false');
+  if (refocus) more.focus();
+}
+
+function moreMenu(p, items) {
+  const more = el('button', { type: 'button', className: 'btn sm', textContent: 'More ▾' });
+  more.setAttribute('aria-haspopup', 'menu');
+  more.setAttribute('aria-expanded', 'false');
+  more.setAttribute('aria-label', `More actions for ${p.name}`);
+  const menu = el('div', { className: 'menu', hidden: true });
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', `More actions for ${p.name}`);
+  const btns = items.map(({ label, fn, danger, aria }) => {
+    const b = el('button', { type: 'button', className: danger ? 'danger' : '', textContent: label });
+    b.setAttribute('role', 'menuitem');
+    if (aria) b.setAttribute('aria-label', aria);
+    b.onclick = () => {
+      closeMenu(true);
+      fn();
+    };
+    return b;
+  });
+  menu.append(...btns);
+  menu.addEventListener('keydown', (e) => {
+    const i = btns.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') btns[(i + 1) % btns.length].focus();
+    else if (e.key === 'ArrowUp') btns[(i - 1 + btns.length) % btns.length].focus();
+    else if (e.key === 'Escape') closeMenu(true);
+    else if (e.key === 'Tab') closeMenu(false);
+    else return;
+    if (e.key !== 'Tab') e.preventDefault();
+  });
+  more.onclick = () => {
+    const wasOpen = openMenu?.menu === menu;
+    closeMenu(false);
+    if (wasOpen) return;
+    menu.hidden = false;
+    more.setAttribute('aria-expanded', 'true');
+    openMenu = { menu, more };
+    btns[0].focus();
+  };
+  return [more, menu];
+}
+
 function renderList() {
+  closeMenu(false);
   $('voiceEmpty').hidden = people.length > 0;
+  $('hPeople').textContent = people.length ? `Enrolled people · ${people.length}` : 'Enrolled people';
   $('voiceList').replaceChildren(
     ...people.map((p) => {
-      const row = document.createElement('div');
-      row.className = 'voice-row';
-      row.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)';
-      const who = document.createElement('div');
-      who.style.cssText = 'flex:1;min-width:180px';
+      const anon = p.auto && isAnon(p);
+      const [badge, cls] = badgeOf(p);
       const langs = (p.langs || [p.lang || 'en']).map((l) => LANG_NAME[l] || l).join(' + ');
-      who.innerHTML = '<b class="vn"></b><div class="hint vm" style="margin:2px 0 0"></div>';
-      who.querySelector('.vn').textContent = p.name;
-      who.querySelector('.vm').textContent = p.auto
-        ? `${isAnon(p) ? 'Heard in your meetings, not named yet. Rename it to say who it is · ' : 'Learned from meetings · '}${p.meetings || 1} meeting${(p.meetings || 1) === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech · ${p.ready ? 'in use' : `still learning (needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings), not used yet`}`
+      const n = p.meetings || 1;
+      const meta = p.auto
+        ? `${anon ? 'Heard in your meetings, not named yet' : 'Learned from your meetings'} · ${n} meeting${n === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech${p.ready ? '' : ` · not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings`}`
         : `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
-      const btn = (label, fn, danger) => {
-        const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: label });
-        if (danger) b.style.color = '#b91c1c';
-        b.onclick = fn;
-        return b;
-      };
-      row.append(
-        who,
-        ...(p.auto && isAnon(p) ? [sampleButton(p)] : []),
-        btn('Rename', () => rename(p)),
-        btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)),
-        btn('Add recording', () => begin({ kind: 'add', id: p.id }, p)),
-        btn('Export', () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, '_')}.json`)),
-        ...(p.auto && people.length > 1 ? [btn('Merge into…', () => mergeInto(p))] : []),
-        btn('Delete', () => remove(p), true)
-      );
+      const row = el('li', { className: 'voice-row' });
+      const initial = anon ? '?' : (Array.from(p.name.trim())[0] || '?').toUpperCase();
+      const avatar = el('span', { className: `avatar${anon ? ' anon' : ''}`, textContent: initial });
+      avatar.setAttribute('aria-hidden', 'true');
+      const who = el('div', { className: 'vwho' }, el('div', { className: 'vtop' }, el('strong', { className: 'vn', textContent: p.name }), el('span', { className: `chip ${cls}`.trim(), textContent: badge })), el('p', { className: 'hint vm', textContent: meta }));
+      const btn = (label, fn) => el('button', { type: 'button', className: 'btn sm', textContent: label, onclick: fn });
+      const items = [{ label: 'Export this voice', fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, '_')}.json`) }];
+      if (p.auto && people.length > 1) items.push({ label: 'Merge into…', fn: () => mergeInto(p) });
+      items.push({ label: 'Delete', aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
+      const acts = el('div', { className: 'vacts' }, ...(anon ? [sampleButton(p)] : []), btn(anon ? 'Name this voice' : 'Rename', () => rename(p)), ...(anon ? [] : [btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)), btn('Add recording', () => begin({ kind: 'add', id: p.id }, p))]), ...moreMenu(p, items));
+      row.append(avatar, who, acts);
       return row;
     })
   );
@@ -88,7 +157,8 @@ function renderList() {
 // "Play sample": a short clip of an unnamed voice, only when sample keeping is on and a clip exists.
 let playing = null;
 function sampleButton(p) {
-  const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: '▶ Play sample', hidden: true });
+  const b = el('button', { type: 'button', className: 'btn sm primary', hidden: true }, el('span', { className: 'tri' }), 'Play sample');
+  b.setAttribute('aria-label', `Play sample of ${p.name}`);
   hasSample(p.id).then((yes) => (b.hidden = !yes)).catch(() => {});
   b.onclick = async () => {
     try {
@@ -116,19 +186,13 @@ async function renderUnnamed() {
   const m = meetings[0];
   const groups = m ? unnamedGroups(m, people) : [];
   $('unnamedCard').hidden = !groups.length;
+  if (m) $('unnamedSub').textContent = `${m.title || 'Your latest meeting'}${m.startedAt ? ` · ${fmtDate(m.startedAt)}` : ''}. Name a voice once and it is recognised next time.`;
   $('unnamedList').replaceChildren(
     ...groups.map((g, i) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border)';
-      const label = document.createElement('div');
-      label.style.cssText = 'flex:1;min-width:200px';
-      label.innerHTML = '<b></b><div class="hint" style="margin:2px 0 0"></div>';
-      label.querySelector('b').textContent = `Voice ${i + 1}`;
-      label.querySelector('.hint').textContent = `${g.seconds} s of speech · for example at ${g.at.map(fmtTime).join(', ')}`;
-      const input = Object.assign(document.createElement('input'), { placeholder: 'Who is this?', maxLength: 60 });
-      input.style.cssText = 'padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--field);width:200px';
-      const save = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Save this voice' });
-      save.onclick = async () => {
+      const label = el('label', { className: 'sr-only', htmlFor: `unnamedName${i}`, textContent: `Name for Voice ${i + 1}` });
+      const input = el('input', { id: `unnamedName${i}`, placeholder: 'Who is this?', maxLength: 60, autocomplete: 'off' });
+      const save = el('button', { type: 'button', className: 'btn primary', textContent: 'Name this voice' });
+      const doSave = async () => {
         try {
           people = upsertPerson(people, { name: input.value, lang: 'free', print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
           await saveVoices(people);
@@ -138,8 +202,15 @@ async function renderUnnamed() {
           tell(e.message);
         }
       };
-      row.append(label, input, save);
-      return row;
+      save.onclick = doSave;
+      input.onkeydown = (e) => e.key === 'Enter' && doSave();
+      return el(
+        'li',
+        {},
+        el('div', { className: 'ut' }, el('strong', { textContent: `Voice ${i + 1}` }), el('span', { className: 'hint', textContent: `spoke ${g.seconds} s` })),
+        el('p', { className: 'hint', textContent: `For example at ${g.at.map(fmtTime).join(', ')}` }),
+        el('div', { className: 'name-row' }, label, input, save)
+      );
     })
   );
 }
@@ -205,13 +276,19 @@ function resetRecording() {
   pcm = null;
   if (audioUrl) URL.revokeObjectURL(audioUrl);
   audioUrl = '';
-  $('enrolPlay').hidden = true;
-  $('enrolSave').hidden = true;
-  $('enrolStop').hidden = true;
-  $('enrolRec').hidden = false;
   $('enrolRec').textContent = 'Record';
   $('enrolLevel').style.width = '0';
   $('enrolTime').textContent = '';
+  syncEnrol();
+}
+
+// Back to a blank "Add a person" form.
+function blankForm() {
+  mode = { kind: 'new', id: null };
+  resetRecording();
+  $('enrolName').value = '';
+  $('enrolName').disabled = false;
+  $('enrolTitle').textContent = 'Add a person';
 }
 
 function begin(m, person) {
@@ -220,16 +297,24 @@ function begin(m, person) {
   $('enrolTitle').textContent = m.kind === 'new' ? 'Add a person' : m.kind === 'rerecord' ? `Re-record ${person.name}` : `Add another recording for ${person.name}`;
   $('enrolName').value = person ? person.name : '';
   $('enrolName').disabled = !!person;
-  $('enrolCancel').hidden = m.kind === 'new';
   setLang(m.kind === 'add' ? ORDER.find((l) => !(person.langs || [person.lang || 'en']).includes(l)) || 'free' : lang);
-  setMsg(m.kind === 'add' ? 'Record in another language this person uses in meetings: it makes the voice recognisable in each.' : '');
-  $('enrolName').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  setMsg(m.kind === 'add' ? 'Record in another language this person uses in meetings: it makes the voice recognisable in each.' : READY_MSG, m.kind === 'add' ? 'info' : '');
+  (person ? $('enrolRec') : $('enrolName')).scrollIntoView({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  (person ? $('enrolRec') : $('enrolName')).focus({ preventScroll: true });
 }
+
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function setLang(l) {
   lang = l;
   $('enrolPrompt').textContent = PROMPTS[l];
-  document.querySelectorAll('#enrolLang button').forEach((b) => b.classList.toggle('active', b.dataset.lang === l));
+  $('enrolPrompt').lang = l === 'free' ? 'en' : l;
+  document.querySelectorAll('#enrolLang button').forEach((b) => {
+    const on = b.dataset.lang === l;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
 }
 
 // ---- recording ----
@@ -258,10 +343,11 @@ async function startCapture() {
   };
   r.timer = setInterval(() => {
     const sec = (Date.now() - r.started) / 1000;
-    $('enrolTime').textContent = `${sec.toFixed(0)} s${sec < ENROL.targetSec ? ` (aim for about ${ENROL.targetSec})` : ' ✓'}`;
+    $('enrolTime').textContent = `${clock(sec)}${sec < ENROL.targetSec ? '' : ' ✓'}`;
     if (sec >= MAX_SEC) finishCapture();
   }, 250);
   rec = r;
+  syncEnrol();
 }
 
 function stopCapture(discard) {
@@ -284,25 +370,23 @@ function stopCapture(discard) {
 
 function finishCapture() {
   const got = stopCapture(false);
-  $('enrolStop').hidden = true;
-  $('enrolRec').hidden = false;
   $('enrolRec').textContent = 'Record again';
   $('enrolLevel').style.width = '0';
+  syncEnrol();
   if (!got || got.pcm.length < SR * 3) {
-    setMsg('That was too short. Press Record and read the text above.', true);
+    setMsg('That was too short. Press Record and read the text above.', 'warn');
     return;
   }
   if (got.peak < 0.005) {
-    setMsg('Almost nothing was picked up. Check that the right microphone is selected in Chrome, then record again.', true);
+    setMsg('Almost nothing was picked up. Check that the right microphone is selected in Chrome, then record again.', 'bad');
     return;
   }
   pcm = got.pcm;
   if (audioUrl) URL.revokeObjectURL(audioUrl);
   audioUrl = URL.createObjectURL(new Blob([encodeWav(pcm, SR)], { type: 'audio/wav' }));
-  $('enrolPlay').hidden = false;
-  $('enrolSave').hidden = false;
-  $('enrolTime').textContent = `${(pcm.length / SR).toFixed(0)} s recorded`;
-  setMsg('Play it back to check it is clear, then save. Nothing is stored until you press Save.');
+  $('enrolTime').textContent = clock(pcm.length / SR);
+  syncEnrol();
+  setMsg('Play it back to check it is clear, then save. Nothing is stored until you press Save voice.', 'ok');
 }
 
 async function save() {
@@ -310,13 +394,14 @@ async function save() {
   const name = $('enrolName').value;
   try {
     if (mode.kind === 'new') upsertPerson(people, { name, lang, print: { centroid: '', windows: [], speechSec: 0 } }); // validate the name before the slow part
-    $('enrolSave').disabled = true;
-    setMsg('Working out the voice fingerprint… (the first time this loads the speaker model)');
+    saving = true;
+    syncEnrol();
+    setMsg('Working out the voice fingerprint… (the first time this loads the speaker model)', 'info');
     const c = getClient();
     await Promise.race([c.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('The speaker model did not load. Reload this page and try again.')), 60000))]);
     const print = await buildPrint(pcm, (p) => c.embed(p));
     if (!print.ok) {
-      setMsg(print.reason, true);
+      setMsg(print.reason, 'warn');
       return;
     }
     if (mode.kind === 'new') people = upsertPerson(people, { name, lang, print });
@@ -324,18 +409,14 @@ async function save() {
     else people = addRecording(people, mode.id, { lang, print });
     await saveVoices(people);
     const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. Only the fingerprint was stored.${print.warn ? ` ${print.warn}` : ''}`;
-    mode = { kind: 'new', id: null };
-    resetRecording();
-    $('enrolName').value = '';
-    $('enrolName').disabled = false;
-    $('enrolTitle').textContent = 'Add a person';
-    $('enrolCancel').hidden = true;
-    setMsg(done, false);
+    blankForm();
+    setMsg(done, 'ok');
     renderList();
   } catch (e) {
-    setMsg(e.message, true);
+    setMsg(e.message, 'bad');
   } finally {
-    $('enrolSave').disabled = false;
+    saving = false;
+    syncEnrol();
   }
 }
 
@@ -373,38 +454,53 @@ async function importFile(file) {
 export async function initVoices() {
   await refresh();
   setLang('en');
-  document.querySelectorAll('#enrolLang button').forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
+  const langBtns = [...document.querySelectorAll('#enrolLang button')];
+  langBtns.forEach((b, i) => {
+    b.onclick = () => setLang(b.dataset.lang);
+    b.addEventListener('keydown', (e) => {
+      const d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      const next = langBtns[(i + d + langBtns.length) % langBtns.length];
+      setLang(next.dataset.lang);
+      next.focus();
+    });
+  });
+  // the "More" menus close on an outside click
+  document.addEventListener('click', (e) => {
+    if (openMenu && !openMenu.menu.contains(e.target) && !openMenu.more.contains(e.target)) closeMenu(false);
+  });
+  $('enrolJump').onclick = () => {
+    $('enrol').scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' });
+    $('enrolName').focus({ preventScroll: true });
+  };
+  setMsg(READY_MSG);
+  syncEnrol();
   $('enrolRec').onclick = async () => {
     try {
-      if (pcm) {
-        pcm = null;
-        $('enrolPlay').hidden = true;
-        $('enrolSave').hidden = true;
-      }
+      if (pcm) pcm = null;
+      syncEnrol();
       if (mode.kind === 'new' && !$('enrolName').value.trim()) {
-        setMsg('Type the person’s name first.', true);
+        setMsg('Type the person’s name first.', 'bad');
         $('enrolName').focus();
         return;
       }
       await startCapture();
-      $('enrolRec').hidden = true;
-      $('enrolStop').hidden = false;
-      setMsg('Recording… read the text above at a normal pace.');
+      $('enrolStop').focus();
+      setMsg('Listening… keep going until about 20 seconds.', 'info');
     } catch (e) {
-      setMsg(e.name === 'NotAllowedError' ? 'The microphone is blocked. Use “Allow microphone” on the General page, then try again.' : `Could not start the microphone: ${e.message}`, true);
+      setMsg(e.name === 'NotAllowedError' ? 'The microphone is blocked. Use “Allow microphone” on the General page, then try again.' : e.name === 'NotFoundError' ? 'No microphone is available. Allow it in General, under Microphone, or plug one in.' : `Could not start the microphone: ${e.message}`, 'bad');
     }
   };
-  $('enrolStop').onclick = finishCapture;
+  $('enrolStop').onclick = () => {
+    finishCapture();
+    $('enrolPlay').disabled ? $('enrolRec').focus() : $('enrolPlay').focus();
+  };
   $('enrolPlay').onclick = () => audioUrl && new Audio(audioUrl).play();
   $('enrolSave').onclick = save;
   $('enrolCancel').onclick = () => {
-    mode = { kind: 'new', id: null };
-    resetRecording();
-    $('enrolName').value = '';
-    $('enrolName').disabled = false;
-    $('enrolTitle').textContent = 'Add a person';
-    $('enrolCancel').hidden = true;
-    setMsg('');
+    blankForm();
+    setMsg(READY_MSG);
   };
   $('voiceExport').onclick = () => (people.length ? download(exportVoices(people), 'debrief-voices.json') : ($('voiceShareMsg').textContent = 'Nobody is enrolled yet.'));
   $('voiceImport').onclick = () => $('voiceImportFile').click();
@@ -425,7 +521,7 @@ export async function initVoices() {
     people = [];
     renderList();
     closeClient();
-    setMsg(`All voices forgotten${n ? ` (and fingerprints removed from ${n} saved meeting${n === 1 ? '' : 's'})` : ''}.`);
+    setMsg(`All voices forgotten${n ? ` (and fingerprints removed from ${n} saved meeting${n === 1 ? '' : 's'})` : ''}.`, 'ok');
   };
   chrome.storage.onChanged.addListener((c) => {
     if (c.voices) refresh();
