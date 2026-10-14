@@ -390,6 +390,32 @@ try {
   check('asking without a configured model explains what to set up', /Settings/.test(askNoKey), askNoKey);
   check('popup has an Ask a question link on the Meetings tab', await popup.evaluate(`!!document.getElementById('askAll')`));
 
+  // ---- voice model in a real worker (WebAssembly under the extension's CSP) ----
+  const ref = JSON.parse((await import('node:fs')).readFileSync(new URL('./fixtures/fbank-ref.json', import.meta.url), 'utf8'));
+  const voice = await opts.evaluate(`(async () => {
+    const w = new Worker(chrome.runtime.getURL('dist/worker.js'));
+    const ask = (msg, transfer = []) => new Promise((res) => { w.onmessage = (e) => res(e.data); w.postMessage(msg, transfer); });
+    const bytes = new Uint8Array(await (await fetch(chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx'))).arrayBuffer());
+    const t0 = performance.now();
+    const ready = await ask({ type: 'init', model: bytes, wasmPaths: chrome.runtime.getURL('vendor/ort/') }, [bytes.buffer]);
+    const load = performance.now() - t0;
+    const n = ${ref.samples};
+    const pcm = new Float32Array(n);
+    let st = 12345n;
+    for (let i = 0; i < n; i++) {
+      st = (st * 1103515245n + 12345n) & 0x7fffffffn;
+      const noise = (Number(st) / 0x7fffffff) * 2 - 1;
+      pcm[i] = 0.3 * Math.sin((2 * Math.PI * 220 * i) / 16000) + 0.2 * Math.sin((2 * Math.PI * 1370 * i) / 16000) + 0.1 * Math.sin((2 * Math.PI * 3100 * i) / 16000) + 0.05 * noise;
+    }
+    const t1 = performance.now();
+    const out = await ask({ id: 1, pcm }, [pcm.buffer]);
+    const short = await ask({ id: 2, pcm: new Float32Array(4000) });
+    w.terminate();
+    return { ready: !!ready.ready, loadMs: Math.round(load), embedMs: Math.round(performance.now() - t1), emb: out.emb ? Array.from(out.emb) : null, err: out.error, shortNull: short.emb === null };
+  })()`);
+  const cosv = (a, b) => a.reduce((x, v, i) => x + v * b[i], 0) / (Math.hypot(...a) * Math.hypot(...b));
+  check('speaker model loads in a worker in Chrome and reproduces the reference fingerprint', voice.ready && voice.emb && cosv(voice.emb, ref.emb) > 0.995 && voice.shortNull, JSON.stringify({ ...voice, emb: voice.emb && cosv(voice.emb, ref.emb) }));
+
   check('no uncaught page errors', errors.filter((e) => !/40[013]|API key/i.test(e)).length === 0, errors.join(' | '));
 } catch (e) {
   console.log('FAIL harness error:', e.message);

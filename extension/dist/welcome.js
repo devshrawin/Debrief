@@ -1204,6 +1204,8 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+    voiceOn: false,
+    // recognise who is speaking, using voices enrolled in Settings
     followMeetMute: true,
     // ignore my mic while Meet's own mic button is muted
     momLanguage: "English",
@@ -1235,9 +1237,9 @@
     geminiModel: "gemini-3.8-flash"
   };
   async function getSettings() {
-    const { settings, learned } = await chrome.storage.local.get(["settings", "learned"]);
+    const { settings, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
     const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
-    return { ...DEFAULTS, ...settings || {}, learnedNames };
+    return { ...DEFAULTS, ...settings || {}, learnedNames, voices: voices || [] };
   }
   function errorDetail(text) {
     try {
@@ -1250,7 +1252,7 @@
   }
   async function setSetting(patch2) {
     const { settings } = await chrome.storage.local.get("settings");
-    const { learnedNames, ...clean } = patch2;
+    const { learnedNames, voices, ...clean } = patch2;
     await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
   }
   async function ensureEmailSecret() {

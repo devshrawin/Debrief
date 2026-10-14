@@ -294,6 +294,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       return { ok: true };
     },
+    // Voice fingerprints of the meeting's speech, made by the recorder. Only fingerprints, never audio.
+    'voice-seg': async () => {
+      const segs = (msg.segs || []).filter((x) => Number.isFinite(x?.t0) && Number.isFinite(x?.t1) && typeof x.e === 'string' && x.e.length < 600).slice(0, 200);
+      if (!segs.length) return { ok: false };
+      await updateMeeting(msg.meetingId, (m) => {
+        const all = (m.voiceSegs ||= []);
+        all.push(...segs);
+        m.voiceModel = 'wespeaker-resnet34-lm';
+        if (all.length > 12000) all.splice(0, all.length - 12000);
+      });
+      return { ok: true };
+    },
     'dismiss-alert': () => clearAlert(),
     'set-follow': async () => {
       await setSetting({ followMeetMute: !!msg.on });
