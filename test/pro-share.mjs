@@ -196,4 +196,17 @@ await test('mailer: every relay call carries the secret, and the relay lock mess
   await assert.rejects(() => M.sendMail({}, { ...settings, emailSecret: 'z'.repeat(40) }), /locked to a different Debrief install/);
 });
 
+await test('mail: company (Workspace) web app URLs with /a/macros/domain/ are accepted, test /dev URLs and http are not', async () => {
+  const { mailReady } = await import('../src/mailer.js');
+  const ok = (u) => mailReady({ emailWebhook: u });
+  assert.ok(ok('https://script.google.com/macros/s/AKfycbx_-1/exec'));
+  assert.ok(ok('https://script.google.com/a/macros/amnex.com/s/AKfycbx_-1/exec'));
+  assert.ok(ok('https://script.google.com/a/amnex.com/macros/s/AKfycbx_-1/exec'));
+  assert.ok(ok('  https://script.google.com/macros/s/AKfy/exec  '));
+  assert.ok(!ok('https://script.google.com/macros/s/AKfy/dev'));
+  assert.ok(!ok('http://script.google.com/macros/s/AKfy/exec'));
+  assert.ok(!ok('https://evil.example.com/macros/s/AKfy/exec'));
+  assert.ok(!ok(''));
+});
+
 console.log(`\n${passed} passed`);

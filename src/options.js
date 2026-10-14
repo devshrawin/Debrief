@@ -354,7 +354,7 @@ $('testMail').onclick = async () => {
   $('mailMsg').textContent = 'Sending…';
   try {
     const s = await save();
-    if (!mailReady(s)) throw new Error('Paste the Apps Script web app URL (it ends in /exec) first.');
+    if (!mailReady(s)) throw new Error(/\/dev(\?|$)/.test(s.emailWebhook || '') ? 'That is the test URL (ends in /dev). Use Deploy → New deployment, and paste the Web app URL that ends in /exec.' : 'Paste the Apps Script web app URL: https://script.google.com/…/exec (company accounts have /a/macros/yourcompany.com/ in it).');
     const r = await sendMail(
       {
         subject: 'Debrief test email',

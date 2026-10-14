@@ -14675,7 +14675,8 @@ _(Output hit the length limit and was cut off.)_`;
   }
 
   // src/mailer.js
-  var mailReady = (s) => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/.test(s.emailWebhook || "");
+  var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
+  var mailReady = (s) => WEBAPP_URL.test(String(s.emailWebhook || "").trim());
   async function callRelay(payload, settings) {
     if (!mailReady(settings)) throw new Error("Email is not set up: add the Apps Script URL in Settings.");
     const secret = settings.emailSecret || (typeof chrome !== "undefined" && chrome.storage?.local ? await ensureEmailSecret() : "");
@@ -16031,7 +16032,7 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     $2("mailMsg").textContent = "Sending\u2026";
     try {
       const s = await save2();
-      if (!mailReady(s)) throw new Error("Paste the Apps Script web app URL (it ends in /exec) first.");
+      if (!mailReady(s)) throw new Error(/\/dev(\?|$)/.test(s.emailWebhook || "") ? "That is the test URL (ends in /dev). Use Deploy \u2192 New deployment, and paste the Web app URL that ends in /exec." : "Paste the Apps Script web app URL: https://script.google.com/\u2026/exec (company accounts have /a/macros/yourcompany.com/ in it).");
       const r = await sendMail(
         {
           subject: "Debrief test email",
