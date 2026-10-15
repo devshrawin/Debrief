@@ -2,6 +2,7 @@
 // so it is sent from their Gmail account with no server of ours in the middle.
 
 import { ensureEmailSecret } from './store.js';
+import { parseAmnexMarkdown, renderWordHtml, renderPdfHtml, renderEmailCover, emailCoverText, renderDocBody } from './amnex.js';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -33,9 +34,14 @@ const b64 = (str) => {
   return btoa(bin);
 };
 
-// Word opens HTML saved as .doc, tables and headings intact.
-export const wordDocHtml = (bodyHtml) =>
-  `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${bodyHtml}</body></html>`;
+// Word opens HTML saved as .doc, tables and headings intact. With opts.md set to minutes in the official Amnex
+// format, the document is emitted instead: borders and navy fills on every cell (Word ignores stylesheet rules),
+// rows that do not split across pages, a repeating header row, and a Word header and footer with page numbers.
+export function wordDocHtml(bodyHtml, { md } = {}) {
+  const doc = md ? parseAmnexMarkdown(md) : null;
+  if (doc) return renderWordHtml(doc);
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${bodyHtml}</body></html>`;
+}
 
 // The relay turns this page into a PDF (Apps Script can convert HTML to PDF, the browser cannot offline).
 const pdfPageHtml = (bodyHtml, m) =>
@@ -47,8 +53,35 @@ const meta = (m) => {
   return `${start.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}${mins ? ` · ${mins} min` : ''}`;
 };
 
+// The email for minutes in the official Amnex format: a short cover and the full document as attachments.
+function buildAmnexEmail(meeting, settings, doc, transcriptText) {
+  const date = new Date(meeting.startedAt).toISOString().slice(0, 10);
+  const base = safeName(`MOM ${meeting.title} ${date}`);
+  const attachments = [];
+  const attached = [];
+  if (settings.emailPdf) {
+    attachments.push({ name: `${base}.pdf`, mime: 'application/pdf', fromHtml: renderPdfHtml(doc) });
+    attached.push('PDF');
+  }
+  if (settings.emailWord) {
+    attachments.push({ name: `${base}.doc`, mime: 'application/msword', base64: b64(renderWordHtml(doc)) });
+    attached.push('Word');
+  }
+  if (settings.emailMd) attachments.push({ name: `${base}.md`, mime: 'text/markdown', base64: b64(meeting.mom || '') });
+  if (settings.emailTranscript && transcriptText) {
+    attachments.push({ name: safeName(`Transcript ${meeting.title} ${date}`) + '.txt', mime: 'text/plain', base64: b64(transcriptText) });
+  }
+  // Nothing carries the full document? Then it goes in the mail itself, below the cover.
+  const inline = attached.length ? '' : `<div style="margin-top:18px">${renderDocBody(doc)}</div>`;
+  const html = `${renderEmailCover(doc, { attached })}${inline}
+<p style="max-width:600px;color:#8a9099;font-size:12px;margin-top:14px">Written by Debrief${meeting.model ? ` with ${escapeHtml(meeting.model)}` : ''}. Speech-to-text can mishear names and numbers, so check before circulating.</p>`;
+  return { subject: `MOM: ${meeting.title} (${date})`, html, text: `${emailCoverText(doc)}\n\n-- Written by Debrief`, attachments };
+}
+
 // renderHtml: markdown -> HTML (the MOM page's own renderer, which already escapes raw HTML).
 export function buildEmail(meeting, settings, renderHtml, transcriptText) {
+  const amnexDoc = parseAmnexMarkdown(meeting.mom || '');
+  if (amnexDoc) return buildAmnexEmail(meeting, settings, amnexDoc, transcriptText);
   const date = new Date(meeting.startedAt).toISOString().slice(0, 10);
   const body = inlineStyles(renderHtml(meeting.mom || ''));
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2328;max-width:760px">

@@ -137,6 +137,18 @@ What to expect: names are right most of the time for clear speech and wrong or *
 
 For the minutes you can also pick **Claude** (Anthropic key) or any **OpenAI-compatible** model under *MOM writer*.
 
+## Minutes format (official Amnex template)
+
+By default Debrief fills the Amnex house template (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting). To get the attendee sides and honorifics right:
+
+1. Open **Settings > Minutes > Minutes format**.
+2. Put your company email domain(s) in **Our email domains**, for example `amnex.com`. Leave it blank to use the domain of your "Send to" address.
+3. Optionally fill the **People directory**, one person per line: `Name | Honorific | Department | Designation | Organisation`. Add `| Chair` at the end for the usual chairperson. People who are not listed show `[DESIGNATION]` / `[DEPARTMENT]` / `[CLIENT]` placeholders to fill in by hand.
+4. To name the chair for one meeting, write `Chairperson: Name` in the context box on the minutes page before pressing Generate.
+5. Choose **Debrief standard** instead if you want the older free-form minutes.
+
+For a PDF with page numbers use **Print / PDF** on the minutes page (Chrome 131 or newer) and choose *Save as PDF*. The PDF attached to the email is built by your Apps Script and has no page numbers.
+
 ## 7. Troubleshooting
 
 | What you see | What to do |

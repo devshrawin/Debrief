@@ -398,6 +398,27 @@
           <div class="btnrow" style="margin-top:0"><button id="testLlm" class="btn">Test connection</button><span id="llmStatus" class="status"></span></div>
         </div>
       </div>
+
+      <!-- Minutes format (single card: the official Amnex template) -->
+      <div class="card" id="minutesFormatCard">
+        <h2>Minutes format</h2>
+        <div class="row2">
+          <span class="lab" id="minutesFormatLab">Layout of the minutes</span>
+          <div class="seg" id="minutesFormatSeg" role="group" aria-labelledby="minutesFormatLab"><button type="button" data-v="amnex">Official Amnex format</button><button type="button" data-v="standard">Debrief standard</button></div>
+          <input type="hidden" id="minutesFormat">
+          <p class="hint">The official format fills the Amnex house template (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting) for Print / PDF, Word and the email. Debrief writes only the wording; the header and attendee tables are built from the meeting itself. If the model's reply does not fit the template, standard minutes are written instead.</p>
+        </div>
+        <div class="row2">
+          <label for="myOrgDomains">Our email domains</label>
+          <input id="myOrgDomains" placeholder="amnex.com" autocomplete="off">
+          <p class="hint">Comma separated. People with these email domains are listed as the System Integrator; everyone else as Client Side. Leave blank to use the domain of your "Send to" address (a company one), or one combined list if there is none.</p>
+        </div>
+        <div class="row2">
+          <label for="peopleDirectory">People directory</label>
+          <textarea id="peopleDirectory" class="mono" rows="5" placeholder="Suresh K. | Sri. | Transport Dept | Joint Secretary | Kochi Metro&#10;Meera Iyer | Smt. | Finance | Accounts Officer | Kochi Metro"></textarea>
+          <p class="hint">One person per line: <code>Name | Honorific | Department | Designation | Organisation</code>. Add <code>| Chair</code> at the end for the usual chairperson. Used to fill the honorific (Sri. / Smt.), department and designation; anyone not listed shows [DESIGNATION] or [DEPARTMENT] to fill in. Lines starting with # are ignored.</p>
+        </div>
+      </div>
     </section>
 
     <!-- ============ Email ============ -->

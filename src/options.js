@@ -394,6 +394,13 @@ $('testMail').onclick = async () => {
   }
 };
 
+// Minutes format: a segmented control over a hidden field, read and saved like every other setting.
+const fmtSeg = () => document.querySelectorAll('#minutesFormatSeg button').forEach((b) => b.classList.toggle('active', b.dataset.v === $('minutesFormat').value));
+document.querySelectorAll('#minutesFormatSeg button').forEach((b) => (b.onclick = () => {
+  $('minutesFormat').value = b.dataset.v;
+  fmtSeg();
+}));
+
 (async () => {
   const s = await getSettings();
   buildLanguageUi();
@@ -405,6 +412,7 @@ $('testMail').onclick = async () => {
   }
   $('shareAuto').checked = s.shareMode === 'auto';
   setLanguages(s);
+  fmtSeg();
   loaded = read();
   showProviderFields();
   renderAllow();
@@ -430,6 +438,7 @@ chrome.storage.onChanged.addListener(async (changes) => {
   }
   $('shareAuto').checked = fresh.shareMode === 'auto';
   loaded.shareMode = fresh.shareMode;
+  fmtSeg();
   if (same(read().meetingLanguages, loaded.meetingLanguages)) {
     setLanguages(fresh);
     loaded.meetingLanguages = read().meetingLanguages;
