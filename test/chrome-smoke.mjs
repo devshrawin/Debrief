@@ -318,6 +318,29 @@ try {
   check('minutes page: unnamed voices of this meeting can be named at once, a pause shows in the transcript', named && nb.shown && nb.rows === 1 && nb.playHidden === true && nb.pauseRow && nb.saved && nb.hidden, JSON.stringify(nb));
   await opts.evaluate(`chrome.storage.local.remove(['meeting:nm1', 'voices']).then(async () => { const ids = (await chrome.storage.local.get('meetingIds')).meetingIds || []; await chrome.storage.local.set({ meetingIds: ids.filter((x) => x !== 'nm1') }); })`);
 
+  // ---- Pro: the choices offered when a recording stops ----
+  await opts.evaluate(`(async () => {
+    const meeting = { id: 'sc1', title: 'Start card test', startedAt: Date.now() - 900000, endedAt: Date.now() - 1000, segments: [{ t: 0, dur: 30, src: 'others', text: 'We agreed to ship on Friday.' }], errors: [], mom: '' };
+    const ids = (await chrome.storage.local.get('meetingIds')).meetingIds || [];
+    await chrome.storage.local.set({ 'meeting:sc1': meeting, meetingIds: ['sc1', ...ids] });
+  })()`);
+  const scPage = await openPage(`chrome-extension://${id}/mom.html?id=sc1`);
+  await new Promise((r) => setTimeout(r, 1500));
+  const sc = await scPage.evaluate(`(async () => {
+    const out = { shown: !document.getElementById('startCard').classList.contains('hidden'), count: document.getElementById('startCount').textContent };
+    out.formats = [...document.querySelectorAll('#fmtSeg button')].map((b) => b.getAttribute('aria-checked'));
+    document.querySelector('#fmtSeg button[data-v="standard"]').click();
+    document.getElementById('chkShare').click();
+    await new Promise((r) => setTimeout(r, 700));
+    const m = (await chrome.storage.local.get('meeting:sc1'))['meeting:sc1'];
+    out.saved = m.format === 'standard' && m.transcriptShare === true;
+    out.stopped = /ready/i.test(document.getElementById('startCount').textContent) || out.count !== document.getElementById('startCount').textContent;
+    out.pressed = [...document.querySelectorAll('#fmtSeg button')].map((b) => b.getAttribute('aria-checked'));
+    return out;
+  })()`);
+  check('stopping a recording offers the minutes format and transcript sharing before the minutes are written', sc.shown && /Writing automatically/.test(sc.count) && sc.saved && sc.pressed.join() === 'false,true', JSON.stringify(sc));
+  await opts.evaluate(`chrome.storage.local.remove(['meeting:sc1']).then(async () => { const ids = (await chrome.storage.local.get('meetingIds')).meetingIds || []; await chrome.storage.local.set({ meetingIds: ids.filter((x) => x !== 'sc1') }); })`);
+
   // ---- Pro: the setup check ----
   const chk = await opts.evaluate(`(async () => {
     document.querySelector('#nav button[data-tab=start]').click();
