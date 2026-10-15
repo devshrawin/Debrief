@@ -137,7 +137,7 @@ function renderList() {
       const langs = (p.langs || [p.lang || 'en']).map((l) => LANG_NAME[l] || l).join(' + ');
       const n = p.meetings || 1;
       const meta = p.auto
-        ? `${anon ? 'Heard in your meetings, not named yet' : 'Learned from your meetings'} · ${n} meeting${n === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech${p.ready ? '' : ` · not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings`}`
+        ? `${anon ? 'Heard in your meetings, not named yet' : 'Learned from your meetings'} · ${n} meeting${n === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech${p.ready || p.confirmed ? '' : ` · not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings, or give it a name`}${anon && !samplesOn ? ' · no audio clip (switch on “Keep a short sample” before the next meeting). Meanwhile open that meeting’s Transcript: this voice’s lines are labelled with this name, so you can name it by reading what it said.' : ''}`
         : `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
       const row = el('li', { className: 'voice-row' });
       const initial = anon ? '?' : (Array.from(p.name.trim())[0] || '?').toUpperCase();
@@ -175,7 +175,9 @@ function sampleButton(p) {
   return b;
 }
 
+let samplesOn = false;
 async function refresh() {
+  samplesOn = !!(await getSettings()).voiceSamples;
   people = await getVoices();
   renderList();
   renderUnnamed().catch(() => {});

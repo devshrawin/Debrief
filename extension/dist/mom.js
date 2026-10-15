@@ -1375,8 +1375,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   // src/iconText.js
   var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
   var MENU = /^(?:(?:un)?pin|spotlight|remove|mute|unmute|reframe|zoom (?:in|out)|minimi[sz]e|maximi[sz]e|full screen|more actions|add (?:a )?(?:person|people)|keep|send a message)\b.*$/i;
+  var UI_PHRASE = /(?:\bcan['\u2019]?t\b|\bcannot\b|\bremotely\b|\bsomeone else\b|\bthis participant\b|^you (?:are|have|will|can)\b|^(?:backgrounds?|effects?|captions?|activities|host controls|meeting details|participants|people|in the call|contributors|visual effects|apply visual effects|more options|raise hand|lower hand|present now|share screen|leave call|end call|chat|reactions?)(?:\s+(?:and|&)\s+\w+)?$)/i;
   var isMenuText = (s) => {
     const t = String(s || "").trim();
+    if (UI_PHRASE.test(t) || t.split(/\s+/).length > 6) return true;
     return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
   };
   function cleanPresence(presence) {
@@ -4048,13 +4050,16 @@ ${meeting2.mom || ""}
   var abortCtl = null;
   var genFail = "";
   var attendeeList = () => (meeting?.attendees || []).filter(Boolean);
-  var labelCache = { key: "", lines: null };
-  function labeledLines() {
-    const people = usableVoices(settings.voices);
+  var labelCache = /* @__PURE__ */ new Map();
+  function labeledLines(forDisplay = false) {
+    const people = forDisplay ? settings.voices || [] : usableVoices(settings.voices);
     if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-    const key2 = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
-    if (labelCache.key !== key2) labelCache = { key: key2, lines: labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }) };
-    return labelCache.lines;
+    const key2 = `${forDisplay ? "d" : "n"}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
+    if (!labelCache.has(key2)) {
+      if (labelCache.size > 8) labelCache.clear();
+      labelCache.set(key2, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }));
+    }
+    return labelCache.get(key2);
   }
   var nameCtx = () => {
     const labeled = labeledLines();
@@ -4101,8 +4106,9 @@ ${meeting2.mom || ""}
   }
   function renderTranscript() {
     const ctx = nameCtx();
-    const rows = ctx.labeled ? ctx.labeled.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? settings.myName || "Me" : "Others", text: s.text, flag: "" }));
-    $2("trInfo").textContent = `${rows.length} ${ctx.labeled ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
+    const shown = labeledLines(true);
+    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? settings.myName || "Me" : "Others", text: s.text, flag: "" }));
+    $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
     $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {
       $2("transcript").innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
@@ -4115,8 +4121,8 @@ ${meeting2.mom || ""}
         row2.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
         row2.children[0].textContent = fmtTime(r.t);
         row2.children[1].textContent = r.who;
-        row2.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ctx.labeled ? " named" : ""}`;
-        row2.children[2].textContent = r.src === "me" && !ctx.labeled ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
+        row2.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown ? " named" : ""}`;
+        row2.children[2].textContent = r.src === "me" && !shown ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
         return row2;
       })
     );
@@ -4401,7 +4407,7 @@ ${meeting2.mom || ""}
     if (!c.voices && !c.settings) return;
     try {
       settings = await getSettings();
-      labelCache.key = "";
+      labelCache.clear();
       renderTranscript();
       if (c.voices && meeting?.mom && !abortCtl && labeledLines()) $2("genStatus").textContent = "Voices changed since these minutes were written. Press Regenerate to use the names.";
     } catch {

@@ -181,4 +181,12 @@ await test('meet: Meet control text (Pin ... to your main screen, Reframe, Zoom 
   assert.deepEqual(clean, ['Deep Patel']);
 });
 
+await test('meet: panel headings and sentences from Meet (Backgrounds and effects, You can\'t remotely mute this participant) are not participants', async () => {
+  const { isMenuText } = await import('../src/iconText.js');
+  for (const t of ['Backgrounds and effects', "You can't remotely mute this participant", "You can't unmute someone else", 'You can’t remotely mute this participant', 'Host controls', 'Turn on captions', 'Meeting details', 'More options', 'Present now']) assert.ok(isMenuText(t), t);
+  for (const t of ['Deep Patel', 'Akash Behera', 'Amal Samad', 'Dr. Anil Kumar Sharma', 'Mahaveer Prajapati', 'Shrawin Sisodia', 'Ankur Desai']) assert.ok(!isMenuText(t), t);
+  const doc = page(`<div data-participant-id="a"><div>Deep Patel</div><div>You can't remotely mute this participant</div></div><div data-participant-id="b"><div>Backgrounds and effects</div><div>Ankur Desai</div></div>`);
+  assert.deepEqual(meet.readParticipants(doc).sort(), ['Ankur Desai', 'Deep Patel']);
+});
+
 console.log(`\n${passed} passed`);
