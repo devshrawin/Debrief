@@ -20,7 +20,7 @@ export async function saveSamples(meetingId, meeting, people) {
       const ranked = best.get(p.id).sort((a, b) => b.score - a.score).slice(0, 6);
       const pcms = [];
       for (const { s } of ranked) {
-        const i16 = await getPiece(pieceKey(meetingId, s.t0));
+        const i16 = await getPiece(pieceKey(meetingId, s.t0, s.s));
         if (i16) pcms.push(fromInt16(i16));
         if (pcms.length >= 3) break;
       }

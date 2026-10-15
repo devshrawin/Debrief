@@ -133,6 +133,21 @@ await test('every change of Meet mute is written to the meeting log, and a silen
   assert.equal(state.mem.session.rec.alert?.kind, 'mic');
 });
 
+await test('room mode: the microphone stays on when Meet says muted, and microphone pieces of speech are stored with their origin', async () => {
+  live({ micWanted: true, meetMuted: false });
+  state.mem.local.settings = { followMeetMute: true, roomMode: true };
+  await send({ type: 'meet-mute', muted: true }, page(7));
+  assert.equal(state.mem.session.rec.micOn, true, 'in a room the mic is the meeting');
+  state.mem.local.settings = { followMeetMute: true, roomMode: false };
+  await send({ type: 'meet-mute', muted: false }, page(7));
+  await send({ type: 'meet-mute', muted: true }, page(7));
+  assert.equal(state.mem.session.rec.micOn, false, 'outside room mode muting still pauses the mic');
+  live();
+  await send({ type: 'voice-seg', meetingId: 'mt', segs: [{ t0: 1, t1: 4, e: 'AAAA', s: 'm', extra: 'dropped' }, { t0: 5, t1: 8, e: 'BBBB' }] }, OFFSCREEN);
+  const segs = state.mem.local['meeting:mt'].voiceSegs;
+  assert.deepEqual(segs, [{ t0: 1, t1: 4, e: 'AAAA', s: 'm' }, { t0: 5, t1: 8, e: 'BBBB' }]);
+});
+
 await test('a late message during stop cannot bring a stopped recording back', async () => {
   live();
   const stopping = send({ type: 'stop' }, OWN);

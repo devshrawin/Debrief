@@ -29,7 +29,7 @@ export function evidence(meeting, { myName = '' } = {}) {
   const caps = (meeting.captions || []).filter((c) => c.name && !isIconText(c.name) && !isMe(c.name, myName));
   const all = (meeting.captions || []).filter((c) => c.name && !isIconText(c.name));
   const out = new Map();
-  for (const s of meeting.voiceSegs || []) {
+  for (const s of (meeting.voiceSegs || []).filter((x) => x.s !== 'm')) { // captions describe the call, not a room microphone
     const mine = caps.filter((c) => c.t - LEARN.lead <= s.t0 && (c.t2 ?? c.t) + LEARN.tail >= s.t1);
     if (new Set(mine.map((c) => norm(c.name))).size !== 1) continue; // none, or two different people
     const who = norm(mine[0].name);

@@ -185,23 +185,27 @@ export function labelText(l, { unknown = 'Unknown speaker' } = {}) {
 
 // The whole thing: the transcript of one meeting as labelled lines [{ t, label, name, text, source }].
 // Only passages from the meeting's remote audio (src "others") are labelled; "me" is the note-taker's mic.
-export function labelTranscript(meeting, people, { captions, th = THRESHOLDS, myName = '' } = {}) {
-  const segs = [...(meeting.voiceSegs || [])].sort((a, b) => a.t0 - b.t0);
-  if (!segs.length || !people?.length) return null;
-  const labelled = labelSegments(segs, people, th);
-  const passages = (meeting.segments || []).filter((s) => s.src === 'others' && s.dur);
+export function labelTranscript(meeting, people, { captions, th = THRESHOLDS, myName = '', room = false } = {}) {
+  const all = [...(meeting.voiceSegs || [])].sort((a, b) => a.t0 - b.t0);
+  if (!all.length || !people?.length) return null;
+  // Pieces of speech come from two streams: the meeting tab (the others) and, in room mode, the microphone (s: 'm').
+  const tab = labelSegments(all.filter((s) => s.s !== 'm'), people, th);
+  const mic = room ? labelSegments(all.filter((s) => s.s === 'm'), people, th) : [];
+  const passages = (meeting.segments || []).filter((s) => (s.src === 'others' || (room && s.src === 'me')) && s.dur);
   if (!passages.length) return null;
   const lines = [];
   for (const p of passages.sort((a, b) => a.t - b.t)) {
-    const merged = mergeWithCaptions(alignPassage({ t: p.t, dur: p.dur, text: p.text }, labelled, th), captions);
+    const src = p.src;
+    // Meet's captions describe the people on the call, not the room, so they are only merged into the tab's lines.
+    const merged = mergeWithCaptions(alignPassage({ t: p.t, dur: p.dur, text: p.text }, src === 'me' ? mic : tab, th), src === 'me' ? [] : captions);
     for (const m of merged) {
       const prev = lines.at(-1);
       const label = labelText(m);
-      if (prev && prev.label === label && prev.src === 'others' && m.t - prev.t < 40) prev.text += ` ${m.text}`;
-      else lines.push({ t: m.t, label, name: m.name, text: m.text, source: m.source, src: 'others', mixed: m.mixed });
+      if (prev && prev.label === label && prev.src === src && m.t - prev.t < 40) prev.text += ` ${m.text}`;
+      else lines.push({ t: m.t, label, name: m.name, text: m.text, source: m.source, src, mixed: m.mixed });
     }
   }
-  for (const s of meeting.segments || []) if (s.src === 'me') lines.push({ t: s.t, label: myName || 'Me', name: myName || null, text: s.text, source: 'mic', src: 'me' });
+  if (!room) for (const s of meeting.segments || []) if (s.src === 'me') lines.push({ t: s.t, label: myName || 'Me', name: myName || null, text: s.text, source: 'mic', src: 'me' });
   return lines.sort((a, b) => a.t - b.t);
 }
 
@@ -239,7 +243,7 @@ export function clusterVoices(segs, { threshold = 0.55 } = {}) {
 export function voicePresence(lines) {
   const out = {};
   for (const l of lines || []) {
-    if (!l.name || l.src === 'me' || l.source === 'mic') continue;
+    if (!l.name || l.source === 'mic') continue;
     const end = l.t + Math.max(3, Math.min(30, l.text.length / 14));
     const p = out[l.name];
     if (p) {

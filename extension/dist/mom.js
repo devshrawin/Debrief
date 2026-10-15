@@ -2121,6 +2121,8 @@ ${att}
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+    roomMode: false,
+    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -2678,7 +2680,7 @@ _(Output hit the length limit and was cut off.)_`;
     };
     const source = ctx.labeled?.length ? ctx.labeled.map((l3) => ({ t: l3.t, text: l3.text, src: l3.src, label: l3.label })) : [...meeting2.segments || []].sort((a, b) => a.t - b.t);
     for (const s of source) {
-      const speaker = s.label || (s.src === "me" ? ctx.myName || "Me" : "Others");
+      const speaker = s.label || (s.src === "me" ? ctx.room ? "Room" : ctx.myName || "Me" : "Others");
       const sentences2 = applyDictionary(s.text || "", ctx.entries, ctx.attendees).split(/(?<=[.!?।])\s+/).filter((x2) => x2.trim());
       for (const [i, sentence] of sentences2.entries()) {
         if (!cur.length) start = s.t + 0;
@@ -3134,9 +3136,9 @@ Do not write an Attendance section or notes about the recording: they are added 
   function formatTranscript(meeting2, myName, ctx = {}) {
     const me2 = myName ? `ME (${myName})` : "ME";
     if (ctx.labeled?.length) {
-      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" ? me2 : l3.label}: ${applyDictionary(l3.text, ctx.entries, ctx.attendees)}`).join("\n");
+      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" && !ctx.room ? me2 : l3.label}: ${applyDictionary(l3.text, ctx.entries, ctx.attendees)}`).join("\n");
     }
-    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? me2 : "OTHERS"}: ${applyDictionary(s.text, ctx.entries, ctx.attendees)}`).join("\n");
+    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS"}: ${applyDictionary(s.text, ctx.entries, ctx.attendees)}`).join("\n");
   }
   function speakerTimeline(captions, ctx = {}) {
     if (!captions?.length) return "";
@@ -3165,6 +3167,7 @@ Do not write an Attendance section or notes about the recording: they are added 
     const lines = header(meeting2, settings2);
     const names2 = glossaryLine(ctx.entries || [], [...ctx.attendees || [], ...ctx.learned || []]);
     if (names2) lines.push("", `Names and terms (spell exactly like this): ${names2}`);
+    if (ctx.room) lines.push("", "This was recorded in a room: lines marked ROOM (or named by voice) come from one microphone shared by several people. Never attribute them to the note-taker, and do not assume who spoke unless the line names them.");
     if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(", ")}`);
     if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
     if (notes?.trim()) lines.push("", "Context from the note-taker (attendees, agenda, spellings):", notes.trim());
@@ -3639,29 +3642,33 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
     if (l3.source === "conflict") return `${l3.name} (captions say ${l3.captionName})`;
     return l3.name;
   }
-  function labelTranscript(meeting2, people, { captions, th = THRESHOLDS, myName = "" } = {}) {
-    const segs = [...meeting2.voiceSegs || []].sort((a, b) => a.t0 - b.t0);
-    if (!segs.length || !people?.length) return null;
-    const labelled = labelSegments(segs, people, th);
-    const passages = (meeting2.segments || []).filter((s) => s.src === "others" && s.dur);
+  function labelTranscript(meeting2, people, { captions, th = THRESHOLDS, myName = "", room = false } = {}) {
+    const all = [...meeting2.voiceSegs || []].sort((a, b) => a.t0 - b.t0);
+    if (!all.length || !people?.length) return null;
+    const tab = labelSegments(all.filter((s) => s.s !== "m"), people, th);
+    const mic = room ? labelSegments(all.filter((s) => s.s === "m"), people, th) : [];
+    const passages = (meeting2.segments || []).filter((s) => (s.src === "others" || room && s.src === "me") && s.dur);
     if (!passages.length) return null;
     const lines = [];
     for (const p of passages.sort((a, b) => a.t - b.t)) {
-      const merged = mergeWithCaptions(alignPassage({ t: p.t, dur: p.dur, text: p.text }, labelled, th), captions);
+      const src = p.src;
+      const merged = mergeWithCaptions(alignPassage({ t: p.t, dur: p.dur, text: p.text }, src === "me" ? mic : tab, th), src === "me" ? [] : captions);
       for (const m of merged) {
         const prev = lines.at(-1);
         const label2 = labelText(m);
-        if (prev && prev.label === label2 && prev.src === "others" && m.t - prev.t < 40) prev.text += ` ${m.text}`;
-        else lines.push({ t: m.t, label: label2, name: m.name, text: m.text, source: m.source, src: "others", mixed: m.mixed });
+        if (prev && prev.label === label2 && prev.src === src && m.t - prev.t < 40) prev.text += ` ${m.text}`;
+        else lines.push({ t: m.t, label: label2, name: m.name, text: m.text, source: m.source, src, mixed: m.mixed });
       }
     }
-    for (const s of meeting2.segments || []) if (s.src === "me") lines.push({ t: s.t, label: myName || "Me", name: myName || null, text: s.text, source: "mic", src: "me" });
+    if (!room) {
+      for (const s of meeting2.segments || []) if (s.src === "me") lines.push({ t: s.t, label: myName || "Me", name: myName || null, text: s.text, source: "mic", src: "me" });
+    }
     return lines.sort((a, b) => a.t - b.t);
   }
   function voicePresence(lines) {
     const out = {};
     for (const l3 of lines || []) {
-      if (!l3.name || l3.src === "me" || l3.source === "mic") continue;
+      if (!l3.name || l3.source === "mic") continue;
       const end = l3.t + Math.max(3, Math.min(30, l3.text.length / 14));
       const p = out[l3.name];
       if (p) {
@@ -4057,16 +4064,16 @@ ${meeting2.mom || ""}
   function labeledLines(forDisplay = false) {
     const people = forDisplay ? settings.voices || [] : usableVoices(settings.voices);
     if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-    const key2 = `${forDisplay ? "d" : "n"}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
+    const key2 = `${forDisplay ? "d" : "n"}${settings.roomMode ? "r" : ""}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
     if (!labelCache.has(key2)) {
       if (labelCache.size > 8) labelCache.clear();
-      labelCache.set(key2, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }));
+      labelCache.set(key2, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!settings.roomMode }));
     }
     return labelCache.get(key2);
   }
   var nameCtx = () => {
     const labeled = labeledLines();
-    return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, voicePresence: labeled ? voicePresence(labeled) : null };
+    return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!settings.roomMode, voicePresence: labeled ? voicePresence(labeled) : null };
   };
   var parseAttendees = (text) => text.split(/[\n,]+/).map((x2) => x2.trim()).filter(Boolean);
   function renderMom() {
@@ -4110,7 +4117,7 @@ ${meeting2.mom || ""}
   function renderTranscript() {
     const ctx = nameCtx();
     const shown = labeledLines(true);
-    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? settings.myName || "Me" : "Others", text: s.text, flag: "" }));
+    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? settings.roomMode ? "Room" : settings.myName || "Me" : "Others", text: s.text, flag: "" }));
     $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
     $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {

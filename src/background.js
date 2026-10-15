@@ -274,7 +274,8 @@ function stop(opts = {}) {
 
 // Effective mic = what the user wants, unless "follow Meet mute" is on and Meet itself is muted.
 async function applyMic(patch = {}) {
-  const { followMeetMute } = await getSettings();
+  const { followMeetMute: follow, roomMode } = await getSettings();
+  const followMeetMute = follow && !roomMode; // in room mode the mic is the meeting, whatever Meet says
   let eff = false;
   let changed = false;
   let cur = null;
@@ -413,7 +414,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     },
     // Voice fingerprints of the meeting's speech, made by the recorder. Only fingerprints, never audio.
     'voice-seg': async () => {
-      const segs = (msg.segs || []).filter((x) => Number.isFinite(x?.t0) && Number.isFinite(x?.t1) && typeof x.e === 'string' && x.e.length < 600).slice(0, 200);
+      const segs = (msg.segs || []).filter((x) => Number.isFinite(x?.t0) && Number.isFinite(x?.t1) && typeof x.e === 'string' && x.e.length < 600).map((x) => ({ t0: x.t0, t1: x.t1, e: x.e, ...(x.s === 'm' ? { s: 'm' } : {}) })).slice(0, 200);
       if (!segs.length) return { ok: false };
       await updateMeeting(msg.meetingId, (m) => {
         const all = (m.voiceSegs ||= []);

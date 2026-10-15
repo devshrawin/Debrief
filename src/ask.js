@@ -42,7 +42,7 @@ export function chunkMeeting(meeting, ctx = {}, windowWords = 110) {
   // With voice recognition, each remote line already names its speaker.
   const source = ctx.labeled?.length ? ctx.labeled.map((l) => ({ t: l.t, text: l.text, src: l.src, label: l.label })) : [...(meeting.segments || [])].sort((a, b) => a.t - b.t);
   for (const s of source) {
-    const speaker = s.label || (s.src === 'me' ? ctx.myName || 'Me' : 'Others');
+    const speaker = s.label || (s.src === 'me' ? (ctx.room ? 'Room' : ctx.myName || 'Me') : 'Others');
     const sentences = applyDictionary(s.text || '', ctx.entries, ctx.attendees).split(/(?<=[.!?।])\s+/).filter((x) => x.trim());
     for (const [i, sentence] of sentences.entries()) {
       if (!cur.length) start = s.t + 0;
