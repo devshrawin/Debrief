@@ -1,5 +1,7 @@
 # Running Debrief with local models
 
+**Fastest way:** the `local/` folder has a ready kit (a Whisper server for speech, a start script that also sets Ollama up, and a one-command end-to-end check). See [local/README.md](../local/README.md). The rest of this page explains the pieces.
+
 Everything below keeps your meeting text on your own computer: no quotas, no API keys, nothing sent to Google or Anthropic. The price is quality and speed, so read the honest summary first.
 
 | Job | Local option | What to expect |

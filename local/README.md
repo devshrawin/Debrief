@@ -42,9 +42,9 @@ The recording must be a 16 kHz mono WAV (`ffmpeg -i in.m4a -ar 16000 -ac 1 out.w
 
 | Step | Result |
 |---|---|
-| Speech to text, English with an Indian accent | about 0.5 x real time (a 100 s chunk takes about 50 s) |
+| Speech to text, English with an Indian accent | about 0.3 x real time (a 100 s chunk takes about 30 s), good text |
 | Speech to text, Malayalam (Malayalam model) | about 0.9 x real time, and the text is short and phonetic compared with Gemini |
-| Minutes | slow: minutes of waiting for a one-hour meeting with a 7B model on a CPU |
+| Minutes (qwen2.5:7b, quick mode) | 70 s for the minutes of a 1-minute stretch; expect many minutes for a long meeting, and thorough mode makes several such calls |
 
 Honest limits:
 - **Whisper "small" is weaker than Gemini** on Hindi and Hinglish. The server therefore only picks Hindi or Malayalam when the audio is clearly that language, and otherwise reads it as English, because a wrong Hindi guess turns a whole chunk into noise. Hindi-speaking stretches will come out as mangled English.
