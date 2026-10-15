@@ -20,6 +20,11 @@
     } catch {
     }
   }
+  function nextQuotaReset(now = Date.now()) {
+    const today = dayKey(new Date(now));
+    for (let t = now + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
+    return now + 12 * 36e5;
+  }
 
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
@@ -34,11 +39,7 @@
     } catch {
     }
   }
-  function untilPacificMidnight(now = Date.now()) {
-    const today = dayKey(new Date(now));
-    for (let t = now + 5 * 6e4; t < now + 26 * 36e5; t += 5 * 6e4) if (dayKey(new Date(t)) !== today) return t;
-    return now + 6 * 36e5;
-  }
+  var untilPacificMidnight = (now) => nextQuotaReset(now);
   function cooldownFor(text, now = Date.now()) {
     const t = String(text || "");
     if (/PerDay|per day|daily/i.test(t)) return untilPacificMidnight(now);
@@ -170,7 +171,7 @@
       return await new Promise((resolve, reject) => {
         const t = db.transaction(store, mode);
         const out = fn(t.objectStore(store));
-        t.oncomplete = () => resolve(out?.result ?? out);
+        t.oncomplete = () => resolve(out && typeof out === "object" && "result" in out ? out.result : out);
         t.onerror = () => reject(t.error);
         t.onabort = () => reject(t.error);
       });
@@ -214,6 +215,8 @@
     // ...or after this many silent minutes (0 = never)
     usageLimits: "",
     // one "model=daily requests" per line; learned from 429s too
+    usdInr: 88,
+    // rupees per US dollar, to show the 'cost if paid' estimate in rupees
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
     dictAutoAlias: false,

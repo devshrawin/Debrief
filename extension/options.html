@@ -724,7 +724,7 @@
         <div class="usage-scroll"><table class="data" id="usageTable"></table></div>
         <div id="usageTotals"></div>
       </section>
-      <p class="hint" style="display:flex;gap:8px;align-items:center"><span class="tilde" aria-hidden="true">~</span><span>"~" means an estimate from token and minute counts at the prices below. It is not a bill; your provider's console is the source of truth. Costs are in US dollars.</span></p>
+      <p class="hint" style="display:flex;gap:8px;align-items:center"><span class="tilde" aria-hidden="true">~</span><span>"~" means an estimate from token and minute counts at the prices below. It is not a bill; your provider's console is the source of truth. Costs are shown in rupees at the rate below.</span></p>
 
       <div class="grid2">
         <section class="card">
@@ -735,7 +735,10 @@
         <section class="card">
           <label for="usagePrices" class="lbl" style="margin:0">Prices for "cost if paid"</label>
           <textarea id="usagePrices" class="mono" placeholder="claude-sonnet-5-5=3,15" rows="5"></textarea>
-          <p class="hint">One <code>model=input price,output price</code> per line, in USD per million tokens. Check your provider's price page; prices change. Free tiers show no cost.</p>
+          <p class="hint">One <code>model=input price,output price</code> per line, in US dollars per million tokens (shown in rupees at the exchange rate below). Check your provider's price page; prices change. Free tiers show no cost.</p>
+          <label for="usdInr" class="lbl" style="margin:14px 0 6px">Exchange rate (₹ per US$ 1)</label>
+          <input id="usdInr" type="number" min="1" step="0.1" placeholder="88" style="max-width:140px">
+          <p class="hint">Used only to show the estimate in rupees. Update it when the rate moves.</p>
         </section>
       </div>
       <div class="btnrow"><button type="button" id="usageReset" class="btn danger">Reset counters…</button><span class="hint">Clears these numbers only. Meetings and settings are kept.</span></div>

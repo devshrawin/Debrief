@@ -18,6 +18,7 @@ export const DEFAULTS = {
   autoStop: true, // stop recording by itself when the meeting is over
   autoStopQuietMin: 10, // ...or after this many silent minutes (0 = never)
   usageLimits: '', // one "model=daily requests" per line; learned from 429s too
+  usdInr: 88, // rupees per US dollar, to show the 'cost if paid' estimate in rupees
   usagePrices: '', // one "model=USD per 1M input,USD per 1M output" per line
   dictAutoAlias: false, // accept clear-cut learned fixes (3+ sightings) without asking
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
@@ -34,7 +35,7 @@ export const DEFAULTS = {
   meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
   otherSites: true, // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
   voiceOn: false, // recognise who is speaking, using voices enrolled in Settings
-  voiceSamples: false, // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
+  voiceSamples: true, // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
   voiceLearn: false, // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
