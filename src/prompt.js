@@ -267,7 +267,8 @@ export function guardOwners(items, windowText) {
 
 // Removes leaked prompt markup and placeholders that weaker models copy into their answer.
 export function sanitizeMinutes(md) {
-  let t = String(md || '').trim();
+  // Reasoning models (Qwen3, DeepSeek...) can put their thinking in <think> tags: it is not part of the minutes.
+  let t = String(md || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^[\s\S]*?<\/think>/i, '').trim();
   // A reply wrapped as one code block is unwrapped; fences inside the minutes are the model's content and stay.
   const wrapped = t.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i);
   if (wrapped && !wrapped[1].includes('```')) t = wrapped[1];
