@@ -22,6 +22,9 @@ export const DEFAULTS = {
   dictAutoAlias: false, // accept clear-cut learned fixes (3+ sightings) without asking
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
+  minutesFormat: 'amnex', // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
+  myOrgDomains: '', // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
+  peopleDirectory: '', // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
   shareList: '', // default people to share the minutes with
   shareGroups: '', // per recurring meeting: "title words | a@x.com, b@y.com"
   shareMode: 'review', // review = only I get it until I press Share; auto = send to them too

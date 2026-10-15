@@ -1,0 +1,22 @@
+/* Debrief: official Amnex minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
+@page amx {
+  size: A4;
+  margin: 14mm 16mm 18mm 16mm;
+  @bottom-center { content: "Amnex Infotechnologies Pvt Ltd | Confidential"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+}
+.amx { page: amx; }
+.amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.amx table { page-break-inside: auto; }
+.amx tr { break-inside: avoid; page-break-inside: avoid; }
+.amx thead { display: table-header-group; }
+.amx-gap { break-inside: avoid; }
+.amx-h1 { break-after: avoid; }
+@media print {
+  .amx tfoot { display: none; } /* on paper the Confidential line is the page footer above; on screen it closes the document */
+  .no-print, .amx-review { display: none !important; }
+  body:has(.amx) { background: #fff !important; }
+  body:has(.amx) main { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  body:has(.amx) main > header { display: none !important; }
+  .amx { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+}
