@@ -291,4 +291,11 @@ await test('learning: learned names reach the speech hints and the prompt, never
   delete globalThis.chrome;
 });
 
+await test('minutes from reasoning models: <think> blocks (closed, or cut off at the start) are removed', async () => {
+  const { sanitizeMinutes } = await import('../src/prompt.js');
+  assert.equal(sanitizeMinutes('<think>Let me plan the minutes...\nmore</think>\n# Title\n\n- point'), '# Title\n\n- point');
+  assert.equal(sanitizeMinutes('thinking text without an opening tag</think>\n# Title'), '# Title');
+  assert.equal(sanitizeMinutes('# Title\n\nWe discussed the <think> tag in the parser.'), '# Title\n\nWe discussed the <think> tag in the parser.');
+});
+
 console.log(`\n${passed} passed`);
