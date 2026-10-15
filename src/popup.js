@@ -39,7 +39,8 @@ async function refresh() {
   $('pause').setAttribute('aria-pressed', String(!!st.paused));
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
   show('start', !st.recording);
-  show('modeBox', !st.recording);
+  show('modeBox', !st.recording && !blockedTab);
+  show('shortcutHint', !st.recording && !blockedTab);
   show('stop', !!recording);
   show('live', !!recording);
   show('micRow', !!(recording && st.mic));
@@ -306,6 +307,7 @@ $('alertAction').onclick = (e) => {
 
 // Online meeting or a room: decided by the tab's link, and the user can flip it before pressing Start.
 let tabUrl = '';
+let blockedTab = false; // a Chrome page: nothing can be recorded, so the start controls are hidden
 let chosenRoom = null; // null = follow the link
 const currentRoom = () => roomFor(tabUrl, chosenRoom);
 function paintMode() {
@@ -381,6 +383,7 @@ for (const id of ['openSettings', 'openSettings1']) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || '');
   show('cantRecord', blocked);
+  blockedTab = blocked;
   $('start').disabled = !sttReady(s) || blocked;
   let host = '';
   try {
