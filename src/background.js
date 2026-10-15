@@ -79,9 +79,9 @@ let recTimer = null;
 function paintRec() {
   if (!rec) return;
   const bad = rec.attention;
-  const tip = bad ? TIP_ATTN : `Recording · ${fmtElapsed(Date.now() - rec.startedAt)}`;
+  const tip = bad ? TIP_ATTN : `${rec.paused ? 'Paused' : 'Recording'} · ${fmtElapsed(Date.now() - rec.startedAt)}`;
   for (const t of [null, rec.tabId]) {
-    setBadge(t, bad ? '!' : 'REC', bad ? '#1d1f24' : '#c8281c');
+    setBadge(t, bad ? '!' : rec.paused ? 'II' : 'REC', bad ? '#1d1f24' : rec.paused ? '#c25a00' : '#c8281c');
     setTip(t, tip);
   }
 }
@@ -107,7 +107,15 @@ function hideRec(tabId) {
   }
 }
 // After a service-worker restart in the middle of a recording, put the REC indicator back.
-getState().then((st) => st.recording && !st.stopping && showRec(st.tabId, st.startedAt, !!st.alert), () => {});
+getState().then((st) => {
+  if (st.recording && !st.stopping) {
+    showRec(st.tabId, st.startedAt, !!st.alert);
+    if (st.paused && rec) {
+      rec.paused = true;
+      paintRec();
+    }
+  }
+}, () => {});
 
 let chain = Promise.resolve();
 const serial = (fn) => {
@@ -232,6 +240,36 @@ async function startInner(msg) {
   return { ok: true };
 }
 
+// Pause or resume the recording (the meeting went off topic, a private call, a break). While paused the recorder puts
+// silence on both streams: nothing is transcribed, fingerprinted or kept, and times stay right. The pauses are noted
+// on the meeting so the transcript can say so.
+async function setPaused(want) {
+  let changed = false;
+  const now = Date.now();
+  await mutateState((st) => {
+    if (!st.recording || st.stopping) return null;
+    const on = typeof want === 'boolean' ? want : !st.paused;
+    if (on === !!st.paused) return null;
+    changed = true;
+    return { ...st, paused: on, pausedAt: on ? now : null };
+  });
+  const st = await getState();
+  if (!changed || !st.recording) return { ok: true, paused: !!st.paused };
+  await chrome.runtime.sendMessage({ target: 'offscreen', type: 'pause', on: !!st.paused }).catch(() => {});
+  const sec = Math.max(0, Math.round((now - st.startedAt) / 1000));
+  await updateMeeting(st.meetingId, (m) => {
+    const list = (m.pauses ||= []);
+    if (st.paused) list.push({ from: sec, to: null });
+    else if (list.length && list.at(-1).to == null) list.at(-1).to = sec;
+  });
+  if (!rec) showRec(st.tabId, st.startedAt, !!st.alert); // the worker restarted while recording
+  rec.paused = !!st.paused;
+  paintRec();
+  // a quiet stretch while paused must not trip the silence safety stop
+  await chrome.storage.session.set({ quietSince: now });
+  return { ok: true, paused: !!st.paused };
+}
+
 // Opt-in: learn who is who from this meeting's captions and voice fingerprints (see voice/learn.js).
 async function learnVoices(meetingId) {
   const s = await getSettings();
@@ -264,7 +302,11 @@ function stop(opts = {}) {
     try {
       await chrome.runtime.sendMessage({ target: 'offscreen', type: 'stop' });
     } catch {}
-    await updateMeeting(st.meetingId, (m) => (m.endedAt = Date.now()));
+    await updateMeeting(st.meetingId, (m) => {
+      m.endedAt = Date.now();
+      const open = (m.pauses || []).at(-1); // stopped while paused: the pause ends with the meeting
+      if (open && open.to == null) open.to = Math.round((m.endedAt - m.startedAt) / 1000);
+    });
     await learnVoices(st.meetingId).catch(() => {});
     await closeOffscreen();
     await mutateState(() => ({ recording: false }));
@@ -329,6 +371,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     start: () => start(msg),
     stop: () => stop(),
     mic: () => applyMic({ micWanted: !!msg.on }),
+    pause: () => setPaused(typeof msg.on === 'boolean' ? msg.on : undefined),
     'mic-refresh': () => applyMic(),
     'meet-mute': () => applyMic({ meetMuted: msg.muted }),
     whoami: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
@@ -340,6 +383,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await chrome.storage.session.set({ quietSince: now, heard: true });
         return;
       }
+      if ((await getState()).paused) return; // paused on purpose: not a silent meeting
       const { quietSince, heard } = await chrome.storage.session.get(['quietSince', 'heard']);
       if (!heard || !quietSince) return;
       const s = await getSettings();
@@ -452,6 +496,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Keyboard shortcut (Alt+Shift+M by default): start recording the current tab, or stop.
 // A command counts as invoking the extension, so tab capture is allowed without the popup.
 chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command === 'toggle-pause') {
+    if ((await getState()).recording) await setPaused();
+    return;
+  }
   if (command === 'toggle-mic') {
     const cur = await getState();
     if (cur.recording) await applyMic({ micWanted: !(cur.micWanted ?? cur.micOn) });

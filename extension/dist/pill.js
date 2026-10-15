@@ -511,8 +511,10 @@
       const fresh = lv && Date.now() - lv.at < 4e3;
       const peak = fresh ? Math.max(lv.tab || 0, lv.mic || 0) : 0;
       eq.classList.toggle("live", peak >= 0.012);
-      eq.classList.toggle("hidden", !fresh);
-      silentMsg.classList.toggle("hidden", !!fresh);
+      const isPaused = !!rec.paused;
+      eq.classList.toggle("hidden", !fresh || isPaused);
+      silentMsg.textContent = isPaused ? "Paused" : "No audio is arriving";
+      silentMsg.classList.toggle("hidden", !!fresh && !isPaused);
       pill.classList.toggle("silent", !fresh);
       const alert = rec.alert;
       warnChip.classList.toggle("show", !!alert);
@@ -528,7 +530,7 @@
       pill.setAttribute("aria-expanded", String(expanded));
       pill.classList.toggle("open", expanded);
       pill.setAttribute("aria-label", `Debrief recording, ${timeEl.textContent}. ${expanded ? "Hide" : "Show"} details`);
-      const say = alert ? alert.title : !fresh ? "No audio is arriving" : paused ? "You are muted in the call" : "Debrief is recording";
+      const say = alert ? alert.title : isPaused ? "Recording is paused" : !fresh ? "No audio is arriving" : paused ? "You are muted in the call" : "Debrief is recording";
       if (say !== lastStatus) {
         lastStatus = say;
         status.textContent = say;
@@ -539,7 +541,7 @@
         panelSig = "";
         return;
       }
-      const sig = JSON.stringify([peak > 0 ? Math.round(lv.tab * 1e3) : 0, fresh && rec.micOn ? Math.round((lv.mic || 0) * 1e3) : -1, S.counts, alert?.at, !!fresh, !!rec.mic, !!wanted, !!paused]);
+      const sig = JSON.stringify([peak > 0 ? Math.round(lv.tab * 1e3) : 0, fresh && rec.micOn ? Math.round((lv.mic || 0) * 1e3) : -1, S.counts, alert?.at, !!fresh, !!rec.mic, !!wanted, !!paused, isPaused]);
       if (sig === panelSig) return;
       panelSig = sig;
       const active = panel.getRootNode().activeElement;
@@ -590,6 +592,17 @@
       };
       row.append(el("span", "grow", "Include my microphone"), sw);
       panel.append(row);
+      const pauseBtn = el("button", "stop");
+      pauseBtn.type = "button";
+      pauseBtn.dataset.k = "pause";
+      pauseBtn.style.cssText = "margin-bottom:8px;background:transparent;color:inherit;border:1px solid currentColor";
+      pauseBtn.textContent = isPaused ? "Resume recording" : "Pause recording";
+      pauseBtn.onclick = async () => {
+        await send({ type: "pause" });
+        await load();
+        render();
+      };
+      panel.append(pauseBtn);
       const stop = el("button", "stop");
       stop.type = "button";
       stop.dataset.k = "stop";

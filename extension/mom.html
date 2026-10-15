@@ -22,6 +22,14 @@
     .chips:empty { display: none; }
 
     /* collapsible boxes: People, Share */
+    .namebox { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; }
+    .namebox h2 { margin: 0 0 4px; font-size: 16px; }
+    .namerow { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+    .namerow:first-of-type { border-top: 0; }
+    .namerow .who { font-weight: 700; }
+    .namerow .said { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; margin: -4px 0 0; }
+    .namerow input { min-width: 0; }
+    @media (max-width: 640px) { .namerow { grid-template-columns: 1fr; } }
     details.box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin: 0; }
     details.box > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; padding: 0 18px; border-radius: 14px; }
     details.box > summary::-webkit-details-marker { display: none; }
@@ -158,6 +166,12 @@
   </header>
   <div id="errors" class="warn hidden no-print" role="alert"></div>
   <div id="pendingBox" class="state warnc hidden no-print" role="status"><div><strong>Recovering missing audio</strong><p id="pendingText"></p></div><button id="retry">Retry transcription</button></div>
+
+  <section class="namebox no-print hidden" id="nameBox" aria-labelledby="hName">
+    <h2 id="hName">Who was speaking? Name the voices from this meeting</h2>
+    <p class="hint" id="nameNote"></p>
+    <div id="nameList"></div>
+  </section>
 
   <details class="box no-print" id="notesBox">
     <summary>People, names and context</summary>

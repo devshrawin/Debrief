@@ -84,6 +84,12 @@
       },
       "description": "Start or stop recording the current tab"
     },
+    "toggle-pause": {
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
+      "description": "Pause or resume the recording (nothing is transcribed while paused)"
+    },
     "toggle-mic": {
       "suggested_key": {
         "default": "Alt+Shift+K"

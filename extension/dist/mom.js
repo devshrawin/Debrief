@@ -2057,6 +2057,37 @@ ${att}
     return doc ? renderPrintFragment(doc) : fallback(md);
   }
 
+  // src/voice/samples.js
+  var DB = "debrief-voice";
+  function open() {
+    return new Promise((resolve, reject) => {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore("pieces");
+        r.result.createObjectStore("samples");
+      };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function tx(store, mode, fn2) {
+    const db = await open();
+    try {
+      return await new Promise((resolve, reject) => {
+        const t = db.transaction(store, mode);
+        const out = fn2(t.objectStore(store));
+        t.oncomplete = () => resolve(out && typeof out === "object" && "result" in out ? out.result : out);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
+  var hasSample = async (personId) => !!await getSample(personId);
+  var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -2210,6 +2241,13 @@ ${att}
     const secret = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
     await chrome.storage.local.set({ settings: { ...settings2 || {}, emailSecret: secret } });
     return secret;
+  }
+  async function getVoices() {
+    const { voices } = await chrome.storage.local.get("voices");
+    return voices || [];
+  }
+  async function saveVoices(list) {
+    await chrome.storage.local.set({ voices: list });
   }
 
   // src/usage.js
@@ -3165,6 +3203,7 @@ Do not write an Attendance section or notes about the recording: they are added 
     const lines = header(meeting2, settings2);
     const names2 = glossaryLine(ctx.entries || [], [...ctx.attendees || [], ...ctx.learned || []]);
     if (names2) lines.push("", `Names and terms (spell exactly like this): ${names2}`);
+    if (meeting2.pauses?.length) lines.push("", `Recording was paused (on purpose, so the topic of those stretches is not in the transcript): ${meeting2.pauses.map((p) => `${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : "the end"}`).join(", ")}. Do not treat the gap as missing audio.`);
     if (ctx.room) lines.push("", "This was recorded in a room: lines marked ROOM (or named by voice) come from one microphone shared by several people. Never attribute them to the note-taker, and do not assume who spoke unless the line names them.");
     if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(", ")}`);
     if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
@@ -3678,6 +3717,7 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
   }
 
   // src/voice/learn.js
+  var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
   var usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready || p.confirmed);
 
   // src/noise.js
@@ -3862,24 +3902,24 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
   }
 
   // src/audiostore.js
-  var DB = "debrief";
+  var DB2 = "debrief";
   var STORE = "pending";
-  function open() {
+  function open2() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB, 1);
+      const req = indexedDB.open(DB2, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
   async function run(mode, fn2) {
-    const db = await open();
+    const db = await open2();
     try {
       return await new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, mode);
-        const req = fn2(tx.objectStore(STORE));
-        tx.oncomplete = () => resolve(req?.result);
-        tx.onerror = () => reject(tx.error);
+        const tx2 = db.transaction(STORE, mode);
+        const req = fn2(tx2.objectStore(STORE));
+        tx2.oncomplete = () => resolve(req?.result);
+        tx2.onerror = () => reject(tx2.error);
       });
     } finally {
       db.close();
@@ -4113,10 +4153,66 @@ ${meeting2.mom || ""}
     if (meeting.mom && meeting.extract) list.push(chip("Checked for completeness", "ok"));
     $2("chips").replaceChildren(...list);
   }
+  var playing = null;
+  async function renderNameBox() {
+    const here = (settings.voices || []).filter((v) => v.auto && isAnon(v) && (v.learnedFrom || []).includes(meeting.id));
+    $2("nameBox").classList.toggle("hidden", !here.length);
+    if (!here.length) return;
+    const lines = labeledLines(true) || [];
+    const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
+    $2("nameNote").textContent = clips.some(Boolean) ? "Press Play, type who it is, and save. Then press Regenerate so the minutes use the names." : settings.voiceSamples ? "No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate." : 'No audio clips are kept: switch on "Keep short samples of unnamed voices" in Settings \u2192 Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
+    $2("nameList").replaceChildren(
+      ...here.map((v, i) => {
+        const row2 = document.createElement("div");
+        row2.className = "namerow";
+        const who = Object.assign(document.createElement("span"), { className: "who", textContent: v.name });
+        const input = Object.assign(document.createElement("input"), { placeholder: "Who is this?", maxLength: 60 });
+        input.setAttribute("aria-label", `Name for ${v.name}`);
+        const play = Object.assign(document.createElement("button"), { type: "button", textContent: "\u25B6 Play", hidden: !clips[i] });
+        play.onclick = async () => {
+          try {
+            playing?.pause();
+            const blob = await getSample(v.id);
+            if (!blob) return play.hidden = true;
+            const url = URL.createObjectURL(blob);
+            playing = new Audio(url);
+            playing.onended = () => URL.revokeObjectURL(url);
+            await playing.play();
+          } catch {
+          }
+        };
+        const save = Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: "Save name" });
+        save.onclick = async () => {
+          const clean = input.value.trim().replace(/\s+/g, " ").slice(0, 60);
+          const all = await getVoices();
+          if (!clean) return void input.focus();
+          if (all.some((x2) => x2.id !== v.id && x2.name.toLowerCase() === clean.toLowerCase())) {
+            $2("nameNote").textContent = `There is already a voice called ${clean}. Use Settings \u2192 Voices \u2192 Merge to join two voices of the same person.`;
+            return;
+          }
+          await saveVoices(all.map((x2) => x2.id === v.id ? { ...x2, name: clean, confirmed: true } : x2));
+          deleteSample(v.id).catch(() => {
+          });
+        };
+        input.addEventListener("keydown", (e2) => e2.key === "Enter" && save.click());
+        const said = lines.filter((l3) => l3.name === v.name).slice(0, 2);
+        const excerpt = Object.assign(document.createElement("p"), {
+          className: "said",
+          textContent: said.length ? said.map((l3) => `[${fmtTime(l3.t)}] \u201C${l3.text.length > 110 ? `${l3.text.slice(0, 107)}\u2026` : l3.text}\u201D`).join("   ") : "Nothing from this voice was long enough to show."
+        });
+        row2.append(who, input, play, save, excerpt);
+        return row2;
+      })
+    );
+  }
   function renderTranscript() {
     const ctx = nameCtx();
     const shown = labeledLines(true);
     const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? meeting.room ? "Room" : settings.myName || "Me" : "Others", text: s.text, flag: "" }));
+    for (const p of meeting.pauses || []) rows.push({ t: p.from, src: "note", who: "Paused", text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : "the end"}. Nothing from this stretch was transcribed or kept.`, flag: "" });
+    rows.sort((a, b) => a.t - b.t);
+    renderNameBox().catch(() => {
+    });
     $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
     $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {

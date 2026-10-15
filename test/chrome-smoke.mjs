@@ -217,6 +217,7 @@ try {
   // Screenshots of the recording UI (popup + on-page pill) with a quota alert showing.
   const alertRec = (tabId) => `chrome.storage.session.set({ rec: { recording: true, meetingId: 'mtest', tabId: ${tabId}, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetMuted: false, alert: { kind: 'quota', title: 'API limit reached', detail: 'gemini-3.8-flash: free-tier limit used up, resets in about 18h. Debrief tries other models first; chunks that still fail are kept and retried from the MOM page.', at: Date.now(), notifiedAt: Date.now() } }, levels: { tab: 0.14, mic: 0.02, ctx: 'running', at: Date.now() } })`;
   const popupAlert = await popup.evaluate(`(async () => { await ${alertRec(1)}; await new Promise((r) => setTimeout(r, 1500)); return { alert: !document.getElementById('alert').classList.contains('hidden'), title: document.getElementById('alertTitle').textContent, live: !document.getElementById('live').classList.contains('hidden'), segs: document.getElementById('segInfo').textContent }; })()`);
+  check('popup has a pause button while recording and the online/room switch when idle', await popup.evaluate(`!!document.getElementById('pause') && !!document.getElementById('modeSeg') && document.querySelectorAll('#modeSeg button').length === 2`));
   check('popup shows the API-limit alert and live meters', popupAlert.alert && /limit/i.test(popupAlert.title) && popupAlert.live, JSON.stringify(popupAlert));
   if (process.env.SHOTS) {
     const fs = await import('node:fs');
@@ -287,6 +288,35 @@ try {
   }
   check('settings has dictionary, sharing, local presets, other sites, minutes mode', proOpts.dict && proOpts.share && proOpts.local && proOpts.sites && proOpts.mode);
   check('usage table has a cost-if-paid column and total', proOpts.rows.length > 0 && /if this were paid: about ₹[0-9.,]+/.test(proOpts.totals), proOpts.totals);
+
+  // ---- Pro: naming this meeting's voices on the minutes page ----
+  const named = await opts.evaluate(`(async () => {
+    const fp = 'A'.repeat(342) + '==';
+    const meeting = { id: 'nm1', title: 'Naming test', startedAt: Date.now() - 600000, endedAt: Date.now(), segments: [{ t: 0, dur: 20, src: 'others', text: 'We should freeze the fare table on the twenty fifth. Send the budget sheet by Friday.' }], errors: [], mom: '', voiceSegs: [0, 4, 8, 12, 16].map((t) => ({ t0: t, t1: t + 3.5, e: fp })), pauses: [{ from: 30, to: 95 }] };
+    const voice = { id: 'av9', name: 'Unnamed voice 1', auto: true, ready: false, centroid: fp, windows: [fp], secs: 18, meetings: 1, learnedFrom: ['nm1'], created: Date.now() };
+    const cur = (await chrome.storage.local.get(['meetingIds', 'settings'])).meetingIds || [];
+    await chrome.storage.local.set({ 'meeting:nm1': meeting, meetingIds: ['nm1', ...cur], voices: [voice] });
+    const st = (await chrome.storage.local.get('settings')).settings || {};
+    await chrome.storage.local.set({ settings: { ...st, voiceOn: true } });
+    return true;
+  })()`);
+  const nameMom = await openPage(`chrome-extension://${id}/mom.html?id=nm1`);
+  await new Promise((r) => setTimeout(r, 1500));
+  const nb = await nameMom.evaluate(`(async () => {
+    const out = { shown: !document.getElementById('nameBox').classList.contains('hidden'), rows: document.querySelectorAll('#nameList .namerow').length, note: document.getElementById('nameNote').textContent.slice(0, 60) };
+    out.playHidden = [...document.querySelectorAll('#nameList .namerow button')].find((b) => /Play/.test(b.textContent))?.hidden;
+    out.pauseRow = /Recording was paused from 00:30 to 01:35/.test(document.getElementById('transcript').textContent);
+    const input = document.querySelector('#nameList .namerow input');
+    input.value = 'Akash Behera';
+    [...document.querySelectorAll('#nameList .namerow button')].find((b) => /Save name/.test(b.textContent)).click();
+    await new Promise((r) => setTimeout(r, 900));
+    const v = (await chrome.storage.local.get('voices')).voices[0];
+    out.saved = v.name === 'Akash Behera' && v.confirmed === true;
+    out.hidden = document.getElementById('nameBox').classList.contains('hidden');
+    return out;
+  })()`);
+  check('minutes page: unnamed voices of this meeting can be named at once, a pause shows in the transcript', named && nb.shown && nb.rows === 1 && nb.playHidden === true && nb.pauseRow && nb.saved && nb.hidden, JSON.stringify(nb));
+  await opts.evaluate(`chrome.storage.local.remove(['meeting:nm1', 'voices']).then(async () => { const ids = (await chrome.storage.local.get('meetingIds')).meetingIds || []; await chrome.storage.local.set({ meetingIds: ids.filter((x) => x !== 'nm1') }); })`);
 
   // ---- Pro: the setup check ----
   const chk = await opts.evaluate(`(async () => {

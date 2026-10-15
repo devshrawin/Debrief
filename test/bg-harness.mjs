@@ -15,13 +15,14 @@ const area = (name) => ({
 const badge = {};
 const title = {};
 const icon = {};
+const offLog = [];
 globalThis.chrome = {
   runtime: {
     id: 'testid',
     getURL: (p) => `chrome-extension://testid/${p}`,
     onInstalled: { addListener: (f) => listeners.installed.push(f) },
     onMessage: { addListener: (f) => listeners.message.push(f) },
-    sendMessage: async (m) => (m.target === 'offscreen' ? (m.type === 'start' ? { ok: true, mic: true } : { ok: true, micOn: m.on }) : undefined),
+    sendMessage: async (m) => (m.target === 'offscreen' && offLog.push(m), m.target === 'offscreen' ? (m.type === 'start' ? { ok: true, mic: true } : { ok: true, micOn: m.on }) : undefined),
     getContexts: async () => [],
     openOptionsPage: () => {},
   },
@@ -36,7 +37,7 @@ globalThis.chrome = {
 };
 await import('../src/background.js');
 
-export const state = { mem, created, badge, title, icon };
+export const state = { mem, created, badge, title, icon, offLog };
 // Sends a message the way Chrome would and waits for the reply (or reports that none came).
 export function send(msg, sender = { id: 'testid', tab: { id: 7 }, url: 'chrome-extension://testid/popup.html' }) {
   return new Promise((resolve) => {

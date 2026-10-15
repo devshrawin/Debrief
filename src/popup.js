@@ -33,7 +33,10 @@ async function refresh() {
   show('idleView', !st.recording);
   show('recView', !!recording);
   show('finView', !!st.stopping);
-  $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.room ? 'Recording the room' : 'Recording') : 'Idle';
+  $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.paused ? 'Paused' : st.room ? 'Recording the room' : 'Recording') : 'Idle';
+  show('pause', !!recording);
+  $('pause').textContent = st.paused ? 'Resume recording' : 'Pause recording';
+  $('pause').setAttribute('aria-pressed', String(!!st.paused));
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
   show('start', !st.recording);
   show('modeBox', !st.recording);
@@ -334,6 +337,13 @@ $('start').onclick = async () => {
     $('start').disabled = false;
     refresh();
   }
+};
+
+$('pause').onclick = async () => {
+  $('pause').disabled = true;
+  await send({ type: 'pause' });
+  $('pause').disabled = false;
+  refresh();
 };
 
 $('stop').onclick = async () => {

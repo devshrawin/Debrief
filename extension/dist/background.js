@@ -702,9 +702,9 @@
   function paintRec() {
     if (!rec) return;
     const bad = rec.attention;
-    const tip = bad ? TIP_ATTN : `Recording \xB7 ${fmtElapsed(Date.now() - rec.startedAt)}`;
+    const tip = bad ? TIP_ATTN : `${rec.paused ? "Paused" : "Recording"} \xB7 ${fmtElapsed(Date.now() - rec.startedAt)}`;
     for (const t of [null, rec.tabId]) {
-      setBadge(t, bad ? "!" : "REC", bad ? "#1d1f24" : "#c8281c");
+      setBadge(t, bad ? "!" : rec.paused ? "II" : "REC", bad ? "#1d1f24" : rec.paused ? "#c25a00" : "#c8281c");
       setTip(t, tip);
     }
   }
@@ -729,7 +729,15 @@
       setTip(t, TIP_IDLE);
     }
   }
-  getState().then((st) => st.recording && !st.stopping && showRec(st.tabId, st.startedAt, !!st.alert), () => {
+  getState().then((st) => {
+    if (st.recording && !st.stopping) {
+      showRec(st.tabId, st.startedAt, !!st.alert);
+      if (st.paused && rec) {
+        rec.paused = true;
+        paintRec();
+      }
+    }
+  }, () => {
   });
   var chain = Promise.resolve();
   var serial = (fn) => {
@@ -836,6 +844,32 @@
     showRec(msg.tabId, Date.now());
     return { ok: true };
   }
+  async function setPaused(want) {
+    let changed = false;
+    const now = Date.now();
+    await mutateState((st2) => {
+      if (!st2.recording || st2.stopping) return null;
+      const on = typeof want === "boolean" ? want : !st2.paused;
+      if (on === !!st2.paused) return null;
+      changed = true;
+      return { ...st2, paused: on, pausedAt: on ? now : null };
+    });
+    const st = await getState();
+    if (!changed || !st.recording) return { ok: true, paused: !!st.paused };
+    await chrome.runtime.sendMessage({ target: "offscreen", type: "pause", on: !!st.paused }).catch(() => {
+    });
+    const sec = Math.max(0, Math.round((now - st.startedAt) / 1e3));
+    await updateMeeting(st.meetingId, (m) => {
+      const list = m.pauses ||= [];
+      if (st.paused) list.push({ from: sec, to: null });
+      else if (list.length && list.at(-1).to == null) list.at(-1).to = sec;
+    });
+    if (!rec) showRec(st.tabId, st.startedAt, !!st.alert);
+    rec.paused = !!st.paused;
+    paintRec();
+    await chrome.storage.session.set({ quietSince: now });
+    return { ok: true, paused: !!st.paused };
+  }
   async function learnVoices(meetingId) {
     const s = await getSettings();
     const m = await getMeeting(meetingId);
@@ -867,7 +901,11 @@
         await chrome.runtime.sendMessage({ target: "offscreen", type: "stop" });
       } catch {
       }
-      await updateMeeting(st.meetingId, (m) => m.endedAt = Date.now());
+      await updateMeeting(st.meetingId, (m) => {
+        m.endedAt = Date.now();
+        const open2 = (m.pauses || []).at(-1);
+        if (open2 && open2.to == null) open2.to = Math.round((m.endedAt - m.startedAt) / 1e3);
+      });
       await learnVoices(st.meetingId).catch(() => {
       });
       await closeOffscreen();
@@ -925,6 +963,7 @@
       start: () => start(msg),
       stop: () => stop(),
       mic: () => applyMic({ micWanted: !!msg.on }),
+      pause: () => setPaused(typeof msg.on === "boolean" ? msg.on : void 0),
       "mic-refresh": () => applyMic(),
       "meet-mute": () => applyMic({ meetMuted: msg.muted }),
       whoami: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
@@ -935,6 +974,7 @@
           await chrome.storage.session.set({ quietSince: now, heard: true });
           return;
         }
+        if ((await getState()).paused) return;
         const { quietSince, heard } = await chrome.storage.session.get(["quietSince", "heard"]);
         if (!heard || !quietSince) return;
         const s = await getSettings();
@@ -1042,6 +1082,10 @@
     return true;
   });
   chrome.commands.onCommand.addListener(async (command, tab) => {
+    if (command === "toggle-pause") {
+      if ((await getState()).recording) await setPaused();
+      return;
+    }
     if (command === "toggle-mic") {
       const cur = await getState();
       if (cur.recording) await applyMic({ micWanted: !(cur.micWanted ?? cur.micOn) });
