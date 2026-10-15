@@ -65,7 +65,7 @@
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
-    voiceSamples: false,
+    voiceSamples: true,
     // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
     voiceLearn: false,
     // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
@@ -547,7 +547,7 @@ Rules:
 - Reply in the language the question is asked in. Use short bullets for lists.`;
   function buildAskPrompt({ question, meetings, ctx = {}, history = [], limit = 12 }) {
     const all = meetings.flatMap((m) => chunkMeeting(m, ctx));
-    const picked = rankChunks(all, question, limit);
+    const picked2 = rankChunks(all, question, limit);
     const names = glossaryLine(ctx.entries || [], [...ctx.attendees || [], ...ctx.learned || []]);
     const lines = [];
     if (names) lines.push(`Names (spell exactly like this): ${names}`, "");
@@ -557,9 +557,9 @@ Rules:
       lines.push("");
     }
     lines.push("<excerpts>");
-    picked.forEach((c, i) => lines.push(`[${i + 1}] [${label(c)}]`, c.text, ""));
+    picked2.forEach((c, i) => lines.push(`[${i + 1}] [${label(c)}]`, c.text, ""));
     lines.push("</excerpts>", "", `Question: ${question}`);
-    return { system: ASK_SYSTEM, user: lines.join("\n"), sources: picked.map((c) => ({ meetingId: c.meetingId, label: label(c), kind: c.kind, t: c.t })), found: picked.length };
+    return { system: ASK_SYSTEM, user: lines.join("\n"), sources: picked2.map((c) => ({ meetingId: c.meetingId, label: label(c), kind: c.kind, t: c.t })), found: picked2.length };
   }
   async function askMeetings({ question, meetings, ctx, history, gen, onText, limit }) {
     if (!String(question || "").trim()) throw new Error("Type a question first.");
@@ -2194,13 +2194,81 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     return { ask, history };
   }
 
+  // src/askscope.js
+  var DAY = 864e5;
+  var dayStart = (iso) => {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : NaN;
+  };
+  function filterByScope(meetings, scope2 = { mode: "all" }, now = Date.now()) {
+    const usable2 = (meetings || []).filter((m) => m.segments?.length || m.mom);
+    const when2 = (m) => m.startedAt || 0;
+    switch (scope2.mode) {
+      case "days": {
+        const cutoff = now - Number(scope2.days || 0) * DAY;
+        return usable2.filter((m) => when2(m) >= cutoff);
+      }
+      case "range": {
+        const from = dayStart(scope2.from);
+        const to = dayStart(scope2.to);
+        return usable2.filter((m) => (Number.isNaN(from) || when2(m) >= from) && (Number.isNaN(to) || when2(m) < to + DAY));
+      }
+      case "pick": {
+        const ids = new Set(scope2.ids || []);
+        return usable2.filter((m) => ids.has(m.id));
+      }
+      default:
+        return usable2;
+    }
+  }
+  function describeScope(scope2 = { mode: "all" }) {
+    if (scope2.mode === "days") return `the last ${scope2.days} days`;
+    if (scope2.mode === "range") return scope2.from && scope2.to ? `${scope2.from} to ${scope2.to}` : scope2.from ? `from ${scope2.from}` : scope2.to ? `up to ${scope2.to}` : "all dates";
+    if (scope2.mode === "pick") return `${(scope2.ids || []).length} picked`;
+    return "all meetings";
+  }
+
   // src/askpage.js
   var $2 = (id) => document.getElementById(id);
+  var scope = { mode: "all", days: 0, from: "", to: "", ids: [] };
+  var everything = [];
+  var picked = /* @__PURE__ */ new Set();
+  function readScope() {
+    const v = $2("scope").value;
+    scope.mode = v === "all" ? "all" : v === "range" ? "range" : v === "pick" ? "pick" : "days";
+    scope.days = Number(v) || 0;
+    scope.from = $2("dateFrom").value;
+    scope.to = $2("dateTo").value;
+    scope.ids = [...picked];
+    return scope;
+  }
   async function scoped() {
-    const days = $2("scope").value;
-    const all = (await listMeetings()).filter((m) => m.segments?.length || m.mom);
-    const cutoff = days === "all" ? 0 : Date.now() - Number(days) * 864e5;
-    return all.filter((m) => m.startedAt >= cutoff);
+    everything = (await listMeetings()).filter((m) => m.segments?.length || m.mom);
+    return filterByScope(everything, readScope());
+  }
+  var fmtDay = (t) => new Date(t).toLocaleDateString(void 0, { day: "numeric", month: "short", year: "numeric" });
+  function renderPick() {
+    const q2 = $2("pickQ").value.trim().toLowerCase();
+    const shown = [...everything].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).filter((m) => !q2 || String(m.title || "").toLowerCase().includes(q2));
+    $2("pickList").replaceChildren(
+      ...shown.length ? shown.map((m) => {
+        const label2 = document.createElement("label");
+        const cb = Object.assign(document.createElement("input"), { type: "checkbox", value: m.id, checked: picked.has(m.id) });
+        const t = document.createElement("span");
+        t.className = "t";
+        t.textContent = m.title || "Untitled meeting";
+        const meta = document.createElement("span");
+        meta.className = "m";
+        meta.textContent = `${fmtDay(m.startedAt)}${m.endedAt ? ` \xB7 ${Math.round((m.endedAt - m.startedAt) / 6e4)} min` : ""}`;
+        t.append(meta);
+        label2.append(cb, t);
+        cb.onchange = () => {
+          cb.checked ? picked.add(m.id) : picked.delete(m.id);
+          refresh();
+        };
+        return label2;
+      }) : [Object.assign(document.createElement("p"), { className: "hint", textContent: "No meeting matches." })]
+    );
   }
   var seconds = (m) => m.endedAt ? (m.endedAt - m.startedAt) / 1e3 : Math.max(0, ...(m.segments || []).map((s) => s.t || 0));
   var span = (sec) => {
@@ -2210,14 +2278,36 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   (async () => {
     const settings = await getSettings();
     if (llmReady(settings)) $2("modelName").textContent = modelLabel(settings);
-    const refresh = async () => {
+    const refresh2 = async () => {
       const list = await scoped();
+      if (scope.mode === "pick" && !$2("pickList").children.length) renderPick();
       const n = list.length;
       const total = list.reduce((a, m) => a + seconds(m), 0);
-      $2("count").textContent = `${n} meeting${n === 1 ? "" : "s"}${total >= 60 ? `, ${span(total)} of transcript` : ""}`;
+      $2("count").textContent = `${n} meeting${n === 1 ? "" : "s"}${total >= 60 ? `, ${span(total)} of transcript` : ""}${scope.mode === "all" ? "" : ` \xB7 ${describeScope(scope)}`}${scope.mode === "pick" && !n ? " \xB7 tick the meetings to search" : ""}`;
     };
-    $2("scope").onchange = refresh;
-    await refresh();
+    const onScope = async () => {
+      const v = $2("scope").value;
+      $2("rangeBox").hidden = v !== "range";
+      $2("pickBox").hidden = v !== "pick";
+      await refresh2();
+      if (v === "pick") renderPick();
+    };
+    $2("scope").onchange = onScope;
+    $2("dateFrom").onchange = $2("dateTo").onchange = refresh2;
+    $2("pickQ").oninput = renderPick;
+    $2("pickAll").onclick = () => {
+      document.querySelectorAll("#pickList input").forEach((c) => {
+        c.checked = true;
+        picked.add(c.value);
+      });
+      refresh2();
+    };
+    $2("pickNone").onclick = () => {
+      document.querySelectorAll("#pickList input").forEach((c) => c.checked = false);
+      picked.clear();
+      refresh2();
+    };
+    await refresh2();
     mountAsk($2("askBox"), {
       large: true,
       getMeetings: scoped,

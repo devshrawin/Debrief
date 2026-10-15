@@ -117,4 +117,29 @@ await test('ask: a hundred long meetings are searched quickly and only a few exc
   assert.ok(p.user.length < 20000, `prompt is ${p.user.length} characters`);
 });
 
+await test('ask scope: all, last N days, a date range (inclusive of both ends) and hand-picked meetings', async () => {
+  const { filterByScope, describeScope, dayStart } = await import('../src/askscope.js');
+  const day = (iso, h = 12) => dayStart(iso) + h * 3600000;
+  const ms = [
+    { id: 'a', title: 'A', startedAt: day('2026-10-01'), segments: [{}] },
+    { id: 'b', title: 'B', startedAt: day('2026-10-10', 0), segments: [{}] },
+    { id: 'c', title: 'C', startedAt: day('2026-10-14', 23), mom: 'x' },
+    { id: 'd', title: 'D', startedAt: day('2026-10-15'), segments: [], mom: '' }, // nothing recorded or written: never searched
+  ];
+  const now = day('2026-10-15');
+  const ids = (s) => filterByScope(ms, s, now).map((m) => m.id);
+  assert.deepEqual(ids({ mode: 'all' }), ['a', 'b', 'c']);
+  assert.deepEqual(ids({ mode: 'days', days: 7 }), ['b', 'c']);
+  assert.deepEqual(ids({ mode: 'days', days: 30 }), ['a', 'b', 'c']);
+  assert.deepEqual(ids({ mode: 'range', from: '2026-10-10', to: '2026-10-14' }), ['b', 'c'], 'both end days count, even late in the day');
+  assert.deepEqual(ids({ mode: 'range', from: '2026-10-11', to: '' }), ['c'], 'an open end means no limit');
+  assert.deepEqual(ids({ mode: 'range', from: '', to: '2026-10-05' }), ['a']);
+  assert.deepEqual(ids({ mode: 'range', from: '', to: '' }), ['a', 'b', 'c']);
+  assert.deepEqual(ids({ mode: 'pick', ids: ['c', 'a', 'zzz'] }), ['a', 'c'], 'unknown ids are ignored');
+  assert.deepEqual(ids({ mode: 'pick', ids: [] }), []);
+  assert.equal(describeScope({ mode: 'range', from: '2026-10-10', to: '2026-10-14' }), '2026-10-10 to 2026-10-14');
+  assert.equal(describeScope({ mode: 'pick', ids: ['a', 'b'] }), '2 picked');
+  assert.equal(describeScope({ mode: 'days', days: 7 }), 'the last 7 days');
+});
+
 console.log(`\n${passed} passed`);

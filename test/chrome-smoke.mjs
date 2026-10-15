@@ -463,7 +463,22 @@ try {
   const askPage = await openPage(`chrome-extension://${id}/ask.html`);
   await sleep(900);
   const ask1 = await askPage.evaluate(`({ box: !!document.querySelector('#askBox .ask-row input'), chips: document.querySelectorAll('#askBox .chipbtn').length, count: document.getElementById('count').textContent, scope: document.getElementById('scope').options.length })`);
-  check('ask page lists the scope, suggestions and a question box', ask1.box && ask1.chips >= 3 && /meeting/.test(ask1.count) && ask1.scope === 3, JSON.stringify(ask1));
+  check('ask page lists the scope, suggestions and a question box', ask1.box && ask1.chips >= 3 && /meeting/.test(ask1.count) && ask1.scope === 5, JSON.stringify(ask1));
+  const askScope = await askPage.evaluate(`(async () => {
+    const sel = document.getElementById('scope');
+    const out = {};
+    sel.value = 'range'; sel.onchange(); await new Promise((r) => setTimeout(r, 300));
+    out.rangeShown = !document.getElementById('rangeBox').hidden && document.getElementById('pickBox').hidden;
+    document.getElementById('dateFrom').value = '2999-01-01'; document.getElementById('dateFrom').onchange(); await new Promise((r) => setTimeout(r, 300));
+    out.futureCount = document.getElementById('count').textContent;
+    sel.value = 'pick'; sel.onchange(); await new Promise((r) => setTimeout(r, 300));
+    out.pickShown = !document.getElementById('pickBox').hidden && document.getElementById('rangeBox').hidden;
+    out.hasList = !!document.getElementById('pickList');
+    sel.value = 'all'; sel.onchange(); await new Promise((r) => setTimeout(r, 200));
+    out.back = document.getElementById('pickBox').hidden && document.getElementById('rangeBox').hidden;
+    return out;
+  })()`);
+  check('ask page: date range and pick-meetings controls show and hide, a future range finds nothing', askScope.rangeShown && askScope.pickShown && askScope.hasList && askScope.back && /^0 meetings/.test(askScope.futureCount), JSON.stringify(askScope));
   const askMom = await mom.evaluate(`({ box: !!document.querySelector('#askBox .ask-row input'), title: document.querySelector('#askBox h3')?.textContent })`);
   check('minutes page has an Ask about this meeting box', askMom.box && /Ask about this meeting/.test(askMom.title), JSON.stringify(askMom));
   const askNoKey = await askPage.evaluate(`(async () => {
