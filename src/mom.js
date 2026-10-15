@@ -414,6 +414,16 @@ function download(name, type, content) {
 const fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
 $('gen').onclick = () => runGenerate();
+// Voices named, merged or deleted while a meeting is open: show the new names and say what to press.
+chrome.storage.onChanged.addListener(async (c) => {
+  if (!c.voices && !c.settings) return;
+  try {
+    settings = await getSettings();
+    labelCache.key = '';
+    renderTranscript();
+    if (c.voices && meeting?.mom && !abortCtl && labeledLines()) $('genStatus').textContent = 'Voices changed since these minutes were written. Press Regenerate to use the names.';
+  } catch {}
+});
 $('reread').onclick = () => runGenerate({ reread: true });
 $('mail').onclick = () => emailMom(false);
 $('abort').onclick = () => abortCtl?.abort();
