@@ -525,4 +525,7 @@ await test('pipeline: standard format is untouched; an empty reply is still an e
   assert.ok(!/forgotten decision/.test(A.renderWordHtml(d)));
 });
 
+// Debug aid: DUMP_AMNEX=<file> writes the sample document so it can be looked at in a browser.
+if (process.env.DUMP_AMNEX) (await import('node:fs')).writeFileSync(process.env.DUMP_AMNEX, A.standaloneA4Html(md));
+
 console.log(`${passed} passed`);
