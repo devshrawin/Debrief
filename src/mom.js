@@ -1,4 +1,5 @@
 import { renderMd } from './md.js';
+import { renderMinutesHtml } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
@@ -36,7 +37,8 @@ const nameCtx = () => {
 const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
 function renderMom() {
-  $('mom').innerHTML = meeting.mom ? renderMd(meeting.mom) : '<p class="muted">No minutes yet.</p>';
+  // Minutes in the official Amnex format show as the A4 document (and print as such); anything else as markdown.
+  $('mom').innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
 }
 
 function renderMeta() {
@@ -149,7 +151,7 @@ async function runGenerate({ reread = false } = {}) {
     });
     await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
     renderMom();
-    $('genStatus').textContent = `Done · ${meeting.model}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
+    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack ? ' · the reply did not fit the official format, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
     // First time only: regenerating or editing never re-sends by itself.
     if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
   } catch (e) {
@@ -375,12 +377,12 @@ $('print').onclick = () => {
 $('dlMd').onclick = () => (setEditing(false), download(`${fileBase()}.md`, 'text/markdown', meeting.mom));
 $('dlDoc').onclick = () => {
   setEditing(false);
-  const html = wordDocHtml(renderMd(meeting.mom));
+  const html = wordDocHtml(renderMd(meeting.mom), { md: meeting.mom });
   download(`${fileBase()}.doc`, 'application/msword', html);
 };
 $('copy').onclick = async () => {
   setEditing(false);
-  const html = renderMd(meeting.mom);
+  const html = renderMinutesHtml(meeting.mom, renderMd);
   await navigator.clipboard.write([
     new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
