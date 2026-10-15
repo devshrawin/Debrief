@@ -1,5 +1,6 @@
 import { isIconText, isMenuText } from './iconText.js';
 import { learnFromMeeting, learnRecurring } from './voice/learn.js';
+import { roomFor } from './room.js';
 import { saveSamples } from './voice/sampling.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
@@ -194,9 +195,12 @@ async function startInner(msg) {
   const st = await getState();
   if (st.recording) return { ok: false, error: 'Already recording another tab.' };
   const settings = await getSettings();
+  // Online meeting or a room: the user's choice in the popup, else decided by the link of the tab.
+  const room = roomFor(msg.url, msg.room);
   const id = `m${Date.now()}`;
   await saveMeeting({
     id,
+    room,
     title: cleanTitle(msg.title),
     url: msg.url,
     startedAt: Date.now(),
@@ -209,7 +213,7 @@ async function startInner(msg) {
   await addMeetingId(id);
 
   await ensureOffscreen();
-  const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'start', streamId: msg.streamId, settings, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
+  const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'start', streamId: msg.streamId, settings: { ...settings, roomMode: room, captureMic: settings.captureMic || room }, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
   if (!r?.ok) {
     await closeOffscreen();
     await updateMeeting(id, (m) => {
@@ -218,7 +222,7 @@ async function startInner(msg) {
     });
     return { ok: false, error: r?.error || 'Recorder did not start.' };
   }
-  await mutateState(() => ({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || '').match(MEET_CODE)?.[0] || null }));
+  await mutateState(() => ({ recording: true, room, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || '').match(MEET_CODE)?.[0] || null }));
   // The silence timer only starts once sound has been heard, so a quiet lobby never ends the recording.
   await chrome.storage.session.set({ quietSince: null, heard: false });
   // The pill is a content script; inject it now so it appears without reloading the Meet tab.
@@ -274,8 +278,7 @@ function stop(opts = {}) {
 
 // Effective mic = what the user wants, unless "follow Meet mute" is on and Meet itself is muted.
 async function applyMic(patch = {}) {
-  const { followMeetMute: follow, roomMode } = await getSettings();
-  const followMeetMute = follow && !roomMode; // in room mode the mic is the meeting, whatever Meet says
+  const { followMeetMute } = await getSettings();
   let eff = false;
   let changed = false;
   let cur = null;
@@ -284,7 +287,8 @@ async function applyMic(patch = {}) {
     if (!st.recording || st.stopping) return null;
     cur = { ...st, ...patch };
     if ('meetMuted' in patch && patch.meetMuted !== st.meetMuted) noted = `Meet mic: ${patch.meetMuted === true ? 'muted' : patch.meetMuted === false ? 'unmuted' : 'state not detected'} at +${Math.round((Date.now() - (st.startedAt || Date.now())) / 1000)}s${followMeetMute ? '' : ' (following Meet is off)'}`;
-    eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && cur.meetMuted === true);
+    // in a room the microphone is the meeting, whatever Meet says about being muted
+    eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && !cur.room && cur.meetMuted === true);
     changed = eff !== !!st.micOn;
     return cur;
   });

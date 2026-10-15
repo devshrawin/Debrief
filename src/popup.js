@@ -1,5 +1,6 @@
 import { nearLimit, parseLimits } from './usage.js';
 import { isMeetingSite } from './adapters/index.js';
+import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,9 +33,10 @@ async function refresh() {
   show('idleView', !st.recording);
   show('recView', !!recording);
   show('finView', !!st.stopping);
-  $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? 'Recording' : 'Idle';
+  $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.room ? 'Recording the room' : 'Recording') : 'Idle';
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
   show('start', !st.recording);
+  show('modeBox', !st.recording);
   show('stop', !!recording);
   show('live', !!recording);
   show('micRow', !!(recording && st.mic));
@@ -299,13 +301,31 @@ $('alertAction').onclick = (e) => {
   chrome.runtime.openOptionsPage();
 };
 
+// Online meeting or a room: decided by the tab's link, and the user can flip it before pressing Start.
+let tabUrl = '';
+let chosenRoom = null; // null = follow the link
+const currentRoom = () => roomFor(tabUrl, chosenRoom);
+function paintMode() {
+  const room = currentRoom();
+  $('modeOnline').setAttribute('aria-checked', String(!room));
+  $('modeRoom').setAttribute('aria-checked', String(room));
+  $('modeHint').textContent = modeHint(tabUrl, room, chosenRoom !== null && chosenRoom !== !isMeetingUrl(tabUrl));
+  $('startLabel').textContent = room ? 'Start recording the room' : 'Start recording this tab';
+}
+for (const [id, value] of [['modeOnline', false], ['modeRoom', true]]) {
+  $(id).onclick = () => {
+    chosenRoom = value;
+    paintMode();
+  };
+}
+
 $('start').onclick = async () => {
   $('start').disabled = true;
   try {
     show('error', false);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
-    const r = await send({ type: 'start', streamId, tabId: tab.id, title: tab.title, url: tab.url });
+    const r = await send({ type: 'start', streamId, tabId: tab.id, title: tab.title, url: tab.url, room: currentRoom() });
     if (!r?.ok) throw new Error(r?.error || 'unknown error');
   } catch (e) {
     $('error').textContent = `Could not start: ${e.message}`;
@@ -356,7 +376,8 @@ for (const id of ['openSettings', 'openSettings1']) {
   try {
     host = new URL(tab?.url || '').hostname;
   } catch {}
-  if (!isMeetingSite(host)) $('startLabel').textContent = 'Record this tab (not a known meeting site)';
+  tabUrl = tab?.url || '';
+  paintMode();
   const syncOnline = () => show('offline', !navigator.onLine);
   syncOnline();
   addEventListener('online', syncOnline);

@@ -110,4 +110,17 @@ await test('room: clips for microphone pieces use their own keys, and are found 
   assert.equal(await S.getPiece(S.pieceKey('rm', 0, 'm')), undefined, 'waiting microphone audio is deleted');
 });
 
+await test('room switch: a meeting link means an online meeting, any other tab means a room, and the user can flip it', async () => {
+  const R = await import('../src/room.js');
+  for (const u of ['https://meet.google.com/abc-defg-hij', 'https://meet.google.com/abc-defg-hij?authuser=0', 'https://app.zoom.us/wc/123/join', 'https://teams.microsoft.com/v2/', 'https://whereby.com/room', 'https://meet.jit.si/MyRoom']) assert.ok(R.isMeetingUrl(u), u);
+  for (const u of ['https://meet.google.com/', 'https://meet.google.com/landing', 'https://www.google.com/', 'https://mail.google.com/mail', 'chrome://newtab/', 'about:blank', '', undefined]) assert.ok(!R.isMeetingUrl(u), String(u));
+  assert.equal(R.roomFor('https://meet.google.com/abc-defg-hij'), false);
+  assert.equal(R.roomFor('https://example.com/'), true);
+  assert.equal(R.roomFor('https://meet.google.com/abc-defg-hij', true), true, 'the user said room');
+  assert.equal(R.roomFor('https://example.com/', false), false, 'the user said online');
+  assert.match(R.modeHint('https://meet.google.com/abc-defg-hij', false, false), /Google Meet detected/);
+  assert.match(R.modeHint('https://example.com/', true, false), /not a meeting link/);
+  assert.match(R.modeHint('https://example.com/', false, true), /Online meeting/);
+});
+
 console.log(`\n${passed} passed`);

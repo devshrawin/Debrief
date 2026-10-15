@@ -124,8 +124,6 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
-    roomMode: false,
-    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
