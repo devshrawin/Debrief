@@ -17,6 +17,13 @@
     .scope label { margin: 0; }
     .scope select { width: auto; }
     .scope .hint { margin: 0; }
+    .scope input[type="date"] { width: auto; min-height: 36px; }
+    .pick { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .pick-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--line); padding-top: 6px; }
+    .pick-list label { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 6px 4px; border-radius: 8px; font-weight: 500; cursor: pointer; }
+    .pick-list label:hover { background: var(--sunk); }
+    .pick-list .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .pick-list .m { color: var(--muted); font-size: 12.5px; display: block; }
     .privacy { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 0; }
     .privacy svg { flex: none; margin-top: 3px; }
     @media (max-width: 600px) { main { padding: 24px 16px 48px; } h1 { font-size: 26px; } }
@@ -30,8 +37,13 @@
     <p class="lede">Ask anything that was said. Every point in the answer links to the meeting and the moment it came from.</p>
   </div>
   <div class="scope"><label for="scope">Search</label>
-    <select id="scope"><option value="all">All meetings</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+    <select id="scope"><option value="all">All meetings</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="range">Between dates…</option><option value="pick">Pick meetings…</option></select>
+    <span id="rangeBox" class="row" hidden><label for="dateFrom">From</label><input id="dateFrom" type="date"><label for="dateTo">to</label><input id="dateTo" type="date"></span>
     <span class="hint" id="count" role="status"></span>
+  </div>
+  <div class="pick" id="pickBox" hidden>
+    <div class="row"><label for="pickQ" style="margin:0">Find a meeting</label><input id="pickQ" type="search" placeholder="Type part of a title" style="max-width:280px"><span style="flex:1"></span><button type="button" class="btn ghost" id="pickAll">Select all shown</button><button type="button" class="btn ghost" id="pickNone">Clear</button></div>
+    <div class="pick-list" id="pickList" role="group" aria-label="Meetings to search"></div>
   </div>
   <div id="askBox"></div>
   <p class="hint privacy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><span>Searching happens on this computer. Only the passages that match, about 2 to 6 short pieces, are sent with your question to <strong id="modelName">the model you chose for the minutes</strong>, your minutes service. No audio is sent. Answers can be wrong: check the sources.</span></p>
