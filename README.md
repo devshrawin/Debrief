@@ -83,6 +83,8 @@ Debrief Pro can put names to voices, as a **best guess**. Everything is switched
 
 **When you stop.** The minutes page opens with a short card before anything is written: pick the **minutes format** (Official Amnex format or Debrief standard) and whether the **transcript** goes with the minutes, to you by email and, separately, to the people you share with. It writes automatically after 10 seconds if you do nothing, and touching the card stops the countdown. After the minutes exist, the toolbar has a format switch (it rewrites the minutes in the other format, reusing the items already found) and "with transcript" and "Include the transcript" ticks for emailing and sharing. The transcript is never sent to the people you share with unless you tick it.
 
+**Full screen while recording.** Chrome can leave the window as it is when a tab that is being recorded asks to go full screen (Meet's *Full screen* button). While you record, Debrief follows the page's full screen with the whole window (and gives the window back afterwards), and the popup has a **Full screen** button and Alt+Shift+F toggles it at any time. F11 always works too.
+
 **Pause and resume.** If a meeting goes off topic or turns private, press **Pause recording** in the popup or the pill, or Alt+Shift+P. While paused nothing is transcribed, fingerprinted or kept, the clock keeps running, the toolbar badge shows **II**, and the transcript says "Recording was paused from … to …". The silence safety stop is off while paused.
 
 **Naming voices right after a meeting.** The minutes page shows a **Who was speaking?** box for the unnamed voices found in that meeting, each with a ▶ Play clip (when clips are kept) and a short excerpt of what it said. Type the name and save; then press **Regenerate**.

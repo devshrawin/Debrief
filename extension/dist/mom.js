@@ -3342,7 +3342,7 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
     });
   }
   function sanitizeMinutes(md) {
-    let t = String(md || "").trim();
+    let t = String(md || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^[\s\S]*?<\/think>/i, "").trim();
     const wrapped = t.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i);
     if (wrapped && !wrapped[1].includes("```")) t = wrapped[1];
     return t.split("\n").filter((l3) => !/^\s*<\/?(checklist|transcript|speakers|minutes)>\s*$/i.test(l3)).join("\n").replace(/\s*\|?\s*"?quote_of_max_12_words"?/gi, "").trim();

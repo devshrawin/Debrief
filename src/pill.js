@@ -247,6 +247,9 @@ import { adapterFor } from './adapters/index.js';
       const home = fs && fs.tagName !== 'VIDEO' && fs.tagName !== 'IFRAME' ? fs : document.documentElement;
       if (host.parentNode !== home) home.appendChild(host);
       clampIn();
+      // While this tab is being recorded, Chrome may leave the window as it is when the page goes full screen, so the
+      // window is taken full screen as well (and given back afterwards).
+      if (S.rec?.recording && S.rec.tabId === myTab) send({ type: 'window-fullscreen', on: !!fs, auto: true });
     });
     addEventListener('resize', clampIn);
     flip();

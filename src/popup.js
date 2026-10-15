@@ -35,6 +35,7 @@ async function refresh() {
   show('finView', !!st.stopping);
   $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.paused ? 'Paused' : st.room ? 'Recording the room' : 'Recording') : 'Idle';
   show('pause', !!recording);
+  show('fullscreen', !!recording);
   $('pause').textContent = st.paused ? 'Resume recording' : 'Pause recording';
   $('pause').setAttribute('aria-pressed', String(!!st.paused));
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
@@ -339,6 +340,11 @@ $('start').onclick = async () => {
     $('start').disabled = false;
     refresh();
   }
+};
+
+$('fullscreen').onclick = async () => {
+  await send({ type: 'window-fullscreen' });
+  window.close();
 };
 
 $('pause').onclick = async () => {

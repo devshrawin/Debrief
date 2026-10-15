@@ -844,6 +844,26 @@
     showRec(msg.tabId, Date.now());
     return { ok: true };
   }
+  async function setWindowFullscreen(windowId, want, auto) {
+    const id = windowId ?? (await chrome.windows.getLastFocused()).id;
+    const w = await chrome.windows.get(id);
+    const { fsPrev = {} } = await chrome.storage.session.get("fsPrev");
+    const on = typeof want === "boolean" ? want : w.state !== "fullscreen";
+    if (on) {
+      if (w.state === "fullscreen") return { ok: true, fullscreen: true };
+      fsPrev[id] = w.state || "normal";
+      await chrome.storage.session.set({ fsPrev });
+      await chrome.windows.update(id, { state: "fullscreen" });
+      return { ok: true, fullscreen: true };
+    }
+    if (w.state !== "fullscreen") return { ok: true, fullscreen: false };
+    if (auto && !(id in fsPrev)) return { ok: true, fullscreen: true };
+    const back = fsPrev[id] && fsPrev[id] !== "fullscreen" ? fsPrev[id] : "normal";
+    delete fsPrev[id];
+    await chrome.storage.session.set({ fsPrev });
+    await chrome.windows.update(id, { state: back });
+    return { ok: true, fullscreen: false };
+  }
   async function setPaused(want) {
     let changed = false;
     const now = Date.now();
@@ -953,7 +973,7 @@
       message: `${reason} Writing the minutes now.`
     });
   }
-  var PAGE_MAY = /* @__PURE__ */ new Set(["whoami", "meet-mute", "meet-ended", "meet-snap", "in-call", "pill-state", "mic", "stop", "set-follow", "dismiss-alert"]);
+  var PAGE_MAY = /* @__PURE__ */ new Set(["window-fullscreen", "whoami", "meet-mute", "meet-ended", "meet-snap", "in-call", "pill-state", "mic", "stop", "set-follow", "dismiss-alert"]);
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.target !== "bg") return;
     if (sender.id !== chrome.runtime.id) return;
@@ -962,6 +982,10 @@
     const handlers = {
       start: () => start(msg),
       stop: () => stop(),
+      // Full screen for the whole browser window. Chrome keeps a tab that is being captured from taking the window full
+      // screen when the page asks (Meet's "Full screen" button), so Debrief does it through the window itself. A page
+      // sets `auto` when it only follows its own full screen: then Debrief only undoes what it did itself.
+      "window-fullscreen": () => setWindowFullscreen(sender.tab?.windowId, typeof msg.on === "boolean" ? msg.on : void 0, !!msg.auto),
       mic: () => applyMic({ micWanted: !!msg.on }),
       pause: () => setPaused(typeof msg.on === "boolean" ? msg.on : void 0),
       "mic-refresh": () => applyMic(),
@@ -1082,6 +1106,10 @@
     return true;
   });
   chrome.commands.onCommand.addListener(async (command, tab) => {
+    if (command === "toggle-fullscreen") {
+      await setWindowFullscreen(tab?.windowId);
+      return;
+    }
     if (command === "toggle-pause") {
       if ((await getState()).recording) await setPaused();
       return;

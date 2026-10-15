@@ -84,6 +84,12 @@
       },
       "description": "Start or stop recording the current tab"
     },
+    "toggle-fullscreen": {
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
+      "description": "Make this browser window full screen, or bring it back"
+    },
     "toggle-pause": {
       "suggested_key": {
         "default": "Alt+Shift+P"

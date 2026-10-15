@@ -258,6 +258,7 @@
     show("finView", !!st.stopping);
     $("statusText").textContent = st.stopping ? "Finishing transcription\u2026" : st.recording ? st.paused ? "Paused" : st.room ? "Recording the room" : "Recording" : "Idle";
     show("pause", !!recording);
+    show("fullscreen", !!recording);
     $("pause").textContent = st.paused ? "Resume recording" : "Pause recording";
     $("pause").setAttribute("aria-pressed", String(!!st.paused));
     $("timer").textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1e3) : "";
@@ -541,6 +542,10 @@
       $("start").disabled = false;
       refresh();
     }
+  };
+  $("fullscreen").onclick = async () => {
+    await send({ type: "window-fullscreen" });
+    window.close();
   };
   $("pause").onclick = async () => {
     $("pause").disabled = true;
