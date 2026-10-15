@@ -191,6 +191,11 @@
       return text;
     }
   }
+  async function setSetting(patch) {
+    const { settings } = await chrome.storage.local.get("settings");
+    const { learnedNames, voices, ...clean } = patch;
+    await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
+  }
   async function ensureEmailSecret() {
     const { settings } = await chrome.storage.local.get("settings");
     if (settings?.emailSecret) return settings.emailSecret;
@@ -2388,7 +2393,7 @@ function out(o) {
     if (into.auto) merged.ready = merged.secs >= LEARN.readySecs && merged.meetings >= LEARN.readyMeetings;
     return list.filter((p) => p.id !== fromId).map((p) => p.id === intoId ? merged : p);
   }
-  var usableVoices = (people2) => (people2 || []).filter((p) => !p.auto || p.ready);
+  var usableVoices = (people2) => (people2 || []).filter((p) => !p.auto || p.ready || p.confirmed);
   function unnamedGroups(meeting, people2, { max = 4, minSecs = 15, cap = 300 } = {}) {
     const usable2 = usableVoices(people2);
     const segs = (meeting.voiceSegs || []).filter((s) => !usable2.length || !classify(unpack(s.e), usable2).id);
@@ -2766,6 +2771,7 @@ function out(o) {
   function badgeOf(p) {
     if (!p.auto) return ["Recorded", "brand"];
     if (isAnon(p)) return ["Unnamed voice", ""];
+    if (p.confirmed) return ["Named by you, in use", "ok"];
     return p.ready ? ["Learned, in use", "ok"] : ["Learned, still learning", "warn"];
   }
   var openMenu = null;
@@ -2908,11 +2914,16 @@ function out(o) {
       const clean = r.input.trim().replace(/\s+/g, " ").slice(0, 60);
       if (!clean) throw new Error("A name cannot be empty.");
       if (people.some((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
-      people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean } : x2);
+      people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean, ...x2.auto ? { confirmed: true } : {} } : x2);
       await saveVoices(people);
       deleteSample(p.id).catch(() => {
       });
       renderList();
+      const st2 = await getSettings();
+      if (!st2.voiceOn) {
+        const on = await modal({ text: `${clean} is saved. Naming speakers by voice is switched off, so transcripts and minutes will not use the name yet. Turn it on?`, buttons: [{ label: "Not now", value: "no" }, { label: "Turn on", value: "yes", primary: true }] });
+        if (on?.value === "yes") await setSetting({ voiceOn: true });
+      }
     } catch (e) {
       tell(e.message);
     }

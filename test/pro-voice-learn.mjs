@@ -217,4 +217,16 @@ await test('block and merge: a deleted learned voice is not learned again, and t
   assert.throws(() => L.mergePeople(list, list[0].id, list[0].id), /two different/);
 });
 
+await test('confirm: a learned voice the user has named is used at once, an unnamed or unconfirmed one is not', () => {
+  const learned = L.learnRecurring(talk('c1', [1, 2]), []).list;
+  assert.deepEqual(L.usableVoices(learned), [], 'still learning, nothing is used');
+  const named = learned.map((p, i) => (i === 0 ? { ...p, name: 'Akash Behera', confirmed: true } : p));
+  assert.deepEqual(L.usableVoices(named).map((p) => p.name), ['Akash Behera'], 'only the voice the user named');
+  // a meeting recorded earlier is labelled with the new name
+  const meetingOne = { ...talk('c1', [1, 2]), segments: [{ t: 0, dur: 20, src: 'others', text: 'I will send the file today. Then the budget is mine as well.' }] };
+  const lines = V.labelTranscript(meetingOne, L.usableVoices(named), {});
+  assert.ok(lines.some((l) => l.label === 'Akash Behera'), JSON.stringify(lines.map((l) => l.label)));
+  assert.ok(lines.every((l) => l.label === 'Akash Behera' || l.label === 'Unknown speaker'));
+});
+
 console.log(`\n${passed} passed`);

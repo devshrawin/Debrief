@@ -1,6 +1,6 @@
 // The Voices page in Settings: add people, record about 20 seconds, play it back, save only the fingerprint,
 // rename, re-record, delete, and forget everything. The recording lives in memory until saved or cancelled.
-import { getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
 import { unnamedGroups, isAnon, mergePeople, blockEntry, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
 import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './voice/enrol.js';
@@ -71,6 +71,7 @@ const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric
 function badgeOf(p) {
   if (!p.auto) return ['Recorded', 'brand'];
   if (isAnon(p)) return ['Unnamed voice', ''];
+  if (p.confirmed) return ['Named by you, in use', 'ok'];
   return p.ready ? ['Learned, in use', 'ok'] : ['Learned, still learning', 'warn'];
 }
 
@@ -222,10 +223,16 @@ async function rename(p) {
     const clean = r.input.trim().replace(/\s+/g, ' ').slice(0, 60);
     if (!clean) throw new Error('A name cannot be empty.');
     if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
-    people = people.map((x) => (x.id === p.id ? { ...x, name: clean } : x));
+    // naming a learned voice confirms it: it is used from now on, including for meetings already recorded
+    people = people.map((x) => (x.id === p.id ? { ...x, name: clean, ...(x.auto ? { confirmed: true } : {}) } : x));
     await saveVoices(people);
     deleteSample(p.id).catch(() => {}); // named now: the clip is no longer kept
     renderList();
+    const st = await getSettings();
+    if (!st.voiceOn) {
+      const on = await modal({ text: `${clean} is saved. Naming speakers by voice is switched off, so transcripts and minutes will not use the name yet. Turn it on?`, buttons: [{ label: 'Not now', value: 'no' }, { label: 'Turn on', value: 'yes', primary: true }] });
+      if (on?.value === 'yes') await setSetting({ voiceOn: true });
+    }
   } catch (e) {
     tell(e.message);
   }

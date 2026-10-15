@@ -236,7 +236,9 @@ export function mergePeople(list, fromId, intoId) {
   return list.filter((p) => p.id !== fromId).map((p) => (p.id === intoId ? merged : p));
 }
 
-export const usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready);
+// A learned voice is used once it has enough speech from enough meetings, or as soon as the user has named it (the
+// user's naming is the confirmation that the group is one person).
+export const usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready || p.confirmed);
 
 // Voices in a meeting that match nobody enrolled, grouped, for "name this voice". At most `max` groups of
 // at least `minSecs` seconds. Large meetings are sampled so grouping stays quick.

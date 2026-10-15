@@ -3668,7 +3668,7 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
   }
 
   // src/voice/learn.js
-  var usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready);
+  var usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready || p.confirmed);
 
   // src/noise.js
   function isLoopNoise(text) {
@@ -4397,6 +4397,16 @@ ${meeting2.mom || ""}
   }
   var fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, "-");
   $2("gen").onclick = () => runGenerate();
+  chrome.storage.onChanged.addListener(async (c) => {
+    if (!c.voices && !c.settings) return;
+    try {
+      settings = await getSettings();
+      labelCache.key = "";
+      renderTranscript();
+      if (c.voices && meeting?.mom && !abortCtl && labeledLines()) $2("genStatus").textContent = "Voices changed since these minutes were written. Press Regenerate to use the names.";
+    } catch {
+    }
+  });
   $2("reread").onclick = () => runGenerate({ reread: true });
   $2("mail").onclick = () => emailMom(false);
   $2("abort").onclick = () => abortCtl?.abort();
