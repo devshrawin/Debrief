@@ -19,8 +19,8 @@
     v.setUint32(40, samples.length * 2, true);
     let off = 44;
     for (let i = 0; i < samples.length; i++, off += 2) {
-      const x = Math.max(-1, Math.min(1, samples[i]));
-      v.setInt16(off, x < 0 ? x * 32768 : x * 32767, true);
+      const x2 = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(off, x2 < 0 ? x2 * 32768 : x2 * 32767, true);
     }
     return new Blob([buf], { type: "audio/wav" });
   }
@@ -38,12 +38,12 @@
       r.onerror = () => reject(r.error);
     });
   }
-  async function tx(store, mode2, fn) {
+  async function tx(store, mode2, fn2) {
     const db = await open();
     try {
       return await new Promise((resolve, reject) => {
         const t = db.transaction(store, mode2);
-        const out = fn(t.objectStore(store));
+        const out = fn2(t.objectStore(store));
         t.oncomplete = () => resolve(out?.result ?? out);
         t.onerror = () => reject(t.error);
         t.onabort = () => reject(t.error);
@@ -100,6 +100,12 @@
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    minutesFormat: "amnex",
+    // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
+    myOrgDomains: "",
+    // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
+    peopleDirectory: "",
+    // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
     shareList: "",
     // default people to share the minutes with
     shareGroups: "",
@@ -169,18 +175,18 @@
   }
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec));
-    const h = Math.floor(sec / 3600);
+    const h2 = Math.floor(sec / 3600);
     const m = Math.floor(sec % 3600 / 60);
     const s = sec % 60;
     const mm = String(m).padStart(2, "0");
     const ss = String(s).padStart(2, "0");
-    return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+    return h2 ? `${h2}:${mm}:${ss}` : `${mm}:${ss}`;
   }
   function errorDetail(text) {
     try {
-      const j = JSON.parse(text);
-      const e = Array.isArray(j) ? j[0]?.error : j.error;
-      return (typeof e === "string" ? e : e?.message) || j.err_msg || j.message || j.detail || text;
+      const j2 = JSON.parse(text);
+      const e = Array.isArray(j2) ? j2[0]?.error : j2.error;
+      return (typeof e === "string" ? e : e?.message) || j2.err_msg || j2.message || j2.detail || text;
     } catch {
       return text;
     }
@@ -230,8 +236,8 @@
   var WHISPER_BASE = "http://localhost:8000/v1";
   function isLocalBase(base) {
     try {
-      const h = new URL(base).hostname;
-      return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h.endsWith(".localhost");
+      const h2 = new URL(base).hostname;
+      return h2 === "localhost" || h2 === "127.0.0.1" || h2 === "[::1]" || h2.endsWith(".localhost");
     } catch {
       return false;
     }
@@ -253,8 +259,8 @@
       return { ok: false, message: explain(e) };
     }
     if (!res.ok) return { ok: false, message: explain(null, res.status) };
-    const j = await res.json().catch(() => ({}));
-    const models = (j.models || []).map((m) => ({ name: m.name, sizeGB: Math.round((m.size || 0) / 1e9 * 10) / 10 }));
+    const j2 = await res.json().catch(() => ({}));
+    const models = (j2.models || []).map((m) => ({ name: m.name, sizeGB: Math.round((m.size || 0) / 1e9 * 10) / 10 }));
     if (!models.length) return { ok: false, message: "Ollama is running but has no models yet. Install one, for example: ollama pull gemma3" };
     return { ok: true, models };
   }
@@ -262,9 +268,9 @@
     try {
       const res = await fetchFn(`${origin(base)}/api/show`, { method: "POST", body: JSON.stringify({ model, name: model }), signal: AbortSignal.timeout(6e3) });
       if (!res.ok) return null;
-      const j = await res.json();
-      const set = Number((String(j.parameters || "").match(/num_ctx\s+(\d+)/) || [])[1]);
-      const max = Object.entries(j.model_info || {}).find(([k]) => k.endsWith(".context_length"))?.[1];
+      const j2 = await res.json();
+      const set = Number((String(j2.parameters || "").match(/num_ctx\s+(\d+)/) || [])[1]);
+      const max = Object.entries(j2.model_info || {}).find(([k2]) => k2.endsWith(".context_length"))?.[1];
       return { configured: set || null, max: max ? Number(max) : null };
     } catch {
       return null;
@@ -591,10 +597,1352 @@ _(Output hit the length limit and was cut off.)_`;
   }
   var PROVIDERS = { anthropic, openai: openaiCompat, gemini };
   function generate(opts) {
-    const fn = PROVIDERS[opts.settings.llmProvider];
-    if (!fn) throw new Error(`Unknown LLM provider ${opts.settings.llmProvider}`);
-    return fn(opts);
+    const fn2 = PROVIDERS[opts.settings.llmProvider];
+    if (!fn2) throw new Error(`Unknown LLM provider ${opts.settings.llmProvider}`);
+    return fn2(opts);
   }
+
+  // node_modules/marked/lib/marked.esm.js
+  function I() {
+    return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
+  }
+  var y = I();
+  function W(l3) {
+    y = l3;
+  }
+  var A = { exec: () => null };
+  function C(l3) {
+    let e = [];
+    return (t) => {
+      let n = Math.max(0, Math.min(3, t - 1)), s = e[n];
+      return s || (s = l3(n), e[n] = s), s;
+    };
+  }
+  function h(l3, e = "") {
+    let t = typeof l3 == "string" ? l3 : l3.source, n = { replace: (s, r) => {
+      let o = typeof r == "string" ? r : r.source;
+      return o = o.replace(x.caret, "$1"), t = t.replace(s, o), n;
+    }, getRegex: () => new RegExp(t, e) };
+    return n;
+  }
+  var _e = ((l3 = "") => {
+    try {
+      return !!new RegExp("(?<=1)(?<!1)" + l3);
+    } catch {
+      return false;
+    }
+  })();
+  var x = { codeRemoveIndent: /^(?: {0,3}\t| {1,4})/gm, outputLinkReplace: /\\([\[\]])/g, indentCodeCompensation: /^(\s+)(?:```)/, beginningSpace: /^\s+/, endingHash: /#$/, startingSpaceChar: /^ /, endingSpaceChar: / $/, endingSpaceTabChar: /[ \t]$/, nonSpaceChar: /[^ ]/, newLineCharGlobal: /\n/g, tabCharGlobal: /\t/g, leadingSpaceTab: /^[ \t]+/, multipleSpaceGlobal: /\s+/g, blankLine: /^[ \t]*$/, doubleBlankLine: /\n[ \t]*\n[ \t]*$/, blockquoteStart: /^ {0,3}>/, blockquoteSetextReplace: /\n {0,3}((?:=+|-+) *)(?=\n|$)/g, blockquoteSetextReplace2: /^ {0,3}>[ \t]?/gm, listReplaceNesting: /^ {1,4}(?=( {4})*[^ ])/g, listIsTask: /^\[[ xX]\] +\S/, listReplaceTask: /^\[[ xX]\] +/, listTaskCheckbox: /\[[ xX]\]/, anyLine: /\n.*\n/, hrefBrackets: /^<(.*)>$/, tableDelimiter: /[:|]/, tableAlignChars: /^\||\| *$/g, tableRowBlankLine: /\n[ \t]*$/, tableAlignRight: /^ *-+: *$/, tableAlignCenter: /^ *:-+: *$/, tableAlignLeft: /^ *:-+ *$/, startATag: /^<a /i, endATag: /^<\/a>/i, startPreScriptTag: /^<(pre|code|kbd|script)(\s|>)/i, endPreScriptTag: /^<\/(pre|code|kbd|script)(\s|>)/i, startAngleBracket: /^</, endAngleBracket: />$/, pedanticHrefTitle: /^([^'"]*[^\s])\s+(['"])(.*)\2/, unicodeAlphaNumeric: /[\p{L}\p{N}]/u, numericCharacterReference: /&#(?:(\d{1,7})|[Xx]([A-Fa-f0-9]{1,6}));/g, escapeTest: /[&<>"']/, escapeReplace: /[&<>"']/g, escapeTestNoEncode: /[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/, escapeReplaceNoEncode: /[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g, caret: /(^|[^\[])\^/g, percentDecode: /%25/g, findPipe: /\|/g, splitPipe: / \|/, slashPipe: /\\\|/g, carriageReturn: /\r\n|\r/g, spaceLine: /^ +$/gm, notSpaceStart: /^\S*/, endingNewline: /\n$/, listItemRegex: (l3) => new RegExp(`^( {0,3}${l3})((?:[	 ][^\\n]*)?(?:\\n|$))`), nextBulletRegex: C((l3) => new RegExp(`^ {0,${l3}}(?:[*+-]|\\d{1,9}[.)])((?:[ 	][^\\n]*)?(?:\\n|$))`)), hrRegex: C((l3) => new RegExp(`^ {0,${l3}}((?:-[ 	]*){3,}|(?:_[ 	]*){3,}|(?:\\*[ 	]*){3,})(?:\\n+|$)`)), fencesBeginRegex: C((l3) => new RegExp(`^ {0,${l3}}(?:\`\`\`|~~~)`)), headingBeginRegex: C((l3) => new RegExp(`^ {0,${l3}}#`)), htmlBeginRegex: C((l3) => new RegExp(`^ {0,${l3}}(?:</?(?:${N})(?: +|$|/?>)|<(?:script|pre|style|textarea|!--))`, "i")), blockquoteBeginRegex: C((l3) => new RegExp(`^ {0,${l3}}>`)) };
+  var $e = /^(?:[ \t]*(?:\n|$))+/;
+  var Le = /^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/;
+  var ze = /^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/;
+  var G = /^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/;
+  var Ae = /^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/;
+  var J = / {0,3}(?:[*+-]|\d{1,9}[.)])/;
+  var ce = /^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |fences|blockquote|heading|hr|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/;
+  var he = h(ce).replace(/bull/g, J).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}(?:\s|$)/).replace(/hr/g, / {0,3}(?:(?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/\|table/g, "").getRegex();
+  var Ee = h(ce).replace(/bull/g, J).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}(?:\s|$)/).replace(/hr/g, / {0,3}(?:(?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/table/g, / {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex();
+  var V = /^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table|[ \t]+\n)[^\n]+)*)/;
+  var Me = /^[^\n]+/;
+  var Y = /(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/;
+  var Ie = h(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label", Y).replace("title", /(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex();
+  var Ce = h(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g, J).getRegex();
+  var N = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
+  var ee = /<!--(?:-?>|[\s\S]*?(?:-->|$))/;
+  var Be = h("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n*|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>[^\\n]*\\n*|$)|<![A-Z][\\s\\S]*?(?:>[^\\n]*\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>[^\\n]*\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][a-z0-9-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][a-z0-9-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))", "i").replace("comment", ee).replace("tag", N).replace("attribute", / +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex();
+  var de = (l3) => h(V).replace("hr", G).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("|table", "").replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", l3).replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", N).getRegex();
+  var De = de(/ {0,3}(?:[*+-]|1[.)])[ \t]+[^ \t\n]/);
+  var qe = de(/ {0,3}(?:[*+-]|\d{1,9}[.)])(?:[ \t]|\n|$)/);
+  var ve = h(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph", qe).getRegex();
+  var te = { blockquote: ve, code: Le, def: Ie, fences: ze, heading: Ae, hr: G, html: Be, lheading: he, list: Ce, newline: $e, paragraph: De, table: A, text: Me };
+  var le = h("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr", G).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("blockquote", " {0,3}>").replace("code", "(?: {4}| {0,3}	)[^\\n]").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", N).getRegex();
+  var Ze = { ...te, lheading: Ee, table: le, paragraph: h(V).replace("hr", G).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("table", le).replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", N).getRegex() };
+  var He = { ...te, html: h(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment", ee).replace(/tag/g, "(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(), def: /^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/, heading: /^(#{1,6})(.*)(?:\n+|$)/, fences: A, lheading: /^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/, paragraph: h(V).replace("hr", G).replace("heading", ` *#{1,6} *[^
+]`).replace("lheading", he).replace("|table", "").replace("blockquote", " {0,3}>").replace("|fences", "").replace("|list", "").replace("|html", "").replace("|tag", "").getRegex() };
+  var Ge = /^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/;
+  var Ne = /^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/;
+  var ke = /^( {2,}|\\)\n(?!\s*$)[ \t]*/;
+  var Qe = /^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/;
+  var $ = /[\p{P}\p{S}]/u;
+  var B = /[\s\p{P}\p{S}]/u;
+  var Q = /[^\s\p{P}\p{S}]/u;
+  var je = h(/^((?![*_])punctSpace)/, "u").replace(/punctSpace/g, B).getRegex();
+  var Fe = /[\p{Pi}\p{Ps}"']/u;
+  var ge = /(?!~)[\p{P}\p{S}]/u;
+  var Ue = /(?!~)[\s\p{P}\p{S}]/u;
+  var Ke = /(?:[^\s\p{P}\p{S}]|~)/u;
+  var We = h(/link|precode-code|html/, "g").replace("link", /\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-", _e ? "(?<!`)()" : "(^^|[^`])").replace("code", /(?<b>`+)[^`]+\k<b>(?!`)/).replace("html", /<(?! )[^<>]*?>/).getRegex();
+  var fe = /^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/;
+  var Xe = h(fe, "u").replace(/punct/g, $).getRegex();
+  var Je = h(fe, "u").replace(/punct/g, ge).getRegex();
+  var Ve = /^(?:\*+(?:((?!\*)(?!openQuote)punct)|([^\s*]))?)|^_+(?:((?!_)(?!openQuote)punct)|([^\s_]))?/;
+  var Ye = h(Ve, "u").replace(/openQuote/g, Fe).replace(/punct/g, $).getRegex();
+  var me = "^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)";
+  var et = h(me, "gu").replace(/notPunctSpace/g, Q).replace(/punctSpace/g, B).replace(/punct/g, $).getRegex();
+  var tt = h(me, "gu").replace(/notPunctSpace/g, Ke).replace(/punctSpace/g, Ue).replace(/punct/g, ge).getRegex();
+  var nt = "^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)[\\s](\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|(?:(?!\\*)punct|notPunctSpace)(\\*+)(?!\\*)(?=notPunctSpace)";
+  var rt = h(nt, "gu").replace(/notPunctSpace/g, Q).replace(/punctSpace/g, B).replace(/punct/g, $).getRegex();
+  var st = h("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)", "gu").replace(/notPunctSpace/g, Q).replace(/punctSpace/g, B).replace(/punct/g, $).getRegex();
+  var it = "^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)[\\s](_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)|(?:(?!_)punct|notPunctSpace)(_+)(?!_)(?=notPunctSpace)";
+  var ot = h(it, "gu").replace(/notPunctSpace/g, Q).replace(/punctSpace/g, B).replace(/punct/g, $).getRegex();
+  var at = h(/^~~?(?:((?!~)punct)|[^\s~])/, "u").replace(/punct/g, $).getRegex();
+  var lt = "^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)";
+  var ut = h(lt, "gu").replace(/notPunctSpace/g, Q).replace(/punctSpace/g, B).replace(/punct/g, $).getRegex();
+  var pt = h(/\\(punct)/, "gu").replace(/punct/g, $).getRegex();
+  var ct = h(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme", /[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email", /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex();
+  var ht = h(ee).replace("(?:-->|$)", "-->").getRegex();
+  var dt = h("^comment|^</[a-zA-Z][a-zA-Z0-9-]*\\s*>|^<[a-zA-Z][a-zA-Z0-9-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment", ht).replace("attribute", /\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex();
+  var xe = /\[(?:\\[\s\S]|[^\[\]\\])*\]/;
+  var U = h(/(?:\[(?:brackets|\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/).replace("brackets", xe).getRegex();
+  var kt = h(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label", U).replace("href", /<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title", /"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex();
+  var gt = h(/^!?\[(label)\]\[(ref)\]/).replace("label", U).replace("ref", Y).getRegex();
+  var ft = h(/^!?\[(ref)\](?:\[\])?/).replace("ref", Y).getRegex();
+  var ue = /(?!\s*\])(?:\\[\s\S]|[^\[\]\\]){1,999}/;
+  var mt = h(/(?:[^\[\]\\`]*(?:\[(?:brackets|\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\]))){0,999}?[^\[\]\\`]*?/).replace("brackets", xe).getRegex();
+  var xt = h("reflink|nolink(?!\\()", "g").replace("reflink", h(/^!?\[(label)\]\[(ref)\]/).replace("label", mt).replace("ref", ue).getRegex()).replace("nolink", h(/^!?\[(ref)\](?:\[\])?/).replace("ref", ue).getRegex()).getRegex();
+  var pe = /[hH][tT][tT][pP][sS]?|[fF][tT][pP]/;
+  var bt = /[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])/;
+  var Rt = h(/(?:mailto:email|xmpp:email(?:\/[A-Za-z0-9@.]+)?)/).replace(/email/g, bt).getRegex();
+  var ne = { _backpedal: A, anyPunctuation: pt, autolink: ct, blockSkip: We, br: ke, code: Ne, del: A, delLDelim: A, delRDelim: A, emStrongLDelim: Xe, emStrongRDelimAst: et, emStrongRDelimUnd: st, escape: Ge, link: kt, nolink: ft, punctuation: je, reflink: gt, reflinkSearch: xt, tag: dt, text: Qe, url: A };
+  var Tt = { ...ne, emStrongLDelim: Ye, emStrongRDelimAst: rt, emStrongRDelimUnd: ot, link: h(/^!?\[(label)\]\((.*?)\)/).replace("label", U).getRegex(), reflink: h(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label", U).getRegex() };
+  var X = { ...ne, emStrongRDelimAst: tt, emStrongLDelim: Je, delLDelim: at, delRDelim: ut, url: h(/^emailProtocol|^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("emailProtocol", Rt).replace("protocol", pe).replace("email", /[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])/).getRegex(), _backpedal: /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/, del: /^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/, text: h(/^(?:[^a-zA-Z0-9](?=emailProtocol)|(`+|~+|[^`~])(?:(?=[`~])|(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9](?=emailProtocol)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@))))/).replace("protocol", pe).replace(/emailProtocol/g, /(?:mailto|xmpp):/).getRegex() };
+  var Ot = { ...X, br: h(ke).replace("{2,}", "*").getRegex(), text: h(X.text).replace("\\b_", "\\b_| {2,}\\n").replace(/\{2,\}/g, "*").getRegex() };
+  var j = { normal: te, gfm: Ze, pedantic: He };
+  var D = { normal: ne, gfm: X, breaks: Ot, pedantic: Tt };
+  var wt = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  var be = (l3) => wt[l3];
+  function O(l3, e) {
+    if (e) {
+      if (x.escapeTest.test(l3)) return l3.replace(x.escapeReplace, be);
+    } else if (x.escapeTestNoEncode.test(l3)) return l3.replace(x.escapeReplaceNoEncode, be);
+    return l3;
+  }
+  function Re(l3) {
+    return l3.replace(x.numericCharacterReference, (e, t, n) => {
+      let s = t === void 0 ? Number.parseInt(n, 16) : Number.parseInt(t, 10);
+      return s === 0 || s > 1114111 || s >= 55296 && s <= 57343 ? "\uFFFD" : String.fromCodePoint(s);
+    });
+  }
+  function re(l3) {
+    try {
+      l3 = encodeURI(l3).replace(x.percentDecode, "%");
+    } catch {
+      return null;
+    }
+    return l3;
+  }
+  function se(l3, e) {
+    let t = l3.replace(x.findPipe, (r, o, i) => {
+      let u = false, a = o;
+      for (; --a >= 0 && i[a] === "\\"; ) u = !u;
+      return u ? "|" : " |";
+    }), n = t.split(x.splitPipe), s = 0;
+    if (n[0].trim() || n.shift(), n.length > 0 && !n.at(-1)?.trim() && n.pop(), e) if (n.length > e) n.splice(e);
+    else for (; n.length < e; ) n.push("");
+    for (; s < n.length; s++) n[s] = n[s].trim().replace(x.slashPipe, "|");
+    return n;
+  }
+  function L(l3, e, t) {
+    let n = l3.length;
+    if (n === 0) return "";
+    let s = 0;
+    for (; s < n; ) {
+      let r = l3.charAt(n - s - 1);
+      if (r === e && !t) s++;
+      else if (r !== e && t) s++;
+      else break;
+    }
+    return l3.slice(0, n - s);
+  }
+  function ie(l3) {
+    let e = l3.split(`
+`), t = e.length - 1;
+    for (; t >= 0 && x.blankLine.test(e[t]); ) t--;
+    return e.length - t <= 2 ? l3 : e.slice(0, t + 1).join(`
+`);
+  }
+  function q(l3) {
+    return l3.trim().toLowerCase().toUpperCase().toLowerCase();
+  }
+  function Te(l3, e) {
+    if (l3.indexOf(e[1]) === -1) return -1;
+    let t = 0;
+    for (let n = 0; n < l3.length; n++) if (l3[n] === "\\") n++;
+    else if (l3[n] === e[0]) t++;
+    else if (l3[n] === e[1] && (t--, t < 0)) return n;
+    return t > 0 ? -2 : -1;
+  }
+  function oe(l3, e = 0) {
+    let t = e, n = "";
+    for (let s of l3) if (s === "	") {
+      let r = 4 - t % 4;
+      n += " ".repeat(r), t += r;
+    } else n += s, t++;
+    return n;
+  }
+  function Oe(l3, e, t, n, s) {
+    let r = e.href, o = e.title || null, i = l3[1].replace(s.other.outputLinkReplace, "$1"), u = l3[0].charAt(0) === "!";
+    n.state.inLink = true;
+    let a = n.state.linkEmitted, p = n.state.inRawBlock;
+    n.state.linkEmitted = false;
+    let c = n.inlineTokens(i), d = n.state.linkEmitted;
+    if (n.state.linkEmitted = a, n.state.inLink = false, !u) {
+      if (d) {
+        n.state.inRawBlock = p;
+        return;
+      }
+      n.state.linkEmitted = true;
+    }
+    return { type: u ? "image" : "link", raw: t, href: r, title: o, text: i, tokens: c };
+  }
+  function yt(l3, e, t) {
+    let n = l3.match(t.other.indentCodeCompensation);
+    if (n === null) return e;
+    let s = n[1];
+    return e.split(`
+`).map((r) => {
+      let o = r.match(t.other.beginningSpace);
+      if (o === null) return r;
+      let [i] = o;
+      return r.slice(Math.min(i.length, s.length));
+    }).join(`
+`);
+  }
+  function we(l3, e, t, n) {
+    if (!e.includes("<")) return false;
+    for (let s = 0; s < e.length; s++) {
+      if (e[s] === "\\") {
+        s++;
+        continue;
+      }
+      if (e[s] === "`") {
+        let i = n.inline.code.exec(e.slice(s));
+        if (i) {
+          s += i[0].length - 1;
+          continue;
+        }
+      }
+      if (e[s] !== "<") continue;
+      let r = l3.slice(t + s), o = n.inline.tag.exec(r) || n.inline.autolink.exec(r);
+      if (o) {
+        if (o[0].length > e.length - s) return true;
+        s += o[0].length - 1;
+      }
+    }
+    return false;
+  }
+  var P = class {
+    options;
+    rules;
+    lexer;
+    constructor(e) {
+      this.options = e || y;
+    }
+    space(e) {
+      let t = this.rules.block.newline.exec(e);
+      if (t && t[0].length > 0) return { type: "space", raw: t[0] };
+    }
+    code(e) {
+      let t = this.rules.block.code.exec(e);
+      if (t) {
+        let n = this.options.pedantic ? t[0] : ie(t[0]), s = n.replace(this.rules.other.codeRemoveIndent, "");
+        return { type: "code", raw: n, codeBlockStyle: "indented", text: s };
+      }
+    }
+    fences(e) {
+      let t = this.rules.block.fences.exec(e);
+      if (t) {
+        let n = t[0], s = yt(n, t[3] || "", this.rules);
+        return { type: "code", raw: n, lang: t[2] ? t[2].trim().replace(this.rules.inline.anyPunctuation, "$1") : t[2], text: s };
+      }
+    }
+    heading(e) {
+      let t = this.rules.block.heading.exec(e);
+      if (t) {
+        let n = t[2].trim();
+        if (this.rules.other.endingHash.test(n)) {
+          let s = L(n, "#");
+          (this.options.pedantic || !s || this.rules.other.endingSpaceTabChar.test(s)) && (n = s.trim());
+        }
+        return { type: "heading", raw: L(t[0], `
+`), depth: t[1].length, text: n, tokens: this.lexer.inline(n) };
+      }
+    }
+    hr(e) {
+      let t = this.rules.block.hr.exec(e);
+      if (t) return { type: "hr", raw: L(t[0], `
+`) };
+    }
+    blockquote(e) {
+      let t = this.rules.block.blockquote.exec(e);
+      if (t) {
+        let n = L(t[0], `
+`).split(`
+`), s = "", r = "", o = [];
+        for (; n.length > 0; ) {
+          let i = false, u = [], a;
+          for (a = 0; a < n.length; a++) if (this.rules.other.blockquoteStart.test(n[a])) u.push(n[a]), i = true;
+          else if (!i) u.push(n[a]);
+          else break;
+          n = n.slice(a);
+          let p = u.join(`
+`), c = p.replace(this.rules.other.blockquoteSetextReplace, `
+    $1`).replace(this.rules.other.blockquoteSetextReplace2, "");
+          s = s ? `${s}
+${p}` : p, r = r ? `${r}
+${c}` : c;
+          let d = this.lexer.state.top;
+          if (this.lexer.state.top = true, this.lexer.blockTokens(c, o, true), this.lexer.state.top = d, n.length === 0) break;
+          let m = o.at(-1);
+          if (m?.type === "code") break;
+          if (m?.type === "blockquote") {
+            let b = m, g = n.join(`
+`), w = b.raw + `
+` + g.replace(this.rules.other.blockquoteSetextReplace2, ""), f = this.blockquote(w);
+            o[o.length - 1] = f;
+            let M = w.substring(f.raw.length).replace(/^\n/, ""), v = M ? M.split(`
+`).length : 0, Z = v ? n.slice(0, -v) : n;
+            Z.length > 0 && (s = `${s}
+${Z.join(`
+`)}`), r = r.substring(0, r.length - b.text.length) + f.text;
+            break;
+          } else if (m?.type === "list") {
+            let b = m, g = b.raw + `
+` + n.join(`
+`), w = this.list(g);
+            o[o.length - 1] = w, s = s.substring(0, s.length - m.raw.length) + w.raw, r = r.substring(0, r.length - b.raw.length) + w.raw, n = g.substring(o.at(-1).raw.length).split(`
+`);
+            continue;
+          }
+        }
+        return { type: "blockquote", raw: s, tokens: o, text: r };
+      }
+    }
+    list(e) {
+      let t = this.rules.block.list.exec(e);
+      if (t) {
+        let n = t[1].trim(), s = n.length > 1, r = { type: "list", raw: "", ordered: s, start: s ? +n.slice(0, -1) : "", loose: false, items: [] };
+        n = s ? `\\d{1,9}\\${n.slice(-1)}` : `\\${n}`, this.options.pedantic && (n = s ? n : "[*+-]");
+        let o = this.rules.other.listItemRegex(n), i = false;
+        for (; e; ) {
+          let a = false, p = "", c = "";
+          if (!(t = o.exec(e)) || this.rules.block.hr.test(e)) break;
+          p = t[0], e = e.substring(p.length);
+          let d = t[2].split(`
+`, 1)[0], m = t[1].length, b = this.options.pedantic ? oe(d, m) : d.replace(this.rules.other.leadingSpaceTab, (M) => oe(M, m)), g = e.split(`
+`, 1)[0], w = !b.trim(), f = 0;
+          if (this.options.pedantic ? (f = 2, c = b.trimStart()) : w ? f = m + 1 : (f = b.search(this.rules.other.nonSpaceChar), f = f > 4 ? 1 : f, c = b.slice(f), f += m), w && this.rules.other.blankLine.test(g) && (p += g + `
+`, e = e.substring(g.length + 1), a = true), !a) {
+            let M = this.rules.other.nextBulletRegex(f), v = this.rules.other.hrRegex(f), Z = this.rules.other.fencesBeginRegex(f), ae = this.rules.other.headingBeginRegex(f), ye = this.rules.other.htmlBeginRegex(f), Pe = this.rules.other.blockquoteBeginRegex(f);
+            for (; e; ) {
+              let K = e.split(`
+`, 1)[0], H;
+              if (g = K, this.options.pedantic ? (g = g.replace(this.rules.other.listReplaceNesting, "  "), H = g) : H = g.replace(this.rules.other.leadingSpaceTab, (Se) => Se.replace(this.rules.other.tabCharGlobal, "    ")), Z.test(g) || ae.test(g) || ye.test(g) || Pe.test(g) || M.test(g) || v.test(g)) break;
+              if (H.search(this.rules.other.nonSpaceChar) >= f || !g.trim()) c += `
+` + H.slice(f);
+              else {
+                if (w || b.replace(this.rules.other.tabCharGlobal, "    ").search(this.rules.other.nonSpaceChar) >= 4 || Z.test(b) || ae.test(b) || v.test(b)) break;
+                c += `
+` + g;
+              }
+              w = !g.trim(), p += K + `
+`, e = e.substring(K.length + 1), b = H.slice(f);
+            }
+          }
+          r.loose || (i ? r.loose = true : this.rules.other.doubleBlankLine.test(p) && (i = true)), r.items.push({ type: "list_item", raw: p, task: !!this.options.gfm && this.rules.other.listIsTask.test(c), loose: false, text: c, tokens: [] }), r.raw += p;
+        }
+        let u = r.items.at(-1);
+        if (u) u.raw = u.raw.trimEnd(), u.text = u.text.trimEnd();
+        else return;
+        r.raw = r.raw.trimEnd();
+        for (let a of r.items) if (this.lexer.state.top = false, a.tokens = this.lexer.blockTokens(a.text, []), !r.loose) {
+          let p = a.tokens.filter((d) => d.type === "space"), c = p.length > 0 && p.some((d) => this.rules.other.anyLine.test(d.raw));
+          r.loose = c;
+        }
+        for (let a of r.items) {
+          let p = a.tokens[0];
+          if (a.task && (p?.type === "text" || p?.type === "paragraph")) {
+            a.text = a.text.replace(this.rules.other.listReplaceTask, ""), p.raw = p.raw.replace(this.rules.other.listReplaceTask, ""), p.text = p.text.replace(this.rules.other.listReplaceTask, "");
+            for (let d = this.lexer.inlineQueue.length - 1; d >= 0; d--) if (this.rules.other.listIsTask.test(this.lexer.inlineQueue[d].src)) {
+              this.lexer.inlineQueue[d].src = this.lexer.inlineQueue[d].src.replace(this.rules.other.listReplaceTask, "");
+              break;
+            }
+            let c = this.rules.other.listTaskCheckbox.exec(a.raw);
+            if (c) {
+              let d = { type: "checkbox", raw: c[0] + " ", checked: c[0] !== "[ ]" };
+              a.checked = d.checked, r.loose ? a.tokens[0] && ["paragraph", "text"].includes(a.tokens[0].type) && "tokens" in a.tokens[0] && a.tokens[0].tokens ? (a.tokens[0].raw = d.raw + a.tokens[0].raw, a.tokens[0].text = d.raw + a.tokens[0].text, a.tokens[0].tokens.unshift(d)) : a.tokens.unshift({ type: "paragraph", raw: d.raw, text: d.raw, tokens: [d] }) : a.tokens.unshift(d);
+            }
+          } else a.task && (a.task = false);
+        }
+        if (r.loose) for (let a of r.items) {
+          a.loose = true;
+          for (let p of a.tokens) p.type === "text" && (p.type = "paragraph");
+        }
+        return r;
+      }
+    }
+    html(e) {
+      let t = this.rules.block.html.exec(e);
+      if (t) {
+        let n = ie(t[0]);
+        return { type: "html", block: true, raw: n, pre: t[1] === "pre" || t[1] === "script" || t[1] === "style", text: n };
+      }
+    }
+    def(e) {
+      let t = this.rules.block.def.exec(e);
+      if (t) {
+        let n = q(t[1]).replace(this.rules.other.multipleSpaceGlobal, " "), s = t[2] ? t[2].replace(this.rules.other.hrefBrackets, "$1").replace(this.rules.inline.anyPunctuation, "$1") : "", r = t[3] ? t[3].substring(1, t[3].length - 1).replace(this.rules.inline.anyPunctuation, "$1") : t[3];
+        return { type: "def", tag: n, raw: L(t[0], `
+`), href: s, title: r };
+      }
+    }
+    table(e) {
+      let t = this.rules.block.table.exec(e);
+      if (!t || !this.rules.other.tableDelimiter.test(t[2])) return;
+      let n = se(t[1]), s = t[2].replace(this.rules.other.tableAlignChars, "").split("|"), r = t[3]?.trim() ? t[3].replace(this.rules.other.tableRowBlankLine, "").split(`
+`) : [], o = { type: "table", raw: L(t[0], `
+`), header: [], align: [], rows: [] };
+      if (n.length === s.length) {
+        for (let i of s) this.rules.other.tableAlignRight.test(i) ? o.align.push("right") : this.rules.other.tableAlignCenter.test(i) ? o.align.push("center") : this.rules.other.tableAlignLeft.test(i) ? o.align.push("left") : o.align.push(null);
+        for (let i = 0; i < n.length; i++) o.header.push({ text: n[i], tokens: this.lexer.inline(n[i]), header: true, align: o.align[i] });
+        for (let i of r) o.rows.push(se(i, o.header.length).map((u, a) => ({ text: u, tokens: this.lexer.inline(u), header: false, align: o.align[a] })));
+        return o;
+      }
+    }
+    lheading(e) {
+      let t = this.rules.block.lheading.exec(e);
+      if (t) {
+        let n = t[1].trim();
+        return { type: "heading", raw: L(t[0], `
+`), depth: t[2].charAt(0) === "=" ? 1 : 2, text: n, tokens: this.lexer.inline(n) };
+      }
+    }
+    paragraph(e) {
+      let t = this.rules.block.paragraph.exec(e);
+      if (t) {
+        let n = t[1].charAt(t[1].length - 1) === `
+` ? t[1].slice(0, -1) : t[1];
+        return { type: "paragraph", raw: t[0], text: n, tokens: this.lexer.inline(n) };
+      }
+    }
+    text(e) {
+      let t = this.rules.block.text.exec(e);
+      if (t) return { type: "text", raw: t[0], text: t[0], tokens: this.lexer.inline(t[0]) };
+    }
+    escape(e) {
+      let t = this.rules.inline.escape.exec(e);
+      if (t) return { type: "escape", raw: t[0], text: t[1] };
+    }
+    tag(e) {
+      let t = this.rules.inline.tag.exec(e);
+      if (t) return !this.lexer.state.inLink && this.rules.other.startATag.test(t[0]) ? this.lexer.state.inLink = true : this.lexer.state.inLink && this.rules.other.endATag.test(t[0]) && (this.lexer.state.inLink = false), !this.lexer.state.inRawBlock && this.rules.other.startPreScriptTag.test(t[0]) ? this.lexer.state.inRawBlock = true : this.lexer.state.inRawBlock && this.rules.other.endPreScriptTag.test(t[0]) && (this.lexer.state.inRawBlock = false), { type: "html", raw: t[0], inLink: this.lexer.state.inLink, inRawBlock: this.lexer.state.inRawBlock, block: false, text: t[0] };
+    }
+    link(e) {
+      let t = this.rules.inline.link.exec(e);
+      if (t) {
+        let n = t[0].charAt(0) === "!" ? 2 : 1;
+        if (!this.options.pedantic && we(e, t[1], n, this.rules)) return;
+        let s = t[2].trim();
+        if (!this.options.pedantic && this.rules.other.startAngleBracket.test(s)) {
+          if (!this.rules.other.endAngleBracket.test(s)) return;
+          let i = L(s.slice(0, -1), "\\");
+          if ((s.length - i.length) % 2 === 0) return;
+        } else {
+          let i = Te(t[2], "()");
+          if (i === -2) return;
+          if (i > -1) {
+            let a = (t[0].indexOf("!") === 0 ? 5 : 4) + t[1].length + i;
+            t[2] = t[2].substring(0, i), t[0] = t[0].substring(0, a).trim(), t[3] = "";
+          }
+        }
+        let r = t[2], o = "";
+        if (this.options.pedantic) {
+          let i = this.rules.other.pedanticHrefTitle.exec(r);
+          i && (r = i[1], o = i[3]);
+        } else o = t[3] ? t[3].slice(1, -1) : "";
+        return r = r.trim(), this.rules.other.startAngleBracket.test(r) && (this.options.pedantic && !this.rules.other.endAngleBracket.test(s) ? r = r.slice(1) : r = r.slice(1, -1)), Oe(t, { href: r && r.replace(this.rules.inline.anyPunctuation, "$1"), title: o && o.replace(this.rules.inline.anyPunctuation, "$1") }, t[0], this.lexer, this.rules);
+      }
+    }
+    reflink(e, t) {
+      let n;
+      if ((n = this.rules.inline.reflink.exec(e)) || (n = this.rules.inline.nolink.exec(e))) {
+        let s = n[0].charAt(0) === "!" ? 2 : 1;
+        if (!this.options.pedantic && we(e, n[1], s, this.rules)) return;
+        let r = (n[2] || n[1]).replace(this.rules.other.multipleSpaceGlobal, " "), o = t[q(r)];
+        if (!o) {
+          let i = n[0].charAt(0);
+          return { type: "text", raw: i, text: i };
+        }
+        return Oe(n, o, n[0], this.lexer, this.rules);
+      }
+    }
+    emStrong(e, t, n = "") {
+      let s = this.rules.inline.emStrongLDelim.exec(e);
+      if (!s || !s[1] && !s[2] && !s[3] && !s[4] || s[4] && n.match(this.rules.other.unicodeAlphaNumeric)) return;
+      if (!(s[1] || s[3] || "") || !n || this.rules.inline.punctuation.exec(n)) {
+        let o = [...s[0]].length - 1, i, u, a = o, p = 0, c = s[0][0], d = n === c, m = c === "*" ? this.rules.inline.emStrongRDelimAst : this.rules.inline.emStrongRDelimUnd;
+        for (m.lastIndex = 0, t = t.slice(-1 * e.length + o); (s = m.exec(t)) !== null; ) {
+          if (i = s[1] || s[2] || s[3] || s[4] || s[5] || s[6], !i) continue;
+          if (u = [...i].length, s[3] || s[4]) {
+            a += u;
+            continue;
+          } else if (s[5] || s[6]) {
+            if (o % 3 && !((o + u) % 3)) {
+              p += u;
+              continue;
+            }
+            if (d) break;
+          }
+          if (a -= u, a > 0) continue;
+          u = Math.min(u, u + a + p);
+          let b = [...s[0]][0].length, g = e.slice(0, o + s.index + b + u);
+          if (Math.min(o, u) % 2) {
+            let f = g.slice(1, -1);
+            return { type: "em", raw: g, text: f, tokens: this.lexer.inlineTokens(f) };
+          }
+          let w = g.slice(2, -2);
+          return { type: "strong", raw: g, text: w, tokens: this.lexer.inlineTokens(w) };
+        }
+      }
+    }
+    codespan(e) {
+      let t = this.rules.inline.code.exec(e);
+      if (t) {
+        let n = t[2].replace(this.rules.other.newLineCharGlobal, " "), s = this.rules.other.nonSpaceChar.test(n), r = this.rules.other.startingSpaceChar.test(n) && this.rules.other.endingSpaceChar.test(n);
+        return s && r && (n = n.substring(1, n.length - 1)), { type: "codespan", raw: t[0], text: n };
+      }
+    }
+    br(e) {
+      let t = this.rules.inline.br.exec(e);
+      if (t) return { type: "br", raw: t[0] };
+    }
+    del(e, t, n = "") {
+      let s = this.rules.inline.delLDelim.exec(e);
+      if (!s) return;
+      if (!(s[1] || "") || !n || this.rules.inline.punctuation.exec(n)) {
+        let o = [...s[0]].length - 1, i, u, a = o, p = this.rules.inline.delRDelim;
+        for (p.lastIndex = 0, t = t.slice(-1 * e.length + o); (s = p.exec(t)) !== null; ) {
+          if (i = s[1] || s[2] || s[3] || s[4] || s[5] || s[6], !i || (u = [...i].length, u !== o)) continue;
+          if (s[3] || s[4]) {
+            a += u;
+            continue;
+          }
+          if (a -= u, a > 0) continue;
+          u = Math.min(u, u + a);
+          let c = [...s[0]][0].length, d = e.slice(0, o + s.index + c + u), m = d.slice(o, -o);
+          return { type: "del", raw: d, text: m, tokens: this.lexer.inlineTokens(m) };
+        }
+      }
+    }
+    autolink(e) {
+      let t = this.rules.inline.autolink.exec(e);
+      if (t) {
+        let n, s;
+        return t[2] === "@" ? (n = t[1], s = "mailto:" + n) : (n = t[1], s = n), { type: "link", raw: t[0], text: n, href: s, autolink: true, tokens: [{ type: "text", raw: n, text: n }] };
+      }
+    }
+    url(e) {
+      let t;
+      if (t = this.rules.inline.url.exec(e)) {
+        let n, s;
+        if (t[2] === "@") n = t[0], s = "mailto:" + n;
+        else {
+          let r;
+          do
+            r = t[0], t[0] = this.rules.inline._backpedal.exec(t[0])?.[0] ?? "";
+          while (r !== t[0]);
+          n = t[0], t[1] === "www." ? s = "http://" + t[0] : s = t[0];
+        }
+        return { type: "link", raw: t[0], text: n, href: s, autolink: true, tokens: [{ type: "text", raw: n, text: n }] };
+      }
+    }
+    inlineText(e) {
+      let t = this.rules.inline.text.exec(e);
+      if (t) {
+        let n = this.lexer.state.inRawBlock;
+        return { type: "text", raw: t[0], text: n ? t[0] : Re(t[0]), escaped: n };
+      }
+    }
+  };
+  var R = class l {
+    tokens;
+    options;
+    state;
+    inlineQueue;
+    tokenizer;
+    constructor(e) {
+      this.tokens = [], this.tokens.links = /* @__PURE__ */ Object.create(null), this.options = e || y, this.options.tokenizer = this.options.tokenizer || new P(), this.tokenizer = this.options.tokenizer, this.tokenizer.options = this.options, this.tokenizer.lexer = this, this.inlineQueue = [], this.state = { inLink: false, inRawBlock: false, linkEmitted: false, top: true };
+      let t = { other: x, block: j.normal, inline: D.normal };
+      this.options.pedantic ? (t.block = j.pedantic, t.inline = D.pedantic) : this.options.gfm && (t.block = j.gfm, this.options.breaks ? t.inline = D.breaks : t.inline = D.gfm), this.tokenizer.rules = t;
+    }
+    static get rules() {
+      return { block: j, inline: D };
+    }
+    static lex(e, t) {
+      return new l(t).lex(e);
+    }
+    static lexInline(e, t) {
+      return new l(t).inlineTokens(e);
+    }
+    lex(e) {
+      e = e.replace(x.carriageReturn, `
+`), this.blockTokens(e, this.tokens);
+      for (let t = 0; t < this.inlineQueue.length; t++) {
+        let n = this.inlineQueue[t];
+        this.inlineTokens(n.src, n.tokens);
+      }
+      return this.inlineQueue = [], this.tokens;
+    }
+    blockTokens(e, t = [], n = false) {
+      this.tokenizer.lexer = this, this.options.pedantic && (e = e.replace(x.tabCharGlobal, "    ").replace(x.spaceLine, ""));
+      let s = 1 / 0;
+      for (; e; ) {
+        if (e.length < s) s = e.length;
+        else {
+          this.infiniteLoopError(e.charCodeAt(0));
+          break;
+        }
+        let r;
+        if (this.options.extensions?.block?.some((i) => (r = i.call({ lexer: this }, e, t)) ? (e = e.substring(r.raw.length), t.push(r), true) : false)) continue;
+        if (r = this.tokenizer.space(e)) {
+          e = e.substring(r.raw.length);
+          let i = t.at(-1);
+          r.raw.length === 1 && i !== void 0 ? i.raw += `
+` : t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.code(e)) {
+          e = e.substring(r.raw.length);
+          let i = t.at(-1);
+          i?.type === "paragraph" || i?.type === "text" ? (i.raw += (i.raw.endsWith(`
+`) ? "" : `
+`) + r.raw, i.text += `
+` + r.text, this.inlineQueue.at(-1).src = i.text) : t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.fences(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.heading(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.hr(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.blockquote(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.list(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.html(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.def(e)) {
+          e = e.substring(r.raw.length);
+          let i = t.at(-1);
+          i?.type === "paragraph" || i?.type === "text" ? (i.raw += (i.raw.endsWith(`
+`) ? "" : `
+`) + r.raw, i.text += `
+` + r.raw, this.inlineQueue.at(-1).src = i.text) : this.tokens.links[r.tag] || (this.tokens.links[r.tag] = { href: r.href, title: r.title }, t.push(r));
+          continue;
+        }
+        if (r = this.tokenizer.table(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        if (r = this.tokenizer.lheading(e)) {
+          e = e.substring(r.raw.length), t.push(r);
+          continue;
+        }
+        let o = e;
+        if (this.options.extensions?.startBlock) {
+          let i = 1 / 0, u = e.slice(1), a;
+          this.options.extensions.startBlock.forEach((p) => {
+            a = p.call({ lexer: this }, u), typeof a == "number" && a >= 0 && (i = Math.min(i, a));
+          }), i < 1 / 0 && i >= 0 && (o = e.substring(0, i + 1));
+        }
+        if (this.state.top && (r = this.tokenizer.paragraph(o))) {
+          let i = t.at(-1);
+          n && i?.type === "paragraph" ? (i.raw += (i.raw.endsWith(`
+`) ? "" : `
+`) + r.raw, i.text += `
+` + r.text, this.inlineQueue.pop(), this.inlineQueue.at(-1).src = i.text) : t.push(r), n = o.length !== e.length, e = e.substring(r.raw.length);
+          continue;
+        }
+        if (r = this.tokenizer.text(e)) {
+          e = e.substring(r.raw.length);
+          let i = t.at(-1);
+          i?.type === "text" ? (i.raw += (i.raw.endsWith(`
+`) ? "" : `
+`) + r.raw, i.text += `
+` + r.text, this.inlineQueue.pop(), this.inlineQueue.at(-1).src = i.text) : t.push(r);
+          continue;
+        }
+        if (e) {
+          this.infiniteLoopError(e.charCodeAt(0));
+          break;
+        }
+      }
+      return this.state.top = true, t;
+    }
+    inline(e, t = []) {
+      return this.inlineQueue.push({ src: e, tokens: t }), t;
+    }
+    linkInText(e) {
+      if (!e.includes("[")) return false;
+      let t = this.tokenizer.rules.inline.link;
+      for (let n of e.matchAll(this.tokenizer.rules.inline.blockSkip)) if (t.test(n[0]) && e.charAt(n.index - 1) !== "!") return true;
+      for (let n of e.matchAll(this.tokenizer.rules.inline.reflinkSearch)) {
+        let s = n[0], r = s.lastIndexOf("[");
+        if (!(s.charAt(0) === "!" || !Object.hasOwn(this.tokens.links, q(s.slice(r + 1, -1)))) && !(r > 1 && this.linkInText(s.slice(1, r - 1)))) return true;
+      }
+      return false;
+    }
+    inlineTokens(e, t = []) {
+      this.tokenizer.lexer = this;
+      let n = e;
+      if (this.tokens.links && e.includes("[")) {
+        let i = this.tokenizer.rules.inline.reflinkSearch, u = (a) => {
+          let p = a.lastIndexOf("[");
+          if (!Object.hasOwn(this.tokens.links, q(a.slice(p + 1, -1)))) return a;
+          if (p > 1 && a.charAt(0) !== "!") {
+            let c = a.slice(1, p - 1);
+            if (this.linkInText(c)) return "[" + c.replace(i, u) + "][" + "a".repeat(a.length - p - 2) + "]";
+          }
+          return "[" + "a".repeat(a.length - 2) + "]";
+        };
+        n = n.replace(i, u);
+      }
+      n = n.replace(this.tokenizer.rules.inline.anyPunctuation, (i) => "+".repeat(i.length)), n = n.replace(this.tokenizer.rules.inline.blockSkip, (i, u, a) => {
+        let p = a ? a.length : 0;
+        return i.slice(0, p) + "[" + "a".repeat(i.length - p - 2) + "]";
+      }), n = this.options.hooks?.emStrongMask?.call({ lexer: this }, n) ?? n;
+      let s = false, r = "", o = 1 / 0;
+      for (; e; ) {
+        if (e.length < o) o = e.length;
+        else {
+          this.infiniteLoopError(e.charCodeAt(0));
+          break;
+        }
+        s || (r = ""), s = false;
+        let i;
+        if (this.options.extensions?.inline?.some((a) => (i = a.call({ lexer: this }, e, t)) ? (e = e.substring(i.raw.length), t.push(i), true) : false)) continue;
+        if (i = this.tokenizer.escape(e)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.tag(e)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.link(e)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.reflink(e, this.tokens.links)) {
+          e = e.substring(i.raw.length);
+          let a = t.at(-1);
+          i.type === "text" && a?.type === "text" ? (a.raw += i.raw, a.text += i.text) : t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.emStrong(e, n, r)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.codespan(e)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.br(e)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.del(e, n, r)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (i = this.tokenizer.autolink(e)) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        if (!this.state.inLink && (i = this.tokenizer.url(e))) {
+          e = e.substring(i.raw.length), t.push(i);
+          continue;
+        }
+        let u = e;
+        if (this.options.extensions?.startInline) {
+          let a = 1 / 0, p = e.slice(1), c;
+          this.options.extensions.startInline.forEach((d) => {
+            c = d.call({ lexer: this }, p), typeof c == "number" && c >= 0 && (a = Math.min(a, c));
+          }), a < 1 / 0 && a >= 0 && (u = e.substring(0, a + 1));
+        }
+        if (i = this.tokenizer.inlineText(u)) {
+          e = e.substring(i.raw.length), i.raw.slice(-1) !== "_" && (r = i.raw.slice(-1)), s = true;
+          let a = t.at(-1);
+          a?.type === "text" ? (a.raw += i.raw, a.text += i.text) : t.push(i);
+          continue;
+        }
+        if (e) {
+          this.infiniteLoopError(e.charCodeAt(0));
+          break;
+        }
+      }
+      return t;
+    }
+    infiniteLoopError(e) {
+      let t = "Infinite loop on byte: " + e;
+      if (this.options.silent) console.error(t);
+      else throw new Error(t);
+    }
+  };
+  var S = class {
+    options;
+    parser;
+    constructor(e) {
+      this.options = e || y;
+    }
+    space(e) {
+      return "";
+    }
+    code({ text: e, lang: t, escaped: n }) {
+      let s = (t || "").match(x.notSpaceStart)?.[0], r = e ? e.replace(x.endingNewline, "") + `
+` : "";
+      return s ? '<pre><code class="language-' + O(s) + '">' + (n ? r : O(r, true)) + `</code></pre>
+` : "<pre><code>" + (n ? r : O(r, true)) + `</code></pre>
+`;
+    }
+    blockquote({ tokens: e }) {
+      return `<blockquote>
+${this.parser.parse(e)}</blockquote>
+`;
+    }
+    html({ text: e }) {
+      return e;
+    }
+    def(e) {
+      return "";
+    }
+    heading({ tokens: e, depth: t }) {
+      return `<h${t}>${this.parser.parseInline(e)}</h${t}>
+`;
+    }
+    hr(e) {
+      return `<hr>
+`;
+    }
+    list(e) {
+      let t = e.ordered, n = e.start, s = "";
+      for (let i = 0; i < e.items.length; i++) {
+        let u = e.items[i];
+        s += this.listitem(u);
+      }
+      let r = t ? "ol" : "ul", o = t && n !== 1 ? ' start="' + n + '"' : "";
+      return "<" + r + o + `>
+` + s + "</" + r + `>
+`;
+    }
+    listitem(e) {
+      return `<li>${this.parser.parse(e.tokens)}</li>
+`;
+    }
+    checkbox({ checked: e }) {
+      return "<input " + (e ? 'checked="" ' : "") + 'disabled="" type="checkbox"> ';
+    }
+    paragraph({ tokens: e }) {
+      return `<p>${this.parser.parseInline(e)}</p>
+`;
+    }
+    table(e) {
+      let t = "", n = "";
+      for (let r = 0; r < e.header.length; r++) n += this.tablecell(e.header[r]);
+      t += this.tablerow({ text: n });
+      let s = "";
+      for (let r = 0; r < e.rows.length; r++) {
+        let o = e.rows[r];
+        n = "";
+        for (let i = 0; i < o.length; i++) n += this.tablecell(o[i]);
+        s += this.tablerow({ text: n });
+      }
+      return s && (s = `<tbody>${s}</tbody>`), `<table>
+<thead>
+` + t + `</thead>
+` + s + `</table>
+`;
+    }
+    tablerow({ text: e }) {
+      return `<tr>
+${e}</tr>
+`;
+    }
+    tablecell(e) {
+      let t = this.parser.parseInline(e.tokens), n = e.header ? "th" : "td";
+      return (e.align ? `<${n} align="${e.align}">` : `<${n}>`) + t + `</${n}>
+`;
+    }
+    strong({ tokens: e }) {
+      return `<strong>${this.parser.parseInline(e)}</strong>`;
+    }
+    em({ tokens: e }) {
+      return `<em>${this.parser.parseInline(e)}</em>`;
+    }
+    codespan({ text: e }) {
+      return `<code>${O(e, true)}</code>`;
+    }
+    br(e) {
+      return "<br>";
+    }
+    del({ tokens: e }) {
+      return `<del>${this.parser.parseInline(e)}</del>`;
+    }
+    link({ href: e, title: t, text: n, tokens: s, autolink: r }) {
+      let o = r ? O(n, true) : this.parser.parseInline(s), i = re(e);
+      if (i === null) return o;
+      e = O(i, r);
+      let u = '<a href="' + e + '"';
+      return t && (u += ' title="' + O(t) + '"'), u += ">" + o + "</a>", u;
+    }
+    image({ href: e, title: t, text: n, tokens: s }) {
+      s && (n = this.parser.parseInline(s, this.parser.textRenderer));
+      let r = re(e);
+      if (r === null) return O(n);
+      e = r;
+      let o = `<img src="${O(e)}" alt="${O(n)}"`;
+      return t && (o += ` title="${O(t)}"`), o += ">", o;
+    }
+    text(e) {
+      return "tokens" in e && e.tokens ? this.parser.parseInline(e.tokens) : "escaped" in e && e.escaped ? e.text : O(e.text);
+    }
+  };
+  var z = class {
+    strong({ text: e }) {
+      return e;
+    }
+    em({ text: e }) {
+      return e;
+    }
+    codespan({ text: e }) {
+      return e;
+    }
+    del({ text: e }) {
+      return e;
+    }
+    html({ text: e }) {
+      return e;
+    }
+    text({ text: e }) {
+      return e;
+    }
+    link({ text: e }) {
+      return "" + e;
+    }
+    image({ text: e }) {
+      return "" + e;
+    }
+    br() {
+      return "";
+    }
+    checkbox({ raw: e }) {
+      return e;
+    }
+  };
+  var T = class l2 {
+    options;
+    renderer;
+    textRenderer;
+    constructor(e) {
+      this.options = e || y, this.options.renderer = this.options.renderer || new S(), this.renderer = this.options.renderer, this.renderer.options = this.options, this.renderer.parser = this, this.textRenderer = new z();
+    }
+    static parse(e, t) {
+      return new l2(t).parse(e);
+    }
+    static parseInline(e, t) {
+      return new l2(t).parseInline(e);
+    }
+    parse(e) {
+      this.renderer.parser = this;
+      let t = "";
+      for (let n = 0; n < e.length; n++) {
+        let s = e[n];
+        if (this.options.extensions?.renderers?.[s.type]) {
+          let o = s, i = this.options.extensions.renderers[o.type].call({ parser: this }, o);
+          if (i !== false || !["space", "hr", "heading", "code", "table", "blockquote", "list", "checkbox", "html", "def", "paragraph", "text"].includes(o.type)) {
+            t += i || "";
+            continue;
+          }
+        }
+        let r = s;
+        switch (r.type) {
+          case "space": {
+            t += this.renderer.space(r);
+            break;
+          }
+          case "hr": {
+            t += this.renderer.hr(r);
+            break;
+          }
+          case "heading": {
+            t += this.renderer.heading(r);
+            break;
+          }
+          case "code": {
+            t += this.renderer.code(r);
+            break;
+          }
+          case "table": {
+            t += this.renderer.table(r);
+            break;
+          }
+          case "blockquote": {
+            t += this.renderer.blockquote(r);
+            break;
+          }
+          case "list": {
+            t += this.renderer.list(r);
+            break;
+          }
+          case "checkbox": {
+            t += this.renderer.checkbox(r);
+            break;
+          }
+          case "html": {
+            t += this.renderer.html(r);
+            break;
+          }
+          case "def": {
+            t += this.renderer.def(r);
+            break;
+          }
+          case "paragraph": {
+            t += this.renderer.paragraph(r);
+            break;
+          }
+          case "text": {
+            t += this.renderer.text(r);
+            break;
+          }
+          default: {
+            let o = 'Token with "' + r.type + '" type was not found.';
+            if (this.options.silent) return console.error(o), "";
+            throw new Error(o);
+          }
+        }
+      }
+      return t;
+    }
+    parseInline(e, t = this.renderer) {
+      this.renderer.parser = this;
+      let n = "";
+      for (let s = 0; s < e.length; s++) {
+        let r = e[s];
+        if (this.options.extensions?.renderers?.[r.type]) {
+          let i = this.options.extensions.renderers[r.type].call({ parser: this }, r);
+          if (i !== false || !["escape", "html", "link", "image", "checkbox", "strong", "em", "codespan", "br", "del", "text"].includes(r.type)) {
+            n += i || "";
+            continue;
+          }
+        }
+        let o = r;
+        switch (o.type) {
+          case "escape": {
+            n += t.text(o);
+            break;
+          }
+          case "html": {
+            n += t.html(o);
+            break;
+          }
+          case "link": {
+            n += t.link(o);
+            break;
+          }
+          case "image": {
+            n += t.image(o);
+            break;
+          }
+          case "checkbox": {
+            n += t.checkbox(o);
+            break;
+          }
+          case "strong": {
+            n += t.strong(o);
+            break;
+          }
+          case "em": {
+            n += t.em(o);
+            break;
+          }
+          case "codespan": {
+            n += t.codespan(o);
+            break;
+          }
+          case "br": {
+            n += t.br(o);
+            break;
+          }
+          case "del": {
+            n += t.del(o);
+            break;
+          }
+          case "text": {
+            n += t.text(o);
+            break;
+          }
+          default: {
+            let i = 'Token with "' + o.type + '" type was not found.';
+            if (this.options.silent) return console.error(i), "";
+            throw new Error(i);
+          }
+        }
+      }
+      return n;
+    }
+  };
+  var _ = class {
+    options;
+    block;
+    constructor(e) {
+      this.options = e || y;
+    }
+    static passThroughHooks = /* @__PURE__ */ new Set(["preprocess", "postprocess", "processAllTokens", "emStrongMask"]);
+    static passThroughHooksRespectAsync = /* @__PURE__ */ new Set(["preprocess", "postprocess", "processAllTokens"]);
+    preprocess(e) {
+      return e;
+    }
+    postprocess(e) {
+      return e;
+    }
+    processAllTokens(e) {
+      return e;
+    }
+    emStrongMask(e) {
+      return e;
+    }
+    provideLexer(e = this.block) {
+      return e ? R.lex : R.lexInline;
+    }
+    provideParser(e = this.block) {
+      return e ? T.parse : T.parseInline;
+    }
+  };
+  var F = class {
+    defaults = I();
+    options = this.setOptions;
+    parse = this.parseMarkdown(true);
+    parseInline = this.parseMarkdown(false);
+    Parser = T;
+    Renderer = S;
+    TextRenderer = z;
+    Lexer = R;
+    Tokenizer = P;
+    Hooks = _;
+    constructor(...e) {
+      this.use(...e);
+    }
+    walkTokens(e, t) {
+      let n = [];
+      for (let s of e) switch (n = n.concat(t.call(this, s)), s.type) {
+        case "table": {
+          let r = s;
+          for (let o of r.header) n = n.concat(this.walkTokens(o.tokens, t));
+          for (let o of r.rows) for (let i of o) n = n.concat(this.walkTokens(i.tokens, t));
+          break;
+        }
+        case "list": {
+          let r = s;
+          n = n.concat(this.walkTokens(r.items, t));
+          break;
+        }
+        default: {
+          let r = s;
+          this.defaults.extensions?.childTokens?.[r.type] ? this.defaults.extensions.childTokens[r.type].forEach((o) => {
+            let i = r[o].flat(1 / 0);
+            n = n.concat(this.walkTokens(i, t));
+          }) : r.tokens && (n = n.concat(this.walkTokens(r.tokens, t)));
+        }
+      }
+      return n;
+    }
+    use(...e) {
+      let t = this.defaults.extensions || { renderers: {}, childTokens: {} };
+      return e.forEach((n) => {
+        let s = { ...n };
+        if (s.async = this.defaults.async || s.async || false, n.extensions && (n.extensions.forEach((r) => {
+          if (!r.name) throw new Error("extension name required");
+          if ("renderer" in r) {
+            let o = t.renderers[r.name];
+            o ? t.renderers[r.name] = function(...i) {
+              let u = r.renderer.apply(this, i);
+              return u === false && (u = o.apply(this, i)), u;
+            } : t.renderers[r.name] = r.renderer;
+          }
+          if ("tokenizer" in r) {
+            if (!r.level || r.level !== "block" && r.level !== "inline") throw new Error("extension level must be 'block' or 'inline'");
+            let o = t[r.level];
+            o ? o.unshift(r.tokenizer) : t[r.level] = [r.tokenizer], r.start && (r.level === "block" ? t.startBlock ? t.startBlock.push(r.start) : t.startBlock = [r.start] : r.level === "inline" && (t.startInline ? t.startInline.push(r.start) : t.startInline = [r.start]));
+          }
+          "childTokens" in r && r.childTokens && (t.childTokens[r.name] = r.childTokens);
+        }), s.extensions = t), n.renderer) {
+          let r = this.defaults.renderer || new S(this.defaults);
+          for (let o in n.renderer) {
+            if (!(o in r)) throw new Error(`renderer '${o}' does not exist`);
+            if (["options", "parser"].includes(o)) continue;
+            let i = o, u = n.renderer[i], a = r[i];
+            r[i] = (...p) => {
+              let c = u.apply(r, p);
+              return c === false && (c = a.apply(r, p)), c || "";
+            };
+          }
+          s.renderer = r;
+        }
+        if (n.tokenizer) {
+          let r = this.defaults.tokenizer || new P(this.defaults);
+          for (let o in n.tokenizer) {
+            if (!(o in r)) throw new Error(`tokenizer '${o}' does not exist`);
+            if (["options", "rules", "lexer"].includes(o)) continue;
+            let i = o, u = n.tokenizer[i], a = r[i];
+            r[i] = (...p) => {
+              let c = u.apply(r, p);
+              return c === false && (c = a.apply(r, p)), c;
+            };
+          }
+          s.tokenizer = r;
+        }
+        if (n.hooks) {
+          let r = this.defaults.hooks || new _();
+          for (let o in n.hooks) {
+            if (!(o in r)) throw new Error(`hook '${o}' does not exist`);
+            if (["options", "block"].includes(o)) continue;
+            let i = o, u = n.hooks[i], a = r[i];
+            _.passThroughHooks.has(o) ? r[i] = (p) => {
+              if (this.defaults.async && _.passThroughHooksRespectAsync.has(o)) return (async () => {
+                let d = await u.call(r, p);
+                return a.call(r, d);
+              })();
+              let c = u.call(r, p);
+              return a.call(r, c);
+            } : r[i] = (...p) => {
+              if (this.defaults.async) return (async () => {
+                let d = await u.apply(r, p);
+                return d === false && (d = await a.apply(r, p)), d;
+              })();
+              let c = u.apply(r, p);
+              return c === false && (c = a.apply(r, p)), c;
+            };
+          }
+          s.hooks = r;
+        }
+        if (n.walkTokens) {
+          let r = this.defaults.walkTokens, o = n.walkTokens;
+          s.walkTokens = function(i) {
+            let u = [];
+            return u.push(o.call(this, i)), r && (u = u.concat(r.call(this, i))), u;
+          };
+        }
+        this.defaults = { ...this.defaults, ...s };
+      }), this;
+    }
+    setOptions(e) {
+      return this.defaults = { ...this.defaults, ...e }, this;
+    }
+    lexer(e, t) {
+      return R.lex(e, t ?? this.defaults);
+    }
+    parser(e, t) {
+      return T.parse(e, t ?? this.defaults);
+    }
+    parseMarkdown(e) {
+      return (n, s) => {
+        let r = { ...s }, o = { ...this.defaults, ...r }, i = this.onError(!!o.silent, !!o.async);
+        if (this.defaults.async === true && r.async === false) return i(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));
+        if (typeof n > "u" || n === null) return i(new Error("marked(): input parameter is undefined or null"));
+        if (typeof n != "string") return i(new Error("marked(): input parameter is of type " + Object.prototype.toString.call(n) + ", string expected"));
+        if (o.hooks && (o.hooks.options = o, o.hooks.block = e), o.async) return (async () => {
+          let u = o.hooks ? await o.hooks.preprocess(n) : n, p = await (o.hooks ? await o.hooks.provideLexer(e) : e ? R.lex : R.lexInline)(u, o), c = o.hooks ? await o.hooks.processAllTokens(p) : p;
+          o.walkTokens && await Promise.all(this.walkTokens(c, o.walkTokens));
+          let m = await (o.hooks ? await o.hooks.provideParser(e) : e ? T.parse : T.parseInline)(c, o);
+          return o.hooks ? await o.hooks.postprocess(m) : m;
+        })().catch(i);
+        try {
+          o.hooks && (n = o.hooks.preprocess(n));
+          let a = (o.hooks ? o.hooks.provideLexer(e) : e ? R.lex : R.lexInline)(n, o);
+          o.hooks && (a = o.hooks.processAllTokens(a)), o.walkTokens && this.walkTokens(a, o.walkTokens);
+          let c = (o.hooks ? o.hooks.provideParser(e) : e ? T.parse : T.parseInline)(a, o);
+          return o.hooks && (c = o.hooks.postprocess(c)), c;
+        } catch (u) {
+          return i(u);
+        }
+      };
+    }
+    onError(e, t) {
+      return (n) => {
+        if (n.message += `
+Please report this to https://github.com/markedjs/marked.`, e) {
+          let s = "<p>An error occurred:</p><pre>" + O(n.message + "", true) + "</pre>";
+          return t ? Promise.resolve(s) : s;
+        }
+        if (t) return Promise.reject(n);
+        throw n;
+      };
+    }
+  };
+  var E = new F();
+  function k(l3, e) {
+    return E.parse(l3, e);
+  }
+  k.options = k.setOptions = function(l3) {
+    return E.setOptions(l3), k.defaults = E.defaults, W(k.defaults), k;
+  };
+  k.getDefaults = I;
+  k.defaults = y;
+  function Pt(...l3) {
+    return E.use(...l3), k.defaults = E.defaults, W(k.defaults), k;
+  }
+  k.use = Pt;
+  k.walkTokens = function(l3, e) {
+    return E.walkTokens(l3, e);
+  };
+  k.parseInline = E.parseInline;
+  k.Parser = T;
+  k.parser = T.parse;
+  k.Renderer = S;
+  k.TextRenderer = z;
+  k.Lexer = R;
+  k.lexer = R.lex;
+  k.Tokenizer = P;
+  k.Hooks = _;
+  k.parse = k;
+  var gn = k.options;
+  var fn = k.setOptions;
+  var mn = k.walkTokens;
+  var xn = k.parseInline;
+  var Rn = T.parse;
+  var Tn = R.lex;
+
+  // src/md.js
+  var escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  k.use({
+    gfm: true,
+    renderer: {
+      html: ({ text }) => escapeHtml(text),
+      image: ({ text }) => escapeHtml(text || ""),
+      link(token) {
+        const inner = this.parser.parseInline(token.tokens);
+        const href = String(token.href || "");
+        return /^(https?:\/\/|mailto:)/i.test(href) ? `<a href="${escapeHtml(href)}" rel="noopener noreferrer" target="_blank">${inner}</a>` : inner;
+      }
+    }
+  });
+
+  // src/amnex.js
+  var NAVY = "#0c2461";
+  var NAVYCELL = `border:1px solid ${NAVY};background:${NAVY};color:#ffffff;font-weight:bold;padding:5px 8px;font-size:10pt;line-height:1.35`;
 
   // src/mailer.js
   var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
@@ -616,16 +1964,16 @@ _(Output hit the length limit and was cut off.)_`;
       throw new Error(e.name === "TimeoutError" ? "The mail relay did not answer in 60 s." : `Could not reach the mail relay (${e.message}).`);
     }
     const raw = await res.text();
-    let j;
+    let j2;
     try {
-      j = JSON.parse(raw);
+      j2 = JSON.parse(raw);
     } catch {
       throw new Error(
         /<html|accounts\.google\.com|Sign in/i.test(raw) ? 'The relay asked for a Google sign-in. Redeploy the web app with "Who has access: Anyone".' : `Unexpected reply from the mail relay (HTTP ${res.status}).`
       );
     }
-    if (!j.ok) throw new Error(j.error || "The mail relay refused the request.");
-    return j;
+    if (!j2.ok) throw new Error(j2.error || "The mail relay refused the request.");
+    return j2;
   }
   function sendMail(mail, settings, who = {}) {
     return callRelay({ to: who.to ?? settings.emailTo ?? "", cc: who.cc || "", bcc: who.bcc || "", ...mail }, settings);
@@ -654,13 +2002,13 @@ _(Output hit the length limit and was cut off.)_`;
     return out;
   }
   function allowListLines(addresses, { domains = false } = {}) {
-    const q = (x) => `'${String(x).replace(/'/g, "'")}'`;
+    const q2 = (x2) => `'${String(x2).replace(/'/g, "'")}'`;
     const list = parseAddresses(addresses.join(","));
     if (domains) {
       const ds = [...new Set(list.map((a) => a.split("@")[1].toLowerCase()))];
-      return { allowed: "[]", domains: `[${ds.map(q).join(", ")}]` };
+      return { allowed: "[]", domains: `[${ds.map(q2).join(", ")}]` };
     }
-    return { allowed: `[${list.map(q).join(", ")}]`, domains: "[]" };
+    return { allowed: `[${list.map(q2).join(", ")}]`, domains: "[]" };
   }
   function scriptWithAllowList(scriptText, addresses, opts) {
     const { allowed, domains } = allowListLines(addresses, opts);
@@ -846,24 +2194,24 @@ function out(o) {
 
   // src/dictionary.js
   var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
-  var oneLine = (x) => String(x || "").replace(/[\r\n,|]+/g, " ").replace(/\s+/g, " ").trim();
+  var oneLine = (x2) => String(x2 || "").replace(/[\r\n,|]+/g, " ").replace(/\s+/g, " ").trim();
   function learnAlias(text, right, wrong) {
     const r = oneLine(right);
     const w = oneLine(wrong);
     if (!r) return String(text || "");
     const lines = String(text || "").split(/\r?\n/);
-    const at = lines.findIndex((l) => {
-      const t = l.trim();
+    const at2 = lines.findIndex((l3) => {
+      const t = l3.trim();
       return t && !t.startsWith("#") && norm(t.split("|")[0]) === norm(r);
     });
-    if (at < 0) {
+    if (at2 < 0) {
       const add = w && norm(w) !== norm(r) ? `${r} | ${w}` : r;
-      return [...lines.filter((l, i) => !(i === lines.length - 1 && !l.trim())), add].join("\n");
+      return [...lines.filter((l3, i) => !(i === lines.length - 1 && !l3.trim())), add].join("\n");
     }
-    const [name, rest = ""] = lines[at].split("|");
+    const [name, rest = ""] = lines[at2].split("|");
     const aliases = rest.split(",").map((a) => a.trim()).filter(Boolean);
     if (w && norm(w) !== norm(r) && !aliases.some((a) => norm(a) === norm(w))) aliases.push(w);
-    lines[at] = aliases.length ? `${name.trim()} | ${aliases.join(", ")}` : name.trim();
+    lines[at2] = aliases.length ? `${name.trim()} | ${aliases.join(", ")}` : name.trim();
     return lines.join("\n");
   }
   var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
@@ -891,7 +2239,7 @@ function out(o) {
     { code: "zh", name: "Chinese (Mandarin)", bcp: "zh-CN", script: "Chinese characters" },
     { code: "ja", name: "Japanese", bcp: "ja-JP", script: "Japanese script" }
   ];
-  var BY_CODE = new Map(LANGUAGES.map((l) => [l.code, l]));
+  var BY_CODE = new Map(LANGUAGES.map((l3) => [l3.code, l3]));
   var LEGACY = { auto: ["en", "hi", "ml"], hinglish: ["hi", "en"], malayalam: ["ml", "en"] };
   function chosenLanguages(settings) {
     const list = settings?.meetingLanguages;
@@ -899,8 +2247,8 @@ function out(o) {
     const legacy = settings?.meetingLanguage;
     return legacy && legacy !== "auto" && LEGACY[legacy] ? LEGACY[legacy].map((c) => BY_CODE.get(c)) : null;
   }
-  var minutesLanguageOptions = () => [...LANGUAGES.map((l) => ({ value: l.code === "hi" ? "Hindi (Devanagari)" : l.name, label: l.code === "hi" ? "Hindi (Devanagari)" : l.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
-  var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l) => l.name).join(", ")} and ${langs.at(-1).name}`;
+  var minutesLanguageOptions = () => [...LANGUAGES.map((l3) => ({ value: l3.code === "hi" ? "Hindi (Devanagari)" : l3.name, label: l3.code === "hi" ? "Hindi (Devanagari)" : l3.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
+  var names = (langs) => langs.length <= 1 ? langs[0]?.name || "" : `${langs.slice(0, -1).map((l3) => l3.name).join(", ")} and ${langs.at(-1).name}`;
 
   // src/voice/match.js
   var THRESHOLDS = {
@@ -928,9 +2276,9 @@ function out(o) {
   }
   function normalize(v) {
     let n = 0;
-    for (const x of v) n += x * x;
+    for (const x2 of v) n += x2 * x2;
     n = Math.sqrt(n) || 1;
-    return Float32Array.from(v, (x) => x / n);
+    return Float32Array.from(v, (x2) => x2 / n);
   }
   function mean(vectors) {
     const out = new Float32Array(vectors[0].length);
@@ -974,25 +2322,25 @@ function out(o) {
   }
   function clusterVoices(segs, { threshold = 0.55 } = {}) {
     const vecs = segs.map((s) => unpack(s.e));
-    let clusters = vecs.map((_, i) => ({ members: [i] }));
+    let clusters = vecs.map((_2, i) => ({ members: [i] }));
     const sim = (a, b) => {
       let s = 0;
-      for (const i of a.members) for (const j of b.members) s += cosine(vecs[i], vecs[j]);
+      for (const i of a.members) for (const j2 of b.members) s += cosine(vecs[i], vecs[j2]);
       return s / (a.members.length * b.members.length);
     };
     for (; ; ) {
       let best = -1;
       let pair = null;
       for (let i2 = 0; i2 < clusters.length; i2++) {
-        for (let j2 = i2 + 1; j2 < clusters.length; j2++) {
-          const s = sim(clusters[i2], clusters[j2]);
-          if (s > best) [best, pair] = [s, [i2, j2]];
+        for (let j3 = i2 + 1; j3 < clusters.length; j3++) {
+          const s = sim(clusters[i2], clusters[j3]);
+          if (s > best) [best, pair] = [s, [i2, j3]];
         }
       }
       if (!pair || best < 1 - threshold) break;
-      const [i, j] = pair;
-      clusters[i] = { members: [...clusters[i].members, ...clusters[j].members] };
-      clusters.splice(j, 1);
+      const [i, j2] = pair;
+      clusters[i] = { members: [...clusters[i].members, ...clusters[j2].members] };
+      clusters.splice(j2, 1);
     }
     return clusters.map((c) => ({ members: c.members.sort((a, b) => a - b), seconds: c.members.reduce((a, i) => a + (segs[i].t1 - segs[i].t0), 0), centroid: pack(mean(c.members.map((i) => vecs[i]))) })).sort((a, b) => b.seconds - a.seconds);
   }
@@ -1018,7 +2366,7 @@ function out(o) {
     keep: 12
     // individual fingerprints kept
   };
-  var scale = (v, k) => Float32Array.from(v, (x) => x * k);
+  var scale = (v, k2) => Float32Array.from(v, (x2) => x2 * k2);
   var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
   var blockEntry = (p) => ({ name: p.name, centroid: p.centroid });
   function mergePeople(list, fromId, intoId) {
@@ -1046,8 +2394,8 @@ function out(o) {
     const segs = (meeting.voiceSegs || []).filter((s) => !usable2.length || !classify(unpack(s.e), usable2).id);
     if (segs.length < 4) return [];
     const step = Math.max(1, Math.ceil(segs.length / cap));
-    const sample = segs.filter((_, i) => i % step === 0);
-    return clusterVoices(sample).filter((g) => g.seconds * step >= minSecs).slice(0, max).map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_, k) => k % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)) }));
+    const sample = segs.filter((_2, i) => i % step === 0);
+    return clusterVoices(sample).filter((g) => g.seconds * step >= minSecs).slice(0, max).map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_2, k2) => k2 % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)) }));
   }
 
   // src/voice/client.js
@@ -1127,13 +2475,13 @@ function out(o) {
       const db = 10 * Math.log10(sum / block.length + 1e-12);
       this.recent.push(db);
       if (this.recent.length > 117) this.recent.shift();
-      const target = [...this.recent].sort((x, y) => x - y)[Math.floor((this.recent.length - 1) * 0.2)];
+      const target = [...this.recent].sort((x2, y2) => x2 - y2)[Math.floor((this.recent.length - 1) * 0.2)];
       this.floor = this.recent.length === 1 ? db : Math.min(target, this.floor + 0.3);
       const speech = db > Math.max(this.floor + 9, -52);
-      const at = this.samples;
+      const at2 = this.samples;
       this.samples += block.length;
       if (speech) {
-        if (!this.cur.length) this.curStart = at;
+        if (!this.cur.length) this.curStart = at2;
         this.cur.push(block);
         this.speechBlocks++;
         this.quiet = 0;
@@ -1210,7 +2558,7 @@ function out(o) {
     const spread = keep.map((e) => cosine(e, centroid));
     const consistency = spread.reduce((a, b) => a + b, 0) / spread.length;
     const step = Math.max(1, Math.floor(keep.length / ENROL.maxWindows));
-    const windows = keep.filter((_, i) => i % step === 0).slice(0, ENROL.maxWindows);
+    const windows = keep.filter((_2, i) => i % step === 0).slice(0, ENROL.maxWindows);
     return {
       ok: true,
       speechSec,
@@ -1289,7 +2637,7 @@ function out(o) {
       }
       const windows = Array.isArray(p.windows) ? p.windows.filter((w) => typeof w === "string" && B64_256.test(w)).slice(0, ENROL.maxWindows * 2) : [];
       const lang2 = String(p.lang || "en").slice(0, 8);
-      const langs = Array.isArray(p.langs) ? p.langs.filter((l) => typeof l === "string").map((l) => l.slice(0, 8)).slice(0, 6) : [];
+      const langs = Array.isArray(p.langs) ? p.langs.filter((l3) => typeof l3 === "string").map((l3) => l3.slice(0, 8)).slice(0, 6) : [];
       people2.push({ name, lang: lang2, langs: langs.length ? langs : [lang2], secs: Math.max(0, Math.min(3600, Number(p.secs) || 0)), centroid: p.centroid, windows });
     }
     return { people: people2, problems };
@@ -1300,7 +2648,7 @@ function out(o) {
     const replaced = [];
     const skipped = [];
     for (const p of incoming) {
-      const i = next.findIndex((x) => x.name.toLowerCase() === p.name.toLowerCase());
+      const i = next.findIndex((x2) => x2.name.toLowerCase() === p.name.toLowerCase());
       if (i >= 0 && !replace) {
         skipped.push(p.name);
         continue;
@@ -1322,10 +2670,10 @@ function out(o) {
     return new Promise((resolve) => {
       const dlg = document.createElement("dialog");
       dlg.className = "dbmodal";
-      const h = document.createElement("div");
-      h.style.cssText = "white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)";
-      h.textContent = [title, text].filter(Boolean).join("\n\n");
-      dlg.append(h);
+      const h2 = document.createElement("div");
+      h2.style.cssText = "white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)";
+      h2.textContent = [title, text].filter(Boolean).join("\n\n");
+      dlg.append(h2);
       let inp = null;
       let sel = null;
       if (input) {
@@ -1369,7 +2717,7 @@ function out(o) {
   // src/voices-ui.js
   var OKBTN = [{ label: "OK", value: "ok", primary: true }];
   var tell = (text) => modal({ text, buttons: OKBTN });
-  var $ = (id) => document.getElementById(id);
+  var $2 = (id) => document.getElementById(id);
   var MAX_SEC2 = 40;
   var people = [];
   var mode = { kind: "new", id: null };
@@ -1384,18 +2732,18 @@ function out(o) {
     return n;
   };
   var setMsg = (t, kind = "") => {
-    $("enrolMsg").textContent = t;
-    $("enrolMsg").className = `msgbox ${kind === true ? "bad" : kind || ""}`.trim();
+    $2("enrolMsg").textContent = t;
+    $2("enrolMsg").className = `msgbox ${kind === true ? "bad" : kind || ""}`.trim();
   };
   var READY_MSG = "Type a name, then press Record and read the text above. Use the mic you use in meetings.";
   var clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
   var saving = false;
   function syncEnrol() {
-    $("enrolRec").hidden = !!rec;
-    $("enrolStop").hidden = !rec;
-    $("enrolDot").hidden = !rec;
-    $("enrolPlay").disabled = !pcm;
-    $("enrolSave").disabled = !pcm || saving;
+    $2("enrolRec").hidden = !!rec;
+    $2("enrolStop").hidden = !rec;
+    $2("enrolDot").hidden = !rec;
+    $2("enrolPlay").disabled = !pcm;
+    $2("enrolSave").disabled = !pcm || saving;
   }
   function getClient() {
     if (!client) {
@@ -1437,13 +2785,13 @@ function out(o) {
     const menu = el("div", { className: "menu", hidden: true });
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", `More actions for ${p.name}`);
-    const btns = items.map(({ label, fn, danger, aria }) => {
+    const btns = items.map(({ label, fn: fn2, danger, aria }) => {
       const b = el("button", { type: "button", className: danger ? "danger" : "", textContent: label });
       b.setAttribute("role", "menuitem");
       if (aria) b.setAttribute("aria-label", aria);
       b.onclick = () => {
         closeMenu(true);
-        fn();
+        fn2();
       };
       return b;
     });
@@ -1470,13 +2818,13 @@ function out(o) {
   }
   function renderList() {
     closeMenu(false);
-    $("voiceEmpty").hidden = people.length > 0;
-    $("hPeople").textContent = people.length ? `Enrolled people \xB7 ${people.length}` : "Enrolled people";
-    $("voiceList").replaceChildren(
+    $2("voiceEmpty").hidden = people.length > 0;
+    $2("hPeople").textContent = people.length ? `Enrolled people \xB7 ${people.length}` : "Enrolled people";
+    $2("voiceList").replaceChildren(
       ...people.map((p) => {
         const anon = p.auto && isAnon(p);
         const [badge, cls] = badgeOf(p);
-        const langs = (p.langs || [p.lang || "en"]).map((l) => LANG_NAME[l] || l).join(" + ");
+        const langs = (p.langs || [p.lang || "en"]).map((l3) => LANG_NAME[l3] || l3).join(" + ");
         const n = p.meetings || 1;
         const meta = p.auto ? `${anon ? "Heard in your meetings, not named yet" : "Learned from your meetings"} \xB7 ${n} meeting${n === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech${p.ready ? "" : ` \xB7 not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
         const row = el("li", { className: "voice-row" });
@@ -1484,7 +2832,7 @@ function out(o) {
         const avatar = el("span", { className: `avatar${anon ? " anon" : ""}`, textContent: initial });
         avatar.setAttribute("aria-hidden", "true");
         const who = el("div", { className: "vwho" }, el("div", { className: "vtop" }, el("strong", { className: "vn", textContent: p.name }), el("span", { className: `chip ${cls}`.trim(), textContent: badge })), el("p", { className: "hint vm", textContent: meta }));
-        const btn = (label, fn) => el("button", { type: "button", className: "btn sm", textContent: label, onclick: fn });
+        const btn = (label, fn2) => el("button", { type: "button", className: "btn sm", textContent: label, onclick: fn2 });
         const items = [{ label: "Export this voice", fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`) }];
         if (p.auto && people.length > 1) items.push({ label: "Merge into\u2026", fn: () => mergeInto(p) });
         items.push({ label: "Delete", aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
@@ -1524,9 +2872,9 @@ function out(o) {
     const meetings = (await listMeetings()).filter((m2) => (m2.voiceSegs || []).length >= 20).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
     const m = meetings[0];
     const groups = m ? unnamedGroups(m, people) : [];
-    $("unnamedCard").hidden = !groups.length;
-    if (m) $("unnamedSub").textContent = `${m.title || "Your latest meeting"}${m.startedAt ? ` \xB7 ${fmtDate(m.startedAt)}` : ""}. Name a voice once and it is recognised next time.`;
-    $("unnamedList").replaceChildren(
+    $2("unnamedCard").hidden = !groups.length;
+    if (m) $2("unnamedSub").textContent = `${m.title || "Your latest meeting"}${m.startedAt ? ` \xB7 ${fmtDate(m.startedAt)}` : ""}. Name a voice once and it is recognised next time.`;
+    $2("unnamedList").replaceChildren(
       ...groups.map((g, i) => {
         const label = el("label", { className: "sr-only", htmlFor: `unnamedName${i}`, textContent: `Name for Voice ${i + 1}` });
         const input = el("input", { id: `unnamedName${i}`, placeholder: "Who is this?", maxLength: 60, autocomplete: "off" });
@@ -1559,8 +2907,8 @@ function out(o) {
     try {
       const clean = r.input.trim().replace(/\s+/g, " ").slice(0, 60);
       if (!clean) throw new Error("A name cannot be empty.");
-      if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
-      people = people.map((x) => x.id === p.id ? { ...x, name: clean } : x);
+      if (people.some((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
+      people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean } : x2);
       await saveVoices(people);
       deleteSample(p.id).catch(() => {
       });
@@ -1579,7 +2927,7 @@ function out(o) {
         await saveBlockedVoices([...await getBlockedVoices(), blockEntry(p)]);
         renderBlocked();
       }
-      people = people.filter((x) => x.id !== p.id);
+      people = people.filter((x2) => x2.id !== p.id);
       await saveVoices(people);
       deleteSample(p.id).catch(() => {
       });
@@ -1589,8 +2937,8 @@ function out(o) {
     }
   }
   async function mergeInto(p) {
-    const others = people.filter((x) => x.id !== p.id);
-    const r = await modal({ text: `Merge ${p.name} into which voice? The result keeps that voice's name.`, select: others.map((x) => ({ value: x.id, label: x.name })), buttons: [{ label: "Cancel", value: "no" }, { label: "Merge", value: "ok", primary: true }] });
+    const others = people.filter((x2) => x2.id !== p.id);
+    const r = await modal({ text: `Merge ${p.name} into which voice? The result keeps that voice's name.`, select: others.map((x2) => ({ value: x2.id, label: x2.name })), buttons: [{ label: "Cancel", value: "no" }, { label: "Merge", value: "ok", primary: true }] });
     if (!r || r.value !== "ok") return;
     try {
       people = mergePeople(people, p.id, r.select);
@@ -1604,44 +2952,44 @@ function out(o) {
   }
   async function renderBlocked() {
     const blocked = await getBlockedVoices();
-    $("voiceBlockedRow").hidden = !blocked.length;
-    $("voiceBlockedMsg").textContent = `${blocked.length} learned voice${blocked.length === 1 ? " is" : "s are"} set never to be learned again.`;
+    $2("voiceBlockedRow").hidden = !blocked.length;
+    $2("voiceBlockedMsg").textContent = `${blocked.length} learned voice${blocked.length === 1 ? " is" : "s are"} set never to be learned again.`;
   }
   function resetRecording() {
     stopCapture(true);
     pcm = null;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = "";
-    $("enrolRec").textContent = "Record";
-    $("enrolLevel").style.width = "0";
-    $("enrolTime").textContent = "";
+    $2("enrolRec").textContent = "Record";
+    $2("enrolLevel").style.width = "0";
+    $2("enrolTime").textContent = "";
     syncEnrol();
   }
   function blankForm() {
     mode = { kind: "new", id: null };
     resetRecording();
-    $("enrolName").value = "";
-    $("enrolName").disabled = false;
-    $("enrolTitle").textContent = "Add a person";
+    $2("enrolName").value = "";
+    $2("enrolName").disabled = false;
+    $2("enrolTitle").textContent = "Add a person";
   }
   function begin(m, person) {
     resetRecording();
     mode = m;
-    $("enrolTitle").textContent = m.kind === "new" ? "Add a person" : m.kind === "rerecord" ? `Re-record ${person.name}` : `Add another recording for ${person.name}`;
-    $("enrolName").value = person ? person.name : "";
-    $("enrolName").disabled = !!person;
-    setLang(m.kind === "add" ? ORDER.find((l) => !(person.langs || [person.lang || "en"]).includes(l)) || "free" : lang);
+    $2("enrolTitle").textContent = m.kind === "new" ? "Add a person" : m.kind === "rerecord" ? `Re-record ${person.name}` : `Add another recording for ${person.name}`;
+    $2("enrolName").value = person ? person.name : "";
+    $2("enrolName").disabled = !!person;
+    setLang(m.kind === "add" ? ORDER.find((l3) => !(person.langs || [person.lang || "en"]).includes(l3)) || "free" : lang);
     setMsg(m.kind === "add" ? "Record in another language this person uses in meetings: it makes the voice recognisable in each." : READY_MSG, m.kind === "add" ? "info" : "");
-    (person ? $("enrolRec") : $("enrolName")).scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" });
-    (person ? $("enrolRec") : $("enrolName")).focus({ preventScroll: true });
+    (person ? $2("enrolRec") : $2("enrolName")).scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" });
+    (person ? $2("enrolRec") : $2("enrolName")).focus({ preventScroll: true });
   }
   var reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function setLang(l) {
-    lang = l;
-    $("enrolPrompt").textContent = PROMPTS[l];
-    $("enrolPrompt").lang = l === "free" ? "en" : l;
+  function setLang(l3) {
+    lang = l3;
+    $2("enrolPrompt").textContent = PROMPTS[l3];
+    $2("enrolPrompt").lang = l3 === "free" ? "en" : l3;
     document.querySelectorAll("#enrolLang button").forEach((b) => {
-      const on = b.dataset.lang === l;
+      const on = b.dataset.lang === l3;
       b.classList.toggle("active", on);
       b.setAttribute("aria-checked", String(on));
       b.tabIndex = on ? 0 : -1;
@@ -1667,11 +3015,11 @@ function out(o) {
       const rms = Math.sqrt(s / b.length);
       r.peak = Math.max(r.peak, rms);
       const db = 20 * Math.log10(rms + 1e-9);
-      $("enrolLevel").style.width = `${Math.max(0, Math.min(100, (db + 50) / 40 * 100))}%`;
+      $2("enrolLevel").style.width = `${Math.max(0, Math.min(100, (db + 50) / 40 * 100))}%`;
     };
     r.timer = setInterval(() => {
       const sec = (Date.now() - r.started) / 1e3;
-      $("enrolTime").textContent = `${clock(sec)}${sec < ENROL.targetSec ? "" : " \u2713"}`;
+      $2("enrolTime").textContent = `${clock(sec)}${sec < ENROL.targetSec ? "" : " \u2713"}`;
       if (sec >= MAX_SEC2) finishCapture();
     }, 250);
     rec = r;
@@ -1697,8 +3045,8 @@ function out(o) {
   }
   function finishCapture() {
     const got = stopCapture(false);
-    $("enrolRec").textContent = "Record again";
-    $("enrolLevel").style.width = "0";
+    $2("enrolRec").textContent = "Record again";
+    $2("enrolLevel").style.width = "0";
     syncEnrol();
     if (!got || got.pcm.length < SR * 3) {
       setMsg("That was too short. Press Record and read the text above.", "warn");
@@ -1711,20 +3059,20 @@ function out(o) {
     pcm = got.pcm;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = URL.createObjectURL(new Blob([encodeWav(pcm, SR)], { type: "audio/wav" }));
-    $("enrolTime").textContent = clock(pcm.length / SR);
+    $2("enrolTime").textContent = clock(pcm.length / SR);
     syncEnrol();
     setMsg("Play it back to check it is clear, then save. Nothing is stored until you press Save voice.", "ok");
   }
   async function save() {
     if (!pcm) return;
-    const name = $("enrolName").value;
+    const name = $2("enrolName").value;
     try {
       if (mode.kind === "new") upsertPerson(people, { name, lang, print: { centroid: "", windows: [], speechSec: 0 } });
       saving = true;
       syncEnrol();
       setMsg("Working out the voice fingerprint\u2026 (the first time this loads the speaker model)", "info");
       const c = getClient();
-      await Promise.race([c.ready, new Promise((_, rej) => setTimeout(() => rej(new Error("The speaker model did not load. Reload this page and try again.")), 6e4))]);
+      await Promise.race([c.ready, new Promise((_2, rej) => setTimeout(() => rej(new Error("The speaker model did not load. Reload this page and try again.")), 6e4))]);
       const print = await buildPrint(pcm, (p) => c.embed(p));
       if (!print.ok) {
         setMsg(print.reason, "warn");
@@ -1754,7 +3102,7 @@ function out(o) {
     setTimeout(() => URL.revokeObjectURL(url), 5e3);
   }
   async function importFile(file) {
-    const out = $("voiceShareMsg");
+    const out = $2("voiceShareMsg");
     try {
       if (file.size > 2e6) throw new Error("That file is too large to be a voices file.");
       const { people: incoming, problems } = parseImport(await file.text());
@@ -1762,7 +3110,7 @@ function out(o) {
         out.textContent = problems[0] || "Nothing to import.";
         return;
       }
-      const clash = incoming.filter((p) => people.some((x) => x.name.toLowerCase() === p.name.toLowerCase())).map((p) => p.name);
+      const clash = incoming.filter((p) => people.some((x2) => x2.name.toLowerCase() === p.name.toLowerCase())).map((p) => p.name);
       const ans = clash.length ? await modal({ text: `${clash.join(", ")} ${clash.length === 1 ? "is" : "are"} already enrolled here. Replace with the imported voice?`, buttons: [{ label: "Keep mine", value: "keep" }, { label: "Replace", value: "replace", primary: true }] }) : null;
       const replace = ans?.value === "replace";
       const r = mergeImport(people, incoming, { replace });
@@ -1792,51 +3140,51 @@ function out(o) {
     document.addEventListener("click", (e) => {
       if (openMenu && !openMenu.menu.contains(e.target) && !openMenu.more.contains(e.target)) closeMenu(false);
     });
-    $("enrolJump").onclick = () => {
-      $("enrol").scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
-      $("enrolName").focus({ preventScroll: true });
+    $2("enrolJump").onclick = () => {
+      $2("enrol").scrollIntoView({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+      $2("enrolName").focus({ preventScroll: true });
     };
     setMsg(READY_MSG);
     syncEnrol();
-    $("enrolRec").onclick = async () => {
+    $2("enrolRec").onclick = async () => {
       try {
         if (pcm) pcm = null;
         syncEnrol();
-        if (mode.kind === "new" && !$("enrolName").value.trim()) {
+        if (mode.kind === "new" && !$2("enrolName").value.trim()) {
           setMsg("Type the person\u2019s name first.", "bad");
-          $("enrolName").focus();
+          $2("enrolName").focus();
           return;
         }
         await startCapture();
-        $("enrolStop").focus();
+        $2("enrolStop").focus();
         setMsg("Listening\u2026 keep going until about 20 seconds.", "info");
       } catch (e) {
         setMsg(e.name === "NotAllowedError" ? "The microphone is blocked. Use \u201CAllow microphone\u201D on the General page, then try again." : e.name === "NotFoundError" ? "No microphone is available. Allow it in General, under Microphone, or plug one in." : `Could not start the microphone: ${e.message}`, "bad");
       }
     };
-    $("enrolStop").onclick = () => {
+    $2("enrolStop").onclick = () => {
       finishCapture();
-      $("enrolPlay").disabled ? $("enrolRec").focus() : $("enrolPlay").focus();
+      $2("enrolPlay").disabled ? $2("enrolRec").focus() : $2("enrolPlay").focus();
     };
-    $("enrolPlay").onclick = () => audioUrl && new Audio(audioUrl).play();
-    $("enrolSave").onclick = save;
-    $("enrolCancel").onclick = () => {
+    $2("enrolPlay").onclick = () => audioUrl && new Audio(audioUrl).play();
+    $2("enrolSave").onclick = save;
+    $2("enrolCancel").onclick = () => {
       blankForm();
       setMsg(READY_MSG);
     };
-    $("voiceExport").onclick = () => people.length ? download(exportVoices(people), "debrief-voices.json") : $("voiceShareMsg").textContent = "Nobody is enrolled yet.";
-    $("voiceImport").onclick = () => $("voiceImportFile").click();
-    $("voiceImportFile").onchange = (e) => {
+    $2("voiceExport").onclick = () => people.length ? download(exportVoices(people), "debrief-voices.json") : $2("voiceShareMsg").textContent = "Nobody is enrolled yet.";
+    $2("voiceImport").onclick = () => $2("voiceImportFile").click();
+    $2("voiceImportFile").onchange = (e) => {
       const f = e.target.files[0];
       e.target.value = "";
       if (f) importFile(f);
     };
     renderBlocked();
-    $("voiceAllowAgain").onclick = async () => {
+    $2("voiceAllowAgain").onclick = async () => {
       await saveBlockedVoices([]);
       renderBlocked();
     };
-    $("voiceForget").onclick = async () => {
+    $2("voiceForget").onclick = async () => {
       const ok = await modal({ text: "Forget all voices? This deletes every enrolled fingerprint and the voice fingerprints saved with past meetings. It cannot be undone.", buttons: [{ label: "Cancel", value: "no" }, { label: "Forget all voices", value: "yes", danger: true }] });
       if (ok?.value !== "yes") return;
       const n = await forgetAllVoices();
@@ -1868,7 +3216,7 @@ function out(o) {
         const { usage, learnedLimits = {}, modelCooldown = {} } = await chrome.storage.local.get(["usage", "learnedLimits", "modelCooldown"]);
         const limits = { ...learnedLimits, ...parseLimits(s.usageLimits) };
         const today = summarize(usage, 1);
-        const used = (m) => today.filter((x) => x.model === m).reduce((a, x) => a + x.req, 0);
+        const used = (m) => today.filter((x2) => x2.model === m).reduce((a, x2) => a + x2.req, 0);
         for (const m of [s.sttGeminiModel, s.geminiModel].filter(Boolean)) {
           const lim = limits[m];
           if (!lim) add(OK, `Quota today: ${m}`, `${used(m)} requests so far (limit not known yet)`);
@@ -1891,8 +3239,8 @@ function out(o) {
     else {
       try {
         const res = await fetch(s.emailWebhook, { redirect: "follow", signal: AbortSignal.timeout(15e3) });
-        const j = await res.json();
-        if (j?.ok) add(Number(j.version) >= 7 ? OK : WARN, "Email relay", `reachable, script version ${j.version}${j.locked ? ", locked to this Debrief" : ", not locked yet (send a test email)"}${Number(j.version) >= 7 ? "" : ". Attendance from the calendar needs version 7: copy the script again and deploy a new version"}`);
+        const j2 = await res.json();
+        if (j2?.ok) add(Number(j2.version) >= 7 ? OK : WARN, "Email relay", `reachable, script version ${j2.version}${j2.locked ? ", locked to this Debrief" : ", not locked yet (send a test email)"}${Number(j2.version) >= 7 ? "" : ". Attendance from the calendar needs version 7: copy the script again and deploy a new version"}`);
         else add(BAD, "Email relay", 'answered, but not as the Debrief script (is it set to "Anyone"?)', "email", "Fix email");
       } catch (e) {
         add(BAD, "Email relay", `could not be reached (${e.message}). Check the deployment is set to "Anyone"`, "email", "Fix email");
@@ -1911,8 +3259,8 @@ function out(o) {
       const m = (await listMeetings()).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
       if (m) {
         const dbg = m.debug || [];
-        const muteLines = dbg.filter((x) => /^Meet mic/.test(x));
-        const silent = dbg.find((x) => /^mic: the raw microphone/.test(x));
+        const muteLines = dbg.filter((x2) => /^Meet mic/.test(x2));
+        const silent = dbg.find((x2) => /^mic: the raw microphone/.test(x2));
         add(OK, `Last meeting: ${m.title || m.id}`, `${(m.segments || []).length} transcript pieces, ${(m.errors || []).length} errors, ${Object.keys(m.presence || {}).length} people seen, ${(m.voiceSegs || []).length} voice pieces, ${(m.captions || []).length} caption lines`);
         add(muteLines.length ? OK : WARN, "Last meeting: the call's mute button", muteLines.length ? `${muteLines.length} changes seen; last: ${muteLines.at(-1)}` : "no mute changes were seen (either you never muted, or the mute button was not found on the page)");
         if (silent) add(BAD, "Last meeting: microphone", "it delivered only silence: check the microphone chosen in General and Windows privacy settings", "general", "Open General");
@@ -1925,7 +3273,7 @@ function out(o) {
   var checkupText = (rows) => rows.map((r) => `${r.level} ${r.title}${r.detail ? `: ${r.detail}` : ""}`).join("\n");
 
   // src/options.js
-  var $2 = (id) => document.getElementById(id);
+  var $3 = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
   var el2 = (tag, props = {}, ...kids) => {
     const n = Object.assign(document.createElement(tag), props);
@@ -1937,26 +3285,26 @@ function out(o) {
   var removed = /* @__PURE__ */ new Set();
   var editing = /* @__PURE__ */ new Set();
   var secretUi = {};
-  function secretValue(k) {
-    const v = $2(k).value.trim();
-    return v || (removed.has(k) ? "" : stored[k] || "");
+  function secretValue(k2) {
+    const v = $3(k2).value.trim();
+    return v || (removed.has(k2) ? "" : stored[k2] || "");
   }
-  function renderSecret(k) {
-    const u = secretUi[k];
+  function renderSecret(k2) {
+    const u = secretUi[k2];
     if (!u) return;
-    const input = $2(k);
-    const has = !!stored[k] && !removed.has(k);
-    const masked = has && !editing.has(k);
+    const input = $3(k2);
+    const has = !!stored[k2] && !removed.has(k2);
+    const masked = has && !editing.has(k2);
     u.mask.hidden = !masked;
     input.hidden = masked;
     u.replace.hidden = !masked;
-    u.keep.hidden = !(has && editing.has(k) || removed.has(k));
-    u.keep.textContent = removed.has(k) ? "Undo remove" : "Keep current";
-    u.remove.hidden = !(has && editing.has(k));
+    u.keep.hidden = !(has && editing.has(k2) || removed.has(k2));
+    u.keep.textContent = removed.has(k2) ? "Undo remove" : "Keep current";
+    u.remove.hidden = !(has && editing.has(k2));
     u.note.hidden = false;
     u.note.replaceChildren();
     if (masked) u.note.append(el2("span", { className: "chip ok", textContent: "Saved" }), "On this computer only. Never shown again.");
-    else if (removed.has(k)) u.note.append("The key will be removed when you press Save changes.");
+    else if (removed.has(k2)) u.note.append("The key will be removed when you press Save changes.");
     else if (has) u.note.append("Type the new key. Leave it empty, or press Escape, to keep the current one.");
     else u.note.hidden = true;
   }
@@ -1964,11 +3312,11 @@ function out(o) {
     SECRETS.forEach(renderSecret);
   }
   function initSecrets() {
-    for (const k of SECRETS) {
-      const input = $2(k);
+    for (const k2 of SECRETS) {
+      const input = $3(k2);
       if (!input) continue;
-      const label = document.querySelector(`label[for="${k}"]`);
-      if (label && !label.id) label.id = `${k}-lbl`;
+      const label = document.querySelector(`label[for="${k2}"]`);
+      if (label && !label.id) label.id = `${k2}-lbl`;
       const name = label ? label.firstChild.textContent.trim() : "key";
       const mask = el2("div", { className: "secret-mask", textContent: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" });
       mask.setAttribute("role", "img");
@@ -1982,69 +3330,69 @@ function out(o) {
       const note2 = el2("p", { className: "secret-note" });
       input.before(mask);
       input.after(replace, keep, remove2, note2);
-      secretUi[k] = { mask, replace, keep, remove: remove2, note: note2 };
+      secretUi[k2] = { mask, replace, keep, remove: remove2, note: note2 };
       replace.onclick = () => {
-        editing.add(k);
-        renderSecret(k);
+        editing.add(k2);
+        renderSecret(k2);
         input.focus();
       };
       const revert = () => {
-        removed.delete(k);
-        editing.delete(k);
+        removed.delete(k2);
+        editing.delete(k2);
         input.value = "";
-        renderSecret(k);
+        renderSecret(k2);
         replace.focus();
         updateDirty();
       };
       keep.onclick = revert;
       remove2.onclick = () => {
-        removed.add(k);
-        editing.add(k);
+        removed.add(k2);
+        editing.add(k2);
         input.value = "";
-        renderSecret(k);
+        renderSecret(k2);
         keep.focus();
         updateDirty();
       };
       input.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && stored[k] && !input.hidden) {
+        if (e.key === "Escape" && stored[k2] && !input.hidden) {
           e.preventDefault();
           revert();
         }
       });
     }
   }
-  function clearSecret(k) {
-    $2(k).value = "";
-    if (stored[k]) {
-      removed.add(k);
-      editing.add(k);
+  function clearSecret(k2) {
+    $3(k2).value = "";
+    if (stored[k2]) {
+      removed.add(k2);
+      editing.add(k2);
     }
-    renderSecret(k);
+    renderSecret(k2);
   }
   function read() {
     const s = {};
-    for (const k of FIELDS2) {
-      const f = $2(k);
+    for (const k2 of FIELDS2) {
+      const f = $3(k2);
       if (!f) continue;
-      s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === "checkbox" ? f.checked : f.value.trim();
+      s[k2] = SECRETS.includes(k2) ? secretValue(k2) : f.type === "checkbox" ? f.checked : f.value.trim();
     }
-    s.shareMode = $2("shareAuto").checked ? "auto" : "review";
+    s.shareMode = $3("shareAuto").checked ? "auto" : "review";
     s.meetingLanguages = [...document.querySelectorAll("#langChips input:checked")].map((c) => c.dataset.lang);
     return s;
   }
   function fill(s) {
-    for (const k of FIELDS2) {
-      const f = $2(k);
+    for (const k2 of FIELDS2) {
+      const f = $3(k2);
       if (!f) continue;
-      if (SECRETS.includes(k)) {
-        stored[k] = s[k] || "";
+      if (SECRETS.includes(k2)) {
+        stored[k2] = s[k2] || "";
         f.value = "";
-      } else if (f.type === "checkbox") f.checked = !!s[k];
-      else f.value = s[k] ?? "";
+      } else if (f.type === "checkbox") f.checked = !!s[k2];
+      else f.value = s[k2] ?? "";
     }
     removed.clear();
     editing.clear();
-    $2("shareAuto").checked = s.shareMode === "auto";
+    $3("shareAuto").checked = s.shareMode === "auto";
     renderSecrets();
   }
   var MODE_NOTE = {
@@ -2065,7 +3413,7 @@ function out(o) {
   }
   function initSegs() {
     document.querySelectorAll("[data-seg-for]").forEach((box) => {
-      const sel = $2(box.dataset.segFor);
+      const sel = $3(box.dataset.segFor);
       const btns = [...box.querySelectorAll("button")];
       const sync = () => {
         btns.forEach((b) => {
@@ -2073,7 +3421,7 @@ function out(o) {
           b.setAttribute("aria-checked", String(on));
           b.tabIndex = on ? 0 : -1;
         });
-        if (sel.id === "minutesMode") $2("minutesModeNote").textContent = MODE_NOTE[sel.value] || "";
+        if (sel.id === "minutesMode") $3("minutesModeNote").textContent = MODE_NOTE[sel.value] || "";
       };
       const pick = (b) => {
         sel.value = b.dataset.v;
@@ -2104,10 +3452,10 @@ function out(o) {
   async function renderLearned() {
     const { learned } = await chrome.storage.local.get("learned");
     const names2 = Object.keys(learned?.names || {});
-    $2("learnedNames").textContent = names2.length ? names2.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
+    $3("learnedNames").textContent = names2.length ? names2.slice(-60).join(", ") : "None yet. Names are learned from your meetings.";
     const pending = learned?.pending || [];
-    $2("pendingEmpty").classList.toggle("hidden", pending.length > 0);
-    $2("pendingList").replaceChildren(
+    $3("pendingEmpty").classList.toggle("hidden", pending.length > 0);
+    $3("pendingList").replaceChildren(
       ...pending.map((p) => {
         const row = el2("div", { className: "prow" });
         const t = el2("span", { className: "who" }, el2("b", { textContent: p.suggest }), " was heard as ", el2("b", { textContent: p.found }));
@@ -2115,17 +3463,17 @@ function out(o) {
         const ok = el2("button", { type: "button", className: "btn sm primary", textContent: "Fix it from now on" });
         const no = el2("button", { type: "button", className: "btn sm", textContent: "Dismiss" });
         ok.onclick = async () => {
-          $2("dictionary").value = learnAlias($2("dictionary").value, p.suggest, p.found);
+          $3("dictionary").value = learnAlias($3("dictionary").value, p.suggest, p.found);
           await save2();
-          await chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id) } });
+          await chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x2) => x2.id !== p.id) } });
         };
-        no.onclick = async () => chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x) => x.id !== p.id), rejected: [...learned.rejected || [], p.id] } });
+        no.onclick = async () => chrome.storage.local.set({ learned: { ...learned, pending: pending.filter((x2) => x2.id !== p.id), rejected: [...learned.rejected || [], p.id] } });
         row.append(t, meta, ok, no);
         return row;
       })
     );
   }
-  $2("clearLearned").onclick = async () => {
+  $3("clearLearned").onclick = async () => {
     const { learned } = await chrome.storage.local.get("learned");
     await chrome.storage.local.set({ learned: { ...learned, names: {} } });
   };
@@ -2140,12 +3488,12 @@ function out(o) {
   async function renderUsage() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
-    const typed = parseLimits($2("usageLimits").value || settings.usageLimits);
+    const typed = parseLimits($3("usageLimits").value || settings.usageLimits);
     const limits = { ...learnedLimits, ...typed };
     const rows = summarize(usage, usageDays);
-    const prices = parsePrices($2("usagePrices").value || settings.usagePrices);
+    const prices = parsePrices($3("usagePrices").value || settings.usagePrices);
     const today = summarize(usage, 1);
-    const table = $2("usageTable");
+    const table = $3("usageTable");
     table.replaceChildren();
     const head = table.createTHead().insertRow();
     [
@@ -2157,7 +3505,7 @@ function out(o) {
       ["Audio", "num"],
       ["Cost if paid", "num"],
       [usageDays === 1 ? "Left today (estimate)" : "", ""]
-    ].forEach(([h, cls]) => head.append(Object.assign(document.createElement("th"), { textContent: h, className: cls })));
+    ].forEach(([h2, cls]) => head.append(Object.assign(document.createElement("th"), { textContent: h2, className: cls })));
     const body = table.createTBody();
     if (!rows.length) {
       const r = body.insertRow();
@@ -2183,7 +3531,7 @@ function out(o) {
       left.className = "usage-left";
       const limit = limits[r.model];
       if (usageDays === 1 && limit) {
-        const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
+        const used = today.filter((x2) => x2.model === r.model).reduce((a, x2) => a + x2.req, 0);
         const remaining = Math.max(0, limit - used);
         const pct = Math.max(0, Math.min(100, Math.round(remaining / limit * 100)));
         const meter = el2("div", { className: "meter" }, el2("i", { className: pct === 0 ? "s" : pct <= 20 ? "q" : "" }));
@@ -2200,7 +3548,7 @@ function out(o) {
     const audio = rows.filter((r) => r.kind === "stt").reduce((a, r) => a + r.audioSec, 0);
     const cost = estimateCost(rows, prices);
     const paid = paidTotal(rows, prices);
-    $2("usageTotals").replaceChildren(
+    $3("usageTotals").replaceChildren(
       el2("strong", { textContent: `Total ${RANGE[usageDays] || ""}`.trim() }),
       el2("span", { textContent: `${reqs} requests` }),
       el2("span", { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
@@ -2212,10 +3560,10 @@ function out(o) {
   var rangeBtns = [...document.querySelectorAll("#usageRange button")];
   var pickRange = (b) => {
     usageDays = Number(b.dataset.days);
-    rangeBtns.forEach((x) => {
-      x.classList.toggle("active", x === b);
-      x.setAttribute("aria-selected", String(x === b));
-      x.tabIndex = x === b ? 0 : -1;
+    rangeBtns.forEach((x2) => {
+      x2.classList.toggle("active", x2 === b);
+      x2.setAttribute("aria-selected", String(x2 === b));
+      x2.tabIndex = x2 === b ? 0 : -1;
     });
     renderUsage();
   };
@@ -2224,20 +3572,20 @@ function out(o) {
     b.tabIndex = b.classList.contains("active") ? 0 : -1;
   });
   arrowKeys(rangeBtns, pickRange);
-  $2("usageReset").onclick = async () => {
+  $3("usageReset").onclick = async () => {
     const r = await modal({ text: "Reset all usage counters? This only clears Debrief's own tally.", buttons: [{ label: "Cancel", value: "no" }, { label: "Reset counters", value: "yes", danger: true }] });
     if (r?.value !== "yes") return;
     await chrome.storage.local.remove(["usage", "learnedLimits"]);
     renderUsage();
   };
-  $2("usageLimits").addEventListener("input", renderUsage);
-  $2("usagePrices").addEventListener("input", renderUsage);
+  $3("usageLimits").addEventListener("input", renderUsage);
+  $3("usagePrices").addEventListener("input", renderUsage);
   chrome.storage.onChanged.addListener((c) => {
     if (c.usage || c.learnedLimits) renderUsage();
   });
   function showProviderFields() {
-    document.querySelectorAll("[data-stt]").forEach((f) => f.classList.toggle("hidden", f.dataset.stt !== $2("sttProvider").value));
-    document.querySelectorAll("[data-llm]").forEach((f) => f.classList.toggle("hidden", f.dataset.llm !== $2("llmProvider").value));
+    document.querySelectorAll("[data-stt]").forEach((f) => f.classList.toggle("hidden", f.dataset.stt !== $3("sttProvider").value));
+    document.querySelectorAll("[data-llm]").forEach((f) => f.classList.toggle("hidden", f.dataset.llm !== $3("llmProvider").value));
   }
   async function requestOrigins(s) {
     const urls = [];
@@ -2256,19 +3604,19 @@ function out(o) {
     if (!await chrome.permissions.request({ origins })) throw new Error("Permission for the custom endpoint was denied.");
   }
   function buildLanguageUi() {
-    $2("langChips").replaceChildren(
-      ...LANGUAGES.map((l) => {
+    $3("langChips").replaceChildren(
+      ...LANGUAGES.map((l3) => {
         const label = document.createElement("label");
         label.className = "pick";
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.dataset.lang = l.code;
+        cb.dataset.lang = l3.code;
         cb.onchange = langHint;
-        label.append(cb, l.name);
+        label.append(cb, l3.name);
         return label;
       })
     );
-    $2("momLanguage").replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement("option"), { value: o.value, textContent: o.label })));
+    $3("momLanguage").replaceChildren(...minutesLanguageOptions().map((o) => Object.assign(document.createElement("option"), { value: o.value, textContent: o.label })));
   }
   function setLanguageCodes(codes) {
     const set = new Set(codes);
@@ -2276,11 +3624,11 @@ function out(o) {
     langHint();
   }
   function setLanguages(s) {
-    setLanguageCodes((chosenLanguages(s) || []).map((l) => l.code));
+    setLanguageCodes((chosenLanguages(s) || []).map((l3) => l3.code));
   }
   function langHint() {
-    const picked = LANGUAGES.filter((l) => document.querySelector(`#langChips input[data-lang="${l.code}"]`)?.checked);
-    $2("langHint").textContent = picked.length ? `Debrief will expect ${names(picked)}, in any mix. Fewer choices give more accurate text.` : "Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.";
+    const picked = LANGUAGES.filter((l3) => document.querySelector(`#langChips input[data-lang="${l3.code}"]`)?.checked);
+    $3("langHint").textContent = picked.length ? `Debrief will expect ${names(picked)}, in any mix. Fewer choices give more accurate text.` : "Nothing selected: automatic (Hindi, English and Malayalam are expected, and others are detected). Pick the languages your meetings really use for better accuracy.";
   }
   var loaded = {};
   var ready = false;
@@ -2288,14 +3636,14 @@ function out(o) {
   async function save2() {
     const vals = read();
     const out = { ...await getSettings() };
-    for (const k of Object.keys(vals)) if (!same(vals[k], loaded[k])) out[k] = vals[k];
+    for (const k2 of Object.keys(vals)) if (!same(vals[k2], loaded[k2])) out[k2] = vals[k2];
     await requestOrigins(out);
     await saveSettings(out);
     loaded = vals;
-    for (const k of SECRETS) if ($2(k)) stored[k] = vals[k];
+    for (const k2 of SECRETS) if ($3(k2)) stored[k2] = vals[k2];
     removed.clear();
     editing.clear();
-    for (const k of SECRETS) if ($2(k)) $2(k).value = "";
+    for (const k2 of SECRETS) if ($3(k2)) $3(k2).value = "";
     renderSecrets();
     updateDirty();
     return out;
@@ -2305,16 +3653,16 @@ function out(o) {
   var isDirty = () => {
     if (!ready) return false;
     const v = read();
-    return Object.keys(v).some((k) => !same(v[k], loaded[k]));
+    return Object.keys(v).some((k2) => !same(v[k2], loaded[k2]));
   };
   function updateDirty() {
-    const bar = $2("savebar");
+    const bar = $3("savebar");
     const dirty = isDirty();
     bar.classList.toggle("dirty", dirty && !flash);
     bar.classList.toggle("saved", flash?.kind === "saved");
     bar.classList.toggle("bad", flash?.kind === "bad");
-    $2("undo").hidden = !dirty;
-    $2("msg").textContent = flash ? flash.text : dirty ? "You have unsaved changes" : "All changes saved";
+    $3("undo").hidden = !dirty;
+    $3("msg").textContent = flash ? flash.text : dirty ? "You have unsaved changes" : "All changes saved";
   }
   function showFlash(kind, text, ms) {
     flash = { kind, text };
@@ -2341,22 +3689,22 @@ function out(o) {
     if (flash?.kind === "saved") flash = null;
     updateDirty();
   });
-  $2("undo").onclick = () => {
+  $3("undo").onclick = () => {
     applyValues(loaded);
     updateDirty();
-    $2("save").focus();
+    $3("save").focus();
   };
   async function micStatus() {
     try {
       const p = await navigator.permissions.query({ name: "microphone" });
-      $2("micStatus").textContent = p.state === "granted" ? "Microphone allowed \u2713" : `Microphone: ${p.state}`;
-      $2("micStatus").classList.toggle("ok", p.state === "granted");
+      $3("micStatus").textContent = p.state === "granted" ? "Microphone allowed \u2713" : `Microphone: ${p.state}`;
+      $3("micStatus").classList.toggle("ok", p.state === "granted");
     } catch {
     }
   }
-  $2("sttProvider").onchange = showProviderFields;
-  $2("llmProvider").onchange = showProviderFields;
-  $2("save").onclick = async () => {
+  $3("sttProvider").onchange = showProviderFields;
+  $3("llmProvider").onchange = showProviderFields;
+  $3("save").onclick = async () => {
     try {
       await save2();
       showFlash("saved", "Saved \u2713", 3e3);
@@ -2365,68 +3713,68 @@ function out(o) {
       showFlash("bad", e.message, 7e3);
     }
   };
-  $2("grantMic").onclick = async () => {
+  $3("grantMic").onclick = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
     } catch (e) {
-      $2("micStatus").textContent = `Not allowed: ${e.message}`;
+      $3("micStatus").textContent = `Not allowed: ${e.message}`;
       return;
     }
     micStatus();
     updateGuide();
   };
-  $2("useOllama").onclick = () => {
-    $2("llmProvider").value = "openai";
+  $3("useOllama").onclick = () => {
+    $3("llmProvider").value = "openai";
     showProviderFields();
-    $2("oaBase").value = OLLAMA_BASE;
+    $3("oaBase").value = OLLAMA_BASE;
     clearSecret("oaKey");
-    $2("localStatus").textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
+    $3("localStatus").textContent = 'Set to Ollama (http://localhost:11434/v1). Press "Find my installed models" to pick one.';
     updateDirty();
   };
-  $2("findOllama").onclick = async () => {
-    $2("localStatus").textContent = "Looking for Ollama\u2026";
-    const base = $2("oaBase").value.trim() || OLLAMA_BASE;
+  $3("findOllama").onclick = async () => {
+    $3("localStatus").textContent = "Looking for Ollama\u2026";
+    const base = $3("oaBase").value.trim() || OLLAMA_BASE;
     const r = await listOllamaModels(base);
     if (!r.ok) {
-      $2("ollamaPick").classList.add("hidden");
-      $2("localStatus").textContent = r.message;
+      $3("ollamaPick").classList.add("hidden");
+      $3("localStatus").textContent = r.message;
       return;
     }
-    const sel = $2("ollamaModels");
+    const sel = $3("ollamaModels");
     sel.replaceChildren(...r.models.map((m) => Object.assign(document.createElement("option"), { value: m.name, textContent: `${m.name}${m.sizeGB ? ` (${m.sizeGB} GB)` : ""}` })));
-    if (r.models.some((m) => m.name === $2("oaModel").value)) sel.value = $2("oaModel").value;
-    $2("ollamaPick").classList.remove("hidden");
+    if (r.models.some((m) => m.name === $3("oaModel").value)) sel.value = $3("oaModel").value;
+    $3("ollamaPick").classList.remove("hidden");
     const pick = async () => {
-      $2("oaBase").value = base;
-      $2("oaModel").value = sel.value;
+      $3("oaBase").value = base;
+      $3("oaModel").value = sel.value;
       updateDirty();
       const ctx = await ollamaContext(sel.value, base);
-      $2("localStatus").textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
+      $3("localStatus").textContent = `Using ${sel.value}. ${contextAdvice(ctx)}`;
     };
     sel.onchange = pick;
     await pick();
   };
-  $2("useWhisper").onclick = () => {
-    $2("sttProvider").value = "openai";
+  $3("useWhisper").onclick = () => {
+    $3("sttProvider").value = "openai";
     showProviderFields();
-    $2("sttBase").value = WHISPER_BASE;
+    $3("sttBase").value = WHISPER_BASE;
     clearSecret("sttKey");
-    $2("whisperStatus").textContent = "Set to http://localhost:8000/v1. Change the address if your server uses another port.";
+    $3("whisperStatus").textContent = "Set to http://localhost:8000/v1. Change the address if your server uses another port.";
     updateDirty();
   };
-  $2("testWhisper").onclick = async () => {
-    $2("whisperStatus").textContent = "Testing\u2026";
-    const base = ($2("sttBase").value.trim() || WHISPER_BASE).replace(/\/+$/, "");
+  $3("testWhisper").onclick = async () => {
+    $3("whisperStatus").textContent = "Testing\u2026";
+    const base = ($3("sttBase").value.trim() || WHISPER_BASE).replace(/\/+$/, "");
     try {
       const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(6e3) });
-      $2("whisperStatus").textContent = res.ok ? "The server answered \u2713" : explain(null, res.status, "The server");
+      $3("whisperStatus").textContent = res.ok ? "The server answered \u2713" : explain(null, res.status, "The server");
     } catch (e) {
-      $2("whisperStatus").textContent = explain(e, 0, "the server");
+      $3("whisperStatus").textContent = explain(e, 0, "the server");
     }
   };
-  $2("testLlm").onclick = async () => {
-    $2("llmStatus").textContent = "Testing\u2026";
+  $3("testLlm").onclick = async () => {
+    $3("llmStatus").textContent = "Testing\u2026";
     try {
       const settings = await save2();
       const ping = (s) => generate({ settings: s, system: "You are a connectivity test.", user: "Reply with exactly: OK", onText: () => {
@@ -2442,16 +3790,16 @@ function out(o) {
           results.push(`${label}: failed: ${e.message.slice(0, 150)}`);
         }
       }
-      $2("llmStatus").textContent = results.join(" \xB7 ");
+      $3("llmStatus").textContent = results.join(" \xB7 ");
     } catch (e) {
-      $2("llmStatus").textContent = `Failed: ${e.message}`;
+      $3("llmStatus").textContent = `Failed: ${e.message}`;
     }
   };
   async function updateGuide() {
     const s = await getSettings();
     const mic = await navigator.permissions.query({ name: "microphone" }).then((p) => p.state === "granted").catch(() => false);
     const needsGemini = s.sttProvider === "gemini" || s.llmProvider === "gemini";
-    const langs = (chosenLanguages(s) || []).map((l) => l.name).join(", ");
+    const langs = (chosenLanguages(s) || []).map((l3) => l3.name).join(", ");
     const done = { g1: !!s.geminiKey || !needsGemini, g2: mic, g3: !!s.myName, g4: mailReady(s) };
     const text = {
       g1: done.g1 ? s.geminiKey ? "Gemini key saved" : "No Gemini key needed: you use other services" : "Add your Gemini key",
@@ -2460,7 +3808,7 @@ function out(o) {
       g4: done.g4 ? "Email is set up" : "Email the minutes to yourself"
     };
     for (const [id, ok] of Object.entries(done)) {
-      const row = $2(id);
+      const row = $3(id);
       if (!row) continue;
       row.classList.toggle("done", ok);
       row.querySelector(".ic").textContent = ok ? "\u2713" : id.slice(1);
@@ -2470,37 +3818,37 @@ function out(o) {
       if (opt) opt.hidden = ok;
     }
     const n = Object.values(done).filter(Boolean).length;
-    $2("startLede").textContent = n === 4 ? "Everything is set up. Debrief is ready to record your next meeting." : `Four things make Debrief work. ${["None", "One", "Two", "Three"][n]} ${n === 1 ? "is" : "are"} done.`;
+    $3("startLede").textContent = n === 4 ? "Everything is set up. Debrief is ready to record your next meeting." : `Four things make Debrief work. ${["None", "One", "Two", "Three"][n]} ${n === 1 ? "is" : "are"} done.`;
   }
-  $2("g1go").onclick = () => {
+  $3("g1go").onclick = () => {
     showTab("start");
-    const f = $2("geminiKey");
+    const f = $3("geminiKey");
     (f.hidden ? secretUi.geminiKey.replace : f).focus();
   };
   function allAllowed() {
-    return parseAddresses([$2("shareList").value, ...parseGroups($2("shareGroups").value).map((g) => g.list.join(","))].join(","));
+    return parseAddresses([$3("shareList").value, ...parseGroups($3("shareGroups").value).map((g) => g.list.join(","))].join(","));
   }
   function renderAllow() {
-    const l = allowListLines(allAllowed(), { domains: $2("shareDomains").checked });
-    $2("allowLines").textContent = `const ALLOWED = ${l.allowed};
-const ALLOWED_DOMAINS = ${l.domains};`;
+    const l3 = allowListLines(allAllowed(), { domains: $3("shareDomains").checked });
+    $3("allowLines").textContent = `const ALLOWED = ${l3.allowed};
+const ALLOWED_DOMAINS = ${l3.domains};`;
   }
-  ["shareList", "shareGroups"].forEach((id) => $2(id).addEventListener("input", renderAllow));
-  $2("shareDomains").addEventListener("change", renderAllow);
-  $2("copyScriptAllow").onclick = async () => {
-    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $2("shareDomains").checked }));
-    $2("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
-    setTimeout(() => $2("copyAllowMsg").textContent = "", 6e3);
+  ["shareList", "shareGroups"].forEach((id) => $3(id).addEventListener("input", renderAllow));
+  $3("shareDomains").addEventListener("change", renderAllow);
+  $3("copyScriptAllow").onclick = async () => {
+    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $3("shareDomains").checked }));
+    $3("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
+    setTimeout(() => $3("copyAllowMsg").textContent = "", 6e3);
   };
-  $2("scriptText").textContent = Code_default;
-  $2("copyScript").onclick = async () => {
+  $3("scriptText").textContent = Code_default;
+  $3("copyScript").onclick = async () => {
     await navigator.clipboard.writeText(Code_default);
-    $2("copyMsg").textContent = "Copied \u2713";
-    setTimeout(() => $2("copyMsg").textContent = "", 1500);
+    $3("copyMsg").textContent = "Copied \u2713";
+    setTimeout(() => $3("copyMsg").textContent = "", 1500);
   };
   var LEVEL = { "\u2713": ["ok", "Working"], "!": ["warn", "Warning"], "\u2717": ["bad", "Not working"] };
   function renderChecks(rows) {
-    $2("checkupOut").replaceChildren(
+    $3("checkupOut").replaceChildren(
       ...rows.map((r) => {
         const [cls, sr] = LEVEL[r.level] || LEVEL["!"];
         const ic = el2("span", { className: `ic ${cls}`, textContent: r.level });
@@ -2518,32 +3866,32 @@ const ALLOWED_DOMAINS = ${l.domains};`;
       })
     );
   }
-  $2("checkup").onclick = async () => {
-    $2("checkup").disabled = true;
-    $2("checkupMsg").textContent = "Checking\u2026";
+  $3("checkup").onclick = async () => {
+    $3("checkup").disabled = true;
+    $3("checkupMsg").textContent = "Checking\u2026";
     try {
       const rows = await runCheckup();
       const text = checkupText(rows);
       renderChecks(rows);
-      $2("checkupOut").hidden = false;
-      $2("checkupCopy").hidden = false;
-      $2("checkup").textContent = "Check again";
+      $3("checkupOut").hidden = false;
+      $3("checkupCopy").hidden = false;
+      $3("checkup").textContent = "Check again";
       const bad = rows.filter((r) => r.level === "\u2717").length;
       const warn = rows.filter((r) => r.level === "!").length;
       const summary = bad ? `${bad} problem${bad === 1 ? "" : "s"}, ${warn} to look at` : warn ? `No problems, ${warn} to look at` : "All good";
-      $2("checkupMsg").textContent = summary;
-      $2("checkupCopy").onclick = async () => {
+      $3("checkupMsg").textContent = summary;
+      $3("checkupCopy").onclick = async () => {
         await navigator.clipboard.writeText(text);
-        $2("checkupMsg").textContent = `Copied \u2713 ${summary}`;
+        $3("checkupMsg").textContent = `Copied \u2713 ${summary}`;
       };
     } catch (e) {
-      $2("checkupMsg").textContent = `Could not check: ${e.message}`;
+      $3("checkupMsg").textContent = `Could not check: ${e.message}`;
     } finally {
-      $2("checkup").disabled = false;
+      $3("checkup").disabled = false;
     }
   };
-  $2("testMail").onclick = async () => {
-    $2("mailMsg").textContent = "Sending\u2026";
+  $3("testMail").onclick = async () => {
+    $3("mailMsg").textContent = "Sending\u2026";
     try {
       const s = await save2();
       if (!mailReady(s)) throw new Error(/\/dev(\?|$)/.test(s.emailWebhook || "") ? "That is the test URL (ends in /dev). Use Deploy \u2192 New deployment, and paste the Web app URL that ends in /exec." : "Paste the Apps Script web app URL: https://script.google.com/\u2026/exec (company accounts have /a/macros/yourcompany.com/ in it).");
@@ -2556,11 +3904,16 @@ const ALLOWED_DOMAINS = ${l.domains};`;
         },
         s
       );
-      $2("mailMsg").textContent = `Sent to ${r.to} \u2713 Check your inbox.`;
+      $3("mailMsg").textContent = `Sent to ${r.to} \u2713 Check your inbox.`;
     } catch (e) {
-      $2("mailMsg").textContent = `Failed: ${e.message}`;
+      $3("mailMsg").textContent = `Failed: ${e.message}`;
     }
   };
+  var fmtSeg = () => document.querySelectorAll("#minutesFormatSeg button").forEach((b) => b.classList.toggle("active", b.dataset.v === $3("minutesFormat").value));
+  document.querySelectorAll("#minutesFormatSeg button").forEach((b) => b.onclick = () => {
+    $3("minutesFormat").value = b.dataset.v;
+    fmtSeg();
+  });
   (async () => {
     const s = await getSettings();
     buildLanguageUi();
@@ -2568,6 +3921,7 @@ const ALLOWED_DOMAINS = ${l.domains};`;
     initSegs();
     fill(s);
     setLanguages(s);
+    fmtSeg();
     loaded = read();
     ready = true;
     showProviderFields();
@@ -2584,18 +3938,19 @@ const ALLOWED_DOMAINS = ${l.domains};`;
   chrome.storage.onChanged.addListener(async (changes) => {
     if (!changes.settings || !ready) return;
     const fresh = await getSettings();
-    for (const k of FIELDS2) {
-      const f = $2(k);
-      if (!f || !same(read()[k], loaded[k])) continue;
-      if (SECRETS.includes(k)) {
-        stored[k] = fresh[k] || "";
-        renderSecret(k);
-      } else if (f.type === "checkbox") f.checked = !!fresh[k];
-      else f.value = fresh[k];
-      loaded[k] = fresh[k];
+    for (const k2 of FIELDS2) {
+      const f = $3(k2);
+      if (!f || !same(read()[k2], loaded[k2])) continue;
+      if (SECRETS.includes(k2)) {
+        stored[k2] = fresh[k2] || "";
+        renderSecret(k2);
+      } else if (f.type === "checkbox") f.checked = !!fresh[k2];
+      else f.value = fresh[k2];
+      loaded[k2] = fresh[k2];
     }
-    $2("shareAuto").checked = fresh.shareMode === "auto";
+    $3("shareAuto").checked = fresh.shareMode === "auto";
     loaded.shareMode = fresh.shareMode;
+    fmtSeg();
     if (same(read().meetingLanguages, loaded.meetingLanguages)) {
       setLanguages(fresh);
       loaded.meetingLanguages = read().meetingLanguages;

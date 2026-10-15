@@ -523,7 +523,26 @@
           <p class="hint">Thorough uses 3 or more model requests per meeting (more for long ones), so it costs more of a free quota. Short meetings always use one pass.</p>
         </div>
       </section>
-      <!-- Extension point: add further Minutes cards here, as <section class="card"> with an <h2 class="lbl">. -->
+
+      <section class="card" id="minutesFormatCard" aria-labelledby="hFmt">
+        <h2 id="hFmt" class="lbl">Minutes format</h2>
+        <div class="fld">
+          <span class="lab" id="minutesFormatLab">Layout of the minutes</span>
+          <div class="seg-ctl" id="minutesFormatSeg" role="group" aria-labelledby="minutesFormatLab"><button type="button" data-v="amnex">Official Amnex format</button><button type="button" data-v="standard">Debrief standard</button></div>
+          <input type="hidden" id="minutesFormat">
+          <p class="hint">The official format fills the Amnex house template (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting) for Print / PDF, Word and the email attachment. Debrief standard keeps the original minutes layout.</p>
+        </div>
+        <div class="fld">
+          <label for="myOrgDomains">Our email domains</label>
+          <input id="myOrgDomains" placeholder="amnex.com" autocomplete="off">
+          <p class="hint">Comma separated. People with these email domains are listed as the System Integrator; everyone else as Client Side. Leave blank to use the domain of your "Send to" address.</p>
+        </div>
+        <div class="fld">
+          <label for="peopleDirectory">People directory</label>
+          <textarea id="peopleDirectory" class="mono" rows="5" placeholder="Suresh K. | Sri. | Transport Dept | Joint Secretary | Kochi Metro"></textarea>
+          <p class="hint">One person per line: <code>Name | Honorific | Department | Designation | Organisation</code>. Add <code>| Chair</code> at the end for the usual chairperson. Unknown details stay as [DESIGNATION] / [DEPARTMENT] placeholders for you to fill in.</p>
+        </div>
+      </section>
     </section>
 
     <!-- ============ Email ============ -->

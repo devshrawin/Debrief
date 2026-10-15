@@ -142,6 +142,38 @@ The full walkthrough, with troubleshooting, is in the [setup guide](docs/SETUP.m
 
 Safety: whatever a request says, the script only ever mails **your own address** plus whatever you put in its `ALLOWED` list, and it locks itself to the Debrief install that talks to it first: Debrief makes up a random secret on its own (you never type one) and the script refuses every request without it, so the web address alone is useless to anyone else. After reinstalling Debrief or using a new browser profile, run the script's `resetSecret` function once and send a test email. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
 
+## Minutes format
+
+Settings > Minutes has a **Minutes format** card: **Official Amnex format** (the default) or **Debrief standard**.
+
+In the official format the minutes are the Amnex house template: *Meeting Minutes* title, navy label cells, header block (Topic, Mode, Location, Date, Time, Chairperson), attendee tables split into **Client Side** and **System Integrator**, Agenda, a numbered Discussion table with Responsibility, numbered Action items, a Next Meeting block, a running header and *Page X of Y / Amnex Infotechnologies Pvt Ltd | Confidential* on every page.
+
+**Code builds the facts, the model writes only the wording.**
+
+| Part | Who fills it |
+|---|---|
+| Topic, Date (`13-Oct-26`), Time (`10:00 AM`), Mode (`Online (Google Meet)` from the meeting link, `Offline` with no link), Location | code, from the meeting record |
+| Attendee tables, SR numbering, Client / System Integrator split | code, from the calendar invite and who was seen or heard (call page, captions, voices), split by email domain |
+| Honorific (Sri. / Smt.), department, designation, chairperson | code, from your **People directory**; unknown ones stay `[DESIGNATION]`, `[DEPARTMENT]`, `[CLIENT]`, `[CHAIRPERSON]` |
+| Agenda, Discussion rows, Action items (due date at the end of the sentence), Next meeting | the model, in a strict markdown shape that code parses |
+| Responsibility column | the model proposes, code checks: only a known attendee or invitee, a known organisation, or a name actually said in the transcript survives; anything else becomes `[RESPONSIBILITY]` |
+
+Settings on that card:
+
+- **Our email domains** (`myOrgDomains`): comma separated, e.g. `amnex.com`. People with these domains are the System Integrator. Blank means the company domain of your "Send to" address; if there is none, everyone goes into one *Attendees* list instead of guessing a split.
+- **People directory** (`peopleDirectory`): one person per line, `Name | Honorific | Department | Designation | Organisation`, optionally `| Chair` at the end for the usual chairperson. `#` starts a comment.
+- A line `Chairperson: Name` in the note-taker's context box (People, names and context) names the chair for that meeting and beats the directory.
+
+If the model's reply does not fit the template, Debrief writes the standard minutes instead and says so in the status line. The extraction, writing and completeness-check passes, the cached extraction and the low temperature (repeatable regenerate) work the same for both formats. In the official format the completeness-check findings and recording warnings go to a *Notes for the note-taker* box that is shown on screen but left out of Print, Word, PDF and email.
+
+**Where it appears**
+
+- **Print / PDF** (the Print button): `extension/print.css` (linked for printing only) sets A4, repeats the running header and the table header rows on every page, keeps rows whole, and puts *Page X of Y* and the Confidential line in the page footer. Page footers use CSS `@page` margin boxes, so they need Chrome 131 or newer.
+- **Word** (the Word button, and the email attachment): borders and navy fills are set on every cell (Word ignores stylesheets), rows do not split, the table header row repeats, and Word's own header and footer carry the running title and `Page X of Y` fields.
+- **Email**: a short 600 px cover (topic, date and time, mode, action items table) with the full document attached as PDF and Word, following the *attach as PDF / Word* switches under Settings > Email. If neither is on, the full tables are placed in the email itself.
+
+Known limits: the PDF that the Apps Script relay builds comes from Google's HTML converter, which ignores `@page`, so that PDF has the title and Confidential line once, but no repeating header and no *Page X of Y*. Use the Print / PDF button (Save as PDF) when page numbers matter. Outlook and Word on the web were not tested.
+
 ## How it works
 
 ```

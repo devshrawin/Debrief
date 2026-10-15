@@ -161,11 +161,11 @@ await test('minutes: writing again reuses the items found the first time, so the
 await test('minutes: quick mode and short meetings use a single pass', async () => {
   let n = 0;
   const gen = async () => (n++, '# Title');
-  const r1 = await writeMinutes({ meeting, settings: { ...DEFAULTS }, gen, ctx: {} });
+  const r1 = await writeMinutes({ meeting, settings: { ...DEFAULTS, minutesFormat: 'standard' }, gen, ctx: {} });
   assert.equal(n, 1);
   assert.match(r1.mom, /a single pass/);
   n = 0;
-  await writeMinutes({ meeting: long, settings: { ...DEFAULTS, minutesMode: 'quick' }, gen, ctx: {} });
+  await writeMinutes({ meeting: long, settings: { ...DEFAULTS, minutesMode: 'quick', minutesFormat: 'standard' }, gen, ctx: {} });
   assert.equal(n, 1);
 });
 

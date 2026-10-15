@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice.mjs"
+    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs"
   },
   "keywords": [],
   "author": "",

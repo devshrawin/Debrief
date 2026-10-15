@@ -13,7 +13,10 @@ import {
   itemsToChecklist,
   guardOwners,
   sanitizeMinutes,
+  buildAmnexSystemPrompt,
+  buildAmnexUserPrompt,
 } from './prompt.js';
+import { buildFacts, parseDirectory, parseModelOutput, guardProse, knownParties, composeMarkdown, fmtDate } from './amnex.js';
 import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
 import { languagesOf, joinNames } from './languages.js';
@@ -95,11 +98,45 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     if (!cached && !stats.extractFailed) extract = { key, items };
   }
 
-  onStatus('Writing the minutes…');
-  stats.calls++;
-  let mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages: joinNames(languagesOf(settings)) }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText, { temperature: TEMPERATURE.write }));
+  const presence = { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) };
+  let mom = '';
+  let amnex = null; // { facts, prose } when the official format was written and parsed
+  let wasEmpty = false;
+  if (settings.minutesFormat !== 'standard') {
+    // Official Amnex format: code builds the header and attendee tables, the model writes only the language parts.
+    const dir = parseDirectory(settings.peopleDirectory);
+    const facts = buildFacts({ meeting, settings, dir, presence, entries: ctx.entries, notes });
+    const known = knownParties({ facts, meeting, dir, transcript });
+    onStatus('Writing the minutes in the official format…');
+    stats.calls++;
+    const people = [...new Set([...facts.known.people, ...(meeting.invited || []).map((p) => p.name).filter(Boolean)])];
+    const raw = sanitizeMinutes(
+      await gen(
+        buildAmnexSystemPrompt(settings.momLanguage, { languages: joinNames(languagesOf(settings)) }),
+        buildAmnexUserPrompt(meeting, settings, notes, { ...ctx, checklist }, { people, orgs: known.orgs, dateText: fmtDate(meeting.startedAt) }),
+        onText,
+        { temperature: TEMPERATURE.write }
+      )
+    );
+    wasEmpty = !raw;
+    const prose = raw ? parseModelOutput(raw) : null;
+    if (prose) {
+      amnex = { facts, prose: guardProse(prose, known) };
+      mom = composeMarkdown(amnex);
+    } else if (raw) {
+      stats.fellBack = true; // the reply did not fit the template: write the standard minutes instead
+      onStatus('The reply did not fit the official format. Writing standard minutes instead…');
+    }
+  }
+  if (!mom && !wasEmpty) {
+    if (!amnex) onStatus('Writing the minutes…');
+    stats.calls++;
+    mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages: joinNames(languagesOf(settings)) }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText, { temperature: TEMPERATURE.write }));
+  }
   if (!mom) throw new Error('The model returned an empty reply. Try again, or choose another model in Settings.');
+  const format = amnex ? 'amnex' : 'standard';
 
+  let completeness = '';
   if (thorough && words <= (local ? 6000 : 24000)) {
     onStatus('Checking nothing was left out…');
     try {
@@ -108,19 +145,25 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
       const missing = sanitizeMinutes(out).split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => /^\[?\d{1,2}:\d{2}/.test(l)); // only real findings: a timestamp first; chatter like "Nothing is missing" is dropped
       stats.missed = missing.length;
       if (missing.length) {
-        mom += `\n\n## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;
+        completeness = `## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;
+        if (!amnex) mom += `\n\n${completeness}`;
       }
     } catch (e) {
       if (e?.name === 'AbortError') throw e;
     }
   }
 
-  const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
-  const attendance = attendanceMarkdown({ invited: meeting.invited, presence: { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, durationSec, entries: ctx.entries, myName: settings.myName, whyNoInvite: noInviteReason(meeting, settings) });
   const cov = coverageMarkdown(coverage);
+  const written = `_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})` : 'a single pass'}._`;
+  if (amnex) {
+    // The attendee tables replace the Attendance section; warnings and the check go to a section that is hidden in print and mail.
+    return { mom: composeMarkdown({ ...amnex, review: [cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format };
+  }
+  const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
+  const attendance = attendanceMarkdown({ invited: meeting.invited, presence, durationSec, entries: ctx.entries, myName: settings.myName, whyNoInvite: noInviteReason(meeting, settings) });
   const foot = [];
   if (attendance) foot.push(attendance);
   if (cov) foot.push(cov);
-  foot.push(`_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})` : 'a single pass'}._`);
-  return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist, extract };
+  foot.push(written);
+  return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist, extract, format };
 }
