@@ -2832,7 +2832,7 @@ function out(o) {
         const [badge, cls] = badgeOf(p);
         const langs = (p.langs || [p.lang || "en"]).map((l3) => LANG_NAME[l3] || l3).join(" + ");
         const n = p.meetings || 1;
-        const meta = p.auto ? `${anon ? "Heard in your meetings, not named yet" : "Learned from your meetings"} \xB7 ${n} meeting${n === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech${p.ready ? "" : ` \xB7 not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings`}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
+        const meta = p.auto ? `${anon ? "Heard in your meetings, not named yet" : "Learned from your meetings"} \xB7 ${n} meeting${n === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech${p.ready || p.confirmed ? "" : ` \xB7 not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings, or give it a name`}${anon && !samplesOn ? " \xB7 no audio clip (switch on \u201CKeep a short sample\u201D before the next meeting). Meanwhile open that meeting\u2019s Transcript: this voice\u2019s lines are labelled with this name, so you can name it by reading what it said." : ""}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
         const row = el("li", { className: "voice-row" });
         const initial = anon ? "?" : (Array.from(p.name.trim())[0] || "?").toUpperCase();
         const avatar = el("span", { className: `avatar${anon ? " anon" : ""}`, textContent: initial });
@@ -2868,7 +2868,9 @@ function out(o) {
     };
     return b;
   }
+  var samplesOn = false;
   async function refresh() {
+    samplesOn = !!(await getSettings()).voiceSamples;
     people = await getVoices();
     renderList();
     renderUnnamed().catch(() => {

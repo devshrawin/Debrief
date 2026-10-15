@@ -217,7 +217,8 @@ await test('gemini: a model over its daily limit is skipped afterwards, and a fu
   const G = await import('../src/gemini.js');
   G.resetCooldowns();
   const day = 'Quota exceeded for metric: generate_content_free_tier_requests, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier, limit: 25, model: gemini-3.5-transcribe';
-  assert.ok(G.cooldownFor(day) - Date.now() > 60 * 60000, 'a daily limit cools until the quota day rolls over');
+  const until = G.cooldownFor(day) - Date.now();
+  assert.ok(until >= 5 * 60000 && until <= 26 * 3600000, 'a daily limit cools until the quota day rolls over (within a day, never just a minute)');
   assert.ok(G.cooldownFor('Please retry in 18.5s') - Date.now() < 30000, 'a per-minute limit cools for the time Google gives');
   assert.ok(G.cooldownFor('429') - Date.now() <= 61000);
   // the first request hits the daily limit on the transcription model, then a general model answers

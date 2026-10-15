@@ -24,13 +24,18 @@ let genFail = ''; // why the last attempt to write the minutes failed, shown in 
 // Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
 const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
 // Voice-labelled lines of the remote speech, or null. Cheap enough to recompute, but cached while nothing changes.
-let labelCache = { key: '', lines: null };
-function labeledLines() {
-  const people = usableVoices(settings.voices);
+const labelCache = new Map(); // key -> lines (one entry per mode and state)
+function labeledLines(forDisplay = false) {
+  // Prompts and minutes only use voices that are named or trusted; the transcript view also shows the still-unnamed ones
+  // ("Unnamed voice 2") so the user can see who said what and name them by reading.
+  const people = forDisplay ? (settings.voices || []) : usableVoices(settings.voices);
   if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-  const key = `${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
-  if (labelCache.key !== key) labelCache = { key, lines: labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }) };
-  return labelCache.lines;
+  const key = `${forDisplay ? 'd' : 'n'}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
+  if (!labelCache.has(key)) {
+    if (labelCache.size > 8) labelCache.clear();
+    labelCache.set(key, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName }));
+  }
+  return labelCache.get(key);
 }
 const nameCtx = () => {
   const labeled = labeledLines();
@@ -86,10 +91,11 @@ function renderChips() {
 
 function renderTranscript() {
   const ctx = nameCtx();
-  const rows = ctx.labeled
-    ? ctx.labeled.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
+  const shown = labeledLines(true);
+  const rows = shown
+    ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
     : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? settings.myName || 'Me' : 'Others', text: s.text, flag: '' }));
-  $('trInfo').textContent = `${rows.length} ${ctx.labeled ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
+  $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
   $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
   if (!rows.length) {
     $('transcript').innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
@@ -102,8 +108,8 @@ function renderTranscript() {
       row.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
       row.children[0].textContent = fmtTime(r.t);
       row.children[1].textContent = r.who;
-      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : ctx.labeled ? ' named' : ''}`;
-      row.children[2].textContent = r.src === 'me' && !ctx.labeled ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
+      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown ? ' named' : ''}`;
+      row.children[2].textContent = r.src === 'me' && !shown ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
       return row;
     })
   );
@@ -419,7 +425,7 @@ chrome.storage.onChanged.addListener(async (c) => {
   if (!c.voices && !c.settings) return;
   try {
     settings = await getSettings();
-    labelCache.key = '';
+    labelCache.clear();
     renderTranscript();
     if (c.voices && meeting?.mom && !abortCtl && labeledLines()) $('genStatus').textContent = 'Voices changed since these minutes were written. Press Regenerate to use the names.';
   } catch {}
