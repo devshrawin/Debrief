@@ -30,16 +30,16 @@ function labeledLines(forDisplay = false) {
   // ("Unnamed voice 2") so the user can see who said what and name them by reading.
   const people = forDisplay ? (settings.voices || []) : usableVoices(settings.voices);
   if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-  const key = `${forDisplay ? 'd' : 'n'}${settings.roomMode ? 'r' : ''}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
+  const key = `${forDisplay ? 'd' : 'n'}${meeting.room ? 'r' : ''}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
   if (!labelCache.has(key)) {
     if (labelCache.size > 8) labelCache.clear();
-    labelCache.set(key, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!settings.roomMode }));
+    labelCache.set(key, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!meeting.room }));
   }
   return labelCache.get(key);
 }
 const nameCtx = () => {
   const labeled = labeledLines();
-  return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!settings.roomMode, voicePresence: labeled ? voicePresence(labeled) : null };
+  return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!meeting.room, voicePresence: labeled ? voicePresence(labeled) : null };
 };
 const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
@@ -83,6 +83,7 @@ function renderChips() {
   const chip = (text, cls = '') => Object.assign(document.createElement('span'), { className: `chip ${cls}`.trim(), textContent: text });
   const list = [];
   if (meeting.emailedAt) list.push(chip(`Emailed ${new Date(meeting.emailedAt).toLocaleTimeString('en-IN', { timeStyle: 'short' })}`, 'brand'));
+  if (meeting.room) list.push(chip('In a room', 'brand'));
   if (meeting.mom && meeting.model) list.push(chip(meeting.model));
   if (meeting.stt) list.push(chip(`STT: ${meeting.stt}`));
   if (meeting.mom && meeting.extract) list.push(chip('Checked for completeness', 'ok'));
@@ -94,7 +95,7 @@ function renderTranscript() {
   const shown = labeledLines(true);
   const rows = shown
     ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
-    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (settings.roomMode ? 'Room' : settings.myName || 'Me') : 'Others', text: s.text, flag: '' }));
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: s.text, flag: '' }));
   $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
   $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
   if (!rows.length) {

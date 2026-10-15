@@ -2121,8 +2121,6 @@ ${att}
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
-    roomMode: false,
-    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -4064,16 +4062,16 @@ ${meeting2.mom || ""}
   function labeledLines(forDisplay = false) {
     const people = forDisplay ? settings.voices || [] : usableVoices(settings.voices);
     if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-    const key2 = `${forDisplay ? "d" : "n"}${settings.roomMode ? "r" : ""}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
+    const key2 = `${forDisplay ? "d" : "n"}${meeting.room ? "r" : ""}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
     if (!labelCache.has(key2)) {
       if (labelCache.size > 8) labelCache.clear();
-      labelCache.set(key2, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!settings.roomMode }));
+      labelCache.set(key2, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!meeting.room }));
     }
     return labelCache.get(key2);
   }
   var nameCtx = () => {
     const labeled = labeledLines();
-    return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!settings.roomMode, voicePresence: labeled ? voicePresence(labeled) : null };
+    return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!meeting.room, voicePresence: labeled ? voicePresence(labeled) : null };
   };
   var parseAttendees = (text) => text.split(/[\n,]+/).map((x2) => x2.trim()).filter(Boolean);
   function renderMom() {
@@ -4109,6 +4107,7 @@ ${meeting2.mom || ""}
     const chip = (text, cls = "") => Object.assign(document.createElement("span"), { className: `chip ${cls}`.trim(), textContent: text });
     const list = [];
     if (meeting.emailedAt) list.push(chip(`Emailed ${new Date(meeting.emailedAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}`, "brand"));
+    if (meeting.room) list.push(chip("In a room", "brand"));
     if (meeting.mom && meeting.model) list.push(chip(meeting.model));
     if (meeting.stt) list.push(chip(`STT: ${meeting.stt}`));
     if (meeting.mom && meeting.extract) list.push(chip("Checked for completeness", "ok"));
@@ -4117,7 +4116,7 @@ ${meeting2.mom || ""}
   function renderTranscript() {
     const ctx = nameCtx();
     const shown = labeledLines(true);
-    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? settings.roomMode ? "Room" : settings.myName || "Me" : "Others", text: s.text, flag: "" }));
+    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? meeting.room ? "Room" : settings.myName || "Me" : "Others", text: s.text, flag: "" }));
     $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
     $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {

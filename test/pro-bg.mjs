@@ -134,11 +134,12 @@ await test('every change of Meet mute is written to the meeting log, and a silen
 });
 
 await test('room mode: the microphone stays on when Meet says muted, and microphone pieces of speech are stored with their origin', async () => {
-  live({ micWanted: true, meetMuted: false });
-  state.mem.local.settings = { followMeetMute: true, roomMode: true };
+  live({ micWanted: true, meetMuted: false, room: true });
+  state.mem.local.settings = { followMeetMute: true };
   await send({ type: 'meet-mute', muted: true }, page(7));
   assert.equal(state.mem.session.rec.micOn, true, 'in a room the mic is the meeting');
-  state.mem.local.settings = { followMeetMute: true, roomMode: false };
+  live({ micWanted: true, meetMuted: false, room: false });
+  state.mem.local.settings = { followMeetMute: true };
   await send({ type: 'meet-mute', muted: false }, page(7));
   await send({ type: 'meet-mute', muted: true }, page(7));
   assert.equal(state.mem.session.rec.micOn, false, 'outside room mode muting still pauses the mic');

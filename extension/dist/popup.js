@@ -36,6 +36,9 @@
     return hits;
   }
 
+  // src/meetend.js
+  var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
+
   // src/adapters/index.js
   var OTHER_SITES = [
     { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*", "https://zoom.us/wc/*"] },
@@ -58,6 +61,27 @@
     return OTHER_SITES.find((s) => s.matches.some((m) => hostMatches(m, hostname))) || null;
   }
   var isMeetingSite = (hostname) => hostname === "meet.google.com" || !!siteFor(hostname);
+
+  // src/room.js
+  function meetingFor(url) {
+    let u;
+    try {
+      u = new URL(url);
+    } catch {
+      return null;
+    }
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    if (u.hostname === "meet.google.com") return MEET_CODE.test(u.pathname) ? { app: "Google Meet" } : null;
+    if (isMeetingSite(u.hostname)) return { app: siteFor(u.hostname)?.name || u.hostname };
+    return null;
+  }
+  var isMeetingUrl = (url) => !!meetingFor(url);
+  var roomFor = (url, choice) => typeof choice === "boolean" ? choice : !isMeetingUrl(url);
+  function modeHint(url, room, chosen) {
+    const m = meetingFor(url);
+    if (chosen) return room ? "In a room: your microphone is the meeting, so every voice on it is told apart." : "Online meeting: the call is recorded from this tab and your voice from your microphone.";
+    return m ? `${m.app} detected: recording the call from this tab and your voice from your microphone.` : "This is not a meeting link, so Debrief records the room through your microphone.";
+  }
 
   // src/store.js
   var DEFAULTS = {
@@ -123,8 +147,6 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
-    roomMode: false,
-    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -234,9 +256,10 @@
     show("idleView", !st.recording);
     show("recView", !!recording);
     show("finView", !!st.stopping);
-    $("statusText").textContent = st.stopping ? "Finishing transcription\u2026" : st.recording ? "Recording" : "Idle";
+    $("statusText").textContent = st.stopping ? "Finishing transcription\u2026" : st.recording ? st.room ? "Recording the room" : "Recording" : "Idle";
     $("timer").textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1e3) : "";
     show("start", !st.recording);
+    show("modeBox", !st.recording);
     show("stop", !!recording);
     show("live", !!recording);
     show("micRow", !!(recording && st.mic));
@@ -482,13 +505,29 @@
     e.preventDefault();
     chrome.runtime.openOptionsPage();
   };
+  var tabUrl = "";
+  var chosenRoom = null;
+  var currentRoom = () => roomFor(tabUrl, chosenRoom);
+  function paintMode() {
+    const room = currentRoom();
+    $("modeOnline").setAttribute("aria-checked", String(!room));
+    $("modeRoom").setAttribute("aria-checked", String(room));
+    $("modeHint").textContent = modeHint(tabUrl, room, chosenRoom !== null && chosenRoom !== !isMeetingUrl(tabUrl));
+    $("startLabel").textContent = room ? "Start recording the room" : "Start recording this tab";
+  }
+  for (const [id, value] of [["modeOnline", false], ["modeRoom", true]]) {
+    $(id).onclick = () => {
+      chosenRoom = value;
+      paintMode();
+    };
+  }
   $("start").onclick = async () => {
     $("start").disabled = true;
     try {
       show("error", false);
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
-      const r = await send({ type: "start", streamId, tabId: tab.id, title: tab.title, url: tab.url });
+      const r = await send({ type: "start", streamId, tabId: tab.id, title: tab.title, url: tab.url, room: currentRoom() });
       if (!r?.ok) throw new Error(r?.error || "unknown error");
     } catch (e) {
       $("error").textContent = `Could not start: ${e.message}`;
@@ -535,7 +574,8 @@
       host = new URL(tab?.url || "").hostname;
     } catch {
     }
-    if (!isMeetingSite(host)) $("startLabel").textContent = "Record this tab (not a known meeting site)";
+    tabUrl = tab?.url || "";
+    paintMode();
     const syncOnline = () => show("offline", !navigator.onLine);
     syncOnline();
     addEventListener("online", syncOnline);

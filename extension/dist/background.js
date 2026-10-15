@@ -291,6 +291,48 @@
     return (blocked || []).some((b) => n && !isAnon({ name }) && norm(b.name) === n || centroid && b.centroid && cosine(unpack(b.centroid), centroid) >= 0.7);
   }
 
+  // src/meetend.js
+  var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
+
+  // src/adapters/index.js
+  var OTHER_SITES = [
+    { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*", "https://zoom.us/wc/*"] },
+    { name: "Microsoft Teams", matches: ["https://teams.microsoft.com/*", "https://teams.live.com/*", "https://teams.cloud.microsoft/*"] },
+    { name: "Webex", matches: ["https://*.webex.com/*"] },
+    { name: "Whereby", matches: ["https://whereby.com/*"] },
+    { name: "Jitsi Meet", matches: ["https://meet.jit.si/*", "https://8x8.vc/*"] },
+    { name: "GoTo Meeting", matches: ["https://app.goto.com/*", "https://app.gotomeeting.com/*"] },
+    { name: "BlueJeans", matches: ["https://app.bluejeans.com/*"] },
+    { name: "Amazon Chime", matches: ["https://app.chime.aws/*"] },
+    { name: "Zoho Meeting", matches: ["https://meeting.zoho.com/*", "https://meeting.zoho.in/*", "https://meeting.zoho.eu/*"] },
+    { name: "Skype for Web", matches: ["https://web.skype.com/*"] }
+  ];
+  var hostOf = (pattern) => pattern.replace(/^https:\/\//, "").split("/")[0];
+  var hostMatches = (pattern, hostname) => {
+    const h = hostOf(pattern);
+    return h.startsWith("*.") ? hostname === h.slice(2) || hostname.endsWith(h.slice(1)) : hostname === h;
+  };
+  function siteFor(hostname) {
+    return OTHER_SITES.find((s) => s.matches.some((m) => hostMatches(m, hostname))) || null;
+  }
+  var isMeetingSite = (hostname) => hostname === "meet.google.com" || !!siteFor(hostname);
+
+  // src/room.js
+  function meetingFor(url) {
+    let u;
+    try {
+      u = new URL(url);
+    } catch {
+      return null;
+    }
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    if (u.hostname === "meet.google.com") return MEET_CODE.test(u.pathname) ? { app: "Google Meet" } : null;
+    if (isMeetingSite(u.hostname)) return { app: siteFor(u.hostname)?.name || u.hostname };
+    return null;
+  }
+  var isMeetingUrl = (url) => !!meetingFor(url);
+  var roomFor = (url, choice) => typeof choice === "boolean" ? choice : !isMeetingUrl(url);
+
   // src/wav.js
   function encodeWav(samples, sampleRate) {
     const buf = new ArrayBuffer(44 + samples.length * 2);
@@ -431,9 +473,6 @@
     return null;
   }
 
-  // src/meetend.js
-  var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
-
   // src/usage.js
   function dayKey(date = /* @__PURE__ */ new Date()) {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(date);
@@ -522,8 +561,6 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
-    roomMode: false,
-    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -767,9 +804,11 @@
     const st = await getState();
     if (st.recording) return { ok: false, error: "Already recording another tab." };
     const settings = await getSettings();
+    const room = roomFor(msg.url, msg.room);
     const id = `m${Date.now()}`;
     await saveMeeting({
       id,
+      room,
       title: cleanTitle(msg.title),
       url: msg.url,
       startedAt: Date.now(),
@@ -781,7 +820,7 @@
     });
     await addMeetingId(id);
     await ensureOffscreen();
-    const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "start", streamId: msg.streamId, settings, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
+    const r = await chrome.runtime.sendMessage({ target: "offscreen", type: "start", streamId: msg.streamId, settings: { ...settings, roomMode: room, captureMic: settings.captureMic || room }, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
     if (!r?.ok) {
       await closeOffscreen();
       await updateMeeting(id, (m) => {
@@ -790,7 +829,7 @@
       });
       return { ok: false, error: r?.error || "Recorder did not start." };
     }
-    await mutateState(() => ({ recording: true, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || "").match(MEET_CODE)?.[0] || null }));
+    await mutateState(() => ({ recording: true, room, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || "").match(MEET_CODE)?.[0] || null }));
     await chrome.storage.session.set({ quietSince: null, heard: false });
     chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ["dist/pill.js"] }).catch(() => {
     });
@@ -840,8 +879,7 @@
     return stopping;
   }
   async function applyMic(patch = {}) {
-    const { followMeetMute: follow, roomMode } = await getSettings();
-    const followMeetMute = follow && !roomMode;
+    const { followMeetMute } = await getSettings();
     let eff = false;
     let changed = false;
     let cur = null;
@@ -850,7 +888,7 @@
       if (!st.recording || st.stopping) return null;
       cur = { ...st, ...patch };
       if ("meetMuted" in patch && patch.meetMuted !== st.meetMuted) noted = `Meet mic: ${patch.meetMuted === true ? "muted" : patch.meetMuted === false ? "unmuted" : "state not detected"} at +${Math.round((Date.now() - (st.startedAt || Date.now())) / 1e3)}s${followMeetMute ? "" : " (following Meet is off)"}`;
-      eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && cur.meetMuted === true);
+      eff = !!cur.micWanted && !!cur.mic && !(followMeetMute && !cur.room && cur.meetMuted === true);
       changed = eff !== !!st.micOn;
       return cur;
     });
