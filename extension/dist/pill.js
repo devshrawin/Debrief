@@ -435,6 +435,7 @@
         const home = fs && fs.tagName !== "VIDEO" && fs.tagName !== "IFRAME" ? fs : document.documentElement;
         if (host.parentNode !== home) home.appendChild(host);
         clampIn();
+        if (S.rec?.recording && S.rec.tabId === myTab) send({ type: "window-fullscreen", on: !!fs, auto: true });
       });
       addEventListener("resize", clampIn);
       flip();

@@ -240,6 +240,27 @@ async function startInner(msg) {
   return { ok: true };
 }
 
+async function setWindowFullscreen(windowId, want, auto) {
+  const id = windowId ?? (await chrome.windows.getLastFocused()).id;
+  const w = await chrome.windows.get(id);
+  const { fsPrev = {} } = await chrome.storage.session.get('fsPrev');
+  const on = typeof want === 'boolean' ? want : w.state !== 'fullscreen';
+  if (on) {
+    if (w.state === 'fullscreen') return { ok: true, fullscreen: true };
+    fsPrev[id] = w.state || 'normal';
+    await chrome.storage.session.set({ fsPrev });
+    await chrome.windows.update(id, { state: 'fullscreen' });
+    return { ok: true, fullscreen: true };
+  }
+  if (w.state !== 'fullscreen') return { ok: true, fullscreen: false };
+  if (auto && !(id in fsPrev)) return { ok: true, fullscreen: true }; // the user's own F11: not ours to undo
+  const back = fsPrev[id] && fsPrev[id] !== 'fullscreen' ? fsPrev[id] : 'normal';
+  delete fsPrev[id];
+  await chrome.storage.session.set({ fsPrev });
+  await chrome.windows.update(id, { state: back });
+  return { ok: true, fullscreen: false };
+}
+
 // Pause or resume the recording (the meeting went off topic, a private call, a break). While paused the recorder puts
 // silence on both streams: nothing is transcribed, fingerprinted or kept, and times stay right. The pauses are noted
 // on the meeting so the transcript can say so.
@@ -360,7 +381,7 @@ async function autoStop(reason) {
 }
 
 // What a page script (running on a meeting site) may ask for. Everything else must come from Debrief's own pages.
-const PAGE_MAY = new Set(['whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'set-follow', 'dismiss-alert']);
+const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'set-follow', 'dismiss-alert']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.target !== 'bg') return;
@@ -370,6 +391,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handlers = {
     start: () => start(msg),
     stop: () => stop(),
+    // Full screen for the whole browser window. Chrome keeps a tab that is being captured from taking the window full
+    // screen when the page asks (Meet's "Full screen" button), so Debrief does it through the window itself. A page
+    // sets `auto` when it only follows its own full screen: then Debrief only undoes what it did itself.
+    'window-fullscreen': () => setWindowFullscreen(sender.tab?.windowId, typeof msg.on === 'boolean' ? msg.on : undefined, !!msg.auto),
     mic: () => applyMic({ micWanted: !!msg.on }),
     pause: () => setPaused(typeof msg.on === 'boolean' ? msg.on : undefined),
     'mic-refresh': () => applyMic(),
@@ -496,6 +521,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // Keyboard shortcut (Alt+Shift+M by default): start recording the current tab, or stop.
 // A command counts as invoking the extension, so tab capture is allowed without the popup.
 chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command === 'toggle-fullscreen') {
+    await setWindowFullscreen(tab?.windowId);
+    return;
+  }
   if (command === 'toggle-pause') {
     if ((await getState()).recording) await setPaused();
     return;

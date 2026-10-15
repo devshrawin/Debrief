@@ -181,6 +181,29 @@ await test('pause: pausing tells the recorder, shows the badge, notes the pause 
   assert.equal(typeof last.to, 'number');
 });
 
+await test('full screen: the window is taken full screen and given back, a page only undoes what Debrief did, and a pill-less user\'s own F11 is left alone', async () => {
+  state.winState[7] = 'maximized';
+  state.winLog.length = 0;
+  const page = { id: 'testid', tab: { id: 7, windowId: 7 }, url: 'https://meet.google.com/abc-defg-hij' };
+  assert.equal((await send({ type: 'window-fullscreen', on: true, auto: true }, page)).fullscreen, true);
+  assert.equal(state.winState[7], 'fullscreen');
+  await send({ type: 'window-fullscreen', on: true, auto: true }, page);
+  assert.equal(state.winLog.length, 1, 'already full screen: nothing more to do');
+  assert.equal((await send({ type: 'window-fullscreen', on: false, auto: true }, page)).fullscreen, false);
+  assert.equal(state.winState[7], 'maximized', 'given back the way it was');
+  // the user went full screen with F11 themselves: the page leaving its own full screen must not undo that
+  state.winState[7] = 'fullscreen';
+  state.winLog.length = 0;
+  await send({ type: 'window-fullscreen', on: false, auto: true }, page);
+  assert.equal(state.winState[7], 'fullscreen');
+  assert.equal(state.winLog.length, 0);
+  // the popup button or shortcut toggles whatever the state is
+  await send({ type: 'window-fullscreen' }, OWN);
+  assert.equal(state.winState[1], 'fullscreen', 'a normal window goes full screen');
+  await send({ type: 'window-fullscreen' }, OWN);
+  assert.equal(state.winState[1], 'normal', 'and comes back');
+});
+
 await test('a late message during stop cannot bring a stopped recording back', async () => {
   live();
   const stopping = send({ type: 'stop' }, OWN);

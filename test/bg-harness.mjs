@@ -16,6 +16,8 @@ const badge = {};
 const title = {};
 const icon = {};
 const offLog = [];
+const winState = {};
+const winLog = [];
 globalThis.chrome = {
   runtime: {
     id: 'testid',
@@ -26,6 +28,7 @@ globalThis.chrome = {
     getContexts: async () => [],
     openOptionsPage: () => {},
   },
+  windows: { getLastFocused: async () => ({ id: 1 }), get: async (id) => ({ id, state: winState[id] || 'normal' }), update: async (id, o) => { winState[id] = o.state; winLog.push([id, o.state]); } },
   storage: { local: area('local'), session: area('session') },
   action: { setBadgeText: (o) => ((badge[o.tabId ?? 'g'] = o.text), Promise.resolve()), setBadgeBackgroundColor: () => Promise.resolve(), setTitle: (o) => ((title[o.tabId ?? 'g'] = o.title), Promise.resolve()), setIcon: (o) => ((icon[o.tabId ?? 'g'] = o.path[16]), Promise.resolve()) },
   tabs: { create: async (o) => created.push(o), onUpdated: { addListener: (f) => listeners.tabsUpdated.push(f) }, onRemoved: { addListener: (f) => listeners.tabsRemoved.push(f) }, query: async () => [] },
@@ -37,7 +40,7 @@ globalThis.chrome = {
 };
 await import('../src/background.js');
 
-export const state = { mem, created, badge, title, icon, offLog };
+export const state = { mem, created, badge, title, icon, offLog, winState, winLog };
 // Sends a message the way Chrome would and waits for the reply (or reports that none came).
 export function send(msg, sender = { id: 'testid', tab: { id: 7 }, url: 'chrome-extension://testid/popup.html' }) {
   return new Promise((resolve) => {
