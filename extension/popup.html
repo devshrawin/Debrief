@@ -7,7 +7,14 @@
   <link rel="stylesheet" href="style.css">
   <style>
     /* Popup-only layout. Colours, buttons, chips, meters, switch and the rest come from style.css. */
-    body { width: 360px; margin: 0; background: var(--card); overflow-x: hidden; }
+    /* The popup is a rounded sheet: the page behind it is transparent and the body carries the corners, so nothing square
+       shows at the edges, and the scrollbar is a slim rounded thumb that stays inside the curve. */
+    html { background: transparent; }
+    body { width: 360px; margin: 0; background: var(--card); overflow-x: hidden; border-radius: 16px; overflow-y: auto; max-height: 600px; }
+    body::-webkit-scrollbar { width: 10px; }
+    body::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+    body::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid var(--card); }
+    header.top, header.recbar { border-top-left-radius: 16px; border-top-right-radius: 16px; }
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .stack { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
     .stack > * { margin: 0; }
@@ -138,7 +145,7 @@
         <div style="flex:1"><strong>A call is on.</strong> Start recording?<br><small id="callSite">this tab</small></div>
       </div>
       <div id="cantRecord" class="banner err hidden" role="alert">
-        <div><strong class="blk">Can’t record this tab</strong>Chrome blocks recording on its own pages. Open the meeting tab, then click Debrief again.</div>
+        <div><strong class="blk">Can’t record this tab</strong>Chrome blocks its own pages. Open your meeting tab or any normal web page, then click Debrief again.</div>
       </div>
       <div id="error" class="banner err hidden" role="alert"></div>
 

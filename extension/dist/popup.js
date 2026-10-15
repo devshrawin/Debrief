@@ -262,7 +262,8 @@
     $("pause").setAttribute("aria-pressed", String(!!st.paused));
     $("timer").textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1e3) : "";
     show("start", !st.recording);
-    show("modeBox", !st.recording);
+    show("modeBox", !st.recording && !blockedTab);
+    show("shortcutHint", !st.recording && !blockedTab);
     show("stop", !!recording);
     show("live", !!recording);
     show("micRow", !!(recording && st.mic));
@@ -509,6 +510,7 @@
     chrome.runtime.openOptionsPage();
   };
   var tabUrl = "";
+  var blockedTab = false;
   var chosenRoom = null;
   var currentRoom = () => roomFor(tabUrl, chosenRoom);
   function paintMode() {
@@ -577,6 +579,7 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || "");
     show("cantRecord", blocked);
+    blockedTab = blocked;
     $("start").disabled = !sttReady(s) || blocked;
     let host = "";
     try {
