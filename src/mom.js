@@ -2,12 +2,13 @@ import { renderMd, decorateMinutes } from './md.js';
 import { renderMinutesHtml, isAmnexMd } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { modal } from './modal.js';
-import { getSettings, setSetting, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, llmReady, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople } from './attendance.js';
 import { labelTranscript, voicePresence } from './voice/match.js';
-import { usableVoices } from './voice/learn.js';
+import { usableVoices, isAnon } from './voice/learn.js';
+import { getSample, hasSample, deleteSample } from './voice/samples.js';
 import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
@@ -90,12 +91,73 @@ function renderChips() {
   $('chips').replaceChildren(...list);
 }
 
+// Right after a meeting: the voices Debrief found in it that have no name yet, each with its audio clip (if kept) and
+// what it said, so they can be named here and now. Naming confirms the voice for this and every later meeting.
+let playing = null;
+async function renderNameBox() {
+  const here = (settings.voices || []).filter((v) => v.auto && isAnon(v) && (v.learnedFrom || []).includes(meeting.id));
+  $('nameBox').classList.toggle('hidden', !here.length);
+  if (!here.length) return;
+  const lines = labeledLines(true) || [];
+  const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
+  $('nameNote').textContent = clips.some(Boolean)
+    ? 'Press Play, type who it is, and save. Then press Regenerate so the minutes use the names.'
+    : settings.voiceSamples
+      ? 'No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate.'
+      : 'No audio clips are kept: switch on "Keep short samples of unnamed voices" in Settings → Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
+  $('nameList').replaceChildren(
+    ...here.map((v, i) => {
+      const row = document.createElement('div');
+      row.className = 'namerow';
+      const who = Object.assign(document.createElement('span'), { className: 'who', textContent: v.name });
+      const input = Object.assign(document.createElement('input'), { placeholder: 'Who is this?', maxLength: 60 });
+      input.setAttribute('aria-label', `Name for ${v.name}`);
+      const play = Object.assign(document.createElement('button'), { type: 'button', textContent: '▶ Play', hidden: !clips[i] });
+      play.onclick = async () => {
+        try {
+          playing?.pause();
+          const blob = await getSample(v.id);
+          if (!blob) return (play.hidden = true);
+          const url = URL.createObjectURL(blob);
+          playing = new Audio(url);
+          playing.onended = () => URL.revokeObjectURL(url);
+          await playing.play();
+        } catch {}
+      };
+      const save = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: 'Save name' });
+      save.onclick = async () => {
+        const clean = input.value.trim().replace(/\s+/g, ' ').slice(0, 60);
+        const all = await getVoices();
+        if (!clean) return void input.focus();
+        if (all.some((x) => x.id !== v.id && x.name.toLowerCase() === clean.toLowerCase())) {
+          $('nameNote').textContent = `There is already a voice called ${clean}. Use Settings → Voices → Merge to join two voices of the same person.`;
+          return;
+        }
+        await saveVoices(all.map((x) => (x.id === v.id ? { ...x, name: clean, confirmed: true } : x)));
+        deleteSample(v.id).catch(() => {});
+      };
+      input.addEventListener('keydown', (e) => e.key === 'Enter' && save.click());
+      const said = lines.filter((l) => l.name === v.name).slice(0, 2);
+      const excerpt = Object.assign(document.createElement('p'), {
+        className: 'said',
+        textContent: said.length ? said.map((l) => `[${fmtTime(l.t)}] “${l.text.length > 110 ? `${l.text.slice(0, 107)}…` : l.text}”`).join('   ') : 'Nothing from this voice was long enough to show.',
+      });
+      row.append(who, input, play, save, excerpt);
+      return row;
+    })
+  );
+}
+
 function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
   const rows = shown
     ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
     : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: s.text, flag: '' }));
+  // pauses show as notes in their place, so a gap in the transcript is explained
+  for (const p of meeting.pauses || []) rows.push({ t: p.from, src: 'note', who: 'Paused', text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}. Nothing from this stretch was transcribed or kept.`, flag: '' });
+  rows.sort((a, b) => a.t - b.t);
+  renderNameBox().catch(() => {});
   $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
   $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
   if (!rows.length) {

@@ -149,6 +149,38 @@ await test('room mode: the microphone stays on when Meet says muted, and microph
   assert.deepEqual(segs, [{ t0: 1, t1: 4, e: 'AAAA', s: 'm' }, { t0: 5, t1: 8, e: 'BBBB' }]);
 });
 
+await test('pause: pausing tells the recorder, shows the badge, notes the pause on the meeting and stops the silence safety net; resume undoes it', async () => {
+  live({ micWanted: true });
+  state.mem.local.settings = { autoStop: true, autoStopQuietMin: 1 };
+  state.offLog.length = 0;
+  const a = await send({ type: 'pause', on: true }, OWN);
+  assert.equal(a.paused, true);
+  assert.equal(state.mem.session.rec.paused, true);
+  assert.deepEqual(state.offLog.filter((m) => m.type === 'pause').map((m) => m.on), [true]);
+  assert.equal(state.badge.g, 'II');
+  const during = state.mem.local['meeting:mt'].pauses;
+  assert.equal(during.length, 1);
+  assert.equal(during[0].to, null);
+  // a long quiet stretch while paused never stops the recording
+  state.mem.session.quietSince = Date.now() - 10 * 60000;
+  state.mem.session.heard = true;
+  await send({ type: 'level', tab: 0, mic: 0, ctx: 'running' }, OFFSCREEN);
+  assert.equal(state.mem.session.rec.recording, true, 'paused is not silent');
+  // pausing again does nothing, toggling resumes
+  await send({ type: 'pause', on: true }, OWN);
+  assert.equal(state.mem.local['meeting:mt'].pauses.length, 1);
+  const b = await send({ type: 'pause' }, OWN);
+  assert.equal(b.paused, false);
+  assert.equal(state.badge.g, 'REC');
+  assert.equal(typeof state.mem.local['meeting:mt'].pauses[0].to, 'number');
+  assert.deepEqual(state.offLog.filter((m) => m.type === 'pause').map((m) => m.on), [true, false]);
+  // stopping while paused closes the pause
+  await send({ type: 'pause', on: true }, OWN);
+  await send({ type: 'stop' }, OWN);
+  const last = state.mem.local['meeting:mt'].pauses.at(-1);
+  assert.equal(typeof last.to, 'number');
+});
+
 await test('a late message during stop cannot bring a stopped recording back', async () => {
   live();
   const stopping = send({ type: 'stop' }, OWN);

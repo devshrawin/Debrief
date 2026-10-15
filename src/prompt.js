@@ -96,6 +96,7 @@ export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
   const lines = header(meeting, settings);
   const names = glossaryLine(ctx.entries || [], [...(ctx.attendees || []), ...(ctx.learned || [])]);
   if (names) lines.push('', `Names and terms (spell exactly like this): ${names}`);
+  if (meeting.pauses?.length) lines.push('', `Recording was paused (on purpose, so the topic of those stretches is not in the transcript): ${meeting.pauses.map((p) => `${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}`).join(', ')}. Do not treat the gap as missing audio.`);
   if (ctx.room) lines.push('', 'This was recorded in a room: lines marked ROOM (or named by voice) come from one microphone shared by several people. Never attribute them to the note-taker, and do not assume who spoke unless the line names them.');
   if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(', ')}`);
   if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(', ')}`);

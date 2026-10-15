@@ -150,8 +150,10 @@ async function start({ streamId, settings, meetingId }) {
   rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
   rec.chunkers.others = new Chunker('others', onChunk, chunkSize(settings, onSkip));
   await tap(ctx, tabStream, (b) => {
-    rec?.chunkers.others.push(b);
-    rec?.voice?.tracker.push(b);
+    // Paused: the clock keeps running (so times stay right) but only silence goes on, and silence is never sent anywhere.
+    const blk = rec?.paused ? new Float32Array(b.length) : b;
+    rec?.chunkers.others.push(blk);
+    rec?.voice?.tracker.push(blk);
   });
   if (micStream) {
     rec.chunkers.me = new Chunker('me', onChunk, chunkSize(settings, onSkip));
@@ -163,7 +165,7 @@ async function start({ streamId, settings, meetingId }) {
         rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
         rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
       }
-      const blk = rec.micOn ? b : new Float32Array(b.length);
+      const blk = rec.micOn && !rec.paused ? b : new Float32Array(b.length);
       rec?.chunkers.me.push(blk);
       rec?.voice?.trackerMic?.push(blk);
     });
@@ -245,6 +247,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'stop') {
     stop().then(() => sendResponse({ ok: true }));
     return true;
+  }
+  if (msg.type === 'pause') {
+    if (rec) rec.paused = !!msg.on;
+    sendResponse({ ok: true, paused: !!rec?.paused });
+    return;
   }
   if (msg.type === 'mic') {
     if (rec) rec.micOn = !!msg.on && !!rec.micStream;
