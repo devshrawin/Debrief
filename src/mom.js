@@ -50,6 +50,7 @@ function renderMom() {
   if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($('mom'));
   $('mom').classList.remove('streaming');
   syncState();
+  if (meeting) paintFormat();
 }
 
 // Shows one of: the minutes, the "no minutes yet" card, the generating skeleton; plus the red failure box.
@@ -148,6 +149,71 @@ async function renderNameBox() {
   );
 }
 
+// Should the transcript go with the minutes? Per meeting: what the user chose when the recording stopped (or later), else
+// the setting for the email to oneself, and "no" for people it is shared with.
+const wantTranscript = (shared) => (shared ? !!meeting.transcriptShare : meeting.transcriptMine ?? !!settings.emailTranscript);
+
+// ---- the choice offered when the recording stops: format, and whether the transcript goes out ----
+const FORMATS = { amnex: 'Official Amnex format', standard: 'Debrief standard' };
+const currentFormat = () => meeting.format || settings.minutesFormat || 'amnex';
+function paintFormat() {
+  const f = currentFormat();
+  for (const seg of [$('fmtSeg'), $('fmtSwitch')]) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === f));
+  $('fmtSwitch').classList.toggle('hidden', !meeting.mom);
+  $('chkMine').checked = wantTranscript(false);
+  $('chkShare').checked = wantTranscript(true);
+  $('mailTranscript').checked = wantTranscript(false);
+  $('shareTranscript').checked = wantTranscript(true);
+}
+async function chooseFormat(v, regenerate) {
+  if (v === currentFormat()) return;
+  await patchMeeting({ format: v });
+  paintFormat();
+  if (regenerate && meeting.mom && !abortCtl) {
+    $('genStatus').textContent = `Switching to the ${FORMATS[v]}…`;
+    runGenerate();
+  }
+}
+for (const b of $('fmtSeg').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, false);
+for (const b of $('fmtSwitch').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, true);
+$('chkMine').onchange = $('mailTranscript').onchange = async (e) => {
+  await patchMeeting({ transcriptMine: e.target.checked });
+  paintFormat();
+};
+$('chkShare').onchange = $('shareTranscript').onchange = async (e) => {
+  await patchMeeting({ transcriptShare: e.target.checked });
+  paintFormat();
+};
+
+// The card waits a few seconds and then writes the minutes by itself, so an unattended recording still ends with
+// minutes (and the automatic email). Touching anything on the card stops the countdown.
+let countdown = null;
+function offerChoices() {
+  paintFormat();
+  $('startCard').classList.remove('hidden');
+  let left = 10;
+  const tick = () => {
+    $('startCount').textContent = `Writing automatically in ${left} s`;
+    if (left-- <= 0) return startWriting();
+    countdown = setTimeout(tick, 1000);
+  };
+  const stopCount = () => {
+    clearTimeout(countdown);
+    countdown = null;
+    $('startCount').textContent = 'Press the button when you are ready.';
+  };
+  $('startCard').addEventListener('pointerdown', stopCount, { once: true });
+  $('startCard').addEventListener('keydown', stopCount, { once: true });
+  tick();
+}
+async function startWriting() {
+  clearTimeout(countdown);
+  $('startCard').classList.add('hidden');
+  await patchMeeting({ decided: true });
+  runGenerate();
+}
+$('startNow').onclick = startWriting;
+
 function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
@@ -188,11 +254,17 @@ function renderErrors() {
 
 // Saves only the fields that changed onto the stored meeting, so another tab's or the recorder's newer
 // writes (segments, captions, emailedAt) are never overwritten by this page's older copy.
-async function patchMeeting(fields) {
-  const latest = (await getMeeting(id)) || meeting;
-  Object.assign(latest, fields);
-  Object.assign(meeting, fields);
-  await saveMeeting(latest);
+// Changes are applied one after the other: two quick changes (a checkbox and a format) must not overwrite each other.
+let patchChain = Promise.resolve();
+function patchMeeting(fields) {
+  const run = patchChain.then(async () => {
+    const latest = (await getMeeting(id)) || meeting;
+    Object.assign(latest, fields);
+    Object.assign(meeting, fields);
+    await saveMeeting(latest);
+  });
+  patchChain = run.catch(() => {});
+  return run;
 }
 
 async function runGenerate({ reread = false } = {}) {
@@ -242,7 +314,7 @@ async function runGenerate({ reread = false } = {}) {
     const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
     const { mom: text, stats, extract } = await writeMinutes({
       meeting,
-      settings,
+      settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
       notes: meeting.notes,
       ctx: { ...ctx, absent, captions: meeting.captions, reread },
       gen: (system, user, onText, opts) =>
@@ -307,7 +379,7 @@ async function emailMom(auto) {
           return;
         }
       }
-      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
+      const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(false) }, renderMd, wantTranscript(false) ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
       const r = await sendMail(mail, settings);
       await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
       renderChips();
@@ -372,7 +444,7 @@ async function shareMom(auto) {
   $('shareSend').disabled = true;
   $('shareStatus').textContent = `Sending to ${list.length} ${list.length === 1 ? 'person' : 'people'}…`;
   try {
-    const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
+    const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(true) }, renderMd, wantTranscript(true) ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
     const r = await sendMail(mail, settings, { to: how === 'to' ? list.join(',') : '', cc: how === 'cc' ? list.join(',') : '', bcc: how === 'bcc' ? list.join(',') : '' });
     const sent = [...(r.to && how === 'to' ? String(r.to).split(',') : []), ...(r.cc || []), ...(r.bcc || [])];
     await patchMeeting({ sharedAt: Date.now(), sharedTo: sent, shareTo: list });
@@ -651,10 +723,15 @@ tabBtns.forEach((b, i) => {
     $('mail').textContent = 'Email again';
   }
   if (meeting.mom) {
+    paintFormat();
     $('gen').textContent = 'Regenerate';
     $('reread').classList.toggle('hidden', !meeting.extract);
     if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Regenerate to include it in the minutes.';
   } else if (!meeting.endedAt) {
     $('genStatus').textContent = 'This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.';
-  } else if (meeting.segments.length) runGenerate();
+  } else if (meeting.segments.length) {
+    paintFormat();
+    if (meeting.decided) runGenerate();
+    else offerChoices();
+  }
 })();

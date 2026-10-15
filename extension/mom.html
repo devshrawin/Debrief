@@ -30,6 +30,13 @@
     .namerow .said { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; margin: -4px 0 0; }
     .namerow input { min-width: 0; }
     @media (max-width: 640px) { .namerow { grid-template-columns: 1fr; } }
+    .startcard { background: var(--card); border: 1px solid var(--brand); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+    .startcard h2 { margin: 0; font-size: 16px; }
+    .startrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .startrow .lab { font-weight: 600; }
+    .chk { display: flex; gap: 8px; align-items: center; margin: 0; font-weight: 500; cursor: pointer; }
+    .chk.inl { font-size: 13px; white-space: nowrap; }
+    .seg-ctl.small > button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
     details.box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin: 0; }
     details.box > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; padding: 0 18px; border-radius: 14px; }
     details.box > summary::-webkit-details-marker { display: none; }
@@ -205,8 +212,21 @@
   </div>
 
   <div id="momTab" class="panel" role="tabpanel" aria-labelledby="tabMom">
+    <section class="startcard no-print hidden" id="startCard" aria-labelledby="hStart">
+      <h2 id="hStart">Before the minutes are written</h2>
+      <div class="startrow">
+        <span class="lab" id="fmtLab">Format</span>
+        <div class="seg-ctl" id="fmtSeg" role="radiogroup" aria-labelledby="fmtLab"><button type="button" role="radio" data-v="amnex">Official Amnex format</button><button type="button" role="radio" data-v="standard">Debrief standard</button></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="chkMine"> Attach the transcript to the email I get</label>
+      <label class="chk"><input type="checkbox" id="chkShare"> Include the transcript when I share the minutes with others</label>
+      <p class="hint">The transcript has everything that was said. Leave "share" off if only the minutes should go out. You can change all of this later.</p>
+      <div class="row"><button id="startNow" class="primary">Write the minutes</button><span id="startCount" class="hint" role="status"></span></div>
+    </section>
+
     <div class="toolbar no-print">
       <button id="gen" class="primary">Generate MOM</button>
+      <div class="seg-ctl small hidden" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="amnex">Amnex</button><button type="button" role="radio" data-v="standard">Standard</button></div>
       <button id="reread" class="hidden" title="Read the transcript again from scratch instead of reusing the items found last time">Re-read transcript</button>
       <button id="abort" class="hidden">Stop</button>
       <span id="genStatus" class="hint stat" role="status"></span>
@@ -218,6 +238,7 @@
         <button id="dlMd">.md</button>
         <button id="dlDoc">Word</button>
         <button id="print">Print / PDF</button>
+        <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> with transcript</label>
         <button id="mail" title="Send this MOM to your email">Email me</button>
       </div>
     </div>
@@ -225,6 +246,7 @@
       <summary>Share these minutes with others</summary>
       <div class="box-body">
         <p class="hint" id="shareSrc"></p>
+        <label class="chk"><input type="checkbox" id="shareTranscript"> Include the transcript</label>
         <textarea id="shareTo" rows="2" aria-label="Recipients" placeholder="priya@company.com, ravi@company.com"></textarea>
         <div class="sharebar">
           <select id="shareHowSel" aria-label="Send as"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc</option></select>

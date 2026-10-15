@@ -4119,6 +4119,7 @@ ${meeting2.mom || ""}
     if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($2("mom"));
     $2("mom").classList.remove("streaming");
     syncState();
+    if (meeting) paintFormat();
   }
   function syncState() {
     const busy = !!abortCtl;
@@ -4205,6 +4206,63 @@ ${meeting2.mom || ""}
       })
     );
   }
+  var wantTranscript = (shared) => shared ? !!meeting.transcriptShare : meeting.transcriptMine ?? !!settings.emailTranscript;
+  var FORMATS = { amnex: "Official Amnex format", standard: "Debrief standard" };
+  var currentFormat = () => meeting.format || settings.minutesFormat || "amnex";
+  function paintFormat() {
+    const f = currentFormat();
+    for (const seg of [$2("fmtSeg"), $2("fmtSwitch")]) for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.v === f));
+    $2("fmtSwitch").classList.toggle("hidden", !meeting.mom);
+    $2("chkMine").checked = wantTranscript(false);
+    $2("chkShare").checked = wantTranscript(true);
+    $2("mailTranscript").checked = wantTranscript(false);
+    $2("shareTranscript").checked = wantTranscript(true);
+  }
+  async function chooseFormat(v, regenerate) {
+    if (v === currentFormat()) return;
+    await patchMeeting({ format: v });
+    paintFormat();
+    if (regenerate && meeting.mom && !abortCtl) {
+      $2("genStatus").textContent = `Switching to the ${FORMATS[v]}\u2026`;
+      runGenerate();
+    }
+  }
+  for (const b of $2("fmtSeg").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, false);
+  for (const b of $2("fmtSwitch").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, true);
+  $2("chkMine").onchange = $2("mailTranscript").onchange = async (e2) => {
+    await patchMeeting({ transcriptMine: e2.target.checked });
+    paintFormat();
+  };
+  $2("chkShare").onchange = $2("shareTranscript").onchange = async (e2) => {
+    await patchMeeting({ transcriptShare: e2.target.checked });
+    paintFormat();
+  };
+  var countdown = null;
+  function offerChoices() {
+    paintFormat();
+    $2("startCard").classList.remove("hidden");
+    let left = 10;
+    const tick = () => {
+      $2("startCount").textContent = `Writing automatically in ${left} s`;
+      if (left-- <= 0) return startWriting();
+      countdown = setTimeout(tick, 1e3);
+    };
+    const stopCount = () => {
+      clearTimeout(countdown);
+      countdown = null;
+      $2("startCount").textContent = "Press the button when you are ready.";
+    };
+    $2("startCard").addEventListener("pointerdown", stopCount, { once: true });
+    $2("startCard").addEventListener("keydown", stopCount, { once: true });
+    tick();
+  }
+  async function startWriting() {
+    clearTimeout(countdown);
+    $2("startCard").classList.add("hidden");
+    await patchMeeting({ decided: true });
+    runGenerate();
+  }
+  $2("startNow").onclick = startWriting;
   function renderTranscript() {
     const ctx = nameCtx();
     const shown = labeledLines(true);
@@ -4239,11 +4297,17 @@ ${meeting2.mom || ""}
       $2("errors").textContent = `${errs.length} problem${errs.length > 1 ? "s" : ""} during transcription (some audio may be missing). Last: ${errs[errs.length - 1]}`;
     }
   }
-  async function patchMeeting(fields) {
-    const latest = await getMeeting(id) || meeting;
-    Object.assign(latest, fields);
-    Object.assign(meeting, fields);
-    await saveMeeting(latest);
+  var patchChain = Promise.resolve();
+  function patchMeeting(fields) {
+    const run2 = patchChain.then(async () => {
+      const latest = await getMeeting(id) || meeting;
+      Object.assign(latest, fields);
+      Object.assign(meeting, fields);
+      await saveMeeting(latest);
+    });
+    patchChain = run2.catch(() => {
+    });
+    return run2;
   }
   async function runGenerate({ reread = false } = {}) {
     if (!llmReady(settings)) {
@@ -4292,7 +4356,7 @@ ${meeting2.mom || ""}
       const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
       const { mom: text, stats, extract } = await writeMinutes({
         meeting,
-        settings,
+        settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
         notes: meeting.notes,
         ctx: { ...ctx, absent, captions: meeting.captions, reread },
         gen: (system, user, onText, opts) => gen(system, user, onText && ((d) => {
@@ -4353,7 +4417,7 @@ ${meeting2.mom || ""}
             return;
           }
         }
-        const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
+        const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(false) }, renderMd, wantTranscript(false) ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
         const r = await sendMail(mail, settings);
         await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
         renderChips();
@@ -4413,7 +4477,7 @@ ${meeting2.mom || ""}
     $2("shareSend").disabled = true;
     $2("shareStatus").textContent = `Sending to ${list.length} ${list.length === 1 ? "person" : "people"}\u2026`;
     try {
-      const mail = buildEmail(meeting, settings, renderMd, settings.emailTranscript ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
+      const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(true) }, renderMd, wantTranscript(true) ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
       const r = await sendMail(mail, settings, { to: how === "to" ? list.join(",") : "", cc: how === "cc" ? list.join(",") : "", bcc: how === "bcc" ? list.join(",") : "" });
       const sent = [...r.to && how === "to" ? String(r.to).split(",") : [], ...r.cc || [], ...r.bcc || []];
       await patchMeeting({ sharedAt: Date.now(), sharedTo: sent, shareTo: list });
@@ -4668,11 +4732,16 @@ ${meeting2.mom || ""}
       $2("mail").textContent = "Email again";
     }
     if (meeting.mom) {
+      paintFormat();
       $2("gen").textContent = "Regenerate";
       $2("reread").classList.toggle("hidden", !meeting.extract);
       if (hadPending) $2("genStatus").textContent = "Missing audio was recovered. Press Regenerate to include it in the minutes.";
     } else if (!meeting.endedAt) {
       $2("genStatus").textContent = "This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.";
-    } else if (meeting.segments.length) runGenerate();
+    } else if (meeting.segments.length) {
+      paintFormat();
+      if (meeting.decided) runGenerate();
+      else offerChoices();
+    }
   })();
 })();
