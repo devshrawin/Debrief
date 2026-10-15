@@ -91,6 +91,8 @@
     // ...or after this many silent minutes (0 = never)
     usageLimits: "",
     // one "model=daily requests" per line; learned from 429s too
+    usdInr: 88,
+    // rupees per US dollar, to show the 'cost if paid' estimate in rupees
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
     dictAutoAlias: false,

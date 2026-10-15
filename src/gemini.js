@@ -2,7 +2,7 @@
 // rate-limited, out of quota, rejected, or the server errors.
 const FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
 
-import { record, learnLimit, dayKey } from './usage.js';
+import { record, learnLimit, nextQuotaReset } from './usage.js';
 
 // ---- cooldown: a model that has just said "over your limit" is skipped until it can answer again ----
 // Each failed request against an exhausted model wasted time and quota (49 of 67 requests in one test run).
@@ -18,11 +18,7 @@ async function loadCool() {
   } catch {}
 }
 
-function untilPacificMidnight(now = Date.now()) {
-  const today = dayKey(new Date(now));
-  for (let t = now + 5 * 60000; t < now + 26 * 3600000; t += 5 * 60000) if (dayKey(new Date(t)) !== today) return t;
-  return now + 6 * 3600000;
-}
+const untilPacificMidnight = (now) => nextQuotaReset(now);
 
 // How long a 429 means "stay away": until the daily quota resets, or the retry time Google gave, else a minute.
 export function cooldownFor(text, now = Date.now()) {

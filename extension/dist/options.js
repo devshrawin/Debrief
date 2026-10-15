@@ -44,7 +44,7 @@
       return await new Promise((resolve, reject) => {
         const t = db.transaction(store, mode2);
         const out = fn2(t.objectStore(store));
-        t.oncomplete = () => resolve(out?.result ?? out);
+        t.oncomplete = () => resolve(out && typeof out === "object" && "result" in out ? out.result : out);
         t.onerror = () => reject(t.error);
         t.onabort = () => reject(t.error);
       });
@@ -92,6 +92,8 @@
     // ...or after this many silent minutes (0 = never)
     usageLimits: "",
     // one "model=daily requests" per line; learned from 429s too
+    usdInr: 88,
+    // rupees per US dollar, to show the 'cost if paid' estimate in rupees
     usagePrices: "",
     // one "model=USD per 1M input,USD per 1M output" per line
     dictAutoAlias: false,
@@ -373,6 +375,23 @@
     }
     return { usd, assumed, unknown };
   }
+  var DEFAULT_USD_INR = 88;
+  var rate = (v) => Number(v) > 0 ? Number(v) : DEFAULT_USD_INR;
+  function rupees(usd, usdInr = DEFAULT_USD_INR) {
+    const v = usd * rate(usdInr);
+    return `\u20B9${v.toLocaleString("en-IN", { minimumFractionDigits: v < 100 ? 2 : 0, maximumFractionDigits: v < 100 ? 2 : 0 })}`;
+  }
+  function nextQuotaReset(now = Date.now()) {
+    const today = dayKey(new Date(now));
+    for (let t = now + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
+    return now + 12 * 36e5;
+  }
+  function istClock(ms, now = Date.now()) {
+    const f = (opts) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", ...opts });
+    const time = f({ hour: "numeric", minute: "2-digit", hour12: true }).format(ms).replace(/\s?([ap])m/i, (m, c) => ` ${c.toLowerCase()}m`);
+    const sameDay = f({ year: "numeric", month: "2-digit", day: "2-digit" }).format(ms) === f({ year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return `${sameDay ? "" : `${f({ weekday: "short" }).format(ms)} `}${time} IST`;
+  }
 
   // src/gemini.js
   var FALLBACK_STATUS = (s) => s === 400 || s === 401 || s === 403 || s === 429 || s >= 500;
@@ -387,11 +406,7 @@
     } catch {
     }
   }
-  function untilPacificMidnight(now = Date.now()) {
-    const today = dayKey(new Date(now));
-    for (let t = now + 5 * 6e4; t < now + 26 * 36e5; t += 5 * 6e4) if (dayKey(new Date(t)) !== today) return t;
-    return now + 6 * 36e5;
-  }
+  var untilPacificMidnight = (now) => nextQuotaReset(now);
   function cooldownFor(text, now = Date.now()) {
     const t = String(text || "");
     if (/PerDay|per day|daily/i.test(t)) return untilPacificMidnight(now);
@@ -3497,7 +3512,6 @@ function out(o) {
   var fmtN = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n);
   var KIND = { stt: "Speech to text", llm: "Minutes" };
   var RANGE = { 1: "today", 7: "in the last 7 days", 30: "in the last 30 days" };
-  var money = (usd) => usd < 0.01 && usd > 0 ? usd.toFixed(4) : usd.toFixed(2);
   async function renderUsage() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
@@ -3539,7 +3553,7 @@ function out(o) {
       cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : "-", "num");
       cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : "-", "num");
       const paid2 = paidCost(r, prices);
-      cell(paid2.usd == null ? "-" : r.fail && !r.tin && !r.tout ? "$0.00" : `${paid2.assumed ? "~" : ""}$${money(paid2.usd)}`, "num cost");
+      cell(paid2.usd == null ? "-" : r.fail && !r.tin && !r.tout ? rupees(0, $3("usdInr").value) : `${paid2.assumed ? "~" : ""}${rupees(paid2.usd, $3("usdInr").value)}`, "num cost");
       const left = tr.insertCell();
       left.className = "usage-left";
       const limit = limits[r.model];
@@ -3565,9 +3579,9 @@ function out(o) {
       el2("strong", { textContent: `Total ${RANGE[usageDays] || ""}`.trim() }),
       el2("span", { textContent: `${reqs} requests` }),
       el2("span", { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
-      ...cost != null ? [el2("span", { textContent: `about $${cost.toFixed(2)} at your prices` })] : [],
-      el2("span", { className: "paid", textContent: `if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""}` }),
-      el2("span", { className: "hint", style: "margin-left:auto", textContent: `Quota day ${dayKey()} (Pacific)` })
+      ...cost != null ? [el2("span", { textContent: `about ${rupees(cost, $3("usdInr").value)} at your prices` })] : [],
+      el2("span", { className: "paid", textContent: `if this were paid: about ${rupees(paid.usd, $3("usdInr").value)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""}` }),
+      el2("span", { className: "hint", style: "margin-left:auto", textContent: `Daily quota resets at ${istClock(nextQuotaReset())} (midnight Pacific)` })
     );
   }
   var rangeBtns = [...document.querySelectorAll("#usageRange button")];
@@ -3593,6 +3607,7 @@ function out(o) {
   };
   $3("usageLimits").addEventListener("input", renderUsage);
   $3("usagePrices").addEventListener("input", renderUsage);
+  $3("usdInr").addEventListener("input", renderUsage);
   chrome.storage.onChanged.addListener((c) => {
     if (c.usage || c.learnedLimits) renderUsage();
   });

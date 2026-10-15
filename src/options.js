@@ -8,7 +8,7 @@ import { learnAlias } from './dictionary.js';
 import { LANGUAGES, chosenLanguages, minutesLanguageOptions, joinNames } from './languages.js';
 import { initVoices } from './voices-ui.js';
 import { runCheckup, checkupText } from './checkup.js';
-import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, dayKey } from './usage.js';
+import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, rupees, rate, nextQuotaReset, istClock } from './usage.js';
 import { modal } from './modal.js';
 
 const $ = (id) => document.getElementById(id);
@@ -286,7 +286,7 @@ async function renderUsage() {
     cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '-', 'num');
     cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '-', 'num');
     const paid = paidCost(r, prices);
-    cell(paid.usd == null ? '-' : r.fail && !r.tin && !r.tout ? '$0.00' : `${paid.assumed ? '~' : ''}$${money(paid.usd)}`, 'num cost');
+    cell(paid.usd == null ? '-' : r.fail && !r.tin && !r.tout ? rupees(0, $('usdInr').value) : `${paid.assumed ? '~' : ''}${rupees(paid.usd, $('usdInr').value)}`, 'num cost');
     const left = tr.insertCell();
     left.className = 'usage-left';
     const limit = limits[r.model];
@@ -312,9 +312,9 @@ async function renderUsage() {
     el('strong', { textContent: `Total ${RANGE[usageDays] || ''}`.trim() }),
     el('span', { textContent: `${reqs} requests` }),
     el('span', { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
-    ...(cost != null ? [el('span', { textContent: `about $${cost.toFixed(2)} at your prices` })] : []),
-    el('span', { className: 'paid', textContent: `if this were paid: about $${paid.usd.toFixed(2)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
-    el('span', { className: 'hint', style: 'margin-left:auto', textContent: `Quota day ${dayKey()} (Pacific)` })
+    ...(cost != null ? [el('span', { textContent: `about ${rupees(cost, $('usdInr').value)} at your prices` })] : []),
+    el('span', { className: 'paid', textContent: `if this were paid: about ${rupees(paid.usd, $('usdInr').value)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
+    el('span', { className: 'hint', style: 'margin-left:auto', textContent: `Daily quota resets at ${istClock(nextQuotaReset())} (midnight Pacific)` })
   );
 }
 
@@ -341,6 +341,7 @@ $('usageReset').onclick = async () => {
 };
 $('usageLimits').addEventListener('input', renderUsage);
 $('usagePrices').addEventListener('input', renderUsage);
+$('usdInr').addEventListener('input', renderUsage);
 chrome.storage.onChanged.addListener((c) => {
   if (c.usage || c.learnedLimits) renderUsage();
 });

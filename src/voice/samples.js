@@ -27,7 +27,8 @@ async function tx(store, mode, fn) {
     return await new Promise((resolve, reject) => {
       const t = db.transaction(store, mode);
       const out = fn(t.objectStore(store));
-      t.oncomplete = () => resolve(out?.result ?? out);
+      // a request's result is undefined for a key that is not there: that must come back as undefined, not as the request itself
+      t.oncomplete = () => resolve(out && typeof out === 'object' && 'result' in out ? out.result : out);
       t.onerror = () => reject(t.error);
       t.onabort = () => reject(t.error);
     });

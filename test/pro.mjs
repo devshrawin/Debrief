@@ -111,4 +111,20 @@ await test('usage: other STT providers record requests and audio minutes', async
   assert.ok(captured[0].audioSec > 1.9);
 });
 
+await test('usage: costs are shown in rupees with Indian digit grouping, and the quota reset is shown in Indian time', async () => {
+  const U = await import('../src/usage.js');
+  assert.equal(U.rupees(1, 88), '\u20B988.00');
+  assert.equal(U.rupees(0, 88), '\u20B90.00');
+  assert.equal(U.rupees(2000, 88), '\u20B91,76,000');
+  assert.equal(U.rupees(1, ''), '\u20B988.00', 'an empty rate falls back to the default');
+  assert.equal(U.rupees(1, 83.5), '\u20B983.50');
+  // Pacific midnight in summer (PDT = UTC-7) is 12:30 pm in India; in winter (PST = UTC-8) it is 1:30 pm
+  const summer = Date.UTC(2026, 9, 15, 3, 0); // 15 Oct 2026, 03:00 UTC = 20:00 PDT on the 14th
+  assert.equal(U.istClock(U.nextQuotaReset(summer), summer), '12:30 pm IST');
+  const winter = Date.UTC(2026, 11, 15, 3, 0); // 14 Dec 2026, 19:00 PST
+  assert.equal(U.istClock(U.nextQuotaReset(winter), winter), '1:30 pm IST');
+  const next = U.nextQuotaReset(summer);
+  assert.ok(next > summer && next - summer <= 26 * 3600000);
+});
+
 console.log(`\n${passed} passed`);

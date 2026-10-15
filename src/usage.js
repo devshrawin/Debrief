@@ -138,3 +138,27 @@ export function paidTotal(rows, prices = {}) {
   }
   return { usd, assumed, unknown };
 }
+
+// Money in rupees. Prices are entered in US dollars per million tokens; the amounts shown are converted at the rate
+// the user sets (an estimate, never a bill).
+export const DEFAULT_USD_INR = 88;
+export const rate = (v) => (Number(v) > 0 ? Number(v) : DEFAULT_USD_INR);
+export function rupees(usd, usdInr = DEFAULT_USD_INR) {
+  const v = usd * rate(usdInr);
+  return `\u20B9${v.toLocaleString('en-IN', { minimumFractionDigits: v < 100 ? 2 : 0, maximumFractionDigits: v < 100 ? 2 : 0 })}`;
+}
+
+// When the daily quota resets: midnight Pacific. Returns the moment as milliseconds.
+export function nextQuotaReset(now = Date.now()) {
+  const today = dayKey(new Date(now));
+  for (let t = now + 60000; t < now + 26 * 3600000; t += 60000) if (dayKey(new Date(t)) !== today) return t;
+  return now + 12 * 3600000;
+}
+
+// "12:30 pm IST" (with the weekday when it is not today in India)
+export function istClock(ms, now = Date.now()) {
+  const f = (opts) => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', ...opts });
+  const time = f({ hour: 'numeric', minute: '2-digit', hour12: true }).format(ms).replace(/\s?([ap])m/i, (m, c) => ` ${c.toLowerCase()}m`);
+  const sameDay = f({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms) === f({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  return `${sameDay ? '' : `${f({ weekday: 'short' }).format(ms)} `}${time} IST`;
+}
