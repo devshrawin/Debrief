@@ -180,7 +180,7 @@
     }
   }
   var toInt16 = (f32) => Int16Array.from(f32, (x) => Math.max(-32768, Math.min(32767, Math.round(x * 32767))));
-  var pieceKey = (meetingId, t0) => `${meetingId}|${Math.round(t0 * 100)}`;
+  var pieceKey = (meetingId, t0, origin) => `${meetingId}|${origin === "m" ? "m" : ""}${Math.round(t0 * 100)}`;
   var putPiece = (key, i16) => tx("pieces", "readwrite", (s) => s.put(i16, key));
 
   // src/store.js
@@ -247,6 +247,8 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+    roomMode: false,
+    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -784,7 +786,7 @@
     mute.gain.value = 0;
     src.connect(node).connect(mute).connect(ctx.destination);
   }
-  async function startVoice(meetingId, keepAudio = false) {
+  async function startVoice(meetingId, keepAudio = false, room = false) {
     const client = createVoiceClient({
       workerUrl: chrome.runtime.getURL("dist/worker.js"),
       modelUrl: chrome.runtime.getURL("models/wespeaker_resnet34_lm.onnx"),
@@ -798,17 +800,19 @@
       });
     };
     let kept = 0;
-    const tracker = new VoiceTracker((seg) => {
+    const makeTracker = (origin) => new VoiceTracker((seg) => {
       if (keepAudio && kept < MAX_PIECES && seg.t1 - seg.t0 >= 2) {
         kept++;
-        putPiece(pieceKey(meetingId, seg.t0), toInt16(seg.pcm)).catch(() => {
+        putPiece(pieceKey(meetingId, seg.t0, origin), toInt16(seg.pcm)).catch(() => {
         });
       }
-      client.embed(seg.pcm).then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e) })).catch(() => {
+      client.embed(seg.pcm).then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e), ...origin === "m" ? { s: "m" } : {} })).catch(() => {
       });
     });
+    const tracker = makeTracker("o");
+    const trackerMic = room ? makeTracker("m") : null;
     const timer = setInterval(flush, 1e4);
-    return { client, tracker, flush, timer };
+    return { client, tracker, trackerMic, flush, timer };
   }
   async function start({ streamId, settings, meetingId }) {
     if (rec) throw new Error("Already recording");
@@ -873,11 +877,13 @@
           rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
           rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
         }
-        rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length));
+        const blk = rec.micOn ? b : new Float32Array(b.length);
+        rec?.chunkers.me.push(blk);
+        rec?.voice?.trackerMic?.push(blk);
       });
     }
     if (settings.voiceOn && (settings.voices || []).length || settings.voiceLearn) {
-      rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples)).catch(() => null);
+      rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples), !!settings.roomMode).catch(() => null);
       chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: rec.voice ? "voice recognition: on" : "voice recognition: could not start (recording continues without it)" });
     }
     tabStream.getAudioTracks()[0].addEventListener("ended", () => chrome.runtime.sendMessage({ target: "bg", type: "stop" }));
@@ -921,6 +927,7 @@
     await r.pool.drain();
     if (r.voice) {
       r.voice.tracker.flush();
+      r.voice.trackerMic?.flush();
       await r.voice.client.drain(2e4);
       clearInterval(r.voice.timer);
       r.voice.flush();

@@ -40,7 +40,8 @@ async function tx(store, mode, fn) {
 export const toInt16 = (f32) => Int16Array.from(f32, (x) => Math.max(-32768, Math.min(32767, Math.round(x * 32767))));
 export const fromInt16 = (i16) => Float32Array.from(i16, (x) => x / 32768);
 
-export const pieceKey = (meetingId, t0) => `${meetingId}|${Math.round(t0 * 100)}`;
+// origin 'm' = the microphone (room mode), anything else = the meeting tab
+export const pieceKey = (meetingId, t0, origin) => `${meetingId}|${origin === 'm' ? 'm' : ''}${Math.round(t0 * 100)}`;
 
 export const putPiece = (key, i16) => tx('pieces', 'readwrite', (s) => s.put(i16, key));
 export const getPiece = (key) => tx('pieces', 'readonly', (s) => s.get(key));

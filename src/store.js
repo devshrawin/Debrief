@@ -34,6 +34,7 @@ export const DEFAULTS = {
   calendarLookup: true, // ask the relay who was invited (needs the calendar permission)
   meetCaptions: 'read', // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
   otherSites: true, // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+  roomMode: false, // recording a room: several people share the microphone, so mic lines are not all "me"
   voiceOn: false, // recognise who is speaking, using voices enrolled in Settings
   voiceSamples: true, // keep a short audio clip of each unnamed voice so it can be played to name it (off: no audio is kept)
   voiceLearn: false, // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting

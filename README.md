@@ -81,6 +81,8 @@ Debrief Pro can put names to voices, as a **best guess**. Everything is switched
 4. **Name an unknown voice.** *Unnamed voices in your latest meeting* lists voices that matched nobody, with example timestamps. Check the transcript at those times, type a name, save.
 5. **Share.** *Export voices* saves a file of fingerprints; *Import voices* adds them on another computer (the same model is required). Share only for people who agreed.
 
+**In-person meetings (room mode).** For a meeting in a room recorded on this computer, switch on *Recording a room* in Settings → General → Microphone. Microphone lines are then not labelled with your name: they are labelled by voice (name the "Unnamed voice" entries as usual) or "Room", and the minutes writer is told several people share that microphone. Your mic stays on even when Meet shows you muted. It works for a meeting with only you too (the minutes then have one voice). Limits: one laptop microphone far from some speakers, echo and people talking over each other all lower accuracy, and the voice grouping has only been tried on a recorded call, not yet on a real room.
+
 **Limits, honestly.**
 - It is a statistical best guess. Similar voices, poor microphones, echo, compression by the meeting app and people talking over each other all cause mistakes. Overlap and low-confidence pieces are shown as *Unknown speaker* on purpose.
 - Where Meet's captions name someone else, the line shows both ("Priya (captions say Ravi)") rather than choosing silently.

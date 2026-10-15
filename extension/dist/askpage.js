@@ -63,6 +63,8 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+    roomMode: false,
+    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -500,7 +502,7 @@ _(Output hit the length limit and was cut off.)_`;
     };
     const source = ctx.labeled?.length ? ctx.labeled.map((l3) => ({ t: l3.t, text: l3.text, src: l3.src, label: l3.label })) : [...meeting.segments || []].sort((a, b) => a.t - b.t);
     for (const s of source) {
-      const speaker = s.label || (s.src === "me" ? ctx.myName || "Me" : "Others");
+      const speaker = s.label || (s.src === "me" ? ctx.room ? "Room" : ctx.myName || "Me" : "Others");
       const sentences = applyDictionary(s.text || "", ctx.entries, ctx.attendees).split(/(?<=[.!?।])\s+/).filter((x2) => x2.trim());
       for (const [i, sentence] of sentences.entries()) {
         if (!cur.length) start = s.t + 0;

@@ -54,7 +54,7 @@ async function tap(ctx, stream, onBlock) {
   src.connect(node).connect(mute).connect(ctx.destination);
 }
 
-async function startVoice(meetingId, keepAudio = false) {
+async function startVoice(meetingId, keepAudio = false, room = false) {
   const client = createVoiceClient({
     workerUrl: chrome.runtime.getURL('dist/worker.js'),
     modelUrl: chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx'),
@@ -67,20 +67,23 @@ async function startVoice(meetingId, keepAudio = false) {
     chrome.runtime.sendMessage({ target: 'bg', type: 'voice-seg', meetingId, segs: out.splice(0) }).catch(() => {});
   };
   let kept = 0;
-  const tracker = new VoiceTracker((seg) => {
+  // One tracker per stream of speech: the meeting tab (the others) and, in room mode, the microphone.
+  const makeTracker = (origin) => new VoiceTracker((seg) => {
     // Optional: a copy of this piece waits in this browser (not uploaded) so an unnamed voice can later be played back.
     if (keepAudio && kept < MAX_PIECES && seg.t1 - seg.t0 >= 2) {
       kept++;
-      putPiece(pieceKey(meetingId, seg.t0), toInt16(seg.pcm)).catch(() => {});
+      putPiece(pieceKey(meetingId, seg.t0, origin), toInt16(seg.pcm)).catch(() => {});
     }
     // A slow computer drops pieces here (the client queue is bounded) instead of slowing the recording.
     client
       .embed(seg.pcm)
-      .then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e) }))
+      .then((e) => e && out.push({ t0: Math.round(seg.t0 * 100) / 100, t1: Math.round(seg.t1 * 100) / 100, e: pack(e), ...(origin === 'm' ? { s: 'm' } : {}) }))
       .catch(() => {});
   });
+  const tracker = makeTracker('o');
+  const trackerMic = room ? makeTracker('m') : null;
   const timer = setInterval(flush, 10000);
-  return { client, tracker, flush, timer };
+  return { client, tracker, trackerMic, flush, timer };
 }
 
 async function start({ streamId, settings, meetingId }) {
@@ -160,14 +163,16 @@ async function start({ streamId, settings, meetingId }) {
         rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
         rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
       }
-      rec?.chunkers.me.push(rec.micOn ? b : new Float32Array(b.length));
+      const blk = rec.micOn ? b : new Float32Array(b.length);
+      rec?.chunkers.me.push(blk);
+      rec?.voice?.trackerMic?.push(blk);
     });
   }
 
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
   // Only the fingerprints leave this document; the audio is never stored and never sent anywhere.
   if ((settings.voiceOn && (settings.voices || []).length) || settings.voiceLearn) {
-    rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples)).catch(() => null);
+    rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples), !!settings.roomMode).catch(() => null);
     chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: rec.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
   }
 
@@ -220,6 +225,7 @@ async function stop() {
   await r.pool.drain();
   if (r.voice) {
     r.voice.tracker.flush();
+    r.voice.trackerMic?.flush();
     await r.voice.client.drain(20000);
     clearInterval(r.voice.timer);
     r.voice.flush();

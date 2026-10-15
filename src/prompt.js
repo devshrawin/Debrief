@@ -57,11 +57,11 @@ export function formatTranscript(meeting, myName, ctx = {}) {
   const me = myName ? `ME (${myName})` : 'ME';
   // With voice recognition the remote passages are split into labelled lines: [mm:ss] Amal Raj: ...
   if (ctx.labeled?.length) {
-    return ctx.labeled.map((l) => `[${fmtTime(l.t)}] ${l.src === 'me' ? me : l.label}: ${applyDictionary(l.text, ctx.entries, ctx.attendees)}`).join('\n');
+    return ctx.labeled.map((l) => `[${fmtTime(l.t)}] ${l.src === 'me' && !ctx.room ? me : l.label}: ${applyDictionary(l.text, ctx.entries, ctx.attendees)}`).join('\n');
   }
   return [...meeting.segments]
     .sort((a, b) => a.t - b.t)
-    .map((s) => `[${fmtTime(s.t)}] ${s.src === 'me' ? me : 'OTHERS'}: ${applyDictionary(s.text, ctx.entries, ctx.attendees)}`)
+    .map((s) => `[${fmtTime(s.t)}] ${s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS'}: ${applyDictionary(s.text, ctx.entries, ctx.attendees)}`)
     .join('\n');
 }
 
@@ -96,6 +96,7 @@ export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
   const lines = header(meeting, settings);
   const names = glossaryLine(ctx.entries || [], [...(ctx.attendees || []), ...(ctx.learned || [])]);
   if (names) lines.push('', `Names and terms (spell exactly like this): ${names}`);
+  if (ctx.room) lines.push('', 'This was recorded in a room: lines marked ROOM (or named by voice) come from one microphone shared by several people. Never attribute them to the note-taker, and do not assume who spoke unless the line names them.');
   if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(', ')}`);
   if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(', ')}`);
   if (notes?.trim()) lines.push('', 'Context from the note-taker (attendees, agenda, spellings):', notes.trim());

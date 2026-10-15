@@ -131,7 +131,7 @@
     const caps = (meeting.captions || []).filter((c) => c.name && !isIconText(c.name) && !isMe(c.name, myName));
     const all = (meeting.captions || []).filter((c) => c.name && !isIconText(c.name));
     const out = /* @__PURE__ */ new Map();
-    for (const s of meeting.voiceSegs || []) {
+    for (const s of (meeting.voiceSegs || []).filter((x) => x.s !== "m")) {
       const mine = caps.filter((c) => c.t - LEARN.lead <= s.t0 && (c.t2 ?? c.t) + LEARN.tail >= s.t1);
       if (new Set(mine.map((c) => norm(c.name))).size !== 1) continue;
       const who = norm(mine[0].name);
@@ -347,7 +347,7 @@
     }
   }
   var fromInt16 = (i16) => Float32Array.from(i16, (x) => x / 32768);
-  var pieceKey = (meetingId, t0) => `${meetingId}|${Math.round(t0 * 100)}`;
+  var pieceKey = (meetingId, t0, origin) => `${meetingId}|${origin === "m" ? "m" : ""}${Math.round(t0 * 100)}`;
   var getPiece = (key2) => tx("pieces", "readonly", (s) => s.get(key2));
   async function deletePieces(meetingId) {
     await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
@@ -389,7 +389,7 @@
         const ranked = best.get(p.id).sort((a, b) => b.score - a.score).slice(0, 6);
         const pcms = [];
         for (const { s } of ranked) {
-          const i16 = await getPiece(pieceKey(meetingId, s.t0));
+          const i16 = await getPiece(pieceKey(meetingId, s.t0, s.s));
           if (i16) pcms.push(fromInt16(i16));
           if (pcms.length >= 3) break;
         }
@@ -522,6 +522,8 @@
     // read speaker names from Meet's captions: off | read (when you have captions on) | auto (turn them on)
     otherSites: true,
     // use the page features (amber dot, mute follow, auto-stop) on Zoom, Teams, Webex and other meeting apps
+    roomMode: false,
+    // recording a room: several people share the microphone, so mic lines are not all "me"
     voiceOn: false,
     // recognise who is speaking, using voices enrolled in Settings
     voiceSamples: true,
@@ -838,7 +840,8 @@
     return stopping;
   }
   async function applyMic(patch = {}) {
-    const { followMeetMute } = await getSettings();
+    const { followMeetMute: follow, roomMode } = await getSettings();
+    const followMeetMute = follow && !roomMode;
     let eff = false;
     let changed = false;
     let cur = null;
@@ -970,7 +973,7 @@
       },
       // Voice fingerprints of the meeting's speech, made by the recorder. Only fingerprints, never audio.
       "voice-seg": async () => {
-        const segs = (msg.segs || []).filter((x) => Number.isFinite(x?.t0) && Number.isFinite(x?.t1) && typeof x.e === "string" && x.e.length < 600).slice(0, 200);
+        const segs = (msg.segs || []).filter((x) => Number.isFinite(x?.t0) && Number.isFinite(x?.t1) && typeof x.e === "string" && x.e.length < 600).map((x) => ({ t0: x.t0, t1: x.t1, e: x.e, ...x.s === "m" ? { s: "m" } : {} })).slice(0, 200);
         if (!segs.length) return { ok: false };
         await updateMeeting(msg.meetingId, (m) => {
           const all = m.voiceSegs ||= [];
