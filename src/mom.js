@@ -8,7 +8,7 @@ import { writeMinutes } from './minutes.js';
 import { matchPeople, setEmailNames, learnEmailNames, withAddress, personLabel } from './attendance.js';
 import { labelTranscript, voicePresence } from './voice/match.js';
 import { usableVoices, isAnon } from './voice/learn.js';
-import { getSample, hasSample, deleteSample } from './voice/samples.js';
+import { getSample, hasSample } from './voice/samples.js';
 import { generate, modelLabel, isRetryable } from './llm.js';
 import { transcribe } from './stt.js';
 import { listPending, deletePending, deleteAllPending } from './audiostore.js';
@@ -105,7 +105,7 @@ async function renderNameBox() {
     ? 'Press Play, type who it is, and save. Then press Regenerate so the minutes use the names.'
     : settings.voiceSamples
       ? 'No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate.'
-      : 'No audio clips are kept: switch on "Keep short samples of unnamed voices" in Settings → Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
+      : 'No audio clips are kept: switch on "Keep short samples of voices" in Settings → Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
   $('nameList').replaceChildren(
     ...here.map((v, i) => {
       const row = document.createElement('div');
@@ -135,7 +135,6 @@ async function renderNameBox() {
           return;
         }
         await saveVoices(all.map((x) => (x.id === v.id ? { ...x, name: clean, confirmed: true } : x)));
-        deleteSample(v.id).catch(() => {});
       };
       input.addEventListener('keydown', (e) => e.key === 'Enter' && save.click());
       const said = lines.filter((l) => l.name === v.name).slice(0, 2);

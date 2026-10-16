@@ -27,6 +27,8 @@
 
   // src/voice/samples.js
   var DB = "debrief-voice";
+  var SR = 16e3;
+  var CLIP_SEC = 8;
   function open() {
     return new Promise((resolve, reject) => {
       const r = indexedDB.open(DB, 1);
@@ -52,12 +54,30 @@
       db.close();
     }
   }
+  var putSample = (personId, blob) => tx("samples", "readwrite", (s) => s.put(blob, personId));
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
   var hasSample = async (personId) => !!await getSample(personId);
   var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
   async function clearAllAudio() {
     await tx("pieces", "readwrite", (s) => s.clear());
     await tx("samples", "readwrite", (s) => s.clear());
+  }
+  function makeClip(pieces) {
+    const gap = new Float32Array(Math.round(SR * 0.3));
+    const parts = [];
+    let len = 0;
+    for (const p of pieces) {
+      if (len + p.length > CLIP_SEC * SR && parts.length) break;
+      parts.push(p, gap);
+      len += p.length + gap.length;
+    }
+    const out = new Float32Array(len);
+    let o = 0;
+    for (const p of parts) {
+      out.set(p, o);
+      o += p.length;
+    }
+    return encodeWav(out.subarray(0, Math.min(len, CLIP_SEC * SR)), SR);
   }
 
   // src/store.js
@@ -2473,7 +2493,7 @@ function out(o) {
   }
 
   // src/voice/tracker.js
-  var SR = 16e3;
+  var SR2 = 16e3;
   var MIN_SEC = 1.5;
   var MAX_SEC = 4;
   var PAUSE_BLOCKS = 3;
@@ -2510,7 +2530,7 @@ function out(o) {
         this.cur.push(block);
         if (this.quiet >= PAUSE_BLOCKS) this.close(true);
       }
-      if (this.cur.length && (this.samples - this.curStart) / SR >= MAX_SEC) this.close(false);
+      if (this.cur.length && (this.samples - this.curStart) / SR2 >= MAX_SEC) this.close(false);
     }
     close(trimQuiet) {
       const blocks = trimQuiet ? this.cur.slice(0, this.cur.length - this.quiet) : this.cur;
@@ -2519,14 +2539,14 @@ function out(o) {
       this.quiet = 0;
       this.speechBlocks = 0;
       const len = blocks.reduce((a, b) => a + b.length, 0);
-      if (len / SR < MIN_SEC || speech * (blocks[0]?.length || 2048) / len < 0.6) return;
+      if (len / SR2 < MIN_SEC || speech * (blocks[0]?.length || 2048) / len < 0.6) return;
       const pcm2 = new Float32Array(len);
       let o = 0;
       for (const b of blocks) {
         pcm2.set(b, o);
         o += b.length;
       }
-      this.onSegment({ t0: this.curStart / SR, t1: this.curStart / SR + len / SR, pcm: pcm2 });
+      this.onSegment({ t0: this.curStart / SR2, t1: this.curStart / SR2 + len / SR2, pcm: pcm2 });
     }
     flush() {
       if (this.cur.length) this.close(true);
@@ -2857,7 +2877,7 @@ function out(o) {
         const items = [{ label: "Export this voice", fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`) }];
         if (p.auto && people.length > 1) items.push({ label: "Merge into\u2026", fn: () => mergeInto(p) });
         items.push({ label: "Delete", aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
-        const acts = el("div", { className: "vacts" }, ...anon ? [sampleButton(p)] : [], btn(anon ? "Name this voice" : "Rename", () => rename(p)), ...anon ? [] : [btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)), btn("Add recording", () => begin({ kind: "add", id: p.id }, p))], ...moreMenu(p, items));
+        const acts = el("div", { className: "vacts" }, sampleButton(p), btn(anon ? "Name this voice" : "Rename", () => rename(p)), ...anon ? [] : [btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)), btn("Add recording", () => begin({ kind: "add", id: p.id }, p))], ...moreMenu(p, items));
         row.append(avatar, who, acts);
         return row;
       })
@@ -2933,8 +2953,6 @@ function out(o) {
       if (people.some((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
       people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean, ...x2.auto ? { confirmed: true } : {} } : x2);
       await saveVoices(people);
-      deleteSample(p.id).catch(() => {
-      });
       renderList();
       const st2 = await getSettings();
       if (!st2.voiceOn) {
@@ -3027,7 +3045,7 @@ function out(o) {
     if (rec) return;
     setMsg("");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
-    const ctx = new AudioContext({ sampleRate: SR });
+    const ctx = new AudioContext({ sampleRate: SR2 });
     await ctx.audioWorklet.addModule("worklet.js");
     const src = ctx.createMediaStreamSource(stream);
     const node = new AudioWorkletNode(ctx, "pcm-tap", { channelCount: 1, channelCountMode: "explicit" });
@@ -3076,7 +3094,7 @@ function out(o) {
     $2("enrolRec").textContent = "Record again";
     $2("enrolLevel").style.width = "0";
     syncEnrol();
-    if (!got || got.pcm.length < SR * 3) {
+    if (!got || got.pcm.length < SR2 * 3) {
       setMsg("That was too short. Press Record and read the text above.", "warn");
       return;
     }
@@ -3086,8 +3104,8 @@ function out(o) {
     }
     pcm = got.pcm;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
-    audioUrl = URL.createObjectURL(new Blob([encodeWav(pcm, SR)], { type: "audio/wav" }));
-    $2("enrolTime").textContent = clock(pcm.length / SR);
+    audioUrl = URL.createObjectURL(new Blob([encodeWav(pcm, SR2)], { type: "audio/wav" }));
+    $2("enrolTime").textContent = clock(pcm.length / SR2);
     syncEnrol();
     setMsg("Play it back to check it is clear, then save. Nothing is stored until you press Save voice.", "ok");
   }
@@ -3110,7 +3128,12 @@ function out(o) {
       else if (mode.kind === "rerecord") people = upsertPerson(people, { id: mode.id, name, lang, print });
       else people = addRecording(people, mode.id, { lang, print });
       await saveVoices(people);
-      const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. Only the fingerprint was stored.${print.warn ? ` ${print.warn}` : ""}`;
+      if (samplesOn) {
+        const who = mode.kind === "new" ? people.find((x2) => x2.name.toLowerCase() === name.trim().toLowerCase()) : people.find((x2) => x2.id === mode.id);
+        if (who && (mode.kind !== "add" || !await hasSample(who.id))) await putSample(who.id, makeClip([pcm])).catch(() => {
+        });
+      }
+      const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${samplesOn ? "The fingerprint and a short clip you can play were stored." : "Only the fingerprint was stored."}${print.warn ? ` ${print.warn}` : ""}`;
       blankForm();
       setMsg(done, "ok");
       renderList();

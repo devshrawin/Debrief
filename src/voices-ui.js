@@ -7,7 +7,7 @@ import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './vo
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
 import { modal } from './modal.js';
-import { getSample, deleteSample, hasSample } from './voice/samples.js';
+import { getSample, putSample, deleteSample, hasSample, makeClip } from './voice/samples.js';
 
 const OKBTN = [{ label: 'OK', value: 'ok', primary: true }];
 const tell = (text) => modal({ text, buttons: OKBTN });
@@ -148,14 +148,14 @@ function renderList() {
       const items = [{ label: 'Export this voice', fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, '_')}.json`) }];
       if (p.auto && people.length > 1) items.push({ label: 'Merge into…', fn: () => mergeInto(p) });
       items.push({ label: 'Delete', aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
-      const acts = el('div', { className: 'vacts' }, ...(anon ? [sampleButton(p)] : []), btn(anon ? 'Name this voice' : 'Rename', () => rename(p)), ...(anon ? [] : [btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)), btn('Add recording', () => begin({ kind: 'add', id: p.id }, p))]), ...moreMenu(p, items));
+      const acts = el('div', { className: 'vacts' }, sampleButton(p), btn(anon ? 'Name this voice' : 'Rename', () => rename(p)), ...(anon ? [] : [btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)), btn('Add recording', () => begin({ kind: 'add', id: p.id }, p))]), ...moreMenu(p, items));
       row.append(avatar, who, acts);
       return row;
     })
   );
 }
 
-// "Play sample": a short clip of an unnamed voice, only when sample keeping is on and a clip exists.
+// "Play sample": a short clip of any voice, only when sample keeping is on and a clip exists.
 let playing = null;
 function sampleButton(p) {
   const b = el('button', { type: 'button', className: 'btn sm primary', hidden: true }, el('span', { className: 'tri' }), 'Play sample');
@@ -228,7 +228,6 @@ async function rename(p) {
     // naming a learned voice confirms it: it is used from now on, including for meetings already recorded
     people = people.map((x) => (x.id === p.id ? { ...x, name: clean, ...(x.auto ? { confirmed: true } : {}) } : x));
     await saveVoices(people);
-    deleteSample(p.id).catch(() => {}); // named now: the clip is no longer kept
     renderList();
     const st = await getSettings();
     if (!st.voiceOn) {
@@ -417,7 +416,12 @@ async function save() {
     else if (mode.kind === 'rerecord') people = upsertPerson(people, { id: mode.id, name, lang, print });
     else people = addRecording(people, mode.id, { lang, print });
     await saveVoices(people);
-    const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. Only the fingerprint was stored.${print.warn ? ` ${print.warn}` : ''}`;
+    if (samplesOn) {
+      // a short clip of the recording, so the voice can be played back here later
+      const who = mode.kind === 'new' ? people.find((x) => x.name.toLowerCase() === name.trim().toLowerCase()) : people.find((x) => x.id === mode.id);
+      if (who && (mode.kind !== 'add' || !(await hasSample(who.id)))) await putSample(who.id, makeClip([pcm])).catch(() => {});
+    }
+    const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${samplesOn ? 'The fingerprint and a short clip you can play were stored.' : 'Only the fingerprint was stored.'}${print.warn ? ` ${print.warn}` : ''}`;
     blankForm();
     setMsg(done, 'ok');
     renderList();
