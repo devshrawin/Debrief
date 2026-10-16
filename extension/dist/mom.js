@@ -1381,8 +1381,17 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     if (UI_PHRASE.test(t) || t.split(/\s+/).length > 6) return true;
     return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
   };
+  var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
   function cleanPresence(presence) {
-    return Object.fromEntries(Object.entries(presence || {}).filter(([n]) => !isIconText(n) && !isMenuText(n)));
+    const out = {};
+    for (const [raw, v] of Object.entries(presence || {})) {
+      if (isIconText(raw)) continue;
+      const name = personOfTile(raw);
+      if (!name || isIconText(name) || isMenuText(name)) continue;
+      const cur = out[name];
+      out[name] = cur ? [Math.min(cur[0], v[0]), Math.max(cur[1], v[1]), (cur[2] || 1) + (v[2] || 1)] : [v[0], v[1], v[2] || 1];
+    }
+    return out;
   }
 
   // src/attendance.js
@@ -1404,7 +1413,11 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       if (t.length) ids.add(t.join(" "));
     };
     add(p.name);
-    if (p.email) add(String(p.email).split("@")[0].replace(/[._-]+/g, " "));
+    if (p.email) {
+      const local = String(p.email).split("@")[0];
+      add(local.replace(/[._-]+/g, " "));
+      add(local.split(/[._-]+/).map((w) => w.replace(/\d+$/, "")).filter(Boolean).join(" "));
+    }
     for (const e2 of entries) {
       const names2 = [e2.name, ...e2.aliases].map((x2) => tokens(x2).join(" "));
       for (const id2 of [...ids]) if (names2.includes(id2)) names2.forEach((n) => ids.add(n));
@@ -1419,6 +1432,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const fb = tb[0];
     const sameFirst = fa === fb;
     const closeFirst = !sameFirst && lev1(fa, fb);
+    if (ta.length === 1 !== (tb.length === 1)) {
+      const [one, many] = ta.length === 1 ? [ta[0], tb] : [tb[0], ta];
+      if (one.length >= 6 && one === many.join("")) return 0.9;
+    }
     if (!sameFirst && !closeFirst) return 0;
     if (ta.length === 1 || tb.length === 1) return sameFirst ? 0.7 : 0;
     const rest = (x2, y2) => x2.slice(1).every((w) => y2.slice(1).some((v) => v === w || v.startsWith(w) || w.startsWith(v)));
@@ -1452,9 +1469,20 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       usedH.add(p.hi);
       rows[p.ri].match = here[p.hi];
     }
+    const left = here.map((h3, i) => ({ h: h3, i })).filter((x2) => !usedH.has(x2.i));
+    const couldBe = /* @__PURE__ */ new Map();
+    const mayBe = /* @__PURE__ */ new Map();
+    for (const { h: h3, i } of left) {
+      const first2 = identities({ name: h3.name }, entries)[0]?.split(" ")[0];
+      const cands = rows.map((r, ri) => ({ r, ri })).filter((x2) => !usedR.has(x2.ri) && x2.r.ids.some((id2) => id2.split(" ")[0] === first2 && id2.split(" ").length === 1));
+      if (cands.length > 1) {
+        couldBe.set(i, cands.map((x2) => x2.r.name || x2.r.email));
+        for (const c of cands) mayBe.set(c.ri, [...mayBe.get(c.ri) || [], h3.name]);
+      }
+    }
     return {
-      rows: rows.map((r) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null })),
-      uninvited: here.filter((_2, i) => !usedH.has(i))
+      rows: rows.map((r, ri) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
+      uninvited: here.filter((_2, i) => !usedH.has(i)).map((h3) => ({ ...h3, couldBe: couldBe.get(here.indexOf(h3)) || null }))
     };
   }
   var mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -1476,13 +1504,13 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const lines = ["## Attendance"];
     if (hasInvited && hasPresence) {
       const came = rows.filter((r) => r.present).length;
-      lines.push(`${came} of ${rows.length} invited people were seen in the meeting${uninvited.length ? `, plus ${uninvited.length} who were not on the invite` : ""}.`, "");
+      lines.push(`${came} of ${rows.length} invited people were seen in the meeting${uninvited.length ? `, plus ${uninvited.length} who could not be matched to the invite` : ""}.`, "");
       lines.push("| Person | Invite | In the meeting | Joined | Left | Note |", "|---|---|---|---|---|---|");
       for (const r of rows) {
         const p = r.present;
-        lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when2(p) : ""} |`);
+        lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when2(p) : r.mayBe ? `may be ${r.mayBe.join(" or ")}` : ""} |`);
       }
-      for (const p of uninvited) lines.push(`| ${p.name} | Not invited | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${when2(p)} |`);
+      for (const p of uninvited) lines.push(`| ${p.name} | ${p.couldBe ? "Not matched" : "Not invited"} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when2(p), p.couldBe ? `could be ${p.couldBe.join(" or ")}` : ""].filter(Boolean).join(", ")} |`);
       const absent = rows.filter((r) => !r.present).map((r) => r.name);
       if (absent.length) lines.push("", `Not seen in the meeting: ${absent.join(", ")}. Action items for them need to be passed on.`);
     } else if (hasPresence) {

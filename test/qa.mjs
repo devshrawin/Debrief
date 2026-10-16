@@ -206,4 +206,37 @@ await test('attendance: the table lists invitees present and absent; with no inv
   assert.match(noInviteReason({}, { calendarLookup: true }), /has not run/);
 });
 
+await test('attendance: invitees given only as e-mail addresses are matched to the names seen, and "More options for X" is X', async () => {
+  const { matchPeople, attendanceMarkdown } = await import('../src/attendance.js');
+  const { cleanPresence } = await import('../src/iconText.js');
+  const emails = ['akash8', 'namita', 'munira', 'tushar', 'umed', 'deep5', 'shubhankar', 'amalsamad678@gmail.com', 'neha3', 'swarangi', 'sunny3', 'nileshg', 'ravi7', 'shilpa', 'darshika', 'shrawin', 'vraj2', 'jayman', 'shubham21', 'pratul', 'akash9', 'mahaveer', 'mayuri', 'taha', 'radhika', 'ankur4'];
+  const invited = emails.map((e, i) => ({ email: e.includes('@') ? e : `${e}@amnex.com`, status: i === 0 || e === 'shrawin' ? 'yes' : 'invited' }));
+  const names = ['Akash Behera', 'Amal Samad', 'Akhil Azad', 'Ankur Desai', 'Deep Patel', 'Darshika Patel', 'Mahaveer Prajapati', 'Pratul Shah', 'Shrawin Sisodia', 'Shubham Chavan', 'Swarangi Gwali', 'Tushar Galiya'];
+  const presence = {};
+  names.forEach((n, i) => {
+    presence[n] = [i * 3, 1000 - i, 5];
+    presence[`More options for ${n}`] = [0, 660, 4]; // the same person, written the way Meet's menu button names them
+  });
+  presence['You can\'t remotely mute this participant'] = [0, 5, 1];
+  const clean = cleanPresence(presence);
+  assert.deepEqual(Object.keys(clean).sort(), [...names].sort(), 'one entry per person, no interface text');
+  assert.equal(clean['Deep Patel'][0], 0, 'the earliest time wins');
+  assert.equal(clean['Amal Samad'][1], 1000 - 1, 'the latest time wins');
+  const m = matchPeople(invited, presence, { entries: [], myName: 'Shrawin Sisodia' });
+  const seen = (e) => !!m.rows.find((r) => r.email === `${e}@amnex.com` || r.email === e)?.present;
+  for (const e of ['tushar', 'swarangi', 'darshika', 'shrawin', 'pratul', 'mahaveer', 'deep5', 'shubham21', 'ankur4', 'amalsamad678@gmail.com']) assert.ok(seen(e), `${e} was in the meeting`);
+  for (const e of ['namita', 'munira', 'umed', 'shubhankar', 'neha3', 'sunny3', 'nileshg', 'ravi7', 'shilpa', 'vraj2', 'jayman', 'mayuri', 'taha', 'radhika']) assert.ok(!seen(e), `${e} was not`);
+  // two invitees share the first name akash: not guessable, and said so on both sides
+  assert.ok(!seen('akash8') && !seen('akash9'));
+  assert.deepEqual(m.rows.find((r) => r.email === 'akash8@amnex.com').mayBe, ['Akash Behera']);
+  assert.deepEqual(m.uninvited.map((p) => p.name).sort(), ['Akash Behera', 'Akhil Azad']);
+  assert.deepEqual(m.uninvited.find((p) => p.name === 'Akash Behera').couldBe, ['akash8@amnex.com', 'akash9@amnex.com']);
+  assert.equal(m.uninvited.find((p) => p.name === 'Akhil Azad').couldBe, null);
+  const md = attendanceMarkdown({ invited, presence, durationSec: 1100, entries: [], myName: 'Shrawin Sisodia' });
+  assert.match(md, /10 of 26 invited people were seen in the meeting, plus 2 who could not be matched/);
+  assert.match(md, /Akash Behera \| Not matched \| Yes .*could be akash8@amnex.com or akash9@amnex.com/);
+  assert.match(md, /akash8@amnex.com \| Accepted \| \*\*Absent\*\* .*may be Akash Behera/);
+  assert.doesNotMatch(md, /More options|remotely mute/);
+});
+
 console.log(`\n${passed} passed`);
