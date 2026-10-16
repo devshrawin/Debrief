@@ -114,6 +114,10 @@
     #mom th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); }
     #mom td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.6; }
     #mom td .chip { font-size: 12px; padding: 1px 9px; }
+    /* long "Name (address)" cells must not squeeze the other columns into one letter per line: only the first column breaks anywhere */
+    #mom td, #mom th { overflow-wrap: normal; }
+    #mom td:first-child, #mom th:first-child { overflow-wrap: anywhere; min-width: 140px; }
+    #mom table { min-width: 560px; }
     #mom hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
     #mom blockquote { margin: 8px 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--line-strong); color: var(--muted); }
     #mom code { font: 13px ui-monospace, Consolas, monospace; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }

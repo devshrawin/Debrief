@@ -1424,7 +1424,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const words = local.split("+")[0].split(/[._-]+/).map((w) => w.replace(/\d+$/, "")).filter(Boolean);
     return words.map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(" ");
   }
-  var personLabel = (p) => p.name || knownName(p.email) || prettyFromEmail(p.email) || p.email || "";
+  var personLabel = (p) => p.name || knownName(p.email) || (String(p.email || "").split("@")[0].length <= 30 ? prettyFromEmail(p.email) : "") || p.email || "";
   function identities(p, entries = []) {
     const ids = /* @__PURE__ */ new Set();
     const add = (v) => {
