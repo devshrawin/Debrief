@@ -17,6 +17,24 @@ function lev1(a, b) {
   return s.slice(i) === l.slice(i + 1);
 }
 
+// The calendar often gives only an e-mail address, while the call shows display names. Debrief remembers which address is
+// which name (learned from every meeting where the match was clear, or set by hand) and uses it everywhere.
+let KNOWN = {};
+export const setEmailNames = (map) => {
+  KNOWN = Object.fromEntries(Object.entries(map || {}).map(([k, v]) => [String(k).toLowerCase(), v]));
+};
+export const knownName = (email) => KNOWN[String(email || '').toLowerCase()] || '';
+
+// "akash8@amnex.com" -> "Akash", "amal.samad@x.com" -> "Amal Samad": a readable stand-in until the real name is known.
+export function prettyFromEmail(email) {
+  const local = String(email || '').split('@')[0];
+  const words = local.split(/[._-]+/).map((w) => w.replace(/\d+$/, '')).filter(Boolean);
+  return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
+// What to call an invitee: the calendar's name, else the name learned for the address, else a readable guess.
+export const personLabel = (p) => p.name || knownName(p.email) || prettyFromEmail(p.email) || p.email || '';
+
 // Names a person can go by: calendar name, email name part, and any dictionary aliases.
 function identities(p, entries = []) {
   const ids = new Set();
@@ -25,6 +43,7 @@ function identities(p, entries = []) {
     if (t.length) ids.add(t.join(' '));
   };
   add(p.name);
+  if (p.email && knownName(p.email)) add(knownName(p.email));
   if (p.email) {
     // "akash8@amnex.com" is "akash", "amal.samad@x.com" is "amal samad", "amalsamad678@gmail.com" is "amalsamad":
     // the numbers people add to make an address unique are not part of the name.
@@ -99,14 +118,27 @@ export function matchPeople(invited, presenceIn, { entries = [], myName = '' } =
     const first = identities({ name: h.name }, entries)[0]?.split(' ')[0];
     const cands = rows.map((r, ri) => ({ r, ri })).filter((x) => !usedR.has(x.ri) && x.r.ids.some((id) => id.split(' ')[0] === first && id.split(' ').length === 1));
     if (cands.length > 1) {
-      couldBe.set(i, cands.map((x) => x.r.name || x.r.email));
+      couldBe.set(i, cands.map((x) => x.r.email || personLabel(x.r)));
       for (const c of cands) mayBe.set(c.ri, [...(mayBe.get(c.ri) || []), h.name]);
     }
   }
   return {
-    rows: rows.map((r, ri) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
+    rows: rows.map((r, ri) => ({ name: personLabel(r), email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
     uninvited: here.filter((_, i) => !usedH.has(i)).map((h) => ({ ...h, couldBe: couldBe.get(here.indexOf(h)) || null })),
   };
+}
+
+// "Deep Patel (deep5@amnex.com)": the name when it is known, always with the address, so rows read the same way.
+export const withAddress = (r) => (r.email && r.name && r.name.toLowerCase() !== String(r.email).toLowerCase() ? `${r.name} (${r.email})` : r.name || r.email || '');
+
+// Address -> name for every invitee who was matched to somebody seen in the call. Only a real name is kept.
+export function learnEmailNames(rows) {
+  const out = {};
+  for (const r of rows || []) {
+    const seen = r.present?.name;
+    if (r.email && seen && !/@/.test(seen) && !/^you$/i.test(seen) && seen.trim().split(/\s+/).length >= 1 && seen.toLowerCase() !== String(r.email).toLowerCase()) out[String(r.email).toLowerCase()] = seen.trim();
+  }
+  return out;
 }
 
 const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
@@ -134,16 +166,16 @@ export function attendanceMarkdown({ invited, presence: presenceIn, durationSec,
     lines.push('| Person | Invite | In the meeting | Joined | Left | Note |', '|---|---|---|---|---|---|');
     for (const r of rows) {
       const p = r.present;
-      lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || '—'} | ${p ? 'Yes' : '**Absent**'} | ${p ? mmss(p.first) : '—'} | ${p ? mmss(p.last) : '—'} | ${p ? when(p) : r.mayBe ? `may be ${r.mayBe.join(' or ')}` : ''} |`);
+      lines.push(`| ${withAddress(r)} | ${RSVP[r.status] || r.status || '—'} | ${p ? 'Yes' : '**Absent**'} | ${p ? mmss(p.first) : '—'} | ${p ? mmss(p.last) : '—'} | ${p ? when(p) : r.mayBe ? `may be ${r.mayBe.join(' or ')}` : ''} |`);
     }
     for (const p of uninvited) lines.push(`| ${p.name} | ${p.couldBe ? 'Not matched' : 'Not invited'} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when(p), p.couldBe ? `could be ${p.couldBe.join(' or ')}` : ''].filter(Boolean).join(', ')} |`);
-    const absent = rows.filter((r) => !r.present).map((r) => r.name);
+    const absent = rows.filter((r) => !r.present).map((r) => withAddress(r));
     if (absent.length) lines.push('', `Not seen in the meeting: ${absent.join(', ')}. Action items for them need to be passed on.`);
   } else if (hasPresence) {
     lines.push(`People seen in the meeting. Nobody can be listed as absent because ${whyNoInvite || 'no calendar invite was found to compare with'}.`, '', '| Person | Joined | Left | Note |', '|---|---|---|---|');
     for (const [name, v] of Object.entries(presence)) lines.push(`| ${/^you$/i.test(name) && myName ? myName : name} | ${mmss(v[0])} | ${mmss(v[1])} | ${when({ first: v[0], last: v[1] })} |`);
   } else {
-    lines.push('Invited:', '', ...rows.map((r) => `- ${r.name} (${RSVP[r.status] || r.status || 'invited'})`), '', '_Who actually attended could not be read from the meeting page._');
+    lines.push('Invited:', '', ...rows.map((r) => `- ${withAddress(r)} (${RSVP[r.status] || r.status || 'invited'})`), '', '_Who actually attended could not be read from the meeting page._');
   }
   lines.push('', hasInvited && hasPresence ? '_"Absent" means not seen: attendance is read from the call page (video tiles), and from speech and captions when those are on, so someone who joined without being on screen may be listed as absent. Check before acting._' : '_Who was in the call is read from the call page and may miss people whose video tile was not on screen._');
   return lines.join('\n');

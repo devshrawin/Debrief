@@ -1406,6 +1406,17 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const [s, l3] = a.length < b.length ? [a, b] : [b, a];
     return s.slice(i) === l3.slice(i + 1);
   }
+  var KNOWN = {};
+  var setEmailNames = (map) => {
+    KNOWN = Object.fromEntries(Object.entries(map || {}).map(([k2, v]) => [String(k2).toLowerCase(), v]));
+  };
+  var knownName = (email) => KNOWN[String(email || "").toLowerCase()] || "";
+  function prettyFromEmail(email) {
+    const local = String(email || "").split("@")[0];
+    const words = local.split(/[._-]+/).map((w) => w.replace(/\d+$/, "")).filter(Boolean);
+    return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+  }
+  var personLabel = (p) => p.name || knownName(p.email) || prettyFromEmail(p.email) || p.email || "";
   function identities(p, entries = []) {
     const ids = /* @__PURE__ */ new Set();
     const add = (v) => {
@@ -1413,6 +1424,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       if (t.length) ids.add(t.join(" "));
     };
     add(p.name);
+    if (p.email && knownName(p.email)) add(knownName(p.email));
     if (p.email) {
       const local = String(p.email).split("@")[0];
       add(local.replace(/[._-]+/g, " "));
@@ -1476,14 +1488,23 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       const first2 = identities({ name: h3.name }, entries)[0]?.split(" ")[0];
       const cands = rows.map((r, ri) => ({ r, ri })).filter((x2) => !usedR.has(x2.ri) && x2.r.ids.some((id2) => id2.split(" ")[0] === first2 && id2.split(" ").length === 1));
       if (cands.length > 1) {
-        couldBe.set(i, cands.map((x2) => x2.r.name || x2.r.email));
+        couldBe.set(i, cands.map((x2) => x2.r.email || personLabel(x2.r)));
         for (const c of cands) mayBe.set(c.ri, [...mayBe.get(c.ri) || [], h3.name]);
       }
     }
     return {
-      rows: rows.map((r, ri) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
+      rows: rows.map((r, ri) => ({ name: personLabel(r), email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
       uninvited: here.filter((_2, i) => !usedH.has(i)).map((h3) => ({ ...h3, couldBe: couldBe.get(here.indexOf(h3)) || null }))
     };
+  }
+  var withAddress = (r) => r.email && r.name && r.name.toLowerCase() !== String(r.email).toLowerCase() ? `${r.name} (${r.email})` : r.name || r.email || "";
+  function learnEmailNames(rows) {
+    const out = {};
+    for (const r of rows || []) {
+      const seen = r.present?.name;
+      if (r.email && seen && !/@/.test(seen) && !/^you$/i.test(seen) && seen.trim().split(/\s+/).length >= 1 && seen.toLowerCase() !== String(r.email).toLowerCase()) out[String(r.email).toLowerCase()] = seen.trim();
+    }
+    return out;
   }
   var mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
   var RSVP = { yes: "Accepted", no: "Declined", maybe: "Maybe", invited: "No reply", owner: "Organiser" };
@@ -1508,16 +1529,16 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       lines.push("| Person | Invite | In the meeting | Joined | Left | Note |", "|---|---|---|---|---|---|");
       for (const r of rows) {
         const p = r.present;
-        lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when2(p) : r.mayBe ? `may be ${r.mayBe.join(" or ")}` : ""} |`);
+        lines.push(`| ${withAddress(r)} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when2(p) : r.mayBe ? `may be ${r.mayBe.join(" or ")}` : ""} |`);
       }
       for (const p of uninvited) lines.push(`| ${p.name} | ${p.couldBe ? "Not matched" : "Not invited"} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when2(p), p.couldBe ? `could be ${p.couldBe.join(" or ")}` : ""].filter(Boolean).join(", ")} |`);
-      const absent = rows.filter((r) => !r.present).map((r) => r.name);
+      const absent = rows.filter((r) => !r.present).map((r) => withAddress(r));
       if (absent.length) lines.push("", `Not seen in the meeting: ${absent.join(", ")}. Action items for them need to be passed on.`);
     } else if (hasPresence) {
       lines.push(`People seen in the meeting. Nobody can be listed as absent because ${whyNoInvite || "no calendar invite was found to compare with"}.`, "", "| Person | Joined | Left | Note |", "|---|---|---|---|");
       for (const [name, v] of Object.entries(presence)) lines.push(`| ${/^you$/i.test(name) && myName ? myName : name} | ${mmss(v[0])} | ${mmss(v[1])} | ${when2({ first: v[0], last: v[1] })} |`);
     } else {
-      lines.push("Invited:", "", ...rows.map((r) => `- ${r.name} (${RSVP[r.status] || r.status || "invited"})`), "", "_Who actually attended could not be read from the meeting page._");
+      lines.push("Invited:", "", ...rows.map((r) => `- ${withAddress(r)} (${RSVP[r.status] || r.status || "invited"})`), "", "_Who actually attended could not be read from the meeting page._");
     }
     lines.push("", hasInvited && hasPresence ? '_"Absent" means not seen: attendance is read from the call page (video tiles), and from speech and captions when those are on, so someone who joined without being on screen may be listed as absent. Check before acting._' : "_Who was in the call is read from the call page and may miss people whose video tile was not on screen._");
     return lines.join("\n");
@@ -2276,6 +2297,13 @@ ${att}
   }
   async function saveVoices(list) {
     await chrome.storage.local.set({ voices: list });
+  }
+  async function getEmailNames() {
+    const { emailNames } = await chrome.storage.local.get("emailNames");
+    return emailNames || {};
+  }
+  async function saveEmailNames(map) {
+    await chrome.storage.local.set({ emailNames: map });
   }
 
   // src/usage.js
@@ -4381,7 +4409,7 @@ ${meeting2.mom || ""}
       meeting.notes = $2("notes").value;
       const pending = await listPending(id);
       const ctx = nameCtx();
-      const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+      const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map(withAddress);
       const { mom: text, stats, extract } = await writeMinutes({
         meeting,
         settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
@@ -4473,7 +4501,7 @@ ${meeting2.mom || ""}
     });
   }
   function absentNames() {
-    return matchPeople(meeting.invited, { ...nameCtx().voicePresence || {}, ...meeting.presence || {} }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name || r.email);
+    return matchPeople(meeting.invited, { ...nameCtx().voicePresence || {}, ...meeting.presence || {} }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map(withAddress);
   }
   function initShare() {
     const saved = meeting.shareTo;
@@ -4529,6 +4557,21 @@ ${meeting2.mom || ""}
       await patchMeeting({ invitedError: e2.message });
     }
   }
+  async function rememberEmailNames() {
+    if (!meeting.invited?.length) return;
+    try {
+      const seen = { ...nameCtx().voicePresence || {}, ...meeting.presence || {} };
+      if (!Object.keys(seen).length) return;
+      const found = learnEmailNames(matchPeople(meeting.invited, seen, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows);
+      const known = await getEmailNames();
+      const fresh = Object.entries(found).filter(([k2, v]) => known[k2] !== v);
+      if (!fresh.length) return;
+      const next = { ...known, ...Object.fromEntries(fresh) };
+      await saveEmailNames(next);
+      setEmailNames(next);
+    } catch {
+    }
+  }
   function ensureAttendees() {
     if (meeting.attendees?.length) return;
     const entries = parseDictionary(settings.dictionary);
@@ -4539,7 +4582,7 @@ ${meeting2.mom || ""}
       const m = matchPeople(meeting.invited, seen, { entries, myName: settings.myName });
       names2 = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
     } else if (meeting.invited?.length) {
-      names2 = meeting.invited.filter((p) => p.status !== "no").map((p) => p.name || p.email.split("@")[0]);
+      names2 = meeting.invited.filter((p) => p.status !== "no").map((p) => personLabel(p));
     }
     if (names2.length) meeting.attendees = [...new Set(names2)];
   }
@@ -4731,12 +4774,14 @@ ${meeting2.mom || ""}
   });
   (async () => {
     settings = await getSettings();
+    setEmailNames(await getEmailNames().catch(() => ({})));
     meeting = await getMeeting(id);
     if (!meeting) {
       document.querySelector("main").innerHTML = "<p>Meeting not found.</p>";
       return;
     }
     await ensureInvited();
+    await rememberEmailNames();
     ensureAttendees();
     learn().catch(() => {
     });

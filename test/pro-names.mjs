@@ -211,11 +211,11 @@ await test('attendance: dictionary aliases link a misspelt display name', () => 
 await test('attendance: table lists absent people, late joiners and early leavers', () => {
   const md = A.attendanceMarkdown({ invited, presence, durationSec: 1800, entries: [], myName: 'Shrawin Sisodiya' });
   assert.match(md, /3 of 4 invited people were seen/);
-  assert.match(md, /\| Ravi Kumar \| Maybe \| \*\*Absent\*\*/);
-  assert.match(md, /\| Priya Nair \| Accepted \| Yes \| 06:40 \| 30:00 \| joined late \|/);
+  assert.match(md, /\| Ravi Kumar \(ravi.kumar@co.com\) \| Maybe \| \*\*Absent\*\*/);
+  assert.match(md, /\| Priya Nair \(priya@co.com\) \| Accepted \| Yes \| 06:40 \| 30:00 \| joined late \|/);
   assert.match(md, /\| Amal Raj \| Accepted \| Yes \| 00:10 | 25:00 | left early\| 28:20 \| left early \|/);
   assert.match(md, /Guest Visitor \| Not invited/);
-  assert.match(md, /Not seen in the meeting: Ravi Kumar/);
+  assert.match(md, /Not seen in the meeting: Ravi Kumar \(ravi.kumar@co.com\)/);
   assert.equal(A.attendanceMarkdown({ invited: [], presence: {} }), '');
   assert.match(A.attendanceMarkdown({ invited: [], presence: { You: [0, 5, 1] }, durationSec: 5, myName: 'Me' }), /\| Me \|/);
 });
