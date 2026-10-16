@@ -181,7 +181,10 @@ function sampleButton(p) {
       playing.onended = stopPlaying;
       await playing.play();
     } catch {
+      // a clip that cannot be played (corrupt) is dropped, so the button does not promise something that fails
       stopPlaying();
+      b.hidden = true;
+      deleteSample(p.id).catch(() => {});
     } finally {
       delete b.dataset.busy;
     }

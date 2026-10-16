@@ -2911,6 +2911,9 @@ function out(o) {
         await playing.play();
       } catch {
         stopPlaying();
+        b.hidden = true;
+        deleteSample(p.id).catch(() => {
+        });
       } finally {
         delete b.dataset.busy;
       }

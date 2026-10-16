@@ -40,7 +40,8 @@ export function prettyFromEmail(email) {
 }
 
 // What to call an invitee: the calendar's name, else the name learned for the address, else a readable guess.
-export const personLabel = (p) => p.name || knownName(p.email) || prettyFromEmail(p.email) || p.email || '';
+// (a very long local part is left as the address: a guess built from it would read as nonsense)
+export const personLabel = (p) => p.name || knownName(p.email) || (String(p.email || '').split('@')[0].length <= 30 ? prettyFromEmail(p.email) : '') || p.email || '';
 
 // Names a person can go by: calendar name, email name part, and any dictionary aliases.
 function identities(p, entries = []) {
