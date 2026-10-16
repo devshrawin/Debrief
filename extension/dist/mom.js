@@ -1502,7 +1502,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const out = {};
     for (const r of rows || []) {
       const seen = r.present?.name;
-      if (r.email && seen && !/@/.test(seen) && !/^you$/i.test(seen) && seen.trim().split(/\s+/).length >= 1 && seen.toLowerCase() !== String(r.email).toLowerCase()) out[String(r.email).toLowerCase()] = seen.trim();
+      if (!r.email || !seen || /@/.test(seen) || seen.toLowerCase() === String(r.email).toLowerCase()) continue;
+      const words = seen.trim().split(/\s+/);
+      if (words.length < 2 || /^(you|unnamed voice)\b/i.test(seen) || words.some((w) => /^\w\.?$/.test(w)) || /\b(room|conference|presentation)\b/i.test(seen)) continue;
+      out[String(r.email).toLowerCase()] = seen.trim();
     }
     return out;
   }
@@ -4577,7 +4580,7 @@ ${meeting2.mom || ""}
     let names2 = [];
     if (presence.length) {
       const m = matchPeople(meeting.invited, seen, { entries, myName: settings.myName });
-      names2 = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
+      names2 = [...m.rows.filter((r) => r.present).map((r) => r.present.name || r.name), ...m.uninvited.map((p) => p.name)];
     } else if (meeting.invited?.length) {
       names2 = meeting.invited.filter((p) => p.status !== "no").map((p) => personLabel(p));
     }
