@@ -133,6 +133,7 @@
       return text;
     }
   }
+  var nameQueue = Promise.resolve();
 
   // src/dictionary.js
   var WORD = "\\p{L}\\p{M}\\p{N}_";

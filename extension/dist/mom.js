@@ -1406,15 +1406,23 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const [s, l3] = a.length < b.length ? [a, b] : [b, a];
     return s.slice(i) === l3.slice(i + 1);
   }
-  var KNOWN = {};
-  var setEmailNames = (map) => {
-    KNOWN = Object.fromEntries(Object.entries(map || {}).map(([k2, v]) => [String(k2).toLowerCase(), v]));
+  var KNOWN = /* @__PURE__ */ new Map();
+  var emailKey = (e2) => {
+    const [l3 = "", d = ""] = String(e2 || "").trim().toLowerCase().split("@");
+    const local = l3.split("+")[0];
+    return `${/^(gmail|googlemail)\.com$/.test(d) ? local.replace(/\./g, "") : local}@${d}`;
   };
-  var knownName = (email) => KNOWN[String(email || "").toLowerCase()] || "";
+  var setEmailNames = (map) => {
+    KNOWN = /* @__PURE__ */ new Map();
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      for (const [k2, v] of Object.entries(map)) if (typeof v === "string" && v.trim()) KNOWN.set(emailKey(k2), v.trim());
+    }
+  };
+  var knownName = (email) => email ? KNOWN.get(emailKey(email)) || "" : "";
   function prettyFromEmail(email) {
     const local = String(email || "").split("@")[0];
-    const words = local.split(/[._-]+/).map((w) => w.replace(/\d+$/, "")).filter(Boolean);
-    return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+    const words = local.split("+")[0].split(/[._-]+/).map((w) => w.replace(/\d+$/, "")).filter(Boolean);
+    return words.map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(" ");
   }
   var personLabel = (p) => p.name || knownName(p.email) || prettyFromEmail(p.email) || p.email || "";
   function identities(p, entries = []) {
@@ -1497,15 +1505,21 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       uninvited: here.filter((_2, i) => !usedH.has(i)).map((h3) => ({ ...h3, couldBe: couldBe.get(here.indexOf(h3)) || null }))
     };
   }
-  var withAddress = (r) => r.email && r.name && r.name.toLowerCase() !== String(r.email).toLowerCase() ? `${r.name} (${r.email})` : r.name || r.email || "";
+  var withAddress = (r) => r.email && r.name && !String(r.name).toLowerCase().includes(String(r.email).toLowerCase()) ? `${r.name} (${r.email})` : String(r.name || r.email || "");
+  var cell = (s) => String(s ?? "").replace(/\s*[\r\n]+\s*/g, " ").replace(/\|/g, "\\|");
+  var ROLE_LOCAL = /^(support|info|hr|admin|team|sales|accounts?|helpdesk|hello|contact|office|noreply|no-reply|all|dev|it|ops|billing|careers|jobs|mail|service|group|everyone|notetaker)\d*$/i;
+  var NOT_A_PERSON = /\b(notetaker|note taker|bot|recorder|guest|assistant|room|conference|presentation)\b|\.ai\b|^(you|unnamed voice)\b/i;
   function learnEmailNames(rows) {
     const out = {};
     for (const r of rows || []) {
-      const seen = r.present?.name;
-      if (!r.email || !seen || /@/.test(seen) || seen.toLowerCase() === String(r.email).toLowerCase()) continue;
-      const words = seen.trim().split(/\s+/);
-      if (words.length < 2 || /^(you|unnamed voice)\b/i.test(seen) || words.some((w) => /^\w\.?$/.test(w)) || /\b(room|conference|presentation)\b/i.test(seen)) continue;
-      out[String(r.email).toLowerCase()] = seen.trim();
+      const seen = String(r.present?.name || "");
+      if (!r.email || !seen || /@/.test(seen) || ROLE_LOCAL.test(String(r.email).split("@")[0].split(/[._-]/)[0])) continue;
+      const clean = seen.replace(/\s*[(\[].*?[)\]]\s*/g, " ").replace(/\s+/g, " ").trim();
+      const words = clean.split(" ");
+      if (words.length < 2 || NOT_A_PERSON.test(clean) || /[()[\]|]/.test(clean) || /^(dr|mr|mrs|ms)\.?\s/i.test(clean)) continue;
+      if (words.some((w) => /^[A-Za-zÀ-ɏ]\.?$/.test(w))) continue;
+      if (clean.toLowerCase() === String(r.email).toLowerCase()) continue;
+      out[emailKey(r.email)] = clean;
     }
     return out;
   }
@@ -1532,9 +1546,9 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       lines.push("| Person | Invite | In the meeting | Joined | Left | Note |", "|---|---|---|---|---|---|");
       for (const r of rows) {
         const p = r.present;
-        lines.push(`| ${withAddress(r)} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when2(p) : r.mayBe ? `may be ${r.mayBe.join(" or ")}` : ""} |`);
+        lines.push(`| ${cell(withAddress(r))} | ${RSVP[r.status] || r.status || "\u2014"} | ${p ? "Yes" : "**Absent**"} | ${p ? mmss(p.first) : "\u2014"} | ${p ? mmss(p.last) : "\u2014"} | ${p ? when2(p) : r.mayBe ? `may be ${r.mayBe.join(" or ")}` : ""} |`);
       }
-      for (const p of uninvited) lines.push(`| ${p.name} | ${p.couldBe ? "Not matched" : "Not invited"} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when2(p), p.couldBe ? `could be ${p.couldBe.join(" or ")}` : ""].filter(Boolean).join(", ")} |`);
+      for (const p of uninvited) lines.push(`| ${cell(p.name)} | ${p.couldBe ? "Not matched" : "Not invited"} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when2(p), p.couldBe ? `could be ${p.couldBe.join(" or ")}` : ""].filter(Boolean).join(", ")} |`);
       const absent = rows.filter((r) => !r.present).map((r) => withAddress(r));
       if (absent.length) lines.push("", `Not seen in the meeting: ${absent.join(", ")}. Action items for them need to be passed on.`);
     } else if (hasPresence) {
@@ -1687,7 +1701,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     };
     const { rows, uninvited } = matchPeople(meeting2?.invited || [], presence, { entries, myName });
     const hasPresence = Object.keys(presence || {}).length > 0;
-    rows.filter((r) => r.present).forEach((r) => add(r.name, r.email));
+    rows.filter((r) => r.present).forEach((r) => add(r.present.name || r.name, r.email));
     for (const u of uninvited) {
       if (/^you$/i.test(u.name.trim())) continue;
       add(u.name);
@@ -1784,7 +1798,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       else if (shown.length > names2[i].length) names2[i] = shown;
     };
     (facts?.known?.people || []).forEach(add);
-    (meeting2?.invited || []).forEach((p) => add(p.name || p.email));
+    (meeting2?.invited || []).forEach((p) => add(personLabel(p)));
     (meeting2?.attendees || []).forEach(add);
     const orgs = new Set(facts?.known?.orgs || []);
     dir.forEach((d) => d.organisation && orgs.add(d.organisation));
@@ -2136,8 +2150,41 @@ ${att}
       db.close();
     }
   }
+  async function deletePieces(meetingId) {
+    await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
+  }
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
-  var hasSample = async (personId) => !!await getSample(personId);
+  var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
+
+  // src/audiostore.js
+  var DB2 = "debrief";
+  var STORE = "pending";
+  function open2() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB2, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function run(mode, fn2) {
+    const db = await open2();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx2 = db.transaction(STORE, mode);
+        const req = fn2(tx2.objectStore(STORE));
+        tx2.oncomplete = () => resolve(req?.result);
+        tx2.onerror = () => reject(tx2.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var listPending = (meetingId) => run("readonly", (s) => s.index("meetingId").getAll(meetingId));
+  var deletePending = (id2) => run("readwrite", (s) => s.delete(id2));
+  async function deleteAllPending(meetingId) {
+    for (const p of await listPending(meetingId)) await deletePending(p.id);
+  }
 
   // src/store.js
   var DEFAULTS = {
@@ -2261,6 +2308,7 @@ ${att}
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: meetingIds.filter((x2) => x2 !== id2) });
     await chrome.storage.local.remove(key(id2));
+    await Promise.allSettled([deletePieces(id2), deleteAllPending(id2)]);
   }
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec));
@@ -2306,6 +2354,19 @@ ${att}
   }
   async function saveEmailNames(map) {
     await chrome.storage.local.set({ emailNames: map });
+  }
+  var nameQueue = Promise.resolve();
+  function mergeEmailNames(found) {
+    nameQueue = nameQueue.catch(() => {
+    }).then(async () => {
+      const cur = await getEmailNames();
+      const fresh = Object.entries(found || {}).filter(([k2]) => !cur[k2]);
+      if (!fresh.length) return cur;
+      const next = { ...cur, ...Object.fromEntries(fresh) };
+      await saveEmailNames(next);
+      return next;
+    });
+    return nameQueue;
   }
 
   // src/usage.js
@@ -3959,36 +4020,6 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
     }
   }
 
-  // src/audiostore.js
-  var DB2 = "debrief";
-  var STORE = "pending";
-  function open2() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB2, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  async function run(mode, fn2) {
-    const db = await open2();
-    try {
-      return await new Promise((resolve, reject) => {
-        const tx2 = db.transaction(STORE, mode);
-        const req = fn2(tx2.objectStore(STORE));
-        tx2.oncomplete = () => resolve(req?.result);
-        tx2.onerror = () => reject(tx2.error);
-      });
-    } finally {
-      db.close();
-    }
-  }
-  var listPending = (meetingId) => run("readonly", (s) => s.index("meetingId").getAll(meetingId));
-  var deletePending = (id2) => run("readwrite", (s) => s.delete(id2));
-  async function deleteAllPending(meetingId) {
-    for (const p of await listPending(meetingId)) await deletePending(p.id);
-  }
-
   // src/mailer.js
   var escapeHtml2 = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
@@ -4140,7 +4171,7 @@ ${meeting2.mom || ""}
   }
   function inviteeEmails(meeting2, { absentOnly = false, absentNames: absentNames2 = [] } = {}) {
     const gone = new Set(absentNames2.map((n) => String(n).toLowerCase()));
-    return (meeting2?.invited || []).filter((p) => p.email && (!absentOnly || gone.has(String(p.name || p.email).toLowerCase()))).map((p) => p.email);
+    return (meeting2?.invited || []).filter((p) => p.email && (!absentOnly || (gone.has(String(p.email).toLowerCase()) || gone.has(String(p.name || "").toLowerCase())))).map((p) => p.email);
   }
   async function lookupInvitees(meeting2, settings2) {
     const code = (meeting2.url || "").match(/[a-z]{3}-[a-z]{4}-[a-z]{3}/)?.[0] || "";
@@ -4409,7 +4440,7 @@ ${meeting2.mom || ""}
       meeting.notes = $2("notes").value;
       const pending = await listPending(id);
       const ctx = nameCtx();
-      const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map(withAddress);
+      const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
       const { mom: text, stats, extract } = await writeMinutes({
         meeting,
         settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
@@ -4501,7 +4532,7 @@ ${meeting2.mom || ""}
     });
   }
   function absentNames() {
-    return matchPeople(meeting.invited, { ...nameCtx().voicePresence || {}, ...meeting.presence || {} }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map(withAddress);
+    return matchPeople(meeting.invited, { ...nameCtx().voicePresence || {}, ...meeting.presence || {} }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.email || r.name);
   }
   function initShare() {
     const saved = meeting.shareTo;
@@ -4563,12 +4594,8 @@ ${meeting2.mom || ""}
       const seen = { ...nameCtx().voicePresence || {}, ...meeting.presence || {} };
       if (!Object.keys(seen).length) return;
       const found = learnEmailNames(matchPeople(meeting.invited, seen, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows);
-      const known = await getEmailNames();
-      const fresh = Object.entries(found).filter(([k2, v]) => known[k2] !== v);
-      if (!fresh.length) return;
-      const next = { ...known, ...Object.fromEntries(fresh) };
-      await saveEmailNames(next);
-      setEmailNames(next);
+      if (!Object.keys(found).length) return;
+      setEmailNames(await mergeEmailNames(found));
     } catch {
     }
   }

@@ -184,7 +184,7 @@ export function recipientsFor(meeting, settings) {
 export function inviteeEmails(meeting, { absentOnly = false, absentNames = [] } = {}) {
   const gone = new Set(absentNames.map((n) => String(n).toLowerCase()));
   return (meeting?.invited || [])
-    .filter((p) => p.email && (!absentOnly || gone.has(String(p.name || p.email).toLowerCase())))
+    .filter((p) => p.email && (!absentOnly || (gone.has(String(p.email).toLowerCase()) || gone.has(String(p.name || '').toLowerCase()))))
     .map((p) => p.email);
 }
 

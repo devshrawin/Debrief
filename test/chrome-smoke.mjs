@@ -360,7 +360,7 @@ try {
     const out = {
       page: document.getElementById('page-voices').classList.contains('active'),
       rows: [...document.querySelectorAll('#voiceList .voice-row')].map((r) => r.textContent),
-      toggle: !!document.getElementById('voiceOn') && !!document.getElementById('voiceLearn') && !!document.getElementById('unnamedCard'), privacy: /never saved or uploaded/.test(document.getElementById('page-voices').textContent) && /256 numbers/.test(document.getElementById('page-voices').textContent),
+      toggle: !!document.getElementById('voiceOn') && !!document.getElementById('voiceLearn') && !!document.getElementById('unnamedCard'), privacy: /never uploaded/.test(document.getElementById('page-voices').textContent) && /256 numbers/.test(document.getElementById('page-voices').textContent),
       promptEn: document.getElementById('enrolPrompt').textContent.length > 100,
     };
     document.querySelector('#enrolLang button[data-lang=ml]').click();

@@ -1,5 +1,5 @@
 // Optional short audio samples of voices (learned, named or recorded), so you can play one in Settings and recognise who it is.
-// Off by default. While recording, short pieces of speech wait in this browser's IndexedDB; after the meeting
+// On by default (Settings -> Voices switches it off). While recording, short pieces of speech wait in this browser's IndexedDB; after the meeting
 // one clip of a few seconds is kept per learned voice and every waiting piece is deleted. A clip is deleted when
 // the voice is deleted, merged or forgotten. Nothing here is ever uploaded.
 import { encodeWav } from '../wav.js';
@@ -52,7 +52,7 @@ export async function deletePieces(meetingId) {
 
 export const putSample = (personId, blob) => tx('samples', 'readwrite', (s) => s.put(blob, personId));
 export const getSample = (personId) => tx('samples', 'readonly', (s) => s.get(personId));
-export const hasSample = async (personId) => !!(await getSample(personId));
+export const hasSample = async (personId) => (await tx('samples', 'readonly', (s) => s.count(personId))) > 0;
 export const deleteSample = (personId) => tx('samples', 'readwrite', (s) => s.delete(personId));
 
 export async function clearAllAudio() {

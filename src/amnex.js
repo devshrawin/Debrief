@@ -8,7 +8,7 @@
 //          the people and organisations code knows (cleanResponsibility), so it cannot invent an owner.
 //   The finished minutes are stored as ONE markdown string (composeMarkdown), tagged with a marker comment, so
 //   Edit, Ask, Copy and .md keep working; parseAmnexMarkdown reads it back into the document that is rendered.
-import { matchPeople } from './attendance.js';
+import { matchPeople, personLabel } from './attendance.js';
 import { escapeHtml, renderMd } from './md.js';
 
 export const MARKER = '<!-- debrief-format: amnex -->';
@@ -200,7 +200,7 @@ export function buildAttendees({ meeting, settings = {}, dir = [], presence = {}
 
   const { rows, uninvited } = matchPeople(meeting?.invited || [], presence, { entries, myName });
   const hasPresence = Object.keys(presence || {}).length > 0;
-  rows.filter((r) => r.present).forEach((r) => add(r.name, r.email));
+  rows.filter((r) => r.present).forEach((r) => add(r.present.name || r.name, r.email));
   for (const u of uninvited) {
     if (/^you$/i.test(u.name.trim())) continue; // "You" is the note-taker, added below by name
     add(u.name);
@@ -314,7 +314,7 @@ export function knownParties({ facts, meeting, dir = [], transcript = '' }) {
     else if (shown.length > names[i].length) names[i] = shown;
   };
   (facts?.known?.people || []).forEach(add);
-  (meeting?.invited || []).forEach((p) => add(p.name || p.email));
+  (meeting?.invited || []).forEach((p) => add(personLabel(p)));
   (meeting?.attendees || []).forEach(add);
   const orgs = new Set(facts?.known?.orgs || []);
   dir.forEach((d) => d.organisation && orgs.add(d.organisation));

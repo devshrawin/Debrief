@@ -20,7 +20,7 @@ What is in this folder
    - For **Malayalam**, put a Malayalam CTranslate2 Whisper model in `local\models\malayalam` (a folder with `model.bin`), or set `WHISPER_ML_DIR`. On this computer the `thennal/whisper-medium-ml` model from your MalayalamScribe project is found automatically.
 3. **Start everything.** Double-click `local\start-local.bat`. If Ollama was already running it will say Ollama refuses browser extensions: run it once as `start-local.bat -RestartOllama`, or quit Ollama from the tray and run it again. To make this permanent, run in PowerShell, then restart Ollama:
    ```
-   setx OLLAMA_ORIGINS "chrome-extension://*"
+   setx OLLAMA_ORIGINS "chrome-extension://nckojmcchehoejdfklcmllhpekagiddo"
    setx OLLAMA_CONTEXT_LENGTH 16384
    ```
    (Ollama's default context is only 4096 tokens, which silently cuts a long transcript.)

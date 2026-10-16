@@ -83,6 +83,67 @@
     return m ? `${m.app} detected: recording the call from this tab and your voice from your microphone.` : "This is not a meeting link, so Debrief records the room through your microphone.";
   }
 
+  // src/voice/samples.js
+  var DB = "debrief-voice";
+  function open() {
+    return new Promise((resolve, reject) => {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore("pieces");
+        r.result.createObjectStore("samples");
+      };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function tx(store, mode, fn) {
+    const db = await open();
+    try {
+      return await new Promise((resolve, reject) => {
+        const t = db.transaction(store, mode);
+        const out = fn(t.objectStore(store));
+        t.oncomplete = () => resolve(out && typeof out === "object" && "result" in out ? out.result : out);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  async function deletePieces(meetingId) {
+    await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
+  }
+
+  // src/audiostore.js
+  var DB2 = "debrief";
+  var STORE = "pending";
+  function open2() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB2, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function run(mode, fn) {
+    const db = await open2();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx2 = db.transaction(STORE, mode);
+        const req = fn(tx2.objectStore(STORE));
+        tx2.oncomplete = () => resolve(req?.result);
+        tx2.onerror = () => reject(tx2.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var listPending = (meetingId) => run("readonly", (s) => s.index("meetingId").getAll(meetingId));
+  var deletePending = (id) => run("readwrite", (s) => s.delete(id));
+  async function deleteAllPending(meetingId) {
+    for (const p of await listPending(meetingId)) await deletePending(p.id);
+  }
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -213,6 +274,7 @@
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
     await chrome.storage.local.remove(key(id));
+    await Promise.allSettled([deletePieces(id), deleteAllPending(id)]);
   }
   async function getState() {
     const { rec } = await chrome.storage.session.get("rec");
@@ -227,6 +289,7 @@
     const ss = String(s).padStart(2, "0");
     return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
   }
+  var nameQueue = Promise.resolve();
 
   // src/popup.js
   var $ = (id) => document.getElementById(id);
@@ -487,10 +550,10 @@
   }
   $("diagnose").onclick = async (e) => {
     e.preventDefault();
-    const open = $("diagnose").getAttribute("aria-expanded") !== "true";
-    $("diagnose").setAttribute("aria-expanded", String(open));
-    show("diagResult", open);
-    if (!open) return;
+    const open3 = $("diagnose").getAttribute("aria-expanded") !== "true";
+    $("diagnose").setAttribute("aria-expanded", String(open3));
+    show("diagResult", open3);
+    if (!open3) return;
     $("diagResult").textContent = "Checking\u2026";
     renderDiag(await readPage());
   };

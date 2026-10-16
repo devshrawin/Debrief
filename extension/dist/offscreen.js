@@ -183,6 +183,32 @@
   var pieceKey = (meetingId, t0, origin) => `${meetingId}|${origin === "m" ? "m" : ""}${Math.round(t0 * 100)}`;
   var putPiece = (key, i16) => tx("pieces", "readwrite", (s) => s.put(i16, key));
 
+  // src/audiostore.js
+  var DB2 = "debrief";
+  var STORE = "pending";
+  function open2() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB2, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function run(mode, fn) {
+    const db = await open2();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx2 = db.transaction(STORE, mode);
+        const req = fn(tx2.objectStore(STORE));
+        tx2.oncomplete = () => resolve(req?.result);
+        tx2.onerror = () => reject(tx2.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var savePending = (item) => run("readwrite", (s) => s.add({ ...item, savedAt: Date.now() }));
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -292,6 +318,7 @@
       return text;
     }
   }
+  var nameQueue = Promise.resolve();
 
   // src/dictionary.js
   var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
@@ -595,32 +622,6 @@
       this.onChunk(this.src, start2, pcm);
     }
   };
-
-  // src/audiostore.js
-  var DB2 = "debrief";
-  var STORE = "pending";
-  function open2() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB2, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  async function run(mode, fn) {
-    const db = await open2();
-    try {
-      return await new Promise((resolve, reject) => {
-        const tx2 = db.transaction(STORE, mode);
-        const req = fn(tx2.objectStore(STORE));
-        tx2.oncomplete = () => resolve(req?.result);
-        tx2.onerror = () => reject(tx2.error);
-      });
-    } finally {
-      db.close();
-    }
-  }
-  var savePending = (item) => run("readwrite", (s) => s.add({ ...item, savedAt: Date.now() }));
 
   // src/voice/tracker.js
   var SR2 = 16e3;

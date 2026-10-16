@@ -50,7 +50,7 @@ if (-not $py) {
 Ok "Python with faster-whisper: $py"
 
 # ---- 2. Ollama ----
-$env:OLLAMA_ORIGINS = 'chrome-extension://*'
+$env:OLLAMA_ORIGINS = 'chrome-extension://nckojmcchehoejdfklcmllhpekagiddo'
 $env:OLLAMA_CONTEXT_LENGTH = '16384'
 function Test-Ollama { try { Invoke-RestMethod http://localhost:11434/api/version -TimeoutSec 3 | Out-Null; return $true } catch { return $false } }
 function Test-OllamaCors {
@@ -83,7 +83,7 @@ if (-not (Test-Ollama)) {
 }
 if (Test-Ollama) {
   Ok 'Ollama is running'
-  if (Test-OllamaCors) { Ok 'Ollama accepts the Debrief extension' } else { Warn 'Ollama still refuses the extension: the minutes will fail inside Chrome until it is restarted with OLLAMA_ORIGINS=chrome-extension://*' }
+  if (Test-OllamaCors) { Ok 'Ollama accepts the Debrief extension' } else { Warn 'Ollama still refuses the extension: the minutes will fail inside Chrome until it is restarted with OLLAMA_ORIGINS=chrome-extension://nckojmcchehoejdfklcmllhpekagiddo' }
   $have = (ollama list) -join "`n"
   if ($have -match [regex]::Escape($Model)) { Ok "Ollama model $Model is installed" }
   elseif ($NoPull) { Warn "Ollama model $Model is not installed: ollama pull $Model" }

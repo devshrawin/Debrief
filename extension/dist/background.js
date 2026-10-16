@@ -395,8 +395,7 @@
     await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
   }
   var putSample = (personId, blob) => tx("samples", "readwrite", (s) => s.put(blob, personId));
-  var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
-  var hasSample = async (personId) => !!await getSample(personId);
+  var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
   function makeClip(pieces) {
     const gap = new Float32Array(Math.round(SR * 0.3));
     const parts = [];
@@ -639,6 +638,7 @@
     const { voiceBlock } = await chrome.storage.local.get("voiceBlock");
     return voiceBlock || [];
   }
+  var nameQueue = Promise.resolve();
 
   // src/background.js
   chrome.runtime.onInstalled.addListener((d) => {

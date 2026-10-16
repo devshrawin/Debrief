@@ -56,7 +56,7 @@
   }
   var putSample = (personId, blob) => tx("samples", "readwrite", (s) => s.put(blob, personId));
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
-  var hasSample = async (personId) => !!await getSample(personId);
+  var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
   var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
   async function clearAllAudio() {
     await tx("pieces", "readwrite", (s) => s.clear());
@@ -234,7 +234,7 @@
     await chrome.storage.local.set({ voices: list });
   }
   async function forgetAllVoices() {
-    await chrome.storage.local.remove("voices");
+    await chrome.storage.local.remove(["voices", "voiceBlock", "emailNames"]);
     await clearAllAudio().catch(() => {
     });
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
@@ -257,6 +257,7 @@
   async function saveBlockedVoices(list) {
     await chrome.storage.local.set({ voiceBlock: list.slice(-100) });
   }
+  var nameQueue = Promise.resolve();
 
   // src/local.js
   var OLLAMA_BASE = "http://localhost:11434/v1";
@@ -2859,6 +2860,7 @@ function out(o) {
   }
   function renderList() {
     closeMenu(false);
+    stopPlaying();
     $2("voiceEmpty").hidden = people.length > 0;
     $2("hPeople").textContent = people.length ? `Enrolled people \xB7 ${people.length}` : "Enrolled people";
     $2("voiceList").replaceChildren(
@@ -2884,21 +2886,33 @@ function out(o) {
     );
   }
   var playing = null;
+  var playingUrl = "";
+  function stopPlaying() {
+    playing?.pause();
+    playing = null;
+    if (playingUrl) URL.revokeObjectURL(playingUrl);
+    playingUrl = "";
+  }
   function sampleButton(p) {
     const b = el("button", { type: "button", className: "btn sm primary", hidden: true }, el("span", { className: "tri" }), "Play sample");
     b.setAttribute("aria-label", `Play sample of ${p.name}`);
     hasSample(p.id).then((yes) => b.hidden = !yes).catch(() => {
     });
     b.onclick = async () => {
+      if (b.dataset.busy) return;
+      b.dataset.busy = "1";
       try {
-        playing?.pause();
+        stopPlaying();
         const blob = await getSample(p.id);
         if (!blob) return b.hidden = true;
-        const url = URL.createObjectURL(blob);
-        playing = new Audio(url);
-        playing.onended = () => URL.revokeObjectURL(url);
+        playingUrl = URL.createObjectURL(blob);
+        playing = new Audio(playingUrl);
+        playing.onended = stopPlaying;
         await playing.play();
       } catch {
+        stopPlaying();
+      } finally {
+        delete b.dataset.busy;
       }
     };
     return b;
@@ -2989,6 +3003,9 @@ function out(o) {
     try {
       people = mergePeople(people, p.id, r.select);
       await saveVoices(people);
+      const mine = await getSample(p.id).catch(() => null);
+      if (mine && !await hasSample(r.select).catch(() => true)) await putSample(r.select, mine).catch(() => {
+      });
       deleteSample(p.id).catch(() => {
       });
       renderList();
@@ -3124,16 +3141,20 @@ function out(o) {
         setMsg(print.reason, "warn");
         return;
       }
-      if (mode.kind === "new") people = upsertPerson(people, { name, lang, print });
-      else if (mode.kind === "rerecord") people = upsertPerson(people, { id: mode.id, name, lang, print });
+      const keep = !!(await getSettings()).voiceSamples;
+      let newId2 = mode.id;
+      if (mode.kind === "new") {
+        people = upsertPerson(people, { name, lang, print });
+        newId2 = people[people.length - 1].id;
+      } else if (mode.kind === "rerecord") people = upsertPerson(people, { id: mode.id, name, lang, print });
       else people = addRecording(people, mode.id, { lang, print });
       await saveVoices(people);
-      if (samplesOn) {
-        const who = mode.kind === "new" ? people.find((x2) => x2.name.toLowerCase() === name.trim().replace(/\s+/g, " ").toLowerCase()) : people.find((x2) => x2.id === mode.id);
-        if (who && (mode.kind !== "add" || !await hasSample(who.id))) await putSample(who.id, makeClip([pcm])).catch(() => {
-        });
+      let clipOk = false;
+      if (keep && newId2 && (mode.kind !== "add" || !await hasSample(newId2))) {
+        const best = speechPieces(pcm).sort((a, b) => b.t1 - b.t0 - (a.t1 - a.t0)).map((x2) => x2.pcm);
+        clipOk = await putSample(newId2, makeClip(best.length ? best : [pcm])).then(() => true, () => false);
       }
-      const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${samplesOn ? "The fingerprint and a short clip you can play were stored." : "Only the fingerprint was stored."}${print.warn ? ` ${print.warn}` : ""}`;
+      const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${clipOk ? "The fingerprint and a short audio clip you can play were stored." : "Only the fingerprint was stored."}${print.warn ? ` ${print.warn}` : ""}`;
       blankForm();
       setMsg(done, "ok");
       renderList();

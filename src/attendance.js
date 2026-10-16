@@ -19,17 +19,24 @@ function lev1(a, b) {
 
 // The calendar often gives only an e-mail address, while the call shows display names. Debrief remembers which address is
 // which name (learned from every meeting where the match was clear, or set by hand) and uses it everywhere.
-let KNOWN = {};
-export const setEmailNames = (map) => {
-  KNOWN = Object.fromEntries(Object.entries(map || {}).map(([k, v]) => [String(k).toLowerCase(), v]));
+let KNOWN = new Map();
+// One key per mailbox: case, spaces and "+tag" do not make a different person (and gmail ignores dots).
+export const emailKey = (e) => {
+  const [l = '', d = ''] = String(e || '').trim().toLowerCase().split('@');
+  const local = l.split('+')[0];
+  return `${/^(gmail|googlemail)\.com$/.test(d) ? local.replace(/\./g, '') : local}@${d}`;
 };
-export const knownName = (email) => KNOWN[String(email || '').toLowerCase()] || '';
+export const setEmailNames = (map) => {
+  KNOWN = new Map();
+  if (map && typeof map === 'object' && !Array.isArray(map)) for (const [k, v] of Object.entries(map)) if (typeof v === 'string' && v.trim()) KNOWN.set(emailKey(k), v.trim());
+};
+export const knownName = (email) => (email ? KNOWN.get(emailKey(email)) || '' : '');
 
 // "akash8@amnex.com" -> "Akash", "amal.samad@x.com" -> "Amal Samad": a readable stand-in until the real name is known.
 export function prettyFromEmail(email) {
   const local = String(email || '').split('@')[0];
-  const words = local.split(/[._-]+/).map((w) => w.replace(/\d+$/, '')).filter(Boolean);
-  return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+  const words = local.split('+')[0].split(/[._-]+/).map((w) => w.replace(/\d+$/, '')).filter(Boolean);
+  return words.map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
 // What to call an invitee: the calendar's name, else the name learned for the address, else a readable guess.
@@ -129,18 +136,25 @@ export function matchPeople(invited, presenceIn, { entries = [], myName = '' } =
 }
 
 // "Deep Patel (deep5@amnex.com)": the name when it is known, always with the address, so rows read the same way.
-export const withAddress = (r) => (r.email && r.name && r.name.toLowerCase() !== String(r.email).toLowerCase() ? `${r.name} (${r.email})` : r.name || r.email || '');
+export const withAddress = (r) => (r.email && r.name && !String(r.name).toLowerCase().includes(String(r.email).toLowerCase()) ? `${r.name} (${r.email})` : String(r.name || r.email || ''));
+const cell = (s) => String(s ?? '').replace(/\s*[\r\n]+\s*/g, ' ').replace(/\|/g, '\\|'); // a pipe or line break in a name must not split the table row
 
-// Address -> name for every invitee who was matched to somebody seen in the call. Only a real name is kept.
+// Mailboxes that are a team or a robot, not a person: their "name" in a call is a label, never worth remembering.
+const ROLE_LOCAL = /^(support|info|hr|admin|team|sales|accounts?|helpdesk|hello|contact|office|noreply|no-reply|all|dev|it|ops|billing|careers|jobs|mail|service|group|everyone|notetaker)\d*$/i;
+const NOT_A_PERSON = /\b(notetaker|note taker|bot|recorder|guest|assistant|room|conference|presentation)\b|\.ai\b|^(you|unnamed voice)\b/i;
+
+// Address -> name for every invitee who was matched to somebody seen in the call. Only a full, real name is kept.
 export function learnEmailNames(rows) {
   const out = {};
   for (const r of rows || []) {
-    const seen = r.present?.name;
-    if (!r.email || !seen || /@/.test(seen) || seen.toLowerCase() === String(r.email).toLowerCase()) continue;
-    const words = seen.trim().split(/\s+/);
-    // only a full, real name is worth remembering: not "You", "Akash", "Amal R.", "Unnamed voice 3" or a room
-    if (words.length < 2 || /^(you|unnamed voice)\b/i.test(seen) || words.some((w) => /^\w\.?$/.test(w)) || /\b(room|conference|presentation)\b/i.test(seen)) continue;
-    out[String(r.email).toLowerCase()] = seen.trim();
+    const seen = String(r.present?.name || '');
+    if (!r.email || !seen || /@/.test(seen) || ROLE_LOCAL.test(String(r.email).split('@')[0].split(/[._-]/)[0])) continue;
+    const clean = seen.replace(/\s*[(\[].*?[)\]]\s*/g, ' ').replace(/\s+/g, ' ').trim(); // "Rahul (Presenting)" -> "Rahul"
+    const words = clean.split(' ');
+    if (words.length < 2 || NOT_A_PERSON.test(clean) || /[()[\]|]/.test(clean) || /^(dr|mr|mrs|ms)\.?\s/i.test(clean)) continue;
+    if (words.some((w) => /^[A-Za-zÀ-ɏ]\.?$/.test(w))) continue; // an initial: "Amal R."
+    if (clean.toLowerCase() === String(r.email).toLowerCase()) continue;
+    out[emailKey(r.email)] = clean;
   }
   return out;
 }
@@ -170,9 +184,9 @@ export function attendanceMarkdown({ invited, presence: presenceIn, durationSec,
     lines.push('| Person | Invite | In the meeting | Joined | Left | Note |', '|---|---|---|---|---|---|');
     for (const r of rows) {
       const p = r.present;
-      lines.push(`| ${withAddress(r)} | ${RSVP[r.status] || r.status || '—'} | ${p ? 'Yes' : '**Absent**'} | ${p ? mmss(p.first) : '—'} | ${p ? mmss(p.last) : '—'} | ${p ? when(p) : r.mayBe ? `may be ${r.mayBe.join(' or ')}` : ''} |`);
+      lines.push(`| ${cell(withAddress(r))} | ${RSVP[r.status] || r.status || '—'} | ${p ? 'Yes' : '**Absent**'} | ${p ? mmss(p.first) : '—'} | ${p ? mmss(p.last) : '—'} | ${p ? when(p) : r.mayBe ? `may be ${r.mayBe.join(' or ')}` : ''} |`);
     }
-    for (const p of uninvited) lines.push(`| ${p.name} | ${p.couldBe ? 'Not matched' : 'Not invited'} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when(p), p.couldBe ? `could be ${p.couldBe.join(' or ')}` : ''].filter(Boolean).join(', ')} |`);
+    for (const p of uninvited) lines.push(`| ${cell(p.name)} | ${p.couldBe ? 'Not matched' : 'Not invited'} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when(p), p.couldBe ? `could be ${p.couldBe.join(' or ')}` : ''].filter(Boolean).join(', ')} |`);
     const absent = rows.filter((r) => !r.present).map((r) => withAddress(r));
     if (absent.length) lines.push('', `Not seen in the meeting: ${absent.join(', ')}. Action items for them need to be passed on.`);
   } else if (hasPresence) {

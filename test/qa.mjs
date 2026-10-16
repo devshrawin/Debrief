@@ -239,4 +239,35 @@ await test('attendance: invitees given only as e-mail addresses are matched to t
   assert.doesNotMatch(md, /More options|remotely mute/);
 });
 
+await test('attendance: addresses are shown as "Name (address)", names are learned safely and never flipped', async () => {
+  const A = await import('../src/attendance.js');
+  A.setEmailNames({});
+  const invited = [{ email: 'deep5@amnex.com', status: 'invited' }, { email: 'amal.samad@amnex.com' }, { email: 'priya@x.com', name: 'Priya Nair' }];
+  const m = A.matchPeople(invited, { 'Deep Patel': [0, 600, 3], 'Amal Samad': [0, 600, 3] }, { entries: [] });
+  assert.equal(A.withAddress(m.rows[1]), 'Amal Samad (amal.samad@amnex.com)');
+  assert.equal(A.withAddress(m.rows[0]), 'Deep (deep5@amnex.com)', 'a readable guess until the real name is known');
+  const learned = A.learnEmailNames(m.rows);
+  assert.deepEqual(learned, { 'deep5@amnex.com': 'Deep Patel', 'amal.samad@amnex.com': 'Amal Samad' });
+  A.setEmailNames(learned);
+  const next = A.matchPeople(invited, {}, { entries: [] });
+  assert.equal(A.withAddress(next.rows[0]), 'Deep Patel (deep5@amnex.com)', 'next meeting knows the name even when Deep is absent');
+  A.setEmailNames({});
+  // what must NOT be remembered
+  const row = (email, name) => ({ email, present: { name } });
+  for (const [e, n] of [['a@x.com', 'Akash'], ['b@x.com', 'Unnamed voice 3'], ['c@x.com', 'Amal R.'], ['support@x.com', 'Support Lead'], ['d@x.com', 'Fireflies.ai Notetaker'], ['e@x.com', 'Conference Room'], ['f@x.com', 'You']]) {
+    assert.deepEqual(A.learnEmailNames([row(e, n)]), {}, `${e} / ${n}`);
+  }
+  assert.deepEqual(A.learnEmailNames([row('rahul@x.com', 'Rahul Verma (Presenting)')]), { 'rahul@x.com': 'Rahul Verma' }, 'tile decoration is stripped');
+  // one key per mailbox; hostile stored values do not crash the table
+  assert.equal(A.emailKey(' Amal.Samad+meet@Gmail.com '), 'amalsamad@gmail.com');
+  A.setEmailNames({ 'x@y.z': 5, 'constructor': 'x' });
+  assert.equal(A.personLabel({ email: 'x@y.z' }), 'X');
+  const md = A.attendanceMarkdown({ invited: [{ name: 'Pipe | Guy\nHeading', email: 'p@x.com' }, { name: 'Sam Lee sam.lee@x.com', email: 'sam.lee@x.com' }], presence: { Zed: [0, 50, 2] }, durationSec: 60, entries: [] });
+  assert.match(md, /Pipe \\\| Guy Heading \(p@x.com\)/);
+  assert.ok(!/sam.lee@x.com \(sam.lee@x.com\)/.test(md));
+  A.setEmailNames({});
+  const { inviteeEmails } = await import('../src/mailer.js');
+  assert.deepEqual(inviteeEmails({ invited: [{ email: 'namita@amnex.com' }, { name: 'Deep Patel', email: 'deep5@amnex.com' }] }, { absentOnly: true, absentNames: ['namita@amnex.com'] }), ['namita@amnex.com']);
+});
+
 console.log(`\n${passed} passed`);
