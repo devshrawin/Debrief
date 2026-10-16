@@ -499,7 +499,7 @@ function ensureAttendees() {
   let names = [];
   if (presence.length) {
     const m = matchPeople(meeting.invited, seen, { entries, myName: settings.myName });
-    names = [...m.rows.filter((r) => r.present).map((r) => r.name), ...m.uninvited.map((p) => p.name)];
+    names = [...m.rows.filter((r) => r.present).map((r) => r.present.name || r.name), ...m.uninvited.map((p) => p.name)];
   } else if (meeting.invited?.length) {
     names = meeting.invited.filter((p) => p.status !== 'no').map((p) => personLabel(p));
   }

@@ -418,7 +418,7 @@ async function save() {
     await saveVoices(people);
     if (samplesOn) {
       // a short clip of the recording, so the voice can be played back here later
-      const who = mode.kind === 'new' ? people.find((x) => x.name.toLowerCase() === name.trim().toLowerCase()) : people.find((x) => x.id === mode.id);
+      const who = mode.kind === 'new' ? people.find((x) => x.name.toLowerCase() === name.trim().replace(/\s+/g, ' ').toLowerCase()) : people.find((x) => x.id === mode.id);
       if (who && (mode.kind !== 'add' || !(await hasSample(who.id)))) await putSample(who.id, makeClip([pcm])).catch(() => {});
     }
     const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${samplesOn ? 'The fingerprint and a short clip you can play were stored.' : 'Only the fingerprint was stored.'}${print.warn ? ` ${print.warn}` : ''}`;

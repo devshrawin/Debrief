@@ -3129,7 +3129,7 @@ function out(o) {
       else people = addRecording(people, mode.id, { lang, print });
       await saveVoices(people);
       if (samplesOn) {
-        const who = mode.kind === "new" ? people.find((x2) => x2.name.toLowerCase() === name.trim().toLowerCase()) : people.find((x2) => x2.id === mode.id);
+        const who = mode.kind === "new" ? people.find((x2) => x2.name.toLowerCase() === name.trim().replace(/\s+/g, " ").toLowerCase()) : people.find((x2) => x2.id === mode.id);
         if (who && (mode.kind !== "add" || !await hasSample(who.id))) await putSample(who.id, makeClip([pcm])).catch(() => {
         });
       }
