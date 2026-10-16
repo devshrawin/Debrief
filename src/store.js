@@ -203,3 +203,13 @@ export async function getBlockedVoices() {
 export async function saveBlockedVoices(list) {
   await chrome.storage.local.set({ voiceBlock: list.slice(-100) });
 }
+
+// Which e-mail address belongs to which name (learned from meetings, or set by hand): { "deep5@amnex.com": "Deep Patel" }.
+export async function getEmailNames() {
+  const { emailNames } = await chrome.storage.local.get('emailNames');
+  return emailNames || {};
+}
+
+export async function saveEmailNames(map) {
+  await chrome.storage.local.set({ emailNames: map });
+}

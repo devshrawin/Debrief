@@ -194,8 +194,8 @@ await test('attendance: the table lists invitees present and absent; with no inv
   const presence = { 'Akash Behera': [10, 400, 5], 'Ankur Desai': [200, 410, 5], Visitor: [50, 300, 3] };
   const md = attendanceMarkdown({ invited, presence, durationSec: 420, entries: [], myName: '' });
   assert.match(md, /\| Person \| Invite \| In the meeting \|/);
-  assert.match(md, /\| Akash Behera \| Accepted \| Yes \|/);
-  assert.match(md, /\| Deep Patel \| No reply \| \*\*Absent\*\* \|/);
+  assert.match(md, /\| Akash Behera \(akash@co.com\) \| Accepted \| Yes \|/);
+  assert.match(md, /\| Deep Patel \(deep@co.com\) \| No reply \| \*\*Absent\*\* \|/);
   assert.match(md, /\| Visitor \| Not invited \| Yes \|/);
   assert.match(md, /2 of 3 invited people/);
   assert.match(md, /Absent. means not seen/);
@@ -235,7 +235,7 @@ await test('attendance: invitees given only as e-mail addresses are matched to t
   const md = attendanceMarkdown({ invited, presence, durationSec: 1100, entries: [], myName: 'Shrawin Sisodia' });
   assert.match(md, /10 of 26 invited people were seen in the meeting, plus 2 who could not be matched/);
   assert.match(md, /Akash Behera \| Not matched \| Yes .*could be akash8@amnex.com or akash9@amnex.com/);
-  assert.match(md, /akash8@amnex.com \| Accepted \| \*\*Absent\*\* .*may be Akash Behera/);
+  assert.match(md, /Akash \(akash8@amnex.com\) \| Accepted \| \*\*Absent\*\* .*may be Akash Behera/);
   assert.doesNotMatch(md, /More options|remotely mute/);
 });
 
