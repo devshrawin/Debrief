@@ -38,7 +38,7 @@
     if (UI_PHRASE.test(t) || t.split(/\s+/).length > 6) return true;
     return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
   };
-  var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").trim();
+  var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
 
   // src/adapters/meet.js
   var text = (el) => (el?.innerText ?? el?.textContent ?? "").replace(/ /g, " ").trim();

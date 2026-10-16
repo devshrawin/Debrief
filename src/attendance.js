@@ -25,7 +25,13 @@ function identities(p, entries = []) {
     if (t.length) ids.add(t.join(' '));
   };
   add(p.name);
-  if (p.email) add(String(p.email).split('@')[0].replace(/[._-]+/g, ' '));
+  if (p.email) {
+    // "akash8@amnex.com" is "akash", "amal.samad@x.com" is "amal samad", "amalsamad678@gmail.com" is "amalsamad":
+    // the numbers people add to make an address unique are not part of the name.
+    const local = String(p.email).split('@')[0];
+    add(local.replace(/[._-]+/g, ' '));
+    add(local.split(/[._-]+/).map((w) => w.replace(/\d+$/, '')).filter(Boolean).join(' '));
+  }
   for (const e of entries) {
     const names = [e.name, ...e.aliases].map((x) => tokens(x).join(' '));
     for (const id of [...ids]) if (names.includes(id)) names.forEach((n) => ids.add(n));
@@ -43,6 +49,10 @@ function score(a, b) {
   const fb = tb[0];
   const sameFirst = fa === fb;
   const closeFirst = !sameFirst && lev1(fa, fb);
+  if ((ta.length === 1) !== (tb.length === 1)) {
+    const [one, many] = ta.length === 1 ? [ta[0], tb] : [tb[0], ta];
+    if (one.length >= 6 && one === many.join('')) return 0.9;
+  }
   if (!sameFirst && !closeFirst) return 0;
   if (ta.length === 1 || tb.length === 1) return sameFirst ? 0.7 : 0; // first name only: handled with an ambiguity check
   // "Aman S." vs "Aman Sharma": every later word of one must be a prefix of a word of the other.
@@ -80,9 +90,22 @@ export function matchPeople(invited, presenceIn, { entries = [], myName = '' } =
     usedH.add(p.hi);
     rows[p.ri].match = here[p.hi];
   }
+  // Seen, but their first name fits two or more invitees who were not matched (akash8@ and akash9@ for "Akash Behera"):
+  // not guessable, so both sides say so instead of listing a stranger and an absentee.
+  const left = here.map((h, i) => ({ h, i })).filter((x) => !usedH.has(x.i));
+  const couldBe = new Map();
+  const mayBe = new Map();
+  for (const { h, i } of left) {
+    const first = identities({ name: h.name }, entries)[0]?.split(' ')[0];
+    const cands = rows.map((r, ri) => ({ r, ri })).filter((x) => !usedR.has(x.ri) && x.r.ids.some((id) => id.split(' ')[0] === first && id.split(' ').length === 1));
+    if (cands.length > 1) {
+      couldBe.set(i, cands.map((x) => x.r.name || x.r.email));
+      for (const c of cands) mayBe.set(c.ri, [...(mayBe.get(c.ri) || []), h.name]);
+    }
+  }
   return {
-    rows: rows.map((r) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null })),
-    uninvited: here.filter((_, i) => !usedH.has(i)),
+    rows: rows.map((r, ri) => ({ name: r.name || r.email, email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
+    uninvited: here.filter((_, i) => !usedH.has(i)).map((h) => ({ ...h, couldBe: couldBe.get(here.indexOf(h)) || null })),
   };
 }
 
@@ -107,13 +130,13 @@ export function attendanceMarkdown({ invited, presence: presenceIn, durationSec,
   const lines = ['## Attendance'];
   if (hasInvited && hasPresence) {
     const came = rows.filter((r) => r.present).length;
-    lines.push(`${came} of ${rows.length} invited people were seen in the meeting${uninvited.length ? `, plus ${uninvited.length} who were not on the invite` : ''}.`, '');
+    lines.push(`${came} of ${rows.length} invited people were seen in the meeting${uninvited.length ? `, plus ${uninvited.length} who could not be matched to the invite` : ''}.`, '');
     lines.push('| Person | Invite | In the meeting | Joined | Left | Note |', '|---|---|---|---|---|---|');
     for (const r of rows) {
       const p = r.present;
-      lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || '—'} | ${p ? 'Yes' : '**Absent**'} | ${p ? mmss(p.first) : '—'} | ${p ? mmss(p.last) : '—'} | ${p ? when(p) : ''} |`);
+      lines.push(`| ${r.name} | ${RSVP[r.status] || r.status || '—'} | ${p ? 'Yes' : '**Absent**'} | ${p ? mmss(p.first) : '—'} | ${p ? mmss(p.last) : '—'} | ${p ? when(p) : r.mayBe ? `may be ${r.mayBe.join(' or ')}` : ''} |`);
     }
-    for (const p of uninvited) lines.push(`| ${p.name} | Not invited | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${when(p)} |`);
+    for (const p of uninvited) lines.push(`| ${p.name} | ${p.couldBe ? 'Not matched' : 'Not invited'} | Yes | ${mmss(p.first)} | ${mmss(p.last)} | ${[when(p), p.couldBe ? `could be ${p.couldBe.join(' or ')}` : ''].filter(Boolean).join(', ')} |`);
     const absent = rows.filter((r) => !r.present).map((r) => r.name);
     if (absent.length) lines.push('', `Not seen in the meeting: ${absent.join(', ')}. Action items for them need to be passed on.`);
   } else if (hasPresence) {

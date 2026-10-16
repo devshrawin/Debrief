@@ -189,4 +189,11 @@ await test('meet: panel headings and sentences from Meet (Backgrounds and effect
   assert.deepEqual(meet.readParticipants(doc).sort(), ['Ankur Desai', 'Deep Patel']);
 });
 
+await test('meet: a row\'s "More options for Deep Patel" button is read as Deep Patel, once', () => {
+  const doc = page(`<div role="list" aria-label="Participants"><div role="listitem" aria-label="Deep Patel"><span>Deep Patel</span><button aria-label="More options for Deep Patel">more_vert</button></div></div><div data-participant-id="a"><div>More options for Ankur Desai</div><div>Ankur Desai</div></div>`);
+  assert.deepEqual(meet.readParticipants(doc).sort(), ['Deep Patel']);
+  const tiles = page(`<div data-participant-id="a"><div>More options for Ankur Desai</div><div>Ankur Desai</div></div>`);
+  assert.deepEqual(meet.readParticipants(tiles), ['Ankur Desai']);
+});
+
 console.log(`\n${passed} passed`);
