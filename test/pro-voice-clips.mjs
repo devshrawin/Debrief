@@ -74,19 +74,19 @@ await test('clips: with sampling switched off nothing is kept, and waiting audio
   assert.equal(await S.getPiece(S.pieceKey('m2', 0)), undefined);
 });
 
-await test('clips: a named voice has no clip (naming deletes it), a deleted voice neither, and forget-all clears everything', async () => {
+await test('clips: naming keeps the clip, a deleted voice loses it, and forget-all clears everything', async () => {
   const m = await recordMeeting('m3');
   const { list } = L.learnRecurring(m, []);
   await saveSamples('m3', m, list);
   assert.ok(await S.hasSample(list[0].id));
-  await S.deleteSample(list[0].id); // what Rename and Delete do
+  await S.deleteSample(list[0].id); // what Delete does
   assert.equal(await S.hasSample(list[0].id), false);
   assert.ok(await S.hasSample(list[1].id));
   await S.clearAllAudio(); // Forget all voices
   assert.equal(await S.hasSample(list[1].id), false);
 });
 
-await test('clips: a voice that already has a clip keeps it, and a named person never gets one', async () => {
+await test('clips: a voice that already has a clip keeps it, and a named voice gets one too (so it can be played in Settings)', async () => {
   const m = await recordMeeting('m4');
   const { list } = L.learnRecurring(m, []);
   await saveSamples('m4', m, list);
@@ -98,7 +98,7 @@ await test('clips: a voice that already has a clip keeps it, and a named person 
   await S.clearAllAudio();
   const m6 = await recordMeeting('m6');
   await saveSamples('m6', m6, named);
-  assert.equal(await S.hasSample(named[0].id), false, 'named: no clip');
+  assert.ok(await S.hasSample(named[0].id), 'named: clip kept for Settings');
   assert.ok(await S.hasSample(named[1].id), 'still unnamed: clip');
 });
 

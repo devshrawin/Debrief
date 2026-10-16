@@ -420,7 +420,7 @@
     try {
       if (!meeting) return;
       const todo = [];
-      for (const p of people) if (p.auto && isAnon(p) && !await hasSample(p.id)) todo.push(p);
+      for (const p of people) if (p.auto && !await hasSample(p.id)) todo.push(p);
       if (!todo.length) return;
       const best = new Map(todo.map((p) => [p.id, []]));
       for (const s of meeting.voiceSegs || []) {

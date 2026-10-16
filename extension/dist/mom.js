@@ -2135,7 +2135,6 @@ ${att}
   }
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
   var hasSample = async (personId) => !!await getSample(personId);
-  var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
 
   // src/store.js
   var DEFAULTS = {
@@ -4217,7 +4216,7 @@ ${meeting2.mom || ""}
     if (!here.length) return;
     const lines = labeledLines(true) || [];
     const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
-    $2("nameNote").textContent = clips.some(Boolean) ? "Press Play, type who it is, and save. Then press Regenerate so the minutes use the names." : settings.voiceSamples ? "No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate." : 'No audio clips are kept: switch on "Keep short samples of unnamed voices" in Settings \u2192 Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
+    $2("nameNote").textContent = clips.some(Boolean) ? "Press Play, type who it is, and save. Then press Regenerate so the minutes use the names." : settings.voiceSamples ? "No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate." : 'No audio clips are kept: switch on "Keep short samples of voices" in Settings \u2192 Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
     $2("nameList").replaceChildren(
       ...here.map((v, i) => {
         const row2 = document.createElement("div");
@@ -4248,8 +4247,6 @@ ${meeting2.mom || ""}
             return;
           }
           await saveVoices(all.map((x2) => x2.id === v.id ? { ...x2, name: clean, confirmed: true } : x2));
-          deleteSample(v.id).catch(() => {
-          });
         };
         input.addEventListener("keydown", (e2) => e2.key === "Enter" && save.click());
         const said = lines.filter((l3) => l3.name === v.name).slice(0, 2);

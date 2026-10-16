@@ -1,7 +1,7 @@
-// Optional short audio samples of voices that have no name yet, so you can play one and recognise who it is.
+// Optional short audio samples of voices (learned, named or recorded), so you can play one in Settings and recognise who it is.
 // Off by default. While recording, short pieces of speech wait in this browser's IndexedDB; after the meeting
-// one clip of a few seconds is kept per unnamed voice and every waiting piece is deleted. A clip is deleted when
-// the voice is named, deleted or forgotten. Nothing here is ever uploaded.
+// one clip of a few seconds is kept per learned voice and every waiting piece is deleted. A clip is deleted when
+// the voice is deleted, merged or forgotten. Nothing here is ever uploaded.
 import { encodeWav } from '../wav.js';
 
 const DB = 'debrief-voice';
