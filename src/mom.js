@@ -2,7 +2,7 @@ import { renderMd, decorateMinutes } from './md.js';
 import { renderMinutesHtml, isAmnexMd } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { modal } from './modal.js';
-import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, saveEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, mergeEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople, setEmailNames, learnEmailNames, withAddress, personLabel } from './attendance.js';
@@ -310,7 +310,7 @@ async function runGenerate({ reread = false } = {}) {
     meeting.notes = $('notes').value;
     const pending = await listPending(id);
     const ctx = nameCtx();
-    const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map(withAddress);
+    const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name); // names only: no addresses go to the model
     const { mom: text, stats, extract } = await writeMinutes({
       meeting,
       settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
@@ -409,7 +409,7 @@ function mountAskBox() {
 
 // ---- sharing with other people ----
 function absentNames() {
-  return matchPeople(meeting.invited, { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map(withAddress);
+  return matchPeople(meeting.invited, { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) }, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.email || r.name); // addresses: names can be guesses
 }
 
 function initShare() {
@@ -481,12 +481,8 @@ async function rememberEmailNames() {
     const seen = { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) };
     if (!Object.keys(seen).length) return;
     const found = learnEmailNames(matchPeople(meeting.invited, seen, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows);
-    const known = await getEmailNames();
-    const fresh = Object.entries(found).filter(([k, v]) => known[k] !== v);
-    if (!fresh.length) return;
-    const next = { ...known, ...Object.fromEntries(fresh) };
-    await saveEmailNames(next);
-    setEmailNames(next);
+    if (!Object.keys(found).length) return;
+    setEmailNames(await mergeEmailNames(found));
   } catch {}
 }
 

@@ -3,7 +3,7 @@
 import { getSettings, setSetting, getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
 import { unnamedGroups, isAnon, mergePeople, blockEntry, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
-import { buildPrint, upsertPerson, addRecording, PROMPTS, ENROL, SR } from './voice/enrol.js';
+import { buildPrint, upsertPerson, addRecording, speechPieces, PROMPTS, ENROL, SR } from './voice/enrol.js';
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
 import { modal } from './modal.js';
@@ -128,6 +128,7 @@ function moreMenu(p, items) {
 
 function renderList() {
   closeMenu(false);
+  stopPlaying();
   $('voiceEmpty').hidden = people.length > 0;
   $('hPeople').textContent = people.length ? `Enrolled people · ${people.length}` : 'Enrolled people';
   $('voiceList').replaceChildren(
@@ -157,20 +158,33 @@ function renderList() {
 
 // "Play sample": a short clip of any voice, only when sample keeping is on and a clip exists.
 let playing = null;
+let playingUrl = '';
+function stopPlaying() {
+  playing?.pause();
+  playing = null;
+  if (playingUrl) URL.revokeObjectURL(playingUrl);
+  playingUrl = '';
+}
 function sampleButton(p) {
   const b = el('button', { type: 'button', className: 'btn sm primary', hidden: true }, el('span', { className: 'tri' }), 'Play sample');
   b.setAttribute('aria-label', `Play sample of ${p.name}`);
   hasSample(p.id).then((yes) => (b.hidden = !yes)).catch(() => {});
   b.onclick = async () => {
+    if (b.dataset.busy) return;
+    b.dataset.busy = '1';
     try {
-      playing?.pause();
+      stopPlaying();
       const blob = await getSample(p.id);
       if (!blob) return (b.hidden = true);
-      const url = URL.createObjectURL(blob);
-      playing = new Audio(url);
-      playing.onended = () => URL.revokeObjectURL(url);
+      playingUrl = URL.createObjectURL(blob);
+      playing = new Audio(playingUrl);
+      playing.onended = stopPlaying;
       await playing.play();
-    } catch {}
+    } catch {
+      stopPlaying();
+    } finally {
+      delete b.dataset.busy;
+    }
   };
   return b;
 }
@@ -266,6 +280,9 @@ async function mergeInto(p) {
   try {
     people = mergePeople(people, p.id, r.select);
     await saveVoices(people);
+    // the clip moves to the voice it was merged into when that one has none
+    const mine = await getSample(p.id).catch(() => null);
+    if (mine && !(await hasSample(r.select).catch(() => true))) await putSample(r.select, mine).catch(() => {});
     deleteSample(p.id).catch(() => {});
     renderList();
   } catch (e) {
@@ -412,16 +429,21 @@ async function save() {
       setMsg(print.reason, 'warn');
       return;
     }
-    if (mode.kind === 'new') people = upsertPerson(people, { name, lang, print });
-    else if (mode.kind === 'rerecord') people = upsertPerson(people, { id: mode.id, name, lang, print });
+    const keep = !!(await getSettings()).voiceSamples;
+    let newId = mode.id;
+    if (mode.kind === 'new') {
+      people = upsertPerson(people, { name, lang, print });
+      newId = people[people.length - 1].id;
+    } else if (mode.kind === 'rerecord') people = upsertPerson(people, { id: mode.id, name, lang, print });
     else people = addRecording(people, mode.id, { lang, print });
     await saveVoices(people);
-    if (samplesOn) {
-      // a short clip of the recording, so the voice can be played back here later
-      const who = mode.kind === 'new' ? people.find((x) => x.name.toLowerCase() === name.trim().replace(/\s+/g, ' ').toLowerCase()) : people.find((x) => x.id === mode.id);
-      if (who && (mode.kind !== 'add' || !(await hasSample(who.id)))) await putSample(who.id, makeClip([pcm])).catch(() => {});
+    // a short clip of the speech, so the voice can be played back here later (only while "Keep short samples" is on)
+    let clipOk = false;
+    if (keep && newId && (mode.kind !== 'add' || !(await hasSample(newId)))) {
+      const best = speechPieces(pcm).sort((a, b) => b.t1 - b.t0 - (a.t1 - a.t0)).map((x) => x.pcm);
+      clipOk = await putSample(newId, makeClip(best.length ? best : [pcm])).then(() => true, () => false);
     }
-    const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${samplesOn ? 'The fingerprint and a short clip you can play were stored.' : 'Only the fingerprint was stored.'}${print.warn ? ` ${print.warn}` : ''}`;
+    const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${clipOk ? 'The fingerprint and a short audio clip you can play were stored.' : 'Only the fingerprint was stored.'}${print.warn ? ` ${print.warn}` : ''}`;
     blankForm();
     setMsg(done, 'ok');
     renderList();

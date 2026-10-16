@@ -126,6 +126,7 @@
     await chrome.storage.local.set({ settings: { ...settings || {}, emailSecret: secret } });
     return secret;
   }
+  var nameQueue = Promise.resolve();
 
   // src/usage.js
   function dayKey(date = /* @__PURE__ */ new Date()) {

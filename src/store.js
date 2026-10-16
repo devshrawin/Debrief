@@ -1,4 +1,5 @@
-import { clearAllAudio } from './voice/samples.js';
+import { clearAllAudio, deletePieces } from './voice/samples.js';
+import { deleteAllPending } from './audiostore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
 export const DEFAULTS = {
@@ -116,6 +117,8 @@ export async function deleteMeeting(id) {
   const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
   await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
   await chrome.storage.local.remove(key(id));
+  // the audio that belonged to it too: waiting voice pieces and chunks that failed to transcribe
+  await Promise.allSettled([deletePieces(id), deleteAllPending(id)]);
 }
 
 export async function getState() {
@@ -178,7 +181,8 @@ export async function saveVoices(list) {
 
 // Deletes every enrolled voice, and the voice fingerprints kept inside saved meetings.
 export async function forgetAllVoices() {
-  await chrome.storage.local.remove('voices');
+  // the blocklist holds voice templates and emailNames holds who-is-who: both go with the voices
+  await chrome.storage.local.remove(['voices', 'voiceBlock', 'emailNames']);
   await clearAllAudio().catch(() => {});
   const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
   const r = await chrome.storage.local.get(meetingIds.map(key));
@@ -212,4 +216,19 @@ export async function getEmailNames() {
 
 export async function saveEmailNames(map) {
   await chrome.storage.local.set({ emailNames: map });
+}
+
+// Adds links without ever replacing one that is already there (a name once learned is never silently flipped to someone
+// else), and re-reads storage right before writing, one write at a time. Returns the full map.
+let nameQueue = Promise.resolve();
+export function mergeEmailNames(found) {
+  nameQueue = nameQueue.catch(() => {}).then(async () => {
+    const cur = await getEmailNames();
+    const fresh = Object.entries(found || {}).filter(([k]) => !cur[k]);
+    if (!fresh.length) return cur;
+    const next = { ...cur, ...Object.fromEntries(fresh) };
+    await saveEmailNames(next);
+    return next;
+  });
+  return nameQueue;
 }

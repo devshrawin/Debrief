@@ -122,7 +122,19 @@ def candidates(model, audio, allowed):
 
 
 app = FastAPI(title="Debrief local Whisper")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_origin_regex=r"chrome-extension://.*|http://(localhost|127\.0\.0\.1)(:\d+)?", allow_methods=["*"], allow_headers=["*"])
+# only the Debrief extension (its ID is pinned by the manifest key) may call this from a browser; other web pages are refused
+app.add_middleware(CORSMiddleware, allow_origins=[], allow_origin_regex=r"chrome-extension://nckojmcchehoejdfklcmllhpekagiddo", allow_methods=["*"], allow_headers=["*"])
+MAX_UPLOAD = 25 * 1024 * 1024
+ALLOWED_MODELS = {"auto", "whisper-1", "", "small", "malayalam", "ml", "base", "medium", "tiny", "large-v3"}
+
+
+@app.middleware("http")
+async def local_only(request, call_next):
+    # a web page on another site can reach 127.0.0.1 too (DNS rebinding): require a local Host name
+    host = (request.headers.get("host") or "").split(":")[0]
+    if host not in ("localhost", "127.0.0.1", "[::1]", ""):
+        return JSONResponse({"error": {"message": "Only local requests are accepted."}}, status_code=403)
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -137,7 +149,11 @@ def models():
 
 @app.post("/v1/audio/transcriptions")
 async def transcribe(file: UploadFile = File(...), model: str = Form("auto"), language: str = Form(None), prompt: str = Form(None), response_format: str = Form("json")):
+    if model not in ALLOWED_MODELS:
+        return JSONResponse({"error": {"message": f"Unknown model {model!r}. Use auto, small or malayalam."}}, status_code=400)
     data = await file.read()
+    if len(data) > MAX_UPLOAD:
+        return JSONResponse({"error": {"message": "That audio is too large."}}, status_code=413)
     t0 = time.time()
     lang = (language or "").strip() or None
     try:

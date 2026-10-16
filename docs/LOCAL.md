@@ -20,7 +20,7 @@ Gemma (and other Ollama models) can only write the minutes. They cannot take the
    Smaller models are faster and make more mistakes; 7B models are noticeably better and need roughly 8 GB of free RAM and patience on a CPU. Models you already have show up automatically in step 4.
 2. Let the extension talk to Ollama and give it room to read a whole meeting. In PowerShell:
    ```powershell
-   setx OLLAMA_ORIGINS "chrome-extension://*"
+   setx OLLAMA_ORIGINS "chrome-extension://nckojmcchehoejdfklcmllhpekagiddo"
    setx OLLAMA_CONTEXT_LENGTH 16384
    ```
    Then quit Ollama from the tray icon and start it again (these settings are only read when it starts).
