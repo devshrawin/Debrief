@@ -2176,7 +2176,7 @@ function out(o) {
             "div",
             { class: "callout warnc" },
             svg('<path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4M12 17v.5"></path>', 20, 'stroke="currentColor"'),
-            p("On the free tier Google may use what you send to improve its products, and reviewers may read it. For confidential meetings, turn on billing for the key, pick another provider in Settings, or keep everything local (step 10).")
+            p("On the free tier Google may use what you send to improve its products, and reviewers may read it. For confidential meetings, turn on billing for the key, pick another provider in Settings, or keep everything local (Set up more \u2192 Local models).")
           ),
           card(
             "Good to know",
