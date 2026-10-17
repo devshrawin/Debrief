@@ -3,46 +3,31 @@ import { renderMinutesHtml, isAmnexMd } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { modal } from './modal.js';
-import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, mergeEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes } from './jobs.js';
+import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
-import { writeMinutes } from './minutes.js';
-import { matchPeople, setEmailNames, learnEmailNames, withAddress, personLabel } from './attendance.js';
-import { labelTranscript, voicePresence } from './voice/match.js';
-import { usableVoices, isAnon } from './voice/learn.js';
+import { matchPeople, setEmailNames } from './attendance.js';
+import { isAnon } from './voice/learn.js';
 import { getSample, hasSample } from './voice/samples.js';
-import { generate, modelLabel, isRetryable } from './llm.js';
-import { transcribe } from './stt.js';
-import { listPending, deletePending, deleteAllPending } from './audiostore.js';
-import { buildSystemPrompt, buildUserPrompt, formatTranscript } from './prompt.js';
-import { buildEmail, sendMail, mailReady, wordDocHtml, parseAddresses, recipientsFor, inviteeEmails, lookupInvitees } from './mailer.js';
+import { modelLabel } from './llm.js';
+import { listPending, deleteAllPending } from './audiostore.js';
+import { formatTranscript } from './prompt.js';
+import { mailReady, wordDocHtml, parseAddresses, recipientsFor, inviteeEmails } from './mailer.js';
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get('id');
 let meeting = null;
 let settings = null;
-let abortCtl = null;
+let jobBusy = false; // a job is writing or emailing the minutes right now (here or in the background)
 let genFail = ''; // why the last attempt to write the minutes failed, shown in the red box
 
 // Names the user told us are in the meeting, plus the dictionary, as one context for every prompt and view.
 const attendeeList = () => (meeting?.attendees || []).filter(Boolean);
-// Voice-labelled lines of the remote speech, or null. Cheap enough to recompute, but cached while nothing changes.
+// Voice-labelled lines of the remote speech, or null (shared with the background job, cached while nothing changes).
 const labelCache = new Map(); // key -> lines (one entry per mode and state)
-function labeledLines(forDisplay = false) {
-  // Prompts and minutes only use voices that are named or trusted; the transcript view also shows the still-unnamed ones
-  // ("Unnamed voice 2") so the user can see who said what and name them by reading.
-  const people = forDisplay ? (settings.voices || []) : usableVoices(settings.voices);
-  if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-  const key = `${forDisplay ? 'd' : 'n'}${meeting.room ? 'r' : ''}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(',')}`;
-  if (!labelCache.has(key)) {
-    if (labelCache.size > 8) labelCache.clear();
-    labelCache.set(key, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!meeting.room }));
-  }
-  return labelCache.get(key);
-}
-const nameCtx = () => {
-  const labeled = labeledLines();
-  return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!meeting.room, voicePresence: labeled ? voicePresence(labeled) : null };
-};
+const labeledLines = (forDisplay = false) => labeledLinesFor(meeting, settings, forDisplay, labelCache);
+const nameCtx = () => nameCtxFor(meeting, settings, labelCache);
 const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
 function renderMom() {
@@ -56,7 +41,7 @@ function renderMom() {
 
 // Shows one of: the minutes, the "no minutes yet" card, the generating skeleton; plus the red failure box.
 function syncState() {
-  const busy = !!abortCtl;
+  const busy = jobBusy;
   const empty = !meeting.mom && !busy && !genFail;
   $('failBox').classList.toggle('hidden', !genFail || busy);
   $('failText').textContent = genFail ? `${genFail} Your transcript is safe.` : '';
@@ -151,7 +136,7 @@ async function renderNameBox() {
 
 // Should the transcript go with the minutes? Per meeting: what the user chose when the recording stopped (or later), else
 // the setting for the email to oneself, and "no" for people it is shared with.
-const wantTranscript = (shared) => (shared ? !!meeting.transcriptShare : meeting.transcriptMine ?? !!settings.emailTranscript);
+const wantTranscript = (shared) => wantT(meeting, settings, shared);
 
 // ---- the choice offered when the recording stops: format, and whether the transcript goes out ----
 const FORMATS = { amnex: 'Official Amnex format', standard: 'Debrief standard' };
@@ -169,7 +154,7 @@ async function chooseFormat(v, regenerate) {
   if (v === currentFormat()) return;
   await patchMeeting({ format: v });
   paintFormat();
-  if (regenerate && meeting.mom && !abortCtl) {
+  if (regenerate && meeting.mom && !jobBusy) {
     $('genStatus').textContent = `Switching to the ${FORMATS[v]}…`;
     runGenerate();
   }
@@ -185,32 +170,33 @@ $('chkShare').onchange = $('shareTranscript').onchange = async (e) => {
   paintFormat();
 };
 
-// The card waits a few seconds and then writes the minutes by itself, so an unattended recording still ends with
-// minutes (and the automatic email). Touching anything on the card stops the countdown.
-let countdown = null;
-function offerChoices() {
+// The runner waits 10 s after the meeting ends and then writes the minutes by itself, so an unattended recording still
+// ends with minutes (and the automatic email). This card shows that countdown; touching anything on it holds the job.
+const cd = { timer: null };
+function showStartCard(job) {
   paintFormat();
   $('startCard').classList.remove('hidden');
-  let left = 10;
-  const tick = () => {
-    $('startCount').textContent = `Writing automatically in ${left} s`;
-    if (left-- <= 0) return startWriting();
-    countdown = setTimeout(tick, 1000);
-  };
-  const stopCount = () => {
-    clearTimeout(countdown);
-    countdown = null;
-    $('startCount').textContent = 'Press the button when you are ready.';
-  };
-  $('startCard').addEventListener('pointerdown', stopCount, { once: true });
-  $('startCard').addEventListener('keydown', stopCount, { once: true });
+  clearInterval(cd.timer);
+  if (job?.held || !job?.countdownEnd) {
+    $('startCount').textContent = job?.held ? 'Press the button when you are ready.' : 'Getting ready…';
+    return;
+  }
+  const tick = () => ($('startCount').textContent = `Writing automatically in ${Math.max(0, Math.ceil((job.countdownEnd - Date.now()) / 1000))} s`);
   tick();
+  cd.timer = setInterval(tick, 500);
 }
+const holdJob = () => {
+  clearInterval(cd.timer);
+  $('startCount').textContent = 'Press the button when you are ready.';
+  chrome.runtime?.sendMessage?.({ target: 'bg', type: 'job-hold', id })?.catch?.(() => {});
+  runner.hold(id);
+};
+$('startCard').addEventListener('pointerdown', holdJob, { once: true });
+$('startCard').addEventListener('keydown', holdJob, { once: true });
 async function startWriting() {
-  clearTimeout(countdown);
+  clearInterval(cd.timer);
   $('startCard').classList.add('hidden');
-  await patchMeeting({ decided: true });
-  runGenerate();
+  await runGenerate();
 }
 $('startNow').onclick = startWriting;
 
@@ -267,6 +253,127 @@ function patchMeeting(fields) {
   return run;
 }
 
+// ---- the minutes job: written and emailed by a runner in the background; this page watches it ----
+const jobUi = { timer: null, buf: '', queued: false };
+const runner = createJobRunner({
+  emit: (m) => onJobEvent(m),
+  notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: 'icons/icon128.png', title: n.title, message: n.message }),
+});
+
+// Asks the background runner to start (or join) the job; if it cannot be reached, the same code runs here.
+// Either way there is one job per meeting: asking again while it runs changes nothing.
+async function requestJob(opts) {
+  let r = null;
+  try {
+    r = await chrome.runtime.sendMessage({ target: 'bg', type: 'job-run', id, ...opts });
+  } catch {}
+  return r?.ok && (r.started || r.running) ? r : runner.run(id, opts);
+}
+
+function setBusy(on) {
+  jobBusy = on;
+  $('gen').disabled = on;
+  $('reread').disabled = on;
+  $('abort').classList.toggle('hidden', !on);
+  $('genStatus').classList.toggle('busy', on);
+  syncState();
+}
+
+function paintStream() {
+  $('mom').innerHTML = renderMd(jobUi.buf);
+  decorateMinutes($('mom'));
+  $('mom').classList.add('streaming');
+  $('mom').hidden = false;
+}
+
+function onJobEvent(msg) {
+  if (!msg || msg.id !== id || !meeting) return;
+  if (msg.status) {
+    $('genStatus').textContent = msg.status;
+    if (!msg.keep) jobUi.buf = '';
+  }
+  if (typeof msg.text === 'string') {
+    jobUi.buf = msg.text;
+    if (!jobUi.queued) {
+      jobUi.queued = true;
+      requestAnimationFrame(() => {
+        jobUi.queued = false;
+        if (jobBusy) paintStream();
+      });
+    }
+  }
+  if (msg.job) applyJob(msg.job);
+  if (msg.finished) finishJob();
+}
+
+const JOB_STATUS = { 'transcribing-retry': 'Transcribing the audio that failed during the meeting…', emailing: 'Emailing the minutes…' };
+function applyJob(job) {
+  meeting.job = job;
+  if (job.state === 'queued') {
+    setBusy(false);
+    showStartCard(job);
+    if (!job.countdownEnd && !job.held) $('genStatus').textContent = 'Getting ready…';
+    return;
+  }
+  if (ACTIVE.includes(job.state)) {
+    const first = !jobBusy;
+    $('startCard').classList.add('hidden');
+    clearInterval(cd.timer);
+    setBusy(true);
+    if (JOB_STATUS[job.state]) $('genStatus').textContent = JOB_STATUS[job.state];
+    else if (first) $('genStatus').textContent = `Writing with ${modelLabel(settings)}…`;
+    if (first && !jobUi.buf) showSkeleton();
+  }
+}
+
+// The job ended (done or failed): take the saved result from storage and show it.
+async function finishJob() {
+  clearInterval(jobUi.timer);
+  jobUi.timer = null;
+  const latest = await getMeeting(id);
+  if (latest) {
+    for (const k of Object.keys(meeting)) if (!(k in latest)) delete meeting[k];
+    Object.assign(meeting, latest);
+  }
+  const job = meeting.job || {};
+  jobUi.buf = '';
+  const emailProblem = job.state === 'failed' && meeting.mom && /^(Email|The email)/.test(job.error || '');
+  genFail = job.state === 'failed' && !job.aborted && !emailProblem ? job.error || 'The minutes could not be written.' : '';
+  setBusy(false);
+  $('startCard').classList.add('hidden');
+  clearInterval(cd.timer);
+  $('attendees').value = (meeting.attendees || []).join('\n');
+  renderMom();
+  renderChips();
+  renderTranscript();
+  $('genStatus').classList.remove('busy');
+  if (job.state === 'failed') $('genStatus').textContent = job.aborted ? 'Stopped.' : `Failed: ${job.error}`;
+  else if (job.state === 'done') {
+    const stats = job.stats || {};
+    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack ? ' · the reply did not fit the official format, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
+  }
+  if (emailProblem) $('mailStatus').textContent = job.error;
+  else if (meeting.emailedAt) {
+    $('mailStatus').textContent = `Emailed to ${meeting.emailedTo || 'you'} ✓`;
+    $('mail').textContent = 'Email again';
+  }
+  $('reread').classList.toggle('hidden', !meeting.extract);
+  $('gen').textContent = 'Regenerate';
+}
+
+// Keeps an eye on a job that runs elsewhere: shows its stage, notices when it ends, and takes over here if its runner died.
+function watchJob() {
+  if (jobUi.timer) return;
+  jobUi.timer = setInterval(async () => {
+    const m = await getMeeting(id).catch(() => null);
+    if (!m) return;
+    if (isActive(m)) {
+      if (Date.now() - (m.job.beat || 0) > STALE_MS) runner.run(id, { resume: true });
+      else if (m.job.state !== meeting.job?.state || m.job.countdownEnd !== meeting.job?.countdownEnd) applyJob(m.job);
+    } else if (meeting.job?.state !== m.job?.state || jobBusy) finishJob();
+  }, 1500);
+}
+
 async function runGenerate({ reread = false } = {}) {
   if (!llmReady(settings)) {
     $('genStatus').textContent = 'Set up an LLM in Settings first.';
@@ -277,122 +384,29 @@ async function runGenerate({ reread = false } = {}) {
     return;
   }
   setEditing(false);
-  abortCtl = new AbortController();
+  meeting.notes = $('notes').value;
+  await patchMeeting({ notes: meeting.notes });
   genFail = '';
-  $('gen').disabled = true;
-  $('reread').disabled = true;
-  $('abort').classList.remove('hidden');
-  $('genStatus').classList.add('busy');
+  jobUi.buf = '';
   $('genStatus').textContent = `Writing with ${modelLabel(settings)}…`;
   showSkeleton();
-  syncState();
-  let buf = '';
-  let queued = false;
-  const paint = () => {
-    queued = false;
-    $('mom').innerHTML = renderMd(buf);
-    decorateMinutes($('mom'));
-    $('mom').classList.add('streaming');
-  };
-  // One model call with the same retry-on-rate-limit behaviour as before.
-  const gen = async (system, user, onText, opts = {}) => {
-    for (let i = 0; ; i++) {
-      try {
-        return await generate({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {}), temperature: opts.temperature });
-      } catch (e) {
-        if (i >= 3 || !isRetryable(e)) throw e;
-        const wait = [5, 15, 30][i];
-        $('genStatus').textContent = `Attempt ${i + 1} failed (${e.message.slice(0, 80)}). Retrying in ${wait} s…`;
-        await sleep(wait * 1000, abortCtl.signal);
-      }
-    }
-  };
-  try {
-    meeting.notes = $('notes').value;
-    const pending = await listPending(id);
-    const ctx = nameCtx();
-    const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name); // names only: no addresses go to the model
-    const { mom: text, stats, extract } = await writeMinutes({
-      meeting,
-      settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
-      notes: meeting.notes,
-      ctx: { ...ctx, absent, captions: meeting.captions, reread },
-      gen: (system, user, onText, opts) =>
-        gen(system, user, onText && ((d) => {
-          buf += d;
-          if (!queued) {
-            queued = true;
-            requestAnimationFrame(paint);
-          }
-        }), opts),
-      onText: () => {},
-      onStatus: (t) => {
-        buf = '';
-        $('genStatus').textContent = t;
-      },
-      coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length },
-    });
-    await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
-    renderMom();
-    renderChips();
-    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack ? ' · the reply did not fit the official format, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
-    // First time only: regenerating or editing never re-sends by itself.
-    if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
-  } catch (e) {
-    genFail = abortCtl.signal.aborted ? '' : e.message;
-    $('genStatus').textContent = abortCtl.signal.aborted ? 'Stopped.' : `Failed: ${e.message}`;
-    abortCtl = null;
-    renderMom();
-  } finally {
-    abortCtl = null;
-    syncState();
-    $('genStatus').classList.remove('busy');
-    $('gen').disabled = false;
-    $('reread').disabled = false;
-    $('reread').classList.toggle('hidden', !meeting.extract);
-    $('gen').textContent = 'Regenerate';
-    $('abort').classList.add('hidden');
-  }
+  setBusy(true);
+  await requestJob({ force: true, reread });
+  watchJob();
 }
 
-async function emailMom(auto) {
+// Emails the minutes to yourself, now (the automatic one is sent by the job).
+async function emailMom() {
   setEditing(false); // what is on screen is what gets sent, including unsaved edits
-  if (!meeting.mom?.trim()) {
-    $('mailStatus').textContent = 'No minutes to email yet.';
-    return;
-  }
-  if (!mailReady(settings)) {
-    $('mailStatus').textContent = 'Email is not set up. Add the Apps Script URL in Settings.';
-    return;
-  }
   $('mail').disabled = true;
-  $('mailStatus').textContent = auto ? 'Emailing the minutes…' : 'Sending…';
-  try {
-    // One tab at a time: two tabs finishing together (the one opened after Stop and one opened from the
-    // popup) must not both send the automatic email.
-    await navigator.locks.request(`debrief-email-${id}`, async () => {
-      if (auto) {
-        const latest = await getMeeting(id);
-        if (latest?.emailedAt) {
-          Object.assign(meeting, { emailedAt: latest.emailedAt, emailedTo: latest.emailedTo });
-          $('mailStatus').textContent = `Emailed to ${latest.emailedTo || 'you'} ✓`;
-          return;
-        }
-      }
-      const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(false) }, renderMd, wantTranscript(false) ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
-      const r = await sendMail(mail, settings);
-      await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
-      renderChips();
-      $('mailStatus').textContent = `Emailed to ${r.to} ✓`;
-      $('mail').textContent = 'Email again';
-      chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Debrief: minutes emailed', message: 'The minutes were sent.' });
-      if (auto && settings.shareMode === 'auto' && !meeting.sharedAt) shareMom(true).catch(() => {});
-    });
-  } catch (e) {
-    $('mailStatus').textContent = `Email failed: ${e.message}`;
-  } finally {
-    $('mail').disabled = false;
+  $('mailStatus').textContent = 'Sending…';
+  const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: 'icons/icon128.png', title: n.title, message: n.message }) });
+  $('mailStatus').textContent = r.status;
+  if (r.sent) {
+    renderChips();
+    $('mail').textContent = 'Email again';
   }
+  $('mail').disabled = false;
 }
 
 // ---- ask about this meeting ----
@@ -425,32 +439,18 @@ function initShare() {
   if (meeting.sharedAt) $('shareStatus').textContent = `Shared with ${(meeting.sharedTo || []).join(', ')} ✓`;
 }
 
-async function shareMom(auto) {
+async function shareMom() {
   setEditing(false);
-  if (!meeting.mom?.trim()) {
-    $('shareStatus').textContent = 'No minutes to share yet.';
-    return;
-  }
-  if (!mailReady(settings)) {
-    $('shareStatus').textContent = 'Email is not set up. Add the Apps Script URL in Settings.';
-    return;
-  }
-  const list = parseAddresses($('shareTo').value || (auto ? recipientsFor(meeting, settings).list.join(',') : ''));
+  const list = parseAddresses($('shareTo').value);
   if (!list.length) {
-    $('shareStatus').textContent = auto ? '' : 'Add at least one email address.';
+    $('shareStatus').textContent = 'Add at least one email address.';
     return;
   }
-  const how = auto ? settings.shareHow || 'to' : $('shareHowSel').value;
   $('shareSend').disabled = true;
   $('shareStatus').textContent = `Sending to ${list.length} ${list.length === 1 ? 'person' : 'people'}…`;
   try {
-    const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(true) }, renderMd, wantTranscript(true) ? formatTranscript(meeting, settings.myName, nameCtx()) : '');
-    const r = await sendMail(mail, settings, { to: how === 'to' ? list.join(',') : '', cc: how === 'cc' ? list.join(',') : '', bcc: how === 'bcc' ? list.join(',') : '' });
-    const sent = [...(r.to && how === 'to' ? String(r.to).split(',') : []), ...(r.cc || []), ...(r.bcc || [])];
-    await patchMeeting({ sharedAt: Date.now(), sharedTo: sent, shareTo: list });
-    $('shareStatus').textContent = r.skipped?.length
-      ? `Sent to ${sent.join(', ') || 'nobody'}. Not allowed by your script: ${r.skipped.join(', ')}. Add them under Settings → Email → Sharing, copy the updated script and deploy a new version.`
-      : `Shared with ${sent.join(', ')} ✓`;
+    const r = await shareMinutes({ meeting, settings, list, how: $('shareHowSel').value, patch: patchMeeting, ctxFor: nameCtx });
+    $('shareStatus').textContent = r.status;
   } catch (e) {
     $('shareStatus').textContent = `Share failed: ${e.message}`;
   } finally {
@@ -459,83 +459,26 @@ async function shareMom(auto) {
 }
 
 const addTo = (emails) => ($('shareTo').value = parseAddresses(`${$('shareTo').value},${emails.join(',')}`).join(', '));
-$('shareSend').onclick = () => shareMom(false);
+$('shareSend').onclick = () => shareMom();
 $('shareInvited').onclick = () => addTo(inviteeEmails(meeting));
 $('shareAbsent').onclick = () => addTo(inviteeEmails(meeting, { absentOnly: true, absentNames: absentNames() }));
 
-// Who was invited, from the calendar through the relay. Quiet if it is not set up or not permitted yet.
-async function ensureInvited() {
-  if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
-  try {
-    const guests = await lookupInvitees(meeting, settings);
-    await patchMeeting({ ...(guests ? { invited: [...guests], invitedHow: guests.how, invitedEvent: guests.event, invitedError: null } : { invitedNotFound: true }), invitedChecked: true });
-  } catch (e) {
-    await patchMeeting({ invitedError: e.message });
-  }
-}
+const ensureInvited = () => ensureInvitedFor(meeting, settings, patchMeeting);
+const rememberEmailNames = () => rememberNamesFor(meeting, settings, labelCache);
+const ensureAttendees = () => ensureAttendeesFor(meeting, settings, labelCache);
 
-// Calendar addresses with no name are matched to the people seen in the call; every clear match is remembered, so the next
-// meeting (and this one's tables) shows "Name (address)" instead of a bare address.
-async function rememberEmailNames() {
-  if (!meeting.invited?.length) return;
-  try {
-    const seen = { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) };
-    if (!Object.keys(seen).length) return;
-    const found = learnEmailNames(matchPeople(meeting.invited, seen, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows);
-    if (!Object.keys(found).length) return;
-    setEmailNames(await mergeEmailNames(found));
-  } catch {}
-}
-
-// Pre-fill the attendee list: who was actually seen (matched to calendar names), else who was invited.
-function ensureAttendees() {
-  if (meeting.attendees?.length) return;
-  const entries = parseDictionary(settings.dictionary);
-  const seen = { ...(nameCtx().voicePresence || {}), ...(meeting.presence || {}) };
-  const presence = Object.entries(seen).map(([name]) => (/^you$/i.test(name) && settings.myName ? settings.myName : name));
-  let names = [];
-  if (presence.length) {
-    const m = matchPeople(meeting.invited, seen, { entries, myName: settings.myName });
-    names = [...m.rows.filter((r) => r.present).map((r) => r.present.name || r.name), ...m.uninvited.map((p) => p.name)];
-  } else if (meeting.invited?.length) {
-    names = meeting.invited.filter((p) => p.status !== 'no').map((p) => personLabel(p));
-  }
-  if (names.length) meeting.attendees = [...new Set(names)];
-}
-
-const sleep = (ms, signal) =>
-  new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
-      clearTimeout(t);
-      reject(Object.assign(new Error('Stopped'), { name: 'AbortError' }));
-    });
-  });
-
-// Re-transcribes audio chunks that failed during the meeting. Returns how many are still failing.
+// Re-transcribes audio chunks that failed during the meeting (the job does this by itself before writing). Returns how many still fail.
 async function retryPending() {
-  let pending = await listPending(id);
-  if (!pending.length) return 0;
+  if (!(await listPending(id)).length) return 0;
   $('retry').disabled = true;
-  let done = 0;
-  let lastError = null;
-  for (const p of pending) {
-    $('pendingText').textContent = `Transcribing ${pending.length} audio piece${pending.length > 1 ? 's' : ''} that failed during the meeting… (${done}/${pending.length})`;
-    try {
-      const text = await transcribe(p.wav, settings);
-      if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true });
-      await deletePending(p.id);
-      await saveMeeting(meeting);
-      done++;
-    } catch (e) {
-      lastError = e.message;
-    }
-  }
+  const r = await retryPendingAudio({
+    id, meeting, settings,
+    onProgress: (done, total) => ($('pendingText').textContent = `Transcribing ${total} audio piece${total > 1 ? 's' : ''} that failed during the meeting… (${done}/${total})`),
+  });
   renderTranscript();
-  pending = await listPending(id);
-  renderPending(pending, lastError);
+  renderPending(r.pending, r.lastError);
   $('retry').disabled = false;
-  return pending.length;
+  return r.left;
 }
 
 function renderPending(pending, lastError) {
@@ -575,12 +518,15 @@ chrome.storage.onChanged.addListener(async (c) => {
     settings = await getSettings();
     labelCache.clear();
     renderTranscript();
-    if (c.voices && meeting?.mom && !abortCtl && labeledLines()) $('genStatus').textContent = 'Voices changed since these minutes were written. Press Regenerate to use the names.';
+    if (c.voices && meeting?.mom && !jobBusy && labeledLines()) $('genStatus').textContent = 'Voices changed since these minutes were written. Press Regenerate to use the names.';
   } catch {}
 });
 $('reread').onclick = () => runGenerate({ reread: true });
-$('mail').onclick = () => emailMom(false);
-$('abort').onclick = () => abortCtl?.abort();
+$('mail').onclick = () => emailMom();
+$('abort').onclick = () => {
+  chrome.runtime?.sendMessage?.({ target: 'bg', type: 'job-abort', id })?.catch?.(() => {});
+  runner.abort(id);
+};
 $('edit').onclick = () => setEditing($('mdEdit').classList.contains('hidden'));
 $('print').onclick = () => {
   setEditing(false);
@@ -730,9 +676,11 @@ tabBtns.forEach((b, i) => {
     const left = await retryPending();
     if (!left && meeting.segments.length) $('genStatus').textContent = 'Transcript recovered. Press Regenerate to update the minutes.';
   };
-  // Recover audio that failed mid-meeting before writing the minutes, so nothing is missing.
   const hadPending = (await listPending(id)).length > 0;
-  if (hadPending) await retryPending();
+  const live = isActive(meeting) && Date.now() - (meeting.job.beat || 0) <= STALE_MS; // a runner is on it right now
+  // a meeting that still needs its minutes is handled by the job, which also transcribes any failed audio first
+  const jobWillRun = !meeting.mom && !!meeting.endedAt && (meeting.segments.length > 0 || hadPending);
+  if (hadPending && !jobWillRun) await retryPending();
   if (meeting.emailedAt) {
     $('mailStatus').textContent = `Emailed to ${meeting.emailedTo || 'you'} ✓`;
     $('mail').textContent = 'Email again';
@@ -741,12 +689,24 @@ tabBtns.forEach((b, i) => {
     paintFormat();
     $('gen').textContent = 'Regenerate';
     $('reread').classList.toggle('hidden', !meeting.extract);
-    if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Regenerate to include it in the minutes.';
+    if (live) {
+      applyJob(meeting.job);
+      watchJob();
+    } else if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Regenerate to include it in the minutes.';
   } else if (!meeting.endedAt) {
     $('genStatus').textContent = 'This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.';
-  } else if (meeting.segments.length) {
+  } else if (jobWillRun) {
     paintFormat();
-    if (meeting.decided) runGenerate();
-    else offerChoices();
+    if (live) applyJob(meeting.job);
+    else if (meeting.job?.held) showStartCard(meeting.job);
+    else if (meeting.job?.state === 'failed' && !meeting.job.aborted) {
+      genFail = meeting.job.error || '';
+      syncState();
+    } else {
+      // no job yet (an older meeting, or the service worker did not get to start one): ask for it, once. Asking while one runs changes nothing.
+      showStartCard(null);
+      await requestJob(meeting.decided ? { force: true } : {});
+    }
+    watchJob();
   }
 })();

@@ -496,6 +496,14 @@
     return next;
   }
 
+  // src/jobstate.js
+  var ACTIVE = ["queued", "transcribing-retry", "writing", "emailing"];
+  var isActive = (m) => ACTIVE.includes(m?.job?.state);
+  var STALE_MS = 3e4;
+  function stuckJobs(meetings, now = Date.now()) {
+    return meetings.filter((m) => m && isActive(m) && !m.job?.held && now - (m.job?.beat || 0) > STALE_MS).map((m) => m.id);
+  }
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -640,7 +648,26 @@
     const { voiceBlock } = await chrome.storage.local.get("voiceBlock");
     return voiceBlock || [];
   }
+  async function getEmailNames() {
+    const { emailNames } = await chrome.storage.local.get("emailNames");
+    return emailNames || {};
+  }
+  async function saveEmailNames(map) {
+    await chrome.storage.local.set({ emailNames: map });
+  }
   var nameQueue = Promise.resolve();
+  function mergeEmailNames(found) {
+    nameQueue = nameQueue.catch(() => {
+    }).then(async () => {
+      const cur = await getEmailNames();
+      const fresh = Object.entries(found || {}).filter(([k]) => !cur[k]);
+      if (!fresh.length) return cur;
+      const next = { ...cur, ...Object.fromEntries(fresh) };
+      await saveEmailNames(next);
+      return next;
+    });
+    return nameQueue;
+  }
 
   // src/background.js
   chrome.runtime.onInstalled.addListener((d) => {
@@ -797,8 +824,35 @@
   }
   async function closeOffscreen() {
     const ctxs = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
-    if (ctxs.length) await chrome.offscreen.closeDocument();
+    if (!ctxs.length) return;
+    const busy = await chrome.runtime.sendMessage({ target: "offscreen", type: "job-count" }).catch(() => null);
+    if (busy?.count > 0) return;
+    await chrome.offscreen.closeDocument();
   }
+  async function jobCommand(type, msg, { create = true } = {}) {
+    if (create) await ensureOffscreen();
+    else if (!(await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] })).length) return { ok: true, running: false };
+    try {
+      return await chrome.runtime.sendMessage({ target: "offscreen", type, ...msg }) || { ok: false };
+    } catch {
+      return { ok: false };
+    }
+  }
+  async function startJob(id) {
+    await updateMeeting(id, (m) => {
+      m.job = { state: "queued", beat: Date.now(), error: null };
+    });
+    return jobCommand("job-run", { id });
+  }
+  async function resumeJobs() {
+    const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
+    const rows = await chrome.storage.local.get(meetingIds.slice(0, 30).map((i) => `meeting:${i}`));
+    for (const id of stuckJobs(Object.values(rows))) await jobCommand("job-run", { id, resume: true });
+  }
+  resumeJobs().catch(() => {
+  });
+  chrome.runtime.onStartup?.addListener(() => resumeJobs().catch(() => {
+  }));
   var cleanTitle = (t = "") => t.replace(/^Meet\s*[-–]\s*/i, "").replace(/\s*[-–]\s*Google Meet$/i, "").trim() || "Meeting";
   var starting = false;
   async function start(msg) {
@@ -930,7 +984,8 @@
       });
       await learnVoices(st.meetingId).catch(() => {
       });
-      await closeOffscreen();
+      await startJob(st.meetingId).catch(() => {
+      });
       await mutateState(() => ({ recording: false }));
       hideRec(st.tabId);
       await chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${st.meetingId}`), active: !opts.background });
@@ -1015,6 +1070,26 @@
         return { ok: true };
       },
       "mic-silent": () => raiseAlert(msg.meetingId, "MIC_SILENT"),
+      "job-run": () => jobCommand("job-run", { id: msg.id, force: !!msg.force, reread: !!msg.reread }),
+      "job-hold": () => jobCommand("job-hold", { id: msg.id }, { create: false }),
+      "job-abort": () => jobCommand("job-abort", { id: msg.id }, { create: false }),
+      "offscreen-idle": async () => {
+        if (!(await getState()).recording) await closeOffscreen();
+        return { ok: true };
+      },
+      notify: async () => {
+        chrome.notifications?.create(String(msg.id || "debrief"), { type: "basic", iconUrl: "icons/icon128.png", title: String(msg.title || "Debrief"), message: String(msg.message || "") });
+        return { ok: true };
+      },
+      // the offscreen document has no chrome.storage, so the job runner reads and writes through here
+      store: async () => {
+        if (msg.op === "settings") return { ok: true, value: await getSettings() };
+        if (msg.op === "getMeeting") return { ok: true, value: await getMeeting(msg.id) };
+        if (msg.op === "saveMeeting") return serial(async () => (await saveMeeting(msg.meeting), { ok: true }));
+        if (msg.op === "mergeEmailNames") return { ok: true, value: await mergeEmailNames(msg.found) };
+        if (msg.op === "emailNames") return { ok: true, value: await getEmailNames() };
+        return { ok: false };
+      },
       dbg: () => updateMeeting(msg.meetingId, (m) => (m.debug ||= []).push(msg.note)),
       segment: async () => {
         await updateMeeting(msg.meetingId, (m) => m.segments.push(msg.seg));

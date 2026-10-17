@@ -3035,7 +3035,7 @@ Rules:
     else root.append(chips, row2, status, notice, log);
     if (!opts.large) label2.remove();
     let abort = null;
-    const setBusy = (text) => {
+    const setBusy2 = (text) => {
       status.textContent = text;
       status.classList.toggle("busy", !!text);
     };
@@ -3115,7 +3115,7 @@ Rules:
       showNotice(false);
       if (opts.large) label2.classList.add("hidden"), chips.classList.add("hidden");
       input.value = "";
-      setBusy("Searching the meeting\u2026");
+      setBusy2("Searching the meeting\u2026");
       abort = new AbortController();
       go.disabled = true;
       stop.classList.remove("hidden");
@@ -3136,7 +3136,7 @@ Rules:
             }) });
           } catch (e2) {
             if (i >= 2 || !isRetryable(e2)) throw e2;
-            setBusy(`Busy (${e2.message.slice(0, 60)}). Trying again\u2026`);
+            setBusy2(`Busy (${e2.message.slice(0, 60)}). Trying again\u2026`);
             await sleep([4e3, 12e3][i]);
           }
         }
@@ -3151,7 +3151,7 @@ Rules:
           gen,
           onText: (d) => {
             buf += d;
-            setBusy("Answering\u2026");
+            setBusy2("Answering\u2026");
             if (!queued) {
               queued = true;
               requestAnimationFrame(paint);
@@ -3162,7 +3162,7 @@ Rules:
         const entry = { q: question, a: r.answer, sources: r.sources.slice(0, 8), at: Date.now() };
         history.push(entry);
         opts.onEntry?.(entry);
-        setBusy("");
+        setBusy2("");
       } catch (e2) {
         aEl.classList.remove("live");
         if (abort.signal.aborted) aEl.textContent = "Stopped.";
@@ -3177,7 +3177,7 @@ Rules:
           };
           aEl.replaceChildren(d, retry);
         }
-        setBusy("");
+        setBusy2("");
       } finally {
         abort = null;
         go.disabled = false;
@@ -4215,29 +4215,349 @@ ${meeting2.mom || ""}
     return j2.found ? Object.assign([...j2.guests || []], { how: j2.how || "", event: j2.event || "" }) : null;
   }
 
+  // src/jobstate.js
+  var ACTIVE = ["queued", "transcribing-retry", "writing", "emailing"];
+  var isActive = (m) => ACTIVE.includes(m?.job?.state);
+  var STALE_MS = 3e4;
+  var COUNTDOWN_MS = 1e4;
+
+  // src/jobs.js
+  var IO = { getMeeting, saveMeeting, getSettings, mergeEmailNames };
+  var wantTranscript = (meeting2, settings2, shared) => shared ? !!meeting2.transcriptShare : meeting2.transcriptMine ?? !!settings2.emailTranscript;
+  function labeledLinesFor(meeting2, settings2, forDisplay = false, cache = /* @__PURE__ */ new Map()) {
+    const people = forDisplay ? settings2.voices || [] : usableVoices(settings2.voices);
+    if (!settings2.voiceOn || !meeting2?.voiceSegs?.length || !people.length) return null;
+    const key2 = `${forDisplay ? "d" : "n"}${meeting2.room ? "r" : ""}|${meeting2.voiceSegs.length}|${meeting2.segments.length}|${(meeting2.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
+    if (!cache.has(key2)) {
+      if (cache.size > 8) cache.clear();
+      cache.set(key2, labelTranscript(meeting2, people, { captions: meeting2.captions, myName: settings2.myName, room: !!meeting2.room }));
+    }
+    return cache.get(key2);
+  }
+  function nameCtxFor(meeting2, settings2, cache) {
+    const labeled = labeledLinesFor(meeting2, settings2, false, cache);
+    return {
+      entries: parseDictionary(settings2.dictionary),
+      attendees: (meeting2?.attendees || []).filter(Boolean),
+      learned: (settings2.learnedNames || []).slice(-40),
+      labeled,
+      room: !!meeting2.room,
+      voicePresence: labeled ? voicePresence(labeled) : null
+    };
+  }
+  async function ensureInvited(meeting2, settings2, patch) {
+    if (meeting2.invitedChecked || !settings2.calendarLookup || !mailReady(settings2) || !meeting2.endedAt) return;
+    try {
+      const guests = await lookupInvitees(meeting2, settings2);
+      await patch({ ...guests ? { invited: [...guests], invitedHow: guests.how, invitedEvent: guests.event, invitedError: null } : { invitedNotFound: true }, invitedChecked: true });
+    } catch (e2) {
+      await patch({ invitedError: e2.message });
+    }
+  }
+  async function rememberEmailNames(meeting2, settings2, cache) {
+    if (!meeting2.invited?.length) return;
+    try {
+      const seen = { ...nameCtxFor(meeting2, settings2, cache).voicePresence || {}, ...meeting2.presence || {} };
+      if (!Object.keys(seen).length) return;
+      const found = learnEmailNames(matchPeople(meeting2.invited, seen, { entries: parseDictionary(settings2.dictionary), myName: settings2.myName }).rows);
+      if (!Object.keys(found).length) return;
+      setEmailNames(await IO.mergeEmailNames(found));
+    } catch {
+    }
+  }
+  function ensureAttendees(meeting2, settings2, cache) {
+    if (meeting2.attendees?.length) return;
+    const entries = parseDictionary(settings2.dictionary);
+    const seen = { ...nameCtxFor(meeting2, settings2, cache).voicePresence || {}, ...meeting2.presence || {} };
+    const presence = Object.entries(seen).map(([name]) => /^you$/i.test(name) && settings2.myName ? settings2.myName : name);
+    let names2 = [];
+    if (presence.length) {
+      const m = matchPeople(meeting2.invited, seen, { entries, myName: settings2.myName });
+      names2 = [...m.rows.filter((r) => r.present).map((r) => r.present.name || r.name), ...m.uninvited.map((p) => p.name)];
+    } else if (meeting2.invited?.length) {
+      names2 = meeting2.invited.filter((p) => p.status !== "no").map((p) => personLabel(p));
+    }
+    if (names2.length) meeting2.attendees = [...new Set(names2)];
+  }
+  async function retryPendingAudio({ id: id2, meeting: meeting2, settings: settings2, onProgress = () => {
+  }, transcribeFn = transcribe }) {
+    let pending = await listPending(id2);
+    let lastError = null;
+    let done = 0;
+    for (const p of pending) {
+      onProgress(done, pending.length);
+      try {
+        const text = await transcribeFn(p.wav, settings2);
+        if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting2.segments.push({ ...seg, recovered: true });
+        await deletePending(p.id);
+        await IO.saveMeeting(meeting2);
+        done++;
+      } catch (e2) {
+        lastError = e2.message;
+      }
+    }
+    pending = await listPending(id2);
+    return { left: pending.length, lastError, pending, done };
+  }
+  async function emailMinutes({ meeting: meeting2, settings: settings2, auto, patch, getLatest, ctxFor, notify = () => {
+  } }) {
+    if (!meeting2.mom?.trim()) return { status: "No minutes to email yet." };
+    if (!mailReady(settings2)) return { status: "Email is not set up. Add the Apps Script URL in Settings." };
+    const run2 = async () => {
+      if (auto) {
+        const latest = await getLatest();
+        if (latest?.emailedAt) {
+          Object.assign(meeting2, { emailedAt: latest.emailedAt, emailedTo: latest.emailedTo });
+          return { status: `Emailed to ${latest.emailedTo || "you"} \u2713`, sent: false };
+        }
+        if (latest?.emailSending) return { status: "The email may already have been sent. Check your inbox; press Email to send it again.", unsure: true };
+        await patch({ emailSending: Date.now() });
+      }
+      const withTr = wantTranscript(meeting2, settings2, false);
+      const mail = buildEmail(meeting2, { ...settings2, emailTranscript: withTr }, renderMd, withTr ? formatTranscript(meeting2, settings2.myName, ctxFor()) : "");
+      const r = await sendMail(mail, settings2);
+      await patch({ emailedAt: Date.now(), emailedTo: r.to, emailSending: null });
+      notify({ id: `debrief-mail-${meeting2.id}`, title: "Debrief: minutes emailed", message: "The minutes were sent." });
+      return { status: `Emailed to ${r.to} \u2713`, sent: true, to: r.to };
+    };
+    try {
+      return typeof navigator !== "undefined" && navigator.locks ? await navigator.locks.request(`debrief-email-${meeting2.id}`, run2) : await run2();
+    } catch (e2) {
+      if (auto) await patch({ emailSending: null }).catch(() => {
+      });
+      return { status: `Email failed: ${e2.message}`, failed: true };
+    }
+  }
+  async function shareMinutes({ meeting: meeting2, settings: settings2, list, how, patch, ctxFor }) {
+    if (!meeting2.mom?.trim()) return { status: "No minutes to share yet." };
+    if (!mailReady(settings2)) return { status: "Email is not set up. Add the Apps Script URL in Settings." };
+    if (!list.length) return { status: "" };
+    const withTr = wantTranscript(meeting2, settings2, true);
+    const mail = buildEmail(meeting2, { ...settings2, emailTranscript: withTr }, renderMd, withTr ? formatTranscript(meeting2, settings2.myName, ctxFor()) : "");
+    const r = await sendMail(mail, settings2, { to: how === "to" ? list.join(",") : "", cc: how === "cc" ? list.join(",") : "", bcc: how === "bcc" ? list.join(",") : "" });
+    const sent = [...r.to && how === "to" ? String(r.to).split(",") : [], ...r.cc || [], ...r.bcc || []];
+    await patch({ sharedAt: Date.now(), sharedTo: sent, shareTo: list });
+    return {
+      sent,
+      skipped: r.skipped || [],
+      status: r.skipped?.length ? `Sent to ${sent.join(", ") || "nobody"}. Not allowed by your script: ${r.skipped.join(", ")}. Add them under Settings \u2192 Email \u2192 Sharing, copy the updated script and deploy a new version.` : `Shared with ${sent.join(", ")} \u2713`
+    };
+  }
+  var sleep2 = (ms, signal) => new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      reject(Object.assign(new Error("Stopped"), { name: "AbortError" }));
+    });
+  });
+  async function generateWithRetry({ generate: generate2 = generate, settings: settings2, system, user, signal, onText, temperature, onRetry = () => {
+  }, wait = [5, 15, 30] }) {
+    for (let i = 0; ; i++) {
+      try {
+        return await generate2({ settings: settings2, system, user, signal, onText: onText || (() => {
+        }), temperature });
+      } catch (e2) {
+        if (i >= 3 || !isRetryable(e2)) throw e2;
+        onRetry(i + 1, e2, wait[i]);
+        await sleep2(wait[i] * 1e3, signal);
+      }
+    }
+  }
+  async function writeAndStore({ id: id2, meeting: meeting2, settings: settings2, reread = false, signal, ui, patch, cache, generate: generate2 }) {
+    const pending = await listPending(id2);
+    const ctx = nameCtxFor(meeting2, settings2, cache);
+    const absent = matchPeople(meeting2.invited, { ...ctx.voicePresence || {}, ...meeting2.presence || {} }, { entries: ctx.entries, myName: settings2.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+    const { mom: text, stats, extract } = await writeMinutes({
+      meeting: meeting2,
+      settings: { ...settings2, minutesFormat: meeting2.format || settings2.minutesFormat },
+      notes: meeting2.notes,
+      ctx: { ...ctx, absent, captions: meeting2.captions, reread },
+      gen: (system, user, onText, opts) => generateWithRetry({
+        generate: generate2,
+        settings: settings2,
+        system,
+        user,
+        signal,
+        onText: onText && ui.onText,
+        temperature: opts?.temperature,
+        onRetry: (n, e2, wait) => ui.onStatus(`Attempt ${n} failed (${e2.message.slice(0, 80)}). Retrying in ${wait} s\u2026`, { keep: true })
+      }),
+      onText: () => {
+      },
+      onStatus: (t) => ui.onStatus(t),
+      coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting2.errors || []).length }
+    });
+    await patch({ mom: text, model: modelLabel(settings2), notes: meeting2.notes, attendees: meeting2.attendees, ...extract ? { extract } : {} });
+    return { text, stats };
+  }
+  function createJobRunner(deps = {}) {
+    const d = {
+      getSettings: () => IO.getSettings(),
+      getMeeting: (i) => IO.getMeeting(i),
+      saveMeeting: (m) => IO.saveMeeting(m),
+      emit: () => {
+      },
+      notify: () => {
+      },
+      onIdle: () => {
+      },
+      generate,
+      transcribeFn: transcribe,
+      now: () => Date.now(),
+      countdownMs: COUNTDOWN_MS,
+      beatMs: 5e3,
+      ...deps
+    };
+    const emit = (m) => {
+      try {
+        d.emit(m);
+      } catch {
+      }
+    };
+    const running = /* @__PURE__ */ new Map();
+    async function pipeline(id2, job, { force, reread, resume }) {
+      let chain = Promise.resolve();
+      const patch = (fields) => {
+        const run3 = chain.then(async () => {
+          const latest = await d.getMeeting(id2) || meeting2;
+          Object.assign(latest, fields);
+          if (meeting2) Object.assign(meeting2, fields);
+          await d.saveMeeting(latest);
+        });
+        chain = run3.catch(() => {
+        });
+        return run3;
+      };
+      const cache = /* @__PURE__ */ new Map();
+      let meeting2 = await d.getMeeting(id2);
+      if (!meeting2) return;
+      const settings2 = await d.getSettings();
+      const skipWrite = !!resume && meeting2.job?.state === "emailing" && !!meeting2.mom?.trim();
+      const setJob = (fields) => {
+        const next = { ...meeting2.job || {}, ...fields, beat: d.now() };
+        emit({ type: "job-progress", id: id2, job: next });
+        return patch({ job: next });
+      };
+      const beat = setInterval(() => meeting2.job && isActive(meeting2) && patch({ job: { ...meeting2.job, beat: d.now() } }).catch(() => {
+      }), d.beatMs);
+      let buf = "";
+      let lastEmit = 0;
+      const ui = {
+        onStatus: (t, o) => {
+          if (!o?.keep) buf = "";
+          emit({ type: "job-progress", id: id2, status: t });
+        },
+        onText: (delta) => {
+          buf += delta;
+          if (d.now() - lastEmit > 250) {
+            lastEmit = d.now();
+            emit({ type: "job-progress", id: id2, text: buf });
+          }
+        }
+      };
+      try {
+        await setJob({ state: "queued", error: null, held: false, countdownEnd: null, aborted: false });
+        if (!llmReady(settings2)) return await setJob({ state: "failed", error: "Set up an LLM in Settings first." });
+        if (!meeting2.segments.length && !(await listPending(id2)).length) return await setJob({ state: "failed", error: "Nothing to summarise: the transcript is empty." });
+        await ensureInvited(meeting2, settings2, patch);
+        await rememberEmailNames(meeting2, settings2, cache);
+        if (!meeting2.attendees?.length) {
+          ensureAttendees(meeting2, settings2, cache);
+          if (meeting2.attendees?.length) await patch({ attendees: meeting2.attendees });
+        }
+        if ((await listPending(id2)).length) {
+          await setJob({ state: "transcribing-retry" });
+          await retryPendingAudio({ id: id2, meeting: meeting2, settings: settings2, transcribeFn: d.transcribeFn });
+        }
+        if (!meeting2.segments.length) return await setJob({ state: "failed", error: "Nothing to summarise: the transcript is empty." });
+        if (!force && !meeting2.decided && !meeting2.mom) {
+          if (job.held) return await setJob({ state: "queued", held: true, countdownEnd: null });
+          await setJob({ state: "queued", countdownEnd: d.now() + d.countdownMs });
+          await new Promise((resolve) => {
+            const t = setTimeout(resolve, d.countdownMs);
+            job.release = () => (clearTimeout(t), resolve());
+          });
+          job.release = null;
+          if (job.held) return await setJob({ state: "queued", held: true, countdownEnd: null });
+        }
+        await patch({ decided: true });
+        let result = { stats: meeting2.job?.stats };
+        if (!skipWrite) {
+          await setJob({ state: "writing", countdownEnd: null, held: false });
+          try {
+            result = await writeAndStore({ id: id2, meeting: meeting2, settings: settings2, reread, signal: job.ctl.signal, ui, patch, cache, generate: d.generate });
+          } catch (e2) {
+            const stopped = job.ctl.signal.aborted;
+            return await setJob({ state: "failed", error: stopped ? "Stopped." : e2.message, aborted: stopped });
+          }
+        }
+        if (settings2.emailAuto && mailReady(settings2) && !meeting2.emailedAt && meeting2.endedAt) {
+          await setJob({ state: "emailing" });
+          const r = await emailMinutes({ meeting: meeting2, settings: settings2, auto: true, patch, getLatest: () => d.getMeeting(id2), ctxFor: () => nameCtxFor(meeting2, settings2, cache), notify: d.notify });
+          if (r.failed || r.unsure) await setJob({ state: "failed", error: r.status, stats: result.stats });
+          else {
+            if (r.sent && settings2.shareMode === "auto" && !meeting2.sharedAt) {
+              const rec = recipientsFor(meeting2, settings2);
+              const list = parseAddresses((meeting2.shareTo || rec.list).join(","));
+              if (list.length) await shareMinutes({ meeting: meeting2, settings: settings2, list, how: settings2.shareHow || "to", patch, ctxFor: () => nameCtxFor(meeting2, settings2, cache) }).catch(() => {
+              });
+            }
+            await setJob({ state: "done", error: null, stats: result.stats });
+          }
+        } else await setJob({ state: "done", error: null, stats: result.stats });
+      } catch (e2) {
+        await setJob({ state: "failed", error: e2.message }).catch(() => {
+        });
+      } finally {
+        clearInterval(beat);
+        await chain;
+        emit({ type: "job-progress", id: id2, job: meeting2.job, finished: true });
+      }
+    }
+    function run2(id2, { force = false, reread = false, resume = false } = {}) {
+      const cur = running.get(id2);
+      if (cur) {
+        if (force && cur.release) cur.release();
+        return { ok: true, running: true };
+      }
+      const job = { ctl: new AbortController(), held: false, release: null };
+      running.set(id2, job);
+      job.done = pipeline(id2, job, { force: force || resume, reread, resume }).finally(() => {
+        running.delete(id2);
+        d.onIdle(running.size);
+      });
+      return { ok: true, started: true };
+    }
+    return {
+      run: run2,
+      hold(id2) {
+        const j2 = running.get(id2);
+        if (!j2) return { ok: true, running: false };
+        j2.held = true;
+        j2.release?.();
+        return { ok: true, running: true };
+      },
+      abort(id2) {
+        running.get(id2)?.ctl.abort();
+        return { ok: true };
+      },
+      isRunning: (id2) => running.has(id2),
+      count: () => running.size,
+      whenIdle: () => Promise.allSettled([...running.values()].map((j2) => j2.done))
+    };
+  }
+
   // src/mom.js
   var $2 = (id2) => document.getElementById(id2);
   var id = new URLSearchParams(location.search).get("id");
   var meeting = null;
   var settings = null;
-  var abortCtl = null;
+  var jobBusy = false;
   var genFail = "";
   var attendeeList = () => (meeting?.attendees || []).filter(Boolean);
   var labelCache = /* @__PURE__ */ new Map();
-  function labeledLines(forDisplay = false) {
-    const people = forDisplay ? settings.voices || [] : usableVoices(settings.voices);
-    if (!settings.voiceOn || !meeting?.voiceSegs?.length || !people.length) return null;
-    const key2 = `${forDisplay ? "d" : "n"}${meeting.room ? "r" : ""}|${meeting.voiceSegs.length}|${meeting.segments.length}|${(meeting.captions || []).length}|${people.map((v) => `${v.id}${v.windows?.length}`).join(",")}`;
-    if (!labelCache.has(key2)) {
-      if (labelCache.size > 8) labelCache.clear();
-      labelCache.set(key2, labelTranscript(meeting, people, { captions: meeting.captions, myName: settings.myName, room: !!meeting.room }));
-    }
-    return labelCache.get(key2);
-  }
-  var nameCtx = () => {
-    const labeled = labeledLines();
-    return { entries: parseDictionary(settings.dictionary), attendees: attendeeList(), learned: (settings.learnedNames || []).slice(-40), labeled, room: !!meeting.room, voicePresence: labeled ? voicePresence(labeled) : null };
-  };
+  var labeledLines = (forDisplay = false) => labeledLinesFor(meeting, settings, forDisplay, labelCache);
+  var nameCtx = () => nameCtxFor(meeting, settings, labelCache);
   var parseAttendees = (text) => text.split(/[\n,]+/).map((x2) => x2.trim()).filter(Boolean);
   function renderMom() {
     $2("mom").innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
@@ -4247,7 +4567,7 @@ ${meeting2.mom || ""}
     if (meeting) paintFormat();
   }
   function syncState() {
-    const busy = !!abortCtl;
+    const busy = jobBusy;
     const empty = !meeting.mom && !busy && !genFail;
     $2("failBox").classList.toggle("hidden", !genFail || busy);
     $2("failText").textContent = genFail ? `${genFail} Your transcript is safe.` : "";
@@ -4329,23 +4649,23 @@ ${meeting2.mom || ""}
       })
     );
   }
-  var wantTranscript = (shared) => shared ? !!meeting.transcriptShare : meeting.transcriptMine ?? !!settings.emailTranscript;
+  var wantTranscript2 = (shared) => wantTranscript(meeting, settings, shared);
   var FORMATS = { amnex: "Official Amnex format", standard: "Debrief standard" };
   var currentFormat = () => meeting.format || settings.minutesFormat || "amnex";
   function paintFormat() {
     const f = currentFormat();
     for (const seg of [$2("fmtSeg"), $2("fmtSwitch")]) for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.v === f));
     $2("fmtSwitch").classList.toggle("hidden", !meeting.mom);
-    $2("chkMine").checked = wantTranscript(false);
-    $2("chkShare").checked = wantTranscript(true);
-    $2("mailTranscript").checked = wantTranscript(false);
-    $2("shareTranscript").checked = wantTranscript(true);
+    $2("chkMine").checked = wantTranscript2(false);
+    $2("chkShare").checked = wantTranscript2(true);
+    $2("mailTranscript").checked = wantTranscript2(false);
+    $2("shareTranscript").checked = wantTranscript2(true);
   }
   async function chooseFormat(v, regenerate) {
     if (v === currentFormat()) return;
     await patchMeeting({ format: v });
     paintFormat();
-    if (regenerate && meeting.mom && !abortCtl) {
+    if (regenerate && meeting.mom && !jobBusy) {
       $2("genStatus").textContent = `Switching to the ${FORMATS[v]}\u2026`;
       runGenerate();
     }
@@ -4360,30 +4680,32 @@ ${meeting2.mom || ""}
     await patchMeeting({ transcriptShare: e2.target.checked });
     paintFormat();
   };
-  var countdown = null;
-  function offerChoices() {
+  var cd = { timer: null };
+  function showStartCard(job) {
     paintFormat();
     $2("startCard").classList.remove("hidden");
-    let left = 10;
-    const tick = () => {
-      $2("startCount").textContent = `Writing automatically in ${left} s`;
-      if (left-- <= 0) return startWriting();
-      countdown = setTimeout(tick, 1e3);
-    };
-    const stopCount = () => {
-      clearTimeout(countdown);
-      countdown = null;
-      $2("startCount").textContent = "Press the button when you are ready.";
-    };
-    $2("startCard").addEventListener("pointerdown", stopCount, { once: true });
-    $2("startCard").addEventListener("keydown", stopCount, { once: true });
+    clearInterval(cd.timer);
+    if (job?.held || !job?.countdownEnd) {
+      $2("startCount").textContent = job?.held ? "Press the button when you are ready." : "Getting ready\u2026";
+      return;
+    }
+    const tick = () => $2("startCount").textContent = `Writing automatically in ${Math.max(0, Math.ceil((job.countdownEnd - Date.now()) / 1e3))} s`;
     tick();
+    cd.timer = setInterval(tick, 500);
   }
+  var holdJob = () => {
+    clearInterval(cd.timer);
+    $2("startCount").textContent = "Press the button when you are ready.";
+    chrome.runtime?.sendMessage?.({ target: "bg", type: "job-hold", id })?.catch?.(() => {
+    });
+    runner.hold(id);
+  };
+  $2("startCard").addEventListener("pointerdown", holdJob, { once: true });
+  $2("startCard").addEventListener("keydown", holdJob, { once: true });
   async function startWriting() {
-    clearTimeout(countdown);
+    clearInterval(cd.timer);
     $2("startCard").classList.add("hidden");
-    await patchMeeting({ decided: true });
-    runGenerate();
+    await runGenerate();
   }
   $2("startNow").onclick = startWriting;
   function renderTranscript() {
@@ -4432,6 +4754,115 @@ ${meeting2.mom || ""}
     });
     return run2;
   }
+  var jobUi = { timer: null, buf: "", queued: false };
+  var runner = createJobRunner({
+    emit: (m) => onJobEvent(m),
+    notify: (n) => chrome.notifications?.create(n.id, { type: "basic", iconUrl: "icons/icon128.png", title: n.title, message: n.message })
+  });
+  async function requestJob(opts) {
+    let r = null;
+    try {
+      r = await chrome.runtime.sendMessage({ target: "bg", type: "job-run", id, ...opts });
+    } catch {
+    }
+    return r?.ok && (r.started || r.running) ? r : runner.run(id, opts);
+  }
+  function setBusy(on) {
+    jobBusy = on;
+    $2("gen").disabled = on;
+    $2("reread").disabled = on;
+    $2("abort").classList.toggle("hidden", !on);
+    $2("genStatus").classList.toggle("busy", on);
+    syncState();
+  }
+  function paintStream() {
+    $2("mom").innerHTML = renderMd(jobUi.buf);
+    decorateMinutes($2("mom"));
+    $2("mom").classList.add("streaming");
+    $2("mom").hidden = false;
+  }
+  function onJobEvent(msg) {
+    if (!msg || msg.id !== id || !meeting) return;
+    if (msg.status) {
+      $2("genStatus").textContent = msg.status;
+      if (!msg.keep) jobUi.buf = "";
+    }
+    if (typeof msg.text === "string") {
+      jobUi.buf = msg.text;
+      if (!jobUi.queued) {
+        jobUi.queued = true;
+        requestAnimationFrame(() => {
+          jobUi.queued = false;
+          if (jobBusy) paintStream();
+        });
+      }
+    }
+    if (msg.job) applyJob(msg.job);
+    if (msg.finished) finishJob();
+  }
+  var JOB_STATUS = { "transcribing-retry": "Transcribing the audio that failed during the meeting\u2026", emailing: "Emailing the minutes\u2026" };
+  function applyJob(job) {
+    meeting.job = job;
+    if (job.state === "queued") {
+      setBusy(false);
+      showStartCard(job);
+      if (!job.countdownEnd && !job.held) $2("genStatus").textContent = "Getting ready\u2026";
+      return;
+    }
+    if (ACTIVE.includes(job.state)) {
+      const first2 = !jobBusy;
+      $2("startCard").classList.add("hidden");
+      clearInterval(cd.timer);
+      setBusy(true);
+      if (JOB_STATUS[job.state]) $2("genStatus").textContent = JOB_STATUS[job.state];
+      else if (first2) $2("genStatus").textContent = `Writing with ${modelLabel(settings)}\u2026`;
+      if (first2 && !jobUi.buf) showSkeleton();
+    }
+  }
+  async function finishJob() {
+    clearInterval(jobUi.timer);
+    jobUi.timer = null;
+    const latest = await getMeeting(id);
+    if (latest) {
+      for (const k2 of Object.keys(meeting)) if (!(k2 in latest)) delete meeting[k2];
+      Object.assign(meeting, latest);
+    }
+    const job = meeting.job || {};
+    jobUi.buf = "";
+    const emailProblem = job.state === "failed" && meeting.mom && /^(Email|The email)/.test(job.error || "");
+    genFail = job.state === "failed" && !job.aborted && !emailProblem ? job.error || "The minutes could not be written." : "";
+    setBusy(false);
+    $2("startCard").classList.add("hidden");
+    clearInterval(cd.timer);
+    $2("attendees").value = (meeting.attendees || []).join("\n");
+    renderMom();
+    renderChips();
+    renderTranscript();
+    $2("genStatus").classList.remove("busy");
+    if (job.state === "failed") $2("genStatus").textContent = job.aborted ? "Stopped." : `Failed: ${job.error}`;
+    else if (job.state === "done") {
+      const stats = job.stats || {};
+      $2("genStatus").textContent = `Done \xB7 ${meeting.model}${stats.fellBack ? " \xB7 the reply did not fit the official format, so standard minutes were written" : ""}${stats.calls > 1 ? ` \xB7 ${stats.items} items ${stats.reused ? "reused from the earlier read of this transcript (press Re-read transcript for a fresh read)" : "found"}, ${stats.missed} added by the check` : ""}`;
+    }
+    if (emailProblem) $2("mailStatus").textContent = job.error;
+    else if (meeting.emailedAt) {
+      $2("mailStatus").textContent = `Emailed to ${meeting.emailedTo || "you"} \u2713`;
+      $2("mail").textContent = "Email again";
+    }
+    $2("reread").classList.toggle("hidden", !meeting.extract);
+    $2("gen").textContent = "Regenerate";
+  }
+  function watchJob() {
+    if (jobUi.timer) return;
+    jobUi.timer = setInterval(async () => {
+      const m = await getMeeting(id).catch(() => null);
+      if (!m) return;
+      if (isActive(m)) {
+        if (Date.now() - (m.job.beat || 0) > STALE_MS) runner.run(id, { resume: true });
+        else if (m.job.state !== meeting.job?.state || m.job.countdownEnd !== meeting.job?.countdownEnd) applyJob(m.job);
+      } else if (meeting.job?.state !== m.job?.state || jobBusy) finishJob();
+    }, 1500);
+  }
   async function runGenerate({ reread = false } = {}) {
     if (!llmReady(settings)) {
       $2("genStatus").textContent = "Set up an LLM in Settings first.";
@@ -4442,119 +4873,27 @@ ${meeting2.mom || ""}
       return;
     }
     setEditing(false);
-    abortCtl = new AbortController();
+    meeting.notes = $2("notes").value;
+    await patchMeeting({ notes: meeting.notes });
     genFail = "";
-    $2("gen").disabled = true;
-    $2("reread").disabled = true;
-    $2("abort").classList.remove("hidden");
-    $2("genStatus").classList.add("busy");
+    jobUi.buf = "";
     $2("genStatus").textContent = `Writing with ${modelLabel(settings)}\u2026`;
     showSkeleton();
-    syncState();
-    let buf = "";
-    let queued = false;
-    const paint = () => {
-      queued = false;
-      $2("mom").innerHTML = renderMd(buf);
-      decorateMinutes($2("mom"));
-      $2("mom").classList.add("streaming");
-    };
-    const gen = async (system, user, onText, opts = {}) => {
-      for (let i = 0; ; i++) {
-        try {
-          return await generate({ settings, system, user, signal: abortCtl.signal, onText: onText || (() => {
-          }), temperature: opts.temperature });
-        } catch (e2) {
-          if (i >= 3 || !isRetryable(e2)) throw e2;
-          const wait = [5, 15, 30][i];
-          $2("genStatus").textContent = `Attempt ${i + 1} failed (${e2.message.slice(0, 80)}). Retrying in ${wait} s\u2026`;
-          await sleep2(wait * 1e3, abortCtl.signal);
-        }
-      }
-    };
-    try {
-      meeting.notes = $2("notes").value;
-      const pending = await listPending(id);
-      const ctx = nameCtx();
-      const absent = matchPeople(meeting.invited, { ...ctx.voicePresence || {}, ...meeting.presence || {} }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name);
-      const { mom: text, stats, extract } = await writeMinutes({
-        meeting,
-        settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
-        notes: meeting.notes,
-        ctx: { ...ctx, absent, captions: meeting.captions, reread },
-        gen: (system, user, onText, opts) => gen(system, user, onText && ((d) => {
-          buf += d;
-          if (!queued) {
-            queued = true;
-            requestAnimationFrame(paint);
-          }
-        }), opts),
-        onText: () => {
-        },
-        onStatus: (t) => {
-          buf = "";
-          $2("genStatus").textContent = t;
-        },
-        coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting.errors || []).length }
-      });
-      await patchMeeting({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...extract ? { extract } : {} });
-      renderMom();
-      renderChips();
-      $2("genStatus").textContent = `Done \xB7 ${meeting.model}${stats.fellBack ? " \xB7 the reply did not fit the official format, so standard minutes were written" : ""}${stats.calls > 1 ? ` \xB7 ${stats.items} items ${stats.reused ? "reused from the earlier read of this transcript (press Re-read transcript for a fresh read)" : "found"}, ${stats.missed} added by the check` : ""}`;
-      if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) emailMom(true);
-    } catch (e2) {
-      genFail = abortCtl.signal.aborted ? "" : e2.message;
-      $2("genStatus").textContent = abortCtl.signal.aborted ? "Stopped." : `Failed: ${e2.message}`;
-      abortCtl = null;
-      renderMom();
-    } finally {
-      abortCtl = null;
-      syncState();
-      $2("genStatus").classList.remove("busy");
-      $2("gen").disabled = false;
-      $2("reread").disabled = false;
-      $2("reread").classList.toggle("hidden", !meeting.extract);
-      $2("gen").textContent = "Regenerate";
-      $2("abort").classList.add("hidden");
-    }
+    setBusy(true);
+    await requestJob({ force: true, reread });
+    watchJob();
   }
-  async function emailMom(auto) {
+  async function emailMom() {
     setEditing(false);
-    if (!meeting.mom?.trim()) {
-      $2("mailStatus").textContent = "No minutes to email yet.";
-      return;
-    }
-    if (!mailReady(settings)) {
-      $2("mailStatus").textContent = "Email is not set up. Add the Apps Script URL in Settings.";
-      return;
-    }
     $2("mail").disabled = true;
-    $2("mailStatus").textContent = auto ? "Emailing the minutes\u2026" : "Sending\u2026";
-    try {
-      await navigator.locks.request(`debrief-email-${id}`, async () => {
-        if (auto) {
-          const latest = await getMeeting(id);
-          if (latest?.emailedAt) {
-            Object.assign(meeting, { emailedAt: latest.emailedAt, emailedTo: latest.emailedTo });
-            $2("mailStatus").textContent = `Emailed to ${latest.emailedTo || "you"} \u2713`;
-            return;
-          }
-        }
-        const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(false) }, renderMd, wantTranscript(false) ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
-        const r = await sendMail(mail, settings);
-        await patchMeeting({ emailedAt: Date.now(), emailedTo: r.to });
-        renderChips();
-        $2("mailStatus").textContent = `Emailed to ${r.to} \u2713`;
-        $2("mail").textContent = "Email again";
-        chrome.notifications?.create(`debrief-mail-${meeting.id}`, { type: "basic", iconUrl: "icons/icon128.png", title: "Debrief: minutes emailed", message: "The minutes were sent." });
-        if (auto && settings.shareMode === "auto" && !meeting.sharedAt) shareMom(true).catch(() => {
-        });
-      });
-    } catch (e2) {
-      $2("mailStatus").textContent = `Email failed: ${e2.message}`;
-    } finally {
-      $2("mail").disabled = false;
+    $2("mailStatus").textContent = "Sending\u2026";
+    const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: "basic", iconUrl: "icons/icon128.png", title: n.title, message: n.message }) });
+    $2("mailStatus").textContent = r.status;
+    if (r.sent) {
+      renderChips();
+      $2("mail").textContent = "Email again";
     }
+    $2("mail").disabled = false;
   }
   function mountAskBox() {
     const box = $2("askBox");
@@ -4581,30 +4920,18 @@ ${meeting2.mom || ""}
     $2("shareAbsent").classList.toggle("hidden", !hasInv || !meeting.presence);
     if (meeting.sharedAt) $2("shareStatus").textContent = `Shared with ${(meeting.sharedTo || []).join(", ")} \u2713`;
   }
-  async function shareMom(auto) {
+  async function shareMom() {
     setEditing(false);
-    if (!meeting.mom?.trim()) {
-      $2("shareStatus").textContent = "No minutes to share yet.";
-      return;
-    }
-    if (!mailReady(settings)) {
-      $2("shareStatus").textContent = "Email is not set up. Add the Apps Script URL in Settings.";
-      return;
-    }
-    const list = parseAddresses($2("shareTo").value || (auto ? recipientsFor(meeting, settings).list.join(",") : ""));
+    const list = parseAddresses($2("shareTo").value);
     if (!list.length) {
-      $2("shareStatus").textContent = auto ? "" : "Add at least one email address.";
+      $2("shareStatus").textContent = "Add at least one email address.";
       return;
     }
-    const how = auto ? settings.shareHow || "to" : $2("shareHowSel").value;
     $2("shareSend").disabled = true;
     $2("shareStatus").textContent = `Sending to ${list.length} ${list.length === 1 ? "person" : "people"}\u2026`;
     try {
-      const mail = buildEmail(meeting, { ...settings, emailTranscript: wantTranscript(true) }, renderMd, wantTranscript(true) ? formatTranscript(meeting, settings.myName, nameCtx()) : "");
-      const r = await sendMail(mail, settings, { to: how === "to" ? list.join(",") : "", cc: how === "cc" ? list.join(",") : "", bcc: how === "bcc" ? list.join(",") : "" });
-      const sent = [...r.to && how === "to" ? String(r.to).split(",") : [], ...r.cc || [], ...r.bcc || []];
-      await patchMeeting({ sharedAt: Date.now(), sharedTo: sent, shareTo: list });
-      $2("shareStatus").textContent = r.skipped?.length ? `Sent to ${sent.join(", ") || "nobody"}. Not allowed by your script: ${r.skipped.join(", ")}. Add them under Settings \u2192 Email \u2192 Sharing, copy the updated script and deploy a new version.` : `Shared with ${sent.join(", ")} \u2713`;
+      const r = await shareMinutes({ meeting, settings, list, how: $2("shareHowSel").value, patch: patchMeeting, ctxFor: nameCtx });
+      $2("shareStatus").textContent = r.status;
     } catch (e2) {
       $2("shareStatus").textContent = `Share failed: ${e2.message}`;
     } finally {
@@ -4612,73 +4939,25 @@ ${meeting2.mom || ""}
     }
   }
   var addTo = (emails) => $2("shareTo").value = parseAddresses(`${$2("shareTo").value},${emails.join(",")}`).join(", ");
-  $2("shareSend").onclick = () => shareMom(false);
+  $2("shareSend").onclick = () => shareMom();
   $2("shareInvited").onclick = () => addTo(inviteeEmails(meeting));
   $2("shareAbsent").onclick = () => addTo(inviteeEmails(meeting, { absentOnly: true, absentNames: absentNames() }));
-  async function ensureInvited() {
-    if (meeting.invitedChecked || !settings.calendarLookup || !mailReady(settings) || !meeting.endedAt) return;
-    try {
-      const guests = await lookupInvitees(meeting, settings);
-      await patchMeeting({ ...guests ? { invited: [...guests], invitedHow: guests.how, invitedEvent: guests.event, invitedError: null } : { invitedNotFound: true }, invitedChecked: true });
-    } catch (e2) {
-      await patchMeeting({ invitedError: e2.message });
-    }
-  }
-  async function rememberEmailNames() {
-    if (!meeting.invited?.length) return;
-    try {
-      const seen = { ...nameCtx().voicePresence || {}, ...meeting.presence || {} };
-      if (!Object.keys(seen).length) return;
-      const found = learnEmailNames(matchPeople(meeting.invited, seen, { entries: parseDictionary(settings.dictionary), myName: settings.myName }).rows);
-      if (!Object.keys(found).length) return;
-      setEmailNames(await mergeEmailNames(found));
-    } catch {
-    }
-  }
-  function ensureAttendees() {
-    if (meeting.attendees?.length) return;
-    const entries = parseDictionary(settings.dictionary);
-    const seen = { ...nameCtx().voicePresence || {}, ...meeting.presence || {} };
-    const presence = Object.entries(seen).map(([name]) => /^you$/i.test(name) && settings.myName ? settings.myName : name);
-    let names2 = [];
-    if (presence.length) {
-      const m = matchPeople(meeting.invited, seen, { entries, myName: settings.myName });
-      names2 = [...m.rows.filter((r) => r.present).map((r) => r.present.name || r.name), ...m.uninvited.map((p) => p.name)];
-    } else if (meeting.invited?.length) {
-      names2 = meeting.invited.filter((p) => p.status !== "no").map((p) => personLabel(p));
-    }
-    if (names2.length) meeting.attendees = [...new Set(names2)];
-  }
-  var sleep2 = (ms, signal) => new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(t);
-      reject(Object.assign(new Error("Stopped"), { name: "AbortError" }));
-    });
-  });
+  var ensureInvited2 = () => ensureInvited(meeting, settings, patchMeeting);
+  var rememberEmailNames2 = () => rememberEmailNames(meeting, settings, labelCache);
+  var ensureAttendees2 = () => ensureAttendees(meeting, settings, labelCache);
   async function retryPending() {
-    let pending = await listPending(id);
-    if (!pending.length) return 0;
+    if (!(await listPending(id)).length) return 0;
     $2("retry").disabled = true;
-    let done = 0;
-    let lastError = null;
-    for (const p of pending) {
-      $2("pendingText").textContent = `Transcribing ${pending.length} audio piece${pending.length > 1 ? "s" : ""} that failed during the meeting\u2026 (${done}/${pending.length})`;
-      try {
-        const text = await transcribe(p.wav, settings);
-        if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true });
-        await deletePending(p.id);
-        await saveMeeting(meeting);
-        done++;
-      } catch (e2) {
-        lastError = e2.message;
-      }
-    }
+    const r = await retryPendingAudio({
+      id,
+      meeting,
+      settings,
+      onProgress: (done, total) => $2("pendingText").textContent = `Transcribing ${total} audio piece${total > 1 ? "s" : ""} that failed during the meeting\u2026 (${done}/${total})`
+    });
     renderTranscript();
-    pending = await listPending(id);
-    renderPending(pending, lastError);
+    renderPending(r.pending, r.lastError);
     $2("retry").disabled = false;
-    return pending.length;
+    return r.left;
   }
   function renderPending(pending, lastError) {
     $2("pendingBox").classList.toggle("hidden", !pending.length);
@@ -4712,13 +4991,17 @@ ${meeting2.mom || ""}
       settings = await getSettings();
       labelCache.clear();
       renderTranscript();
-      if (c.voices && meeting?.mom && !abortCtl && labeledLines()) $2("genStatus").textContent = "Voices changed since these minutes were written. Press Regenerate to use the names.";
+      if (c.voices && meeting?.mom && !jobBusy && labeledLines()) $2("genStatus").textContent = "Voices changed since these minutes were written. Press Regenerate to use the names.";
     } catch {
     }
   });
   $2("reread").onclick = () => runGenerate({ reread: true });
-  $2("mail").onclick = () => emailMom(false);
-  $2("abort").onclick = () => abortCtl?.abort();
+  $2("mail").onclick = () => emailMom();
+  $2("abort").onclick = () => {
+    chrome.runtime?.sendMessage?.({ target: "bg", type: "job-abort", id })?.catch?.(() => {
+    });
+    runner.abort(id);
+  };
   $2("edit").onclick = () => setEditing($2("mdEdit").classList.contains("hidden"));
   $2("print").onclick = () => {
     setEditing(false);
@@ -4843,9 +5126,9 @@ ${meeting2.mom || ""}
       document.querySelector("main").innerHTML = "<p>Meeting not found.</p>";
       return;
     }
-    await ensureInvited();
-    await rememberEmailNames();
-    ensureAttendees();
+    await ensureInvited2();
+    await rememberEmailNames2();
+    ensureAttendees2();
     learn().catch(() => {
     });
     $2("notes").value = meeting.notes || "";
@@ -4862,7 +5145,9 @@ ${meeting2.mom || ""}
       if (!left && meeting.segments.length) $2("genStatus").textContent = "Transcript recovered. Press Regenerate to update the minutes.";
     };
     const hadPending = (await listPending(id)).length > 0;
-    if (hadPending) await retryPending();
+    const live = isActive(meeting) && Date.now() - (meeting.job.beat || 0) <= STALE_MS;
+    const jobWillRun = !meeting.mom && !!meeting.endedAt && (meeting.segments.length > 0 || hadPending);
+    if (hadPending && !jobWillRun) await retryPending();
     if (meeting.emailedAt) {
       $2("mailStatus").textContent = `Emailed to ${meeting.emailedTo || "you"} \u2713`;
       $2("mail").textContent = "Email again";
@@ -4871,13 +5156,24 @@ ${meeting2.mom || ""}
       paintFormat();
       $2("gen").textContent = "Regenerate";
       $2("reread").classList.toggle("hidden", !meeting.extract);
-      if (hadPending) $2("genStatus").textContent = "Missing audio was recovered. Press Regenerate to include it in the minutes.";
+      if (live) {
+        applyJob(meeting.job);
+        watchJob();
+      } else if (hadPending) $2("genStatus").textContent = "Missing audio was recovered. Press Regenerate to include it in the minutes.";
     } else if (!meeting.endedAt) {
       $2("genStatus").textContent = "This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.";
-    } else if (meeting.segments.length) {
+    } else if (jobWillRun) {
       paintFormat();
-      if (meeting.decided) runGenerate();
-      else offerChoices();
+      if (live) applyJob(meeting.job);
+      else if (meeting.job?.held) showStartCard(meeting.job);
+      else if (meeting.job?.state === "failed" && !meeting.job.aborted) {
+        genFail = meeting.job.error || "";
+        syncState();
+      } else {
+        showStartCard(null);
+        await requestJob(meeting.decided ? { force: true } : {});
+      }
+      watchJob();
     }
   })();
 })();

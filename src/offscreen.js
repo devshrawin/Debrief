@@ -4,6 +4,7 @@ import { transcribe } from './stt.js';
 import { encodeWav } from './wav.js';
 import { Chunker, SR, chunkSecs } from './chunker.js';
 import { Mixer, Meter, timelineOf, attributeMixed } from './mixer.js';
+import { createJobRunner, useStore } from './jobs.js';
 import { savePending } from './audiostore.js';
 import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
@@ -248,8 +249,31 @@ async function stop() {
   }
 }
 
+// ---- minutes jobs (see jobs.js): this document has no chrome.storage, so reading and saving go through the service worker ----
+const viaBg = async (m) => {
+  const r = await chrome.runtime.sendMessage({ target: 'bg', type: 'store', ...m });
+  if (!r?.ok) throw new Error('The extension could not reach its storage.');
+  return r.value;
+};
+useStore({
+  getSettings: () => viaBg({ op: 'settings' }),
+  getMeeting: (id) => viaBg({ op: 'getMeeting', id }),
+  saveMeeting: (meeting) => viaBg({ op: 'saveMeeting', meeting }),
+  mergeEmailNames: (found) => viaBg({ op: 'mergeEmailNames', found }),
+});
+const jobs = createJobRunner({
+  emit: (m) => chrome.runtime.sendMessage(m).catch(() => {}),
+  notify: (n) => chrome.runtime.sendMessage({ target: 'bg', type: 'notify', ...n }).catch(() => {}),
+  // when nothing is left to do and nothing is recording, ask the service worker to close this document
+  onIdle: (left) => !left && !rec && chrome.runtime.sendMessage({ target: 'bg', type: 'offscreen-idle' }).catch(() => {}),
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.target !== 'offscreen') return;
+  if (msg.type === 'job-run') return sendResponse(jobs.run(msg.id, { force: !!msg.force, reread: !!msg.reread, resume: !!msg.resume }));
+  if (msg.type === 'job-hold') return sendResponse(jobs.hold(msg.id));
+  if (msg.type === 'job-abort') return sendResponse(jobs.abort(msg.id));
+  if (msg.type === 'job-count') return sendResponse({ ok: true, count: jobs.count() });
   if (msg.type === 'start') {
     start(msg).then(
       (r) => sendResponse({ ok: true, ...r }),
