@@ -95,7 +95,7 @@ function loadScript(patch = (s) => s, events = []) {
 
 await test('script v7: owner by default, allowed people and domains only, cc/bcc, reply-to', () => {
   const { post, sent, api } = loadScript((s) => s.replace('const ALLOWED = [];', "const ALLOWED = ['team@co.com'];").replace('const ALLOWED_DOMAINS = [];', "const ALLOWED_DOMAINS = ['corp.com'];"));
-  assert.equal(JSON.parse(api.doGet().t).version, 7);
+  assert.equal(JSON.parse(api.doGet().t).version, 8);
   assert.equal(post({ subject: 's', html: 'h', text: 't' }).to, 'Me@Co.com');
   const r = post({ to: 'team@co.com, evil@bad.com, anyone@corp.com', cc: 'x@corp.com', bcc: 'who@else.com', subject: 's' });
   assert.equal(r.to, 'team@co.com,anyone@corp.com');
@@ -142,10 +142,10 @@ await test('script v7: PDF attachments are built from HTML', () => {
 
 await test('script v7: locks to the first secret, refuses others, can be reset', () => {
   const { post, sent, props, api } = loadScript();
-  assert.equal(JSON.parse(api.doGet().t).locked, false);
+  assert.equal('locked' in JSON.parse(api.doGet().t), false, 'doGet no longer tells anyone whether the relay is locked');
   assert.equal(post({ subject: 's' }, 'short').ok, false, 'a short secret cannot claim the script');
   assert.equal(post({ subject: 's' }).ok, true, 'the first long secret claims it');
-  assert.equal(JSON.parse(api.doGet().t).locked, true);
+  assert.equal(props.secret?.length > 0, true, 'the first long secret was kept');
   const bad = post({ subject: 'spam', html: '<b>phish</b>' }, 'f'.repeat(32));
   assert.equal(bad.ok, false);
   assert.match(bad.error, /locked/);
