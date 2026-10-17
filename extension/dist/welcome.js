@@ -2073,42 +2073,7 @@ function out(o) {
     return h2("div", { class: "trow" }, h2("div", { class: "t" }, h2("label", { for: select.id }, title), h2("p", { class: "hint" }, sub)), select);
   }
   var sel = (id, options, onchange) => h2("select", { id, class: "inp", onchange }, ...options.map(([v, l3]) => h2("option", { value: v }, l3)));
-  var STEPS = [
-    {
-      id: "welcome",
-      label: "Welcome",
-      title: "Meeting minutes without taking notes",
-      lede: "This takes about five minutes. Every step can be skipped and redone later in Settings, and each one is tested so you know it works before your first real meeting.",
-      nodes: () => {
-        const tile = (art, title, sub) => h2("li", {}, h2("div", { class: "tile" }, art), h2("strong", {}, title), h2("span", { class: "hint" }, sub));
-        return [
-          card(
-            "How Debrief works",
-            h2(
-              "ol",
-              { class: "tiles" },
-              tile(svg('<rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="M16 10l5-3v10l-5-3"></path>', 40), "1. Join your meeting", "Meet, Zoom, Teams or Webex in Chrome."),
-              tile(h2("span", { style: "width: 34px; height: 34px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 0 8px var(--rec-bg)" }), "2. Press record", "One click on the Debrief icon. It records the meeting tab, and your microphone if you want."),
-              tile(h2("div", { style: "display: flex; flex-direction: column; gap: 6px; width: 60%" }, h2("span", { style: "height: 7px; width: 60%; border-radius: 4px; background: var(--brand)" }), h2("span", { style: "height: 5px; border-radius: 4px; background: var(--line-strong)" }), h2("span", { style: "height: 5px; width: 80%; border-radius: 4px; background: var(--line-strong)" }), h2("span", { style: "height: 5px; width: 70%; border-radius: 4px; background: var(--line-strong)" })), "3. Minutes appear", "Hindi, English, Malayalam or any mix, with decisions and action items. Debrief stops by itself when the call ends."),
-              tile(svg('<path d="M4 12l16-8-6 16-2-6z"></path><path d="M12 14l8-10"></path>', 40), "4. Share", "Email them to yourself and your team, or copy and download.")
-            ),
-            p("You need one free Gemini key (two minutes). Everything else is optional: microphone, names, email, sharing.", "hint")
-          ),
-          h2(
-            "div",
-            { class: "card promise" },
-            svg('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path>', 28),
-            h2(
-              "div",
-              {},
-              h2("strong", {}, "Our privacy promise"),
-              p("Debrief has no server of its own. Your keys stay in this browser. Audio and text go only to the services you choose, to do their job. If you turn on email, the minutes also pass through a script in your own Google account. Recognising voices happens on your computer.")
-            )
-          ),
-          h2("div", { class: "callout" }, svg('<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path>', 20, 'stroke="currentColor"'), p("Tell participants when you are recording. Your company may also restrict browser extensions or tab capture."))
-        ];
-      }
-    },
+  var ALL = [
     {
       id: "key",
       label: "Gemini key",
@@ -2207,6 +2172,61 @@ function out(o) {
             toggle("followMeetMute", "Pause my mic while muted in the meeting", "Muting yourself in the meeting app does not mute Debrief by itself, so this makes Debrief follow the app's mute button. Side conversations stay out of the transcript.")
           ),
           p("You can also switch your voice in or out at any time from the popup or with the keyboard.", "hint")
+        ];
+      }
+    },
+    {
+      id: "ready",
+      label: "Ready",
+      title: "You are ready",
+      lede: "Join your meeting in Chrome, click the Debrief icon and press Start recording this tab. Everything else is optional and can be done any time in Settings.",
+      nodes: () => {
+        const dictLines = S2.dictionary.trim() ? S2.dictionary.trim().split("\n").length : 0;
+        const nShare = parseAddresses(S2.shareList).length;
+        const more = [
+          ["you", "Your name and languages", S2.myName || "Labels your lines in the transcript."],
+          ["names", "Names and terms", dictLines ? `${dictLines} ${dictLines === 1 ? "entry" : "entries"}.` : "Spell your team's names right."],
+          ["voices", "Voices", "Recognise people by their voice, on your computer."],
+          ["email", "Email the minutes to yourself", mailReady(S2) ? "Ready." : "Not set up."],
+          ["share", "Share with your team", nShare ? `${nShare} ${nShare === 1 ? "person" : "people"}.` : "No one added."],
+          ["local", "Local models", "Keep audio and text on your computer."],
+          ["usage", "Limits and usage", "See how much of the free allowance is left."]
+        ];
+        return [
+          card(
+            "Set up more (optional)",
+            p("Each one is a short step with its own test, and can be skipped. Settings has the same things. You can come back any time from the popup (Take the tour).", "hint"),
+            h2("ul", { class: "checklist", "aria-label": "More to set up" }, ...more.map(([id, title, sub]) => h2(
+              "li",
+              {},
+              h2("span", { class: "txt" }, h2("strong", {}, title), h2("span", { class: "sub" }, sub)),
+              h2("button", { type: "button", class: "btn", onclick: () => openMore(id) }, "Set up")
+            )))
+          ),
+          h2(
+            "div",
+            { class: "card promise" },
+            svg('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path>', 28),
+            h2(
+              "div",
+              {},
+              h2("strong", {}, "Our privacy promise"),
+              p("Debrief has no server of its own. Your keys stay in this browser. Audio and text go only to the services you choose, to do their job. If you turn on email, the minutes also pass through a script in your own Google account. Recognising voices happens on your computer.")
+            )
+          ),
+          h2("div", { class: "callout" }, svg('<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path>', 20, 'stroke="currentColor"'), p("Tell participants when you are recording. Your company may also restrict browser extensions or tab capture.")),
+          card(
+            "Cheat sheet",
+            h2(
+              "div",
+              { class: "cols" },
+              h2("div", { class: "mini" }, h2("b", {}, "Start or stop"), kbd(shortcuts["toggle-recording"] || "Alt+Shift+M"), " or the toolbar icon"),
+              h2("div", { class: "mini" }, h2("b", {}, "My voice in or out"), kbd(shortcuts["toggle-mic"] || "Alt+Shift+K"), " or the popup switch"),
+              h2("div", { class: "mini" }, h2("b", {}, "Past meetings"), "Popup \u2192 Meetings tab"),
+              h2("div", { class: "mini" }, h2("b", {}, "Change anything"), "Popup \u2192 Settings")
+            ),
+            h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html", target: "_blank" }, "Open Settings"), h2("a", { class: "btn", href: GUIDE, target: "_blank" }, "Read the full guide"))
+          )
         ];
       }
     },
@@ -2533,9 +2553,14 @@ function out(o) {
       }
     }
   ];
+  var visibleSteps = () => tour.more ? ALL : ALL.slice(0, 3);
+  async function openMore(id) {
+    tour.more = true;
+    await go(ALL.findIndex((st2) => st2.id === id));
+  }
   function renderNav() {
     $2("stepsNav").replaceChildren(
-      ...STEPS.map((st2, i) => {
+      ...visibleSteps().map((st2, i) => {
         const cur = i === tour.step;
         const done = tour.visited.includes(i) && !cur;
         const b = h2(
@@ -2550,21 +2575,21 @@ function out(o) {
     );
   }
   async function go(i) {
-    const cur = STEPS[tour.step];
+    const cur = visibleSteps()[tour.step];
     if (cur?.save && $2("stage").children.length) await cur.save().catch(() => {
     });
     if (cur && !tour.visited.includes(tour.step)) tour.visited.push(tour.step);
-    tour.step = Math.max(0, Math.min(STEPS.length - 1, i));
-    if (tour.step === STEPS.length - 1) tour.done = true;
+    tour.step = Math.max(0, Math.min(visibleSteps().length - 1, i));
+    if (tour.step === visibleSteps().length - 1) tour.done = true;
     await saveTour();
     render();
     window.scrollTo(0, 0);
     $2("stage").querySelector("h1")?.focus({ preventScroll: true });
   }
   function render() {
-    const st2 = STEPS[tour.step];
+    const st2 = visibleSteps()[tour.step];
     const n = tour.step + 1;
-    const last = STEPS.length - 1;
+    const last = visibleSteps().length - 1;
     $2("stage").replaceChildren(h2(
       "div",
       { class: "wrap" },
@@ -2573,19 +2598,19 @@ function out(o) {
     ));
     st2.after?.();
     renderNav();
-    $2("count").textContent = `Step ${n} of ${STEPS.length}`;
-    const mins = Math.max(0, Math.round((STEPS.length - n) * 0.45));
+    $2("count").textContent = `Step ${n} of ${visibleSteps().length}`;
+    const mins = Math.max(0, Math.round((visibleSteps().length - n) * 0.45));
     $2("left").textContent = mins ? `about ${mins} min left` : "all done";
     $2("bar").setAttribute("aria-valuenow", String(n));
-    $2("bar").setAttribute("aria-valuemax", String(STEPS.length));
-    $2("barfill").style.width = `${Math.round(n / STEPS.length * 100)}%`;
+    $2("bar").setAttribute("aria-valuemax", String(visibleSteps().length));
+    $2("barfill").style.width = `${Math.round(n / visibleSteps().length * 100)}%`;
     $2("back").style.visibility = tour.step === 0 ? "hidden" : "visible";
-    $2("skip").style.display = tour.step > 0 && tour.step < last ? "" : "none";
-    $2("next").textContent = tour.step === last ? "Finish" : tour.step === 0 ? "Start the tour" : "Next";
+    $2("skip").style.display = tour.step < last ? "" : "none";
+    $2("next").textContent = tour.step === last ? "Finish" : "Next";
     document.title = `${st2.title} \xB7 Debrief`;
   }
   $2("next").onclick = async () => {
-    if (tour.step === STEPS.length - 1) {
+    if (tour.step === visibleSteps().length - 1) {
       await go(tour.step);
       window.close();
       return;
@@ -2611,8 +2636,11 @@ function out(o) {
       for (const c of await chrome.commands.getAll()) if (c.shortcut) shortcuts[c.name] = c.shortcut;
     } catch {
     }
-    const at2 = STEPS.findIndex((s) => s.id === location.hash.slice(1));
-    if (at2 >= 0) tour.step = at2;
+    const at2 = ALL.findIndex((s) => s.id === location.hash.slice(1));
+    if (at2 >= 0) {
+      tour.step = at2;
+      if (at2 > 2) tour.more = true;
+    }
     render();
   })();
 })();

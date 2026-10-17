@@ -87,29 +87,7 @@ const sel = (id, options, onchange) => h('select', { id, class: 'inp', onchange 
 // ------------------------------------------------------------------------------------------------
 // Steps. Each has { id, label, title, lede, optional, nodes(), after?(), save?() }
 // ------------------------------------------------------------------------------------------------
-const STEPS = [
-  {
-    id: 'welcome',
-    label: 'Welcome',
-    title: 'Meeting minutes without taking notes',
-    lede: 'This takes about five minutes. Every step can be skipped and redone later in Settings, and each one is tested so you know it works before your first real meeting.',
-    nodes: () => {
-      const tile = (art, title, sub) => h('li', {}, h('div', { class: 'tile' }, art), h('strong', {}, title), h('span', { class: 'hint' }, sub));
-      return [
-        card('How Debrief works',
-          h('ol', { class: 'tiles' },
-            tile(svg('<rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="M16 10l5-3v10l-5-3"></path>', 40), '1. Join your meeting', 'Meet, Zoom, Teams or Webex in Chrome.'),
-            tile(h('span', { style: 'width: 34px; height: 34px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 0 8px var(--rec-bg)' }), '2. Press record', 'One click on the Debrief icon. It records the meeting tab, and your microphone if you want.'),
-            tile(h('div', { style: 'display: flex; flex-direction: column; gap: 6px; width: 60%' }, h('span', { style: 'height: 7px; width: 60%; border-radius: 4px; background: var(--brand)' }), h('span', { style: 'height: 5px; border-radius: 4px; background: var(--line-strong)' }), h('span', { style: 'height: 5px; width: 80%; border-radius: 4px; background: var(--line-strong)' }), h('span', { style: 'height: 5px; width: 70%; border-radius: 4px; background: var(--line-strong)' })), '3. Minutes appear', 'Hindi, English, Malayalam or any mix, with decisions and action items. Debrief stops by itself when the call ends.'),
-            tile(svg('<path d="M4 12l16-8-6 16-2-6z"></path><path d="M12 14l8-10"></path>', 40), '4. Share', 'Email them to yourself and your team, or copy and download.')),
-          p('You need one free Gemini key (two minutes). Everything else is optional: microphone, names, email, sharing.', 'hint')),
-        h('div', { class: 'card promise' }, svg('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path>', 28),
-          h('div', {}, h('strong', {}, 'Our privacy promise'),
-            p('Debrief has no server of its own. Your keys stay in this browser. Audio and text go only to the services you choose, to do their job. If you turn on email, the minutes also pass through a script in your own Google account. Recognising voices happens on your computer.'))),
-        h('div', { class: 'callout' }, svg('<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path>', 20, 'stroke="currentColor"'), p('Tell participants when you are recording. Your company may also restrict browser extensions or tab capture.')),
-      ];
-    },
-  },
+const ALL = [
   {
     id: 'key',
     label: 'Gemini key',
@@ -195,6 +173,43 @@ const STEPS = [
           toggle('captureMic', 'Include my microphone', 'Your own voice goes into the transcript, labelled with your name.'),
           toggle('followMeetMute', 'Pause my mic while muted in the meeting', "Muting yourself in the meeting app does not mute Debrief by itself, so this makes Debrief follow the app's mute button. Side conversations stay out of the transcript.")),
         p('You can also switch your voice in or out at any time from the popup or with the keyboard.', 'hint'),
+      ];
+    },
+  },
+  {
+    id: 'ready',
+    label: 'Ready',
+    title: 'You are ready',
+    lede: 'Join your meeting in Chrome, click the Debrief icon and press Start recording this tab. Everything else is optional and can be done any time in Settings.',
+    nodes: () => {
+      const dictLines = S.dictionary.trim() ? S.dictionary.trim().split('\n').length : 0;
+      const nShare = parseAddresses(S.shareList).length;
+      const more = [
+        ['you', 'Your name and languages', S.myName || 'Labels your lines in the transcript.'],
+        ['names', 'Names and terms', dictLines ? `${dictLines} ${dictLines === 1 ? 'entry' : 'entries'}.` : 'Spell your team\'s names right.'],
+        ['voices', 'Voices', 'Recognise people by their voice, on your computer.'],
+        ['email', 'Email the minutes to yourself', mailReady(S) ? 'Ready.' : 'Not set up.'],
+        ['share', 'Share with your team', nShare ? `${nShare} ${nShare === 1 ? 'person' : 'people'}.` : 'No one added.'],
+        ['local', 'Local models', 'Keep audio and text on your computer.'],
+        ['usage', 'Limits and usage', 'See how much of the free allowance is left.'],
+      ];
+      return [
+        card('Set up more (optional)',
+          p('Each one is a short step with its own test, and can be skipped. Settings has the same things. You can come back any time from the popup (Take the tour).', 'hint'),
+          h('ul', { class: 'checklist', 'aria-label': 'More to set up' }, ...more.map(([id, title, sub]) => h('li', {},
+            h('span', { class: 'txt' }, h('strong', {}, title), h('span', { class: 'sub' }, sub)),
+            h('button', { type: 'button', class: 'btn', onclick: () => openMore(id) }, 'Set up'))))),
+        h('div', { class: 'card promise' }, svg('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path>', 28),
+          h('div', {}, h('strong', {}, 'Our privacy promise'),
+            p('Debrief has no server of its own. Your keys stay in this browser. Audio and text go only to the services you choose, to do their job. If you turn on email, the minutes also pass through a script in your own Google account. Recognising voices happens on your computer.'))),
+        h('div', { class: 'callout' }, svg('<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path>', 20, 'stroke="currentColor"'), p('Tell participants when you are recording. Your company may also restrict browser extensions or tab capture.')),
+        card('Cheat sheet',
+          h('div', { class: 'cols' },
+            h('div', { class: 'mini' }, h('b', {}, 'Start or stop'), kbd(shortcuts['toggle-recording'] || 'Alt+Shift+M'), ' or the toolbar icon'),
+            h('div', { class: 'mini' }, h('b', {}, 'My voice in or out'), kbd(shortcuts['toggle-mic'] || 'Alt+Shift+K'), ' or the popup switch'),
+            h('div', { class: 'mini' }, h('b', {}, 'Past meetings'), 'Popup → Meetings tab'),
+            h('div', { class: 'mini' }, h('b', {}, 'Change anything'), 'Popup → Settings')),
+          h('div', { class: 'btnrow' }, h('a', { class: 'btn', href: 'options.html', target: '_blank' }, 'Open Settings'), h('a', { class: 'btn', href: GUIDE, target: '_blank' }, 'Read the full guide'))),
       ];
     },
   },
@@ -453,11 +468,18 @@ const STEPS = [
   },
 ];
 
+// First run: two steps (key, microphone) and "You are ready". The rest is opened from "Set up more" and is all optional.
+const visibleSteps = () => (tour.more ? ALL : ALL.slice(0, 3));
+async function openMore(id) {
+  tour.more = true;
+  await go(ALL.findIndex((st) => st.id === id));
+}
+
 // ------------------------------------------------------------------------------------------------
 
 function renderNav() {
   $('stepsNav').replaceChildren(
-    ...STEPS.map((st, i) => {
+    ...visibleSteps().map((st, i) => {
       const cur = i === tour.step;
       const done = tour.visited.includes(i) && !cur;
       const b = h('button', { type: 'button', class: done ? 'isdone' : '', 'aria-current': cur ? 'step' : false, onclick: () => go(i) },
@@ -470,11 +492,11 @@ function renderNav() {
 }
 
 async function go(i) {
-  const cur = STEPS[tour.step];
+  const cur = visibleSteps()[tour.step];
   if (cur?.save && $('stage').children.length) await cur.save().catch(() => {});
   if (cur && !tour.visited.includes(tour.step)) tour.visited.push(tour.step);
-  tour.step = Math.max(0, Math.min(STEPS.length - 1, i));
-  if (tour.step === STEPS.length - 1) tour.done = true;
+  tour.step = Math.max(0, Math.min(visibleSteps().length - 1, i));
+  if (tour.step === visibleSteps().length - 1) tour.done = true;
   await saveTour();
   render();
   window.scrollTo(0, 0);
@@ -482,28 +504,28 @@ async function go(i) {
 }
 
 function render() {
-  const st = STEPS[tour.step];
+  const st = visibleSteps()[tour.step];
   const n = tour.step + 1;
-  const last = STEPS.length - 1;
+  const last = visibleSteps().length - 1;
   $('stage').replaceChildren(h('div', { class: 'wrap' },
     h('div', {}, h('p', { class: 'lbl kicker' }, `Step ${n}${st.optional ? ' · optional' : ''}`), h('h1', { tabindex: '-1' }, st.title), h('p', { class: 'lede' }, st.lede)),
     ...st.nodes()));
   st.after?.();
   renderNav();
-  $('count').textContent = `Step ${n} of ${STEPS.length}`;
-  const mins = Math.max(0, Math.round((STEPS.length - n) * 0.45));
+  $('count').textContent = `Step ${n} of ${visibleSteps().length}`;
+  const mins = Math.max(0, Math.round((visibleSteps().length - n) * 0.45));
   $('left').textContent = mins ? `about ${mins} min left` : 'all done';
   $('bar').setAttribute('aria-valuenow', String(n));
-  $('bar').setAttribute('aria-valuemax', String(STEPS.length));
-  $('barfill').style.width = `${Math.round((n / STEPS.length) * 100)}%`;
+  $('bar').setAttribute('aria-valuemax', String(visibleSteps().length));
+  $('barfill').style.width = `${Math.round((n / visibleSteps().length) * 100)}%`;
   $('back').style.visibility = tour.step === 0 ? 'hidden' : 'visible';
-  $('skip').style.display = tour.step > 0 && tour.step < last ? '' : 'none';
-  $('next').textContent = tour.step === last ? 'Finish' : tour.step === 0 ? 'Start the tour' : 'Next';
+  $('skip').style.display = tour.step < last ? '' : 'none';
+  $('next').textContent = tour.step === last ? 'Finish' : 'Next';
   document.title = `${st.title} · Debrief`;
 }
 
 $('next').onclick = async () => {
-  if (tour.step === STEPS.length - 1) {
+  if (tour.step === visibleSteps().length - 1) {
     await go(tour.step);
     window.close();
     return;
@@ -529,7 +551,10 @@ $('skipAll').onclick = async (e) => {
   try {
     for (const c of await chrome.commands.getAll()) if (c.shortcut) shortcuts[c.name] = c.shortcut;
   } catch {}
-  const at = STEPS.findIndex((s) => s.id === location.hash.slice(1));
-  if (at >= 0) tour.step = at;
+  const at = ALL.findIndex((s) => s.id === location.hash.slice(1));
+  if (at >= 0) {
+    tour.step = at;
+    if (at > 2) tour.more = true;
+  }
   render();
 })();
