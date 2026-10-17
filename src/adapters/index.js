@@ -24,6 +24,12 @@ const hostMatches = (pattern, hostname) => {
   return h.startsWith('*.') ? hostname === h.slice(2) || hostname.endsWith(h.slice(1)) : hostname === h;
 };
 
+// One line for the popup when the tab is a known non-Meet meeting app: what Debrief can and cannot read there.
+export function platformHint(hostname) {
+  const site = siteFor(hostname);
+  return site ? `${site.name}: Debrief records the audio. Speaker names and who joined come from Google Meet only; following your mute button and noticing the end of the call are best effort here.` : '';
+}
+
 export function siteFor(hostname) {
   return OTHER_SITES.find((s) => s.matches.some((m) => hostMatches(m, hostname))) || null;
 }

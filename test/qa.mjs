@@ -270,4 +270,13 @@ await test('attendance: addresses are shown as "Name (address)", names are learn
   assert.deepEqual(inviteeEmails({ invited: [{ email: 'namita@amnex.com' }, { name: 'Deep Patel', email: 'deep5@amnex.com' }] }, { absentOnly: true, absentNames: ['namita@amnex.com'] }), ['namita@amnex.com']);
 });
 
+await test('platform labelling: other meeting apps say what Debrief can and cannot read; Meet and other pages say nothing', async () => {
+  const { platformHint } = await import('../src/adapters/index.js');
+  for (const host of ['app.zoom.us', 'teams.microsoft.com', 'whereby.com']) assert.match(platformHint(host), /records the audio\. Speaker names and who joined come from Google Meet only/);
+  assert.equal(platformHint('meet.google.com'), '');
+  assert.equal(platformHint('example.com'), '');
+  const fs = await import('node:fs');
+  for (const f of ['README.md', 'docs/STORE.md', 'extension/options.html', 'src/welcome.js']) assert.match(fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'), /Google Meet only/, f);
+});
+
 console.log(`\n${passed} passed`);
