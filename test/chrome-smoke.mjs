@@ -453,7 +453,7 @@ try {
   const tour = await openPage(`chrome-extension://${id}/welcome.html?restart=1`);
   await sleep(800);
   const t0 = await tour.evaluate(`({ h1: document.querySelector('#stage h1').textContent, nav: document.querySelectorAll('#stepsNav button').length, next: document.getElementById('next').textContent, back: document.getElementById('back').style.visibility })`);
-  check('tour opens on the welcome step with every step listed', /minutes without taking notes/i.test(t0.h1) && t0.nav === 12 && /Start the tour/.test(t0.next) && t0.back === 'hidden', JSON.stringify(t0));
+  check('first run is two steps and a ready page: key, microphone, ready', /Gemini key/i.test(t0.h1) && t0.nav === 3 && t0.next === 'Next' && t0.back === 'hidden', JSON.stringify(t0));
   if (process.env.SHOTS) {
     const fs = await import('node:fs');
     await send('Emulation.setDeviceMetricsOverride', { width: 1180, height: 760, deviceScaleFactor: 1.4, mobile: false }, tour.sessionId);
@@ -466,9 +466,13 @@ try {
   }
   const t1 = await tour.evaluate(`(async () => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    document.getElementById('next').click();
-    await wait(300);
     const out = { key: document.querySelector('#stage h1').textContent };
+    // skipping works: Skip goes on without testing anything, Back returns
+    document.getElementById('skip').click();
+    await wait(300);
+    out.skipped = document.querySelector('#stage h1').textContent;
+    document.getElementById('back').click();
+    await wait(300);
     document.getElementById('t-key').value = 'AIzaNotARealKey';
     [...document.querySelectorAll('#stage button')].find((b) => /Test my key/.test(b.textContent)).click();
     await wait(4500);
@@ -478,7 +482,14 @@ try {
     out.mic = document.querySelector('#stage h1').textContent;
     document.getElementById('next').click();
     await wait(300);
+    out.ready = document.querySelector('#stage h1').textContent;
+    out.navReady = document.querySelectorAll('#stepsNav button').length;
+    out.readyNext = document.getElementById('next').textContent;
+    out.moreItems = document.querySelectorAll('#stage ul[aria-label="More to set up"] li').length;
+    [...document.querySelectorAll('#stage ul[aria-label="More to set up"] button')][0].click();
+    await wait(300);
     out.you = document.querySelector('#stage h1').textContent;
+    out.navMore = document.querySelectorAll('#stepsNav button').length;
     document.getElementById('t-name').value = 'Tour Tester';
     document.querySelector('#t-langs input[data-lang=ml]').click();
     document.querySelector('#t-langs input[data-lang=ta]').click();
@@ -496,8 +507,9 @@ try {
     return out;
   })()`);
   check('tour: key test reports a clear failure for a bad key', /did not work|invalid|API key/i.test(t1.status), t1.status);
+  check('tour: skip works, the ready page lists 7 optional set-ups, and opening one reveals the rest of the steps', /Gemini key/i.test(t1.key) && /microphone/i.test(t1.skipped) && /ready/i.test(t1.ready) && t1.navReady === 3 && t1.readyNext === 'Finish' && t1.moreItems === 7 && t1.navMore === 12, JSON.stringify([t1.key, t1.skipped, t1.ready, t1.navReady, t1.readyNext, t1.moreItems, t1.navMore]));
   check('tour: steps advance and answers are saved as you go', /Your microphone/.test(t1.mic) && /name and languages/i.test(t1.you) && /Teach Debrief your names/.test(t1.names) && t1.saved.name === 'Tour Tester' && JSON.stringify(t1.saved.lang) === JSON.stringify(['ml', 'ta']) && t1.saved.dict === 'Amal | Aman', JSON.stringify(t1));
-  check('tour: the last step shows a setup checklist and Finish', /ready/i.test(t1.done) && t1.items.length === 7 && t1.finish === 'Finish', JSON.stringify([t1.done, t1.items, t1.finish]));
+  check('tour: the last step of the full tour shows a setup checklist and Finish', /ready/i.test(t1.done) && t1.items.length === 7 && t1.finish === 'Finish', JSON.stringify([t1.done, t1.items, t1.finish]));
   await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguages: [], dictionary: '' } }))`);
   check('popup links to the tour', await popup.evaluate(`!!document.getElementById('openTour') && !!document.getElementById('openTour1')`));
 
