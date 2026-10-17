@@ -406,6 +406,12 @@
           <div class="fld">
             <label for="sttGeminiModel">Model</label>
             <input id="sttGeminiModel" placeholder="gemini-3.5-transcribe">
+            <label for="sttGeminiChunk" style="margin-top:12px">Piece length</label>
+            <select id="sttGeminiChunk">
+              <option value="standard">About 2 minutes</option>
+              <option value="long">About 4 minutes (fewer requests)</option>
+            </select>
+            <p class="hint">Debrief sends one request per piece, so longer pieces use less of Gemini's free daily allowance. A failed long piece takes a little longer to retry. With your microphone on, your voice and the call are sent together in one request.</p>
             <p class="hint">gemini-3.5-transcribe handles Hindi and English switching. If your key has no quota for it, Debrief falls back to general Gemini models automatically. The key is set on the Get started page.</p>
           </div>
         </div>

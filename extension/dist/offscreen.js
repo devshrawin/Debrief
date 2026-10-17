@@ -251,6 +251,8 @@
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    sttGeminiChunk: "standard",
+    // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
     minutesFormat: "amnex",
     // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
     myOrgDomains: "",
@@ -560,6 +562,7 @@
   var SR = 16e3;
   var PAUSE = 0.35 * SR;
   var QUIET_RMS = 6e-3;
+  var chunkSecs = (s) => s.sttProvider !== "gemini" ? { minSec: 18, maxSec: 28 } : s.sttGeminiChunk === "long" ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 };
   var SPEECH_RMS = 0.012;
   var rms = (a) => {
     let s = 0;
@@ -578,14 +581,16 @@
       this.maxLen = maxSec * SR;
       this.onChunk = onChunk;
       this.blocks = [];
+      this.metas = [];
       this.len = 0;
       this.offset = 0;
       this.quiet = 0;
       this.loudest = 0;
     }
-    push(block) {
+    push(block, meta) {
       this.total += block.length;
       this.blocks.push(block);
+      if (meta) this.metas.push(meta);
       this.len += block.length;
       const r = rms(block);
       this.loudest = Math.max(this.loudest, r);
@@ -611,6 +616,8 @@
       const start2 = this.offset / SR;
       const loud = this.loudest;
       this.offset += this.len;
+      const metas = this.metas;
+      this.metas = [];
       this.blocks = [];
       this.len = 0;
       this.quiet = 0;
@@ -619,9 +626,88 @@
         if (pcm.length >= SR) this.onSkip?.(this.src, start2, loud);
         return;
       }
-      this.onChunk(this.src, start2, pcm);
+      this.onChunk(this.src, start2, pcm, metas.length ? metas : void 0);
     }
   };
+
+  // src/mixer.js
+  var BLOCK_SEC = 2048 / 16e3;
+  var QUIET = 6e-3;
+  var MIC_WINS = 1.5;
+  var Mixer = class {
+    constructor(onBlock, maxLag = 25) {
+      this.onBlock = onBlock;
+      this.tab = [];
+      this.mic = [];
+      this.maxLag = maxLag;
+    }
+    pushTab(b) {
+      this.tab.push(b);
+      this.pump();
+    }
+    pushMic(b) {
+      this.mic.push(b);
+      this.pump();
+    }
+    pump() {
+      while (this.tab.length && this.mic.length || this.tab.length > this.maxLag || this.mic.length > this.maxLag) this.emit(this.tab.shift(), this.mic.shift());
+    }
+    emit(t, m) {
+      const n = (t || m).length;
+      const out = new Float32Array(n);
+      for (let i = 0; i < n; i++) out[i] = Math.max(-1, Math.min(1, (t ? t[i] : 0) + (m ? m[i] : 0)));
+      this.onBlock(out, { tab: t ? rms(t) : 0, mic: m ? rms(m) : 0 });
+    }
+    drain() {
+      while (this.tab.length || this.mic.length) this.emit(this.tab.shift(), this.mic.shift());
+    }
+  };
+  var Meter = class {
+    constructor() {
+      this.total = 0;
+      this.maxEver = 0;
+      this.levelPeak = 0;
+    }
+    push(b) {
+      this.total += b.length;
+      const r = rms(b);
+      this.maxEver = Math.max(this.maxEver, r);
+      this.levelPeak = Math.max(this.levelPeak, r);
+    }
+    takeLevel() {
+      const p = this.levelPeak;
+      this.levelPeak = 0;
+      return p;
+    }
+    flush() {
+    }
+  };
+  var timelineOf = (metas) => ({ tab: metas.map((m) => Math.round(m.tab * 1e4) / 1e4), mic: metas.map((m) => Math.round(m.mic * 1e4) / 1e4) });
+  function attributeMixed(text, startSec, tl) {
+    const sentences = String(text || "").split(/(?<=[.!?।])\s+/).map((s) => s.trim()).filter(Boolean);
+    if (!sentences.length) return [];
+    const n = Math.min(tl?.tab?.length || 0, tl?.mic?.length || 0);
+    if (!n) return [{ t: startSec, src: "others", text: sentences.join(" ") }];
+    let active = [];
+    for (let i = 0; i < n; i++) if (Math.max(tl.tab[i], tl.mic[i]) > QUIET) active.push(i);
+    if (!active.length) active = Array.from({ length: n }, (_, i) => i);
+    const total = sentences.reduce((a, s) => a + s.length, 0);
+    const out = [];
+    let used = 0;
+    let from = 0;
+    sentences.forEach((s, k) => {
+      used += s.length;
+      const to = k === sentences.length - 1 ? active.length : Math.max(from + 1, Math.round(used / total * active.length));
+      const span = active.slice(Math.min(from, active.length - 1), Math.max(to, from + 1));
+      from = to;
+      const mine = span.filter((i) => tl.mic[i] > QUIET && tl.mic[i] > tl.tab[i] * MIC_WINS).length;
+      const src = mine >= span.length / 2 ? "me" : "others";
+      const last = out[out.length - 1];
+      if (last && last.src === src) last.text += ` ${s}`;
+      else out.push({ t: Math.round((startSec + span[0] * BLOCK_SEC) * 10) / 10, src, text: s });
+    });
+    return out;
+  }
 
   // src/voice/tracker.js
   var SR2 = 16e3;
@@ -749,7 +835,7 @@
 
   // src/offscreen.js
   var CONCURRENCY = 3;
-  var chunkSize = (s, onSkip) => ({ ...s.sttProvider === "gemini" ? { minSec: 100, maxSec: 150 } : { minSec: 18, maxSec: 28 }, onSkip });
+  var chunkSize = (s, onSkip) => ({ ...chunkSecs(s), onSkip });
   var rec = null;
   function makePool(limit) {
     let active = 0;
@@ -837,17 +923,18 @@
     if (ctx.state !== "running") throw new Error(`Audio context is ${ctx.state}, recording would capture nothing.`);
     await ctx.audioWorklet.addModule(chrome.runtime.getURL("worklet.js"));
     const pool = makePool(CONCURRENCY);
-    const onChunk = (src, t, pcm) => pool.add(async () => {
+    const onChunk = (src, t, pcm, metas) => pool.add(async () => {
       const wav = encodeWav(pcm, SR);
+      const tl = metas ? timelineOf(metas) : null;
       const t0 = Date.now();
       try {
         const text = await transcribe(wav, settings);
         chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: `chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1e3).toFixed(1)}s` });
-        if (text) chrome.runtime.sendMessage({ target: "bg", type: "segment", meetingId, seg: { t, src, text, dur: Math.round(pcm.length / SR * 10) / 10 } });
+        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: "bg", type: "segment", meetingId, seg: { ...seg, dur: Math.round(pcm.length / SR * 10) / 10 } });
       } catch (e) {
         let saved = false;
         try {
-          await savePending({ meetingId, src, t, wav, error: e.message });
+          await savePending({ meetingId, src, t, wav, error: e.message, ...tl ? { tl } : {} });
           saved = true;
         } catch {
         }
@@ -862,14 +949,20 @@
       note: `[${Math.round(t)}s ${src}] chunk skipped as silent (peak ${peak.toFixed(4)}, needs 0.012)`
     });
     rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
-    rec.chunkers.others = new Chunker("others", onChunk, chunkSize(settings, onSkip));
+    const mixed = !!micStream && settings.sttProvider === "gemini";
+    if (mixed) {
+      rec.chunkers.mix = new Chunker("mix", onChunk, chunkSize(settings, onSkip));
+      rec.mixer = new Mixer((blk, meta) => rec.chunkers.mix.push(blk, meta));
+    }
+    rec.chunkers.others = mixed ? new Meter() : new Chunker("others", onChunk, chunkSize(settings, onSkip));
     await tap(ctx, tabStream, (b) => {
       const blk = rec?.paused ? new Float32Array(b.length) : b;
       rec?.chunkers.others.push(blk);
+      rec?.mixer?.pushTab(blk);
       rec?.voice?.tracker.push(blk);
     });
     if (micStream) {
-      rec.chunkers.me = new Chunker("me", onChunk, chunkSize(settings, onSkip));
+      rec.chunkers.me = mixed ? new Meter() : new Chunker("me", onChunk, chunkSize(settings, onSkip));
       await tap(ctx, micStream, (b) => {
         if (rec) {
           let pk = 0;
@@ -879,6 +972,7 @@
         }
         const blk = rec.micOn && !rec.paused ? b : new Float32Array(b.length);
         rec?.chunkers.me.push(blk);
+        rec?.mixer?.pushMic(blk);
         rec?.voice?.trackerMic?.push(blk);
       });
     }
@@ -921,6 +1015,7 @@
     rec = null;
     clearInterval(r.levelTimer);
     clearInterval(r.dbgTimer);
+    r.mixer?.drain();
     Object.values(r.chunkers).forEach((c) => c.flush());
     [r.tabStream, r.micStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
     await Promise.allSettled([r.ctx.close(), r.playCtx.close()]);

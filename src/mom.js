@@ -1,6 +1,7 @@
 import { renderMd, decorateMinutes } from './md.js';
 import { renderMinutesHtml, isAmnexMd } from './amnex.js';
 import { mountAsk } from './askui.js';
+import { attributeMixed } from './mixer.js';
 import { modal } from './modal.js';
 import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, mergeEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
@@ -522,7 +523,7 @@ async function retryPending() {
     $('pendingText').textContent = `Transcribing ${pending.length} audio piece${pending.length > 1 ? 's' : ''} that failed during the meeting… (${done}/${pending.length})`;
     try {
       const text = await transcribe(p.wav, settings);
-      if (text) meeting.segments.push({ t: p.t, src: p.src, text, recovered: true });
+      if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true });
       await deletePending(p.id);
       await saveMeeting(meeting);
       done++;

@@ -2228,6 +2228,8 @@ ${att}
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    sttGeminiChunk: "standard",
+    // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
     minutesFormat: "amnex",
     // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
     myOrgDomains: "",
@@ -3188,6 +3190,40 @@ Rules:
       if (e2.key === "Enter" && !e2.isComposing) ask();
     };
     return { ask, history };
+  }
+
+  // src/chunker.js
+  var SR = 16e3;
+  var PAUSE = 0.35 * SR;
+
+  // src/mixer.js
+  var BLOCK_SEC = 2048 / 16e3;
+  var QUIET = 6e-3;
+  var MIC_WINS = 1.5;
+  function attributeMixed(text, startSec, tl) {
+    const sentences2 = String(text || "").split(/(?<=[.!?।])\s+/).map((s) => s.trim()).filter(Boolean);
+    if (!sentences2.length) return [];
+    const n = Math.min(tl?.tab?.length || 0, tl?.mic?.length || 0);
+    if (!n) return [{ t: startSec, src: "others", text: sentences2.join(" ") }];
+    let active = [];
+    for (let i = 0; i < n; i++) if (Math.max(tl.tab[i], tl.mic[i]) > QUIET) active.push(i);
+    if (!active.length) active = Array.from({ length: n }, (_2, i) => i);
+    const total = sentences2.reduce((a, s) => a + s.length, 0);
+    const out = [];
+    let used = 0;
+    let from = 0;
+    sentences2.forEach((s, k2) => {
+      used += s.length;
+      const to = k2 === sentences2.length - 1 ? active.length : Math.max(from + 1, Math.round(used / total * active.length));
+      const span = active.slice(Math.min(from, active.length - 1), Math.max(to, from + 1));
+      from = to;
+      const mine = span.filter((i) => tl.mic[i] > QUIET && tl.mic[i] > tl.tab[i] * MIC_WINS).length;
+      const src = mine >= span.length / 2 ? "me" : "others";
+      const last = out[out.length - 1];
+      if (last && last.src === src) last.text += ` ${s}`;
+      else out.push({ t: Math.round((startSec + span[0] * BLOCK_SEC) * 10) / 10, src, text: s });
+    });
+    return out;
   }
 
   // src/modal.js
@@ -4630,7 +4666,7 @@ ${meeting2.mom || ""}
       $2("pendingText").textContent = `Transcribing ${pending.length} audio piece${pending.length > 1 ? "s" : ""} that failed during the meeting\u2026 (${done}/${pending.length})`;
       try {
         const text = await transcribe(p.wav, settings);
-        if (text) meeting.segments.push({ t: p.t, src: p.src, text, recovered: true });
+        if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true });
         await deletePending(p.id);
         await saveMeeting(meeting);
         done++;
