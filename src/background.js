@@ -5,7 +5,8 @@ import { saveSamples } from './voice/sampling.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
-import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState, saveVoices, getBlockedVoices } from './store.js';
+import { stuckJobs } from './jobstate.js';
+import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState, saveVoices, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -182,8 +183,39 @@ async function ensureOffscreen() {
 
 async function closeOffscreen() {
   const ctxs = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
-  if (ctxs.length) await chrome.offscreen.closeDocument();
+  if (!ctxs.length) return;
+  // minutes being written there must not be cut off
+  const busy = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'job-count' }).catch(() => null);
+  if (busy?.count > 0) return;
+  await chrome.offscreen.closeDocument();
 }
+
+// ---- minutes jobs: written and emailed in the offscreen document, so no minutes tab has to stay open ----
+async function jobCommand(type, msg, { create = true } = {}) {
+  if (create) await ensureOffscreen();
+  else if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length) return { ok: true, running: false };
+  try {
+    return (await chrome.runtime.sendMessage({ target: 'offscreen', type, ...msg })) || { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+async function startJob(id) {
+  await updateMeeting(id, (m) => {
+    m.job = { state: 'queued', beat: Date.now(), error: null };
+  });
+  return jobCommand('job-run', { id });
+}
+
+// After a restart (or when the service worker wakes), jobs that were running and have no runner any more are picked up.
+async function resumeJobs() {
+  const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
+  const rows = await chrome.storage.local.get(meetingIds.slice(0, 30).map((i) => `meeting:${i}`));
+  for (const id of stuckJobs(Object.values(rows))) await jobCommand('job-run', { id, resume: true });
+}
+resumeJobs().catch(() => {});
+chrome.runtime.onStartup?.addListener(() => resumeJobs().catch(() => {}));
 
 const cleanTitle = (t = '') => t.replace(/^Meet\s*[-–]\s*/i, '').replace(/\s*[-–]\s*Google Meet$/i, '').trim() || 'Meeting';
 
@@ -329,7 +361,8 @@ function stop(opts = {}) {
       if (open && open.to == null) open.to = Math.round((m.endedAt - m.startedAt) / 1000);
     });
     await learnVoices(st.meetingId).catch(() => {});
-    await closeOffscreen();
+    // the minutes (and the automatic email) are written in the background; the offscreen document closes itself when done
+    await startJob(st.meetingId).catch(() => {});
     await mutateState(() => ({ recording: false }));
     hideRec(st.tabId);
     // After an automatic stop, open the minutes in the background so it doesn't pull you out of what you're doing.
@@ -423,6 +456,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return { ok: true };
     },
     'mic-silent': () => raiseAlert(msg.meetingId, 'MIC_SILENT'),
+    'job-run': () => jobCommand('job-run', { id: msg.id, force: !!msg.force, reread: !!msg.reread }),
+    'job-hold': () => jobCommand('job-hold', { id: msg.id }, { create: false }),
+    'job-abort': () => jobCommand('job-abort', { id: msg.id }, { create: false }),
+    'offscreen-idle': async () => {
+      if (!(await getState()).recording) await closeOffscreen();
+      return { ok: true };
+    },
+    notify: async () => {
+      chrome.notifications?.create(String(msg.id || 'debrief'), { type: 'basic', iconUrl: 'icons/icon128.png', title: String(msg.title || 'Debrief'), message: String(msg.message || '') });
+      return { ok: true };
+    },
+    // the offscreen document has no chrome.storage, so the job runner reads and writes through here
+    store: async () => {
+      if (msg.op === 'settings') return { ok: true, value: await getSettings() };
+      if (msg.op === 'getMeeting') return { ok: true, value: await getMeeting(msg.id) };
+      if (msg.op === 'saveMeeting') return serial(async () => (await saveMeeting(msg.meeting), { ok: true }));
+      if (msg.op === 'mergeEmailNames') return { ok: true, value: await mergeEmailNames(msg.found) };
+      if (msg.op === 'emailNames') return { ok: true, value: await getEmailNames() };
+      return { ok: false };
+    },
     dbg: () => updateMeeting(msg.meetingId, (m) => (m.debug ||= []).push(msg.note)),
     segment: async () => {
       await updateMeeting(msg.meetingId, (m) => m.segments.push(msg.seg));
