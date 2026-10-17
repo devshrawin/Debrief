@@ -421,9 +421,14 @@
     show("usageWarn", !!hits.length);
     $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
     const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
-    show("quotaWarn", !!q?.short);
+    const hidden = (await chrome.storage.local.get("quotaWarnHidden")).quotaWarnHidden === true;
+    show("quotaWarn", !!q?.short && !hidden);
     if (q?.short) $("quotaWarnText").textContent = `A one-hour meeting needs about ${q.need} requests and ${q.left} are left today (${q.used} of ${q.limit} used). ${q.longHelps ? 'Choose "About 4 minutes (fewer requests)" in Settings \u2192 Speech to text to make it fit.' : "Part of the meeting may be kept as audio to transcribe tomorrow."}`;
   }
+  $("quotaWarnX").onclick = async () => {
+    await chrome.storage.local.set({ quotaWarnHidden: true });
+    show("quotaWarn", false);
+  };
   var armed = null;
   var allMeetings = [];
   var TRASH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>';

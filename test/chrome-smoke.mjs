@@ -514,6 +514,8 @@ try {
   check('tour: steps advance and answers are saved as you go', /Your microphone/.test(t1.mic) && /name and languages/i.test(t1.you) && /Teach Debrief your names/.test(t1.names) && t1.saved.name === 'Tour Tester' && JSON.stringify(t1.saved.lang) === JSON.stringify(['ml', 'ta']) && t1.saved.dict === 'Amal | Aman', JSON.stringify(t1));
   check('tour: the last step of the full tour shows a setup checklist and Finish', /ready/i.test(t1.done) && t1.items.length === 7 && t1.finish === 'Finish', JSON.stringify([t1.done, t1.items, t1.finish]));
   await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguages: [], dictionary: '' } }))`);
+  const qx = await popup.evaluate(`(async () => { document.getElementById('quotaWarn').classList.remove('hidden'); document.getElementById('quotaWarnX').click(); await new Promise((r) => setTimeout(r, 200)); const r = { hidden: document.getElementById('quotaWarn').classList.contains('hidden'), saved: (await chrome.storage.local.get('quotaWarnHidden')).quotaWarnHidden }; await chrome.storage.local.remove('quotaWarnHidden'); return r; })()`);
+  check('the quota warning has a close button that hides it and remembers', qx.hidden && qx.saved === true, JSON.stringify(qx));
   check('popup links to the tour', await popup.evaluate(`!!document.getElementById('openTour') && !!document.getElementById('openTour1')`));
 
   // The amber "a call is on" dot comes from the page script on any supported site.

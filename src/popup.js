@@ -96,9 +96,15 @@ async function usageWarning() {
   $('usageWarnText').textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(' · ') + '. Debrief will fall back to other models if one runs out.';
   // before recording: would a one-hour meeting fit in what is left of today's Gemini allowance?
   const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
-  show('quotaWarn', !!q?.short);
+  const hidden = (await chrome.storage.local.get('quotaWarnHidden')).quotaWarnHidden === true; // the person closed it
+  show('quotaWarn', !!q?.short && !hidden);
   if (q?.short) $('quotaWarnText').textContent = `A one-hour meeting needs about ${q.need} requests and ${q.left} are left today (${q.used} of ${q.limit} used). ${q.longHelps ? 'Choose "About 4 minutes (fewer requests)" in Settings → Speech to text to make it fit.' : 'Part of the meeting may be kept as audio to transcribe tomorrow.'}`;
 }
+
+$('quotaWarnX').onclick = async () => {
+  await chrome.storage.local.set({ quotaWarnHidden: true });
+  show('quotaWarn', false);
+};
 
 let armed = null;
 let allMeetings = [];
