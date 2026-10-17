@@ -49,7 +49,7 @@ export async function runCheckup() {
     try {
       const res = await fetch(s.emailWebhook, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
       const j = await res.json();
-      if (j?.ok) add(Number(j.version) >= 7 ? OK : WARN, 'Email relay', `reachable, script version ${j.version}${j.locked ? ', locked to this Debrief' : ', not locked yet (send a test email)'}${Number(j.version) >= 7 ? '' : '. Attendance from the calendar needs version 7: copy the script again and deploy a new version'}`);
+      if (j?.ok) add(Number(j.version) >= 8 ? OK : WARN, 'Email relay', `reachable, script version ${j.version}${Number(j.version) >= 8 ? '' : '. Version 8 closes a first-use window: copy the script again from Settings > Email and deploy a new version'}`);
       else add(BAD, 'Email relay', 'answered, but not as the Debrief script (is it set to "Anyone"?)', 'email', 'Fix email');
     } catch (e) {
       add(BAD, 'Email relay', `could not be reached (${e.message}). Check the deployment is set to "Anyone"`, 'email', 'Fix email');

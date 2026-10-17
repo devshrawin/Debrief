@@ -81,7 +81,7 @@ Debrief can email you the minutes as soon as they are ready. It uses a small scr
 7. Copy the **Web app URL** (it ends in `/exec`).
 8. Back in Debrief paste it into **Apps Script web app URL**, tick the attachments you want, press **Save**, then **Send test email**. It should arrive within a minute.
 
-> Is "Anyone" safe? The script can only email **you** (plus any addresses you add to `ALLOWED` at the top of the script), whatever a request says, and it locks itself to your Debrief on first use: Debrief makes up a random secret by itself (you never type or see it) and the script refuses requests without it. So the web address alone is not enough for anyone else. If you ever reinstall Debrief or move to another browser profile and the test email says the script is *locked*, open the script, choose the function **resetSecret**, press **Run** once, and send the test email again.
+> Is "Anyone" safe? The script can only email **you** (plus any addresses you add to `ALLOWED` at the top of the script), whatever a request says, and it only answers your Debrief: Debrief makes up a random secret by itself (you never type it), puts it on the `SECRET` line of the script when you copy the script, and the script refuses requests without it. So the web address alone is not enough for anyone else, not even before your first test email. If you ever reinstall Debrief or move to another browser profile and the test email says the script was *set up for a different Debrief install*, copy the script again from Settings → Email, paste it over the old one, save, and deploy a new version.
 
 **What can be attached** (the email itself always contains the full minutes):
 
@@ -162,7 +162,7 @@ For a PDF with page numbers use **Print / PDF** on the minutes page (Chrome 131 
 | Meeting audio bar says **silent** | The Meet tab is muted or nobody is talking |
 | **No audio data arriving** | Stop and start the recording again |
 | Mic bar says **silent** | Wrong input device, or you are muted in Meet |
-| Test email: *"locked to a different Debrief install"* | You reinstalled Debrief or use a new browser profile. In the script editor choose **resetSecret**, press **Run** once, then send the test email again |
+| Test email: *"set up for a different Debrief install"* | You reinstalled Debrief or use a new browser profile. Copy the script again from Settings → Email, paste it over the old one, save and deploy a new version. (An old script with no `SECRET` line says *"locked"*: choose **resetSecret**, press **Run** once, or just replace it with the new script.) |
 | Test email: *"asked for a Google sign-in"* | The web app is not set to **Who has access: Anyone**. Deploy again with that setting |
 | Test email works but the PDF is missing | Tick **MOM as PDF** and press Save. If you changed the script, deploy a new version |
 | Test email: *"Could not reach the mail relay"* | The URL is wrong. It must end in `/exec` |
