@@ -1,0 +1,6 @@
+# one line ending in the repository, whatever the machine; binaries are left alone
+* text=auto eol=lf
+*.onnx binary
+*.png binary
+*.wasm binary
+*.zip binary
