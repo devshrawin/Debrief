@@ -79,3 +79,27 @@ Still open:
 - The email relay URL works for anyone who has it until the first call sets its secret. Test straight after deploying.
 - The extension is 42 MB. Chrome Web Store allows it, but installs are heavier than before.
 - Real accuracy of everything voice-related is unknown until section 5, step 4 is done.
+
+## 8. Roadmap work, 2026-10-17
+
+Test status after this work: all 16 suites in `npm test` pass (243 checks), `test/chrome-smoke.mjs` passes with no failures, and the new real-Chrome run `test/chrome-job.mjs` passes. Counts are from the run; "Verified" means seen working in headless Chrome, "Tested (synthetic)" means an automated test on made-up data.
+
+| Task | What changed | State |
+|---|---|---|
+| Relay: no first-use window | `apps-script/Code.gs` v8: the install's secret is written on a `SECRET` line when the script is copied from Settings or the tour; with it set only that secret works from the first request; `doGet` returns only ok and the version. Setup text updated. | Tested (synthetic): `test/pro-relay.mjs` runs the real script on stubbed Google globals; a wrong secret is refused on a fresh relay. **Not tested on a real Apps Script deployment.** |
+| Repo hygiene | `npm run pack` (store zip from a copy of `extension/` without the dev `key`), `npm run src-zip`, `.gitattributes` (LF), `.gitignore`. | Verified: zip contents checked, key absent in the store zip. |
+| Store readiness | NOTICE.md cites WeSpeaker's own licence statement (CC-BY-4.0). Store manifest drops `key`. | Licence: verified on the project's page. `key`: **could not confirm** whether the store rejects it; it is left out of the store package. The store ID will differ from the pinned dev ID, so the Whisper and Ollama origin pins need the store ID (see `docs/STORE.md`). Model IDs: `gemini-3.5-transcribe` and `nova-3` confirmed in provider release notes; `gemini-3.8-flash` and `saaras:v4` only on third-party pages; nothing was changed. Loading the speaker model on demand was not done. |
+| Fewer Gemini requests | Gemini with the mic on mixes mic and tab into one stream and sends one request per chunk; who spoke is worked out from 128 ms levels (`src/mixer.js`). Piece length setting (about 2 or 4 minutes). Popup warns when a one-hour meeting will not fit what is left of today's allowance. | Tested (synthetic): `test/pro-mix.mjs`. Attribution splits text by sentence in proportion to speaking time, so it is approximate. The warning needs a known daily limit (learned from a 429 or typed in). **The on-page pill does not show the warning. Needs a live Meet test.** |
+| Minutes and email without a tab | `src/jobs.js` is the pipeline and the job runner; it runs in the offscreen document (storage through the service worker), job state is on the meeting (`queued`, `transcribing-retry`, `writing`, `emailing`, `done`, `failed`), the 10 s countdown runs there and touching the page holds it, stuck jobs resume when the service worker starts, the automatic email is sent once (lock, `emailedAt`, and a "sending" mark). `mom.js` is a viewer and runs the same code itself only if no runner answers. | Tested (synthetic): `test/pro-jobs.mjs`, 9 cases. Verified in real Chrome (`test/chrome-job.mjs`): minutes written with no minutes tab, a stuck job resumed after the service worker was closed, one model call for two page opens, the background document closes when done. **Not verified in a real browser: the automatic email itself** (the relay URL cannot be faked), and a real laptop sleep or Chrome quit. |
+| One control per choice | Format switch only on the page (the start card shows it as text), one transcript checkbox for my email and one in Share, "Write minutes" / "Rewrite minutes" everywhere. | Verified in `chrome-smoke.mjs`; no old button names remain in `src`, the page or the docs. |
+| Shorter tour | Key, microphone, then "You are ready"; name, names, voices, email, sharing, local models and limits are an optional "Set up more" list. Settings → Get started links to the tour. | Verified in `chrome-smoke.mjs`. |
+| Honest labels | Speaker names, captions and attendance are Meet only. The task said other apps have no mute follow; they do, best effort, through the generic adapter, so the text says that. The popup shows a one-line hint on known other apps. | Tested (synthetic). |
+| Organisation template | Name, footer line, accent colour and email domains are Settings; "Use Amnex preset" fills them. New installs are generic and use the standard format. Existing installs are migrated once (schema 2) and keep the Amnex format and values. The shipped `print.css` is generic; the page adds the organisation's footer line. | Tested (synthetic): `test/pro-amnex.mjs` (generic, custom, preset, injection, migration). The button is verified in `chrome-smoke.mjs`. |
+
+### Still needs a live test by a person
+
+- A real Google Meet call: mic and tab mixed into one request, "me" and "others" attribution, follow-Meet-mute.
+- Automatic email after closing every Debrief tab, and after a Chrome restart.
+- The quota warning with a real daily limit.
+- Speaker recognition accuracy (unchanged by this work).
+- Deploying the v8 relay script and sending a test email.
