@@ -35,6 +35,21 @@
     }
     return hits;
   }
+  function estimateRequests({ minutes = 60, minSec, maxSec, streams = 1 }) {
+    const avg = (minSec + maxSec) / 2;
+    return Math.ceil(minutes * 60 / avg) * streams;
+  }
+  function quotaCheck(usage, limits, settings, { minutes = 60, now = /* @__PURE__ */ new Date() } = {}) {
+    if (settings.sttProvider !== "gemini") return null;
+    const model = settings.sttGeminiModel;
+    const limit = limits?.[model];
+    if (!model || !limit) return null;
+    const used = summarize(usage, 1, now).filter((r) => r.model === model && r.kind === "stt").reduce((a, r) => a + r.req, 0);
+    const secs = settings.sttGeminiChunk === "long" ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 };
+    const need = estimateRequests({ minutes, ...secs, streams: 1 });
+    const left = Math.max(0, limit - used);
+    return { model, limit, used, left, need, minutes, short: need > left, longHelps: settings.sttGeminiChunk !== "long" && estimateRequests({ minutes, minSec: 200, maxSec: 240 }) <= left };
+  }
 
   // src/meetend.js
   var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
@@ -186,6 +201,8 @@
     // names and terms, one per line: Right | misheard, as, this
     minutesMode: "thorough",
     // thorough = extract, write, then check; quick = one pass
+    sttGeminiChunk: "standard",
+    // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
     minutesFormat: "amnex",
     // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
     myOrgDomains: "",
@@ -376,6 +393,9 @@
     const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
     show("usageWarn", !!hits.length);
     $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
+    const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
+    show("quotaWarn", !!q?.short);
+    if (q?.short) $("quotaWarnText").textContent = `A one-hour meeting needs about ${q.need} requests and ${q.left} are left today (${q.used} of ${q.limit} used). ${q.longHelps ? 'Choose "About 4 minutes (fewer requests)" in Settings \u2192 Speech to text to make it fit.' : "Part of the meeting may be kept as audio to transcribe tomorrow."}`;
   }
   var armed = null;
   var allMeetings = [];

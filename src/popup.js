@@ -1,4 +1,4 @@
-import { nearLimit, parseLimits } from './usage.js';
+import { nearLimit, parseLimits, quotaCheck } from './usage.js';
 import { isMeetingSite } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
@@ -94,6 +94,10 @@ async function usageWarning() {
   const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
   show('usageWarn', !!hits.length);
   $('usageWarnText').textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(' · ') + '. Debrief will fall back to other models if one runs out.';
+  // before recording: would a one-hour meeting fit in what is left of today's Gemini allowance?
+  const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
+  show('quotaWarn', !!q?.short);
+  if (q?.short) $('quotaWarnText').textContent = `A one-hour meeting needs about ${q.need} requests and ${q.left} are left today (${q.used} of ${q.limit} used). ${q.longHelps ? 'Choose "About 4 minutes (fewer requests)" in Settings → Speech to text to make it fit.' : 'Part of the meeting may be kept as audio to transcribe tomorrow.'}`;
 }
 
 let armed = null;

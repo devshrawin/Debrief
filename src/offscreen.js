@@ -2,7 +2,8 @@
 // transcribes each chunk, and sends segments to the service worker.
 import { transcribe } from './stt.js';
 import { encodeWav } from './wav.js';
-import { Chunker, SR } from './chunker.js';
+import { Chunker, SR, chunkSecs } from './chunker.js';
+import { Mixer, Meter, timelineOf, attributeMixed } from './mixer.js';
 import { savePending } from './audiostore.js';
 import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
@@ -13,7 +14,7 @@ const CONCURRENCY = 3;
 
 // Sarvam's REST API caps audio at 30 s. Gemini takes long audio, so it gets ~2 min chunks,
 // which keeps request counts well inside free-tier limits.
-const chunkSize = (s, onSkip) => ({ ...(s.sttProvider === 'gemini' ? { minSec: 100, maxSec: 150 } : { minSec: 18, maxSec: 28 }), onSkip });
+const chunkSize = (s, onSkip) => ({ ...chunkSecs(s), onSkip });
 
 let rec = null;
 
@@ -118,19 +119,21 @@ async function start({ streamId, settings, meetingId }) {
   await ctx.audioWorklet.addModule(chrome.runtime.getURL('worklet.js'));
 
   const pool = makePool(CONCURRENCY);
-  const onChunk = (src, t, pcm) =>
+  const onChunk = (src, t, pcm, metas) =>
     pool.add(async () => {
       const wav = encodeWav(pcm, SR);
+      const tl = metas ? timelineOf(metas) : null;
       const t0 = Date.now();
       try {
         const text = await transcribe(wav, settings);
         chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: `chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1000).toFixed(1)}s` });
-        if (text) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { t, src, text, dur: Math.round((pcm.length / SR) * 10) / 10 } });
+        // one mixed stream: split the text into who-said-what; otherwise the chunk already has its speaker
+        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { ...seg, dur: Math.round((pcm.length / SR) * 10) / 10 } });
       } catch (e) {
         // Keep the audio so the MOM page can retry it after the meeting.
         let saved = false;
         try {
-          await savePending({ meetingId, src, t, wav, error: e.message });
+          await savePending({ meetingId, src, t, wav, error: e.message, ...(tl ? { tl } : {}) });
           saved = true;
         } catch {}
         const note = saved ? 'audio kept, will retry after the meeting' : 'audio could not be kept';
@@ -148,15 +151,23 @@ async function start({ streamId, settings, meetingId }) {
     });
 
   rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
-  rec.chunkers.others = new Chunker('others', onChunk, chunkSize(settings, onSkip));
+  // Gemini with the mic on: ONE mixed stream and one request per chunk (the speaker comes from the levels afterwards).
+  // Other providers have no tight daily limit and keep two streams.
+  const mixed = !!micStream && settings.sttProvider === 'gemini';
+  if (mixed) {
+    rec.chunkers.mix = new Chunker('mix', onChunk, chunkSize(settings, onSkip));
+    rec.mixer = new Mixer((blk, meta) => rec.chunkers.mix.push(blk, meta));
+  }
+  rec.chunkers.others = mixed ? new Meter() : new Chunker('others', onChunk, chunkSize(settings, onSkip));
   await tap(ctx, tabStream, (b) => {
     // Paused: the clock keeps running (so times stay right) but only silence goes on, and silence is never sent anywhere.
     const blk = rec?.paused ? new Float32Array(b.length) : b;
     rec?.chunkers.others.push(blk);
+    rec?.mixer?.pushTab(blk);
     rec?.voice?.tracker.push(blk);
   });
   if (micStream) {
-    rec.chunkers.me = new Chunker('me', onChunk, chunkSize(settings, onSkip));
+    rec.chunkers.me = mixed ? new Meter() : new Chunker('me', onChunk, chunkSize(settings, onSkip));
     // While the mic is paused, feed silence so timestamps stay aligned.
     await tap(ctx, micStream, (b) => {
       if (rec) {
@@ -167,6 +178,7 @@ async function start({ streamId, settings, meetingId }) {
       }
       const blk = rec.micOn && !rec.paused ? b : new Float32Array(b.length);
       rec?.chunkers.me.push(blk);
+      rec?.mixer?.pushMic(blk);
       rec?.voice?.trackerMic?.push(blk);
     });
   }
@@ -221,6 +233,7 @@ async function stop() {
   rec = null;
   clearInterval(r.levelTimer);
   clearInterval(r.dbgTimer);
+  r.mixer?.drain();
   Object.values(r.chunkers).forEach((c) => c.flush());
   [r.tabStream, r.micStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
   await Promise.allSettled([r.ctx.close(), r.playCtx.close()]);

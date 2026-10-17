@@ -24,6 +24,7 @@ export const DEFAULTS = {
   dictAutoAlias: false, // accept clear-cut learned fixes (3+ sightings) without asking
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
+  sttGeminiChunk: 'standard', // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
   minutesFormat: 'amnex', // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
   myOrgDomains: '', // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
   peopleDirectory: '', // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]

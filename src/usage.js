@@ -76,6 +76,27 @@ export function nearLimit(usage, limits, now = new Date()) {
   return hits;
 }
 
+// Requests one meeting needs: a request per chunk per stream. Gemini with the mic on is ONE mixed stream; chunks average
+// about halfway between the shortest and longest length.
+export function estimateRequests({ minutes = 60, minSec, maxSec, streams = 1 }) {
+  const avg = (minSec + maxSec) / 2;
+  return Math.ceil((minutes * 60) / avg) * streams;
+}
+
+// Will a meeting of `minutes` fit in what is left of today's allowance for the Gemini transcription model?
+// Returns null when there is nothing to warn about (not Gemini, or the limit is not known yet).
+export function quotaCheck(usage, limits, settings, { minutes = 60, now = new Date() } = {}) {
+  if (settings.sttProvider !== 'gemini') return null;
+  const model = settings.sttGeminiModel;
+  const limit = limits?.[model];
+  if (!model || !limit) return null;
+  const used = summarize(usage, 1, now).filter((r) => r.model === model && r.kind === 'stt').reduce((a, r) => a + r.req, 0);
+  const secs = settings.sttGeminiChunk === 'long' ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 };
+  const need = estimateRequests({ minutes, ...secs, streams: 1 });
+  const left = Math.max(0, limit - used);
+  return { model, limit, used, left, need, minutes, short: need > left, longHelps: settings.sttGeminiChunk !== 'long' && estimateRequests({ minutes, minSec: 200, maxSec: 240 }) <= left };
+}
+
 // Runs in any extension context. Pages without storage access (the offscreen document) and the
 // service worker all funnel into the service worker so counts never race.
 export const sink = { fn: null }; // tests replace this
