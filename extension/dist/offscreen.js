@@ -271,8 +271,12 @@
     // thorough = extract, write, then check; quick = one pass
     sttGeminiChunk: "standard",
     // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
-    minutesFormat: "amnex",
-    // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
+    minutesFormat: "standard",
+    // amnex = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
+    orgName: "",
+    // organisation template: name, confidentiality line (page footer) and accent colour; empty = generic. Settings has a "Use Amnex preset" button
+    orgConfidential: "",
+    orgAccent: "",
     myOrgDomains: "",
     // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
     peopleDirectory: "",
@@ -329,7 +333,26 @@
     oaModel: "",
     geminiModel: "gemini-3.8-flash"
   };
+  var AMNEX_PRESET = { orgName: "Amnex Infotechnologies", orgConfidential: "Amnex Infotechnologies Pvt Ltd | Confidential", orgAccent: "#0c2461", myOrgDomains: "amnex.com" };
+  function migrateSettings(settings) {
+    const next = { ...settings, minutesFormat: settings.minutesFormat ?? "amnex" };
+    for (const [k2, v] of Object.entries(AMNEX_PRESET)) if (!next[k2]) next[k2] = v;
+    return next;
+  }
+  var migrating = null;
+  function ensureMigrated() {
+    migrating ||= (async () => {
+      const { settings, schema } = await chrome.storage.local.get(["settings", "schema"]);
+      if (schema >= 2) return;
+      const legacy = !!settings && Object.keys(settings).length > 0;
+      await chrome.storage.local.set({ schema: 2, ...legacy ? { settings: migrateSettings(settings) } : {} });
+    })().catch(() => {
+      migrating = null;
+    });
+    return migrating;
+  }
   async function getSettings() {
+    await ensureMigrated();
     const { settings, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
     const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames, voices: voices || [] };
@@ -366,6 +389,7 @@
     }
   }
   async function ensureEmailSecret() {
+    await ensureMigrated();
     const { settings } = await chrome.storage.local.get("settings");
     if (settings?.emailSecret) return settings.emailSecret;
     const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -913,8 +937,8 @@ Do not write an Attendance section or notes about the recording: they are added 
     if (ctx.checklist) lines.push("", "Checklist of items extracted from the transcript. Every one must appear in the minutes:", "<checklist>", ctx.checklist, "</checklist>");
     return lines.join("\n");
   }
-  function buildAmnexSystemPrompt(language, { languages = "Hindi, English, Malayalam" } = {}) {
-    return `You write the Minutes of Meeting (MOM) of a formal project meeting, in the house template of Amnex Infotechnologies, from the raw transcript of an online meeting held in ${languages}, or a mix of them.
+  function buildAmnexSystemPrompt(language, { languages = "Hindi, English, Malayalam", org = "" } = {}) {
+    return `You write the Minutes of Meeting (MOM) of a formal project meeting, in the house template of ${org || "the organisation"}, from the raw transcript of an online meeting held in ${languages}, or a mix of them.
 
 ${TRANSCRIPT_NOTES}
 
@@ -2577,9 +2601,19 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
 
   // src/amnex.js
   var MARKER = "<!-- debrief-format: amnex -->";
-  var NAVY = "#0c2461";
+  var GENERIC_ACCENT = "#334155";
+  var ORG = { name: "", confidential: "Confidential", accent: GENERIC_ACCENT, domains: [] };
+  function setOrg(settings = {}) {
+    ORG = {
+      name: String(settings.orgName || "").trim(),
+      confidential: String(settings.orgConfidential || "").trim() || "Confidential",
+      accent: /^#[0-9a-f]{6}$/i.test(String(settings.orgAccent || "").trim()) ? settings.orgAccent.trim() : GENERIC_ACCENT,
+      domains: parseDomains(settings.myOrgDomains)
+    };
+  }
+  var getOrg = () => ORG;
+  var titleColor = () => ORG.accent.toLowerCase() === "#0c2461" ? "#0c2d6b" : ORG.accent;
   var TBD = "To be decided and communicated separately";
-  var CONFIDENTIAL = "Amnex Infotechnologies Pvt Ltd | Confidential";
   var PH = {
     designation: "[DESIGNATION]",
     department: "[DEPARTMENT]",
@@ -2695,7 +2729,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   function orgFromDomain(domain) {
     const label = String(domain || "").split(".")[0];
     if (!label) return "";
-    if (label.toLowerCase() === "amnex") return "Amnex Infotechnologies";
+    if (ORG.name && ORG.domains.includes(String(domain).toLowerCase())) return ORG.name;
     return label[0].toUpperCase() + label.slice(1);
   }
   function buildAttendees({ meeting, settings = {}, dir = [], presence = {}, entries = [] }) {
@@ -3041,10 +3075,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   }
   var FONT = "font-family:Calibri,Carlito,'Segoe UI','Nirmala UI',Arial,sans-serif";
   var CELL = "border:1px solid #000000;padding:5px 8px;vertical-align:top;text-align:left;font-size:10pt;line-height:1.35;color:#000000";
-  var NAVYCELL = `border:1px solid ${NAVY};background:${NAVY};color:#ffffff;font-weight:bold;padding:5px 8px;font-size:10pt;line-height:1.35`;
+  var navyCell = () => `border:1px solid ${ORG.accent};background:${ORG.accent};color:#ffffff;font-weight:bold;padding:5px 8px;font-size:10pt;line-height:1.35`;
   var ZEBRA = "#f2f2f2";
   var e = (s) => escapeHtml(s ?? "");
-  var navy = (inner, { w, center = true, colspan, mid = false } = {}) => `<th${colspan ? ` colspan="${colspan}"` : ""}${w ? ` width="${w}"` : ""} bgcolor="${NAVY}" style="${NAVYCELL};text-align:${center ? "center" : "left"};${mid ? "vertical-align:middle;" : "vertical-align:top;"}${w ? `width:${w}px;` : ""}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
+  var navy = (inner, { w, center = true, colspan, mid = false } = {}) => `<th${colspan ? ` colspan="${colspan}"` : ""}${w ? ` width="${w}"` : ""} bgcolor="${ORG.accent}" style="${navyCell()};text-align:${center ? "center" : "left"};${mid ? "vertical-align:middle;" : "vertical-align:top;"}${w ? `width:${w}px;` : ""}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
   var plain = (inner, { w, center = false, z: z2 = false, bold = false, colspan } = {}) => `<td${colspan ? ` colspan="${colspan}"` : ""}${w ? ` width="${w}"` : ""}${z2 ? ` bgcolor="${ZEBRA}"` : ""} style="${CELL};${z2 ? `background:${ZEBRA};` : ""}${center ? "text-align:center;" : ""}${w ? `width:${w}px;` : ""}">${bold ? `<b>${inner}</b>` : inner}</td>`;
   var tr = (cells) => `<tr style="page-break-inside:avoid">${cells}</tr>`;
   var table = (inner) => `<table class="amx-t" width="100%" cellspacing="0" cellpadding="0" border="1" style="border-collapse:collapse;width:100%;margin:0;${FONT}">${inner}</table>`;
@@ -3053,7 +3087,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   function renderDocBody(doc) {
     const h2 = doc.header;
     const out = [];
-    out.push(`<h1 class="amx-h1" style="margin:0 0 14pt;font-size:32pt;line-height:1.1;font-weight:bold;color:#0c2d6b;${FONT}">Meeting<br>Minutes</h1>`);
+    out.push(`<h1 class="amx-h1" style="margin:0 0 14pt;font-size:32pt;line-height:1.1;font-weight:bold;color:${titleColor()};${FONT}">Meeting<br>Minutes</h1>`);
     out.push(table(tr(`${navy("Topic", { w: 117, mid: true })}${plain(e(h2.topic), { bold: true })}`)), gap);
     out.push(table(tr(`${navy("Mode", { w: 117, mid: true })}${plain(e(h2.mode), { bold: true })}`) + tr(`${navy("Location", { w: 117, mid: true })}${plain(e(h2.location), { bold: true })}`)), gap);
     out.push(
@@ -3096,36 +3130,60 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     return out.join("");
   }
   var runningTitle = (doc) => `${doc.title} \u2013 Minutes of Meeting`;
+  var printCss = (confidential = "Confidential") => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
+@page amx {
+  size: A4;
+  margin: 14mm 16mm 18mm 16mm;
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+}
+.amx { page: amx; }
+.amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.amx table { page-break-inside: auto; }
+.amx tr { break-inside: avoid; page-break-inside: avoid; }
+.amx thead { display: table-header-group; }
+.amx-gap { break-inside: avoid; }
+.amx-h1 { break-after: avoid; }
+@media print {
+  .amx tfoot { display: none; } /* on paper the Confidential line is the page footer above; on screen it closes the document */
+  .no-print, .amx-review { display: none !important; }
+  body:has(.amx) { background: #fff !important; }
+  body:has(.amx) main { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  body:has(.amx) main > header { display: none !important; }
+  .amx { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+}
+`;
+  var PRINT_CSS = printCss("Confidential");
   function renderWordHtml(doc) {
-    const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${NAVY}">${e(runningTitle(doc))}</p></div>`;
-    const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${NAVY}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(CONFIDENTIAL)}</p></div>`;
+    const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p></div>`;
+    const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${ORG.accent}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(ORG.confidential)}</p></div>`;
     return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:20mm 16mm 20mm 16mm;mso-header-margin:10mm;mso-footer-margin:10mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
   }
   function renderPdfHtml(doc) {
-    return `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}body{${FONT};font-size:10pt;color:#000}</style></head><body><p style="margin:0 0 8pt;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${NAVY}">${e(runningTitle(doc))}</p>${renderDocBody(doc)}<p style="margin:14pt 0 0;text-align:center;font-size:8.5pt;border-top:1px solid ${NAVY}">${e(CONFIDENTIAL)}</p></body></html>`;
+    return `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}body{${FONT};font-size:10pt;color:#000}</style></head><body><p style="margin:0 0 8pt;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p>${renderDocBody(doc)}<p style="margin:14pt 0 0;text-align:center;font-size:8.5pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></body></html>`;
   }
   function renderEmailCover(doc, { attached = [] } = {}) {
-    const th = (t, w) => `<th align="left" bgcolor="${NAVY}" style="border:1px solid ${NAVY};background:${NAVY};color:#ffffff;padding:6px 9px;font-size:13px;text-align:left${w ? `;width:${w}px` : ""}"${w ? ` width="${w}"` : ""}>${t}</th>`;
+    const th = (t, w) => `<th align="left" bgcolor="${ORG.accent}" style="border:1px solid ${ORG.accent};background:${ORG.accent};color:#ffffff;padding:6px 9px;font-size:13px;text-align:left${w ? `;width:${w}px` : ""}"${w ? ` width="${w}"` : ""}>${t}</th>`;
     const td = (t, extra = "") => `<td valign="top" style="border:1px solid #000000;padding:6px 9px;font-size:13px;vertical-align:top;${extra}">${t}</td>`;
     const when = [doc.header.date, doc.header.time].filter(Boolean).join(", ");
     const actions = doc.actions.length ? `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;margin:6px 0 0"><tr>${th("Sr.", 36)}${th("Action Item")}${th("Responsibility", 140)}</tr>${doc.actions.map((a, i) => `<tr>${td(String(i + 1), "text-align:center;font-weight:bold")}${td(e(a.text))}${td(e(a.resp), "font-weight:bold")}</tr>`).join("")}</table>` : '<p style="margin:6px 0 0;font-size:13px">No action items were recorded.</p>';
     const att = attached.length ? `<p style="margin:14px 0 0;font-size:12px;color:#3b4048">The full minutes in the official format are attached (${e(attached.join(" and "))}).</p>` : "";
     return `<div style="font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.45;color:#000000;max-width:600px;width:100%">
-<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%"><tr><td bgcolor="${NAVY}" style="border:1px solid ${NAVY};background:${NAVY};color:#ffffff;padding:10px 14px;font-size:12px;letter-spacing:.04em">MINUTES OF MEETING</td></tr></table>
+<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%"><tr><td bgcolor="${ORG.accent}" style="border:1px solid ${ORG.accent};background:${ORG.accent};color:#ffffff;padding:10px 14px;font-size:12px;letter-spacing:.04em">MINUTES OF MEETING</td></tr></table>
 <p style="margin:12px 0 2px;font-size:18px;font-weight:bold;color:#0c2d6b">${e(doc.header.topic)}</p>
 <p style="margin:0;font-size:13px;color:#3b4048">${e(when)}${doc.header.mode ? ` \xB7 ${e(doc.header.mode)}` : ""}</p>
 ${doc.header.chair && doc.header.chair !== PH.chair ? `<p style="margin:2px 0 0;font-size:13px;color:#3b4048">Chairperson: ${e(doc.header.chair)}</p>` : ""}
 <p style="margin:14px 0 0;font-size:14px;font-weight:bold">Action items</p>
 ${actions}
 ${att}
-<p style="margin:16px 0 0;padding-top:8px;border-top:1px solid ${NAVY};font-size:11px;color:#595959;text-align:center">${e(CONFIDENTIAL)}</p>
+<p style="margin:16px 0 0;padding-top:8px;border-top:1px solid ${ORG.accent};font-size:11px;color:#595959;text-align:center">${e(ORG.confidential)}</p>
 </div>`;
   }
   function emailCoverText(doc) {
     const L2 = [doc.header.topic, [doc.header.date, doc.header.time, doc.header.mode].filter(Boolean).join(" \xB7 "), "", "Action items:"];
     if (doc.actions.length) doc.actions.forEach((a, i) => L2.push(`${i + 1}. ${a.text} (${a.resp})`));
     else L2.push("None recorded.");
-    L2.push("", CONFIDENTIAL);
+    L2.push("", ORG.confidential);
     return L2.join("\n");
   }
 
@@ -3208,6 +3266,7 @@ ${att}
     let amnex = null;
     let wasEmpty = false;
     if (settings.minutesFormat !== "standard") {
+      setOrg(settings);
       const dir = parseDirectory(settings.peopleDirectory);
       const facts = buildFacts({ meeting, settings, dir, presence, entries: ctx.entries, notes });
       const known = knownParties({ facts, meeting, dir, transcript });
@@ -3216,7 +3275,7 @@ ${att}
       const people = [.../* @__PURE__ */ new Set([...facts.known.people, ...(meeting.invited || []).map((p) => p.name).filter(Boolean)])];
       const raw = sanitizeMinutes(
         await gen(
-          buildAmnexSystemPrompt(settings.momLanguage, { languages: names(languagesOf(settings)) }),
+          buildAmnexSystemPrompt(settings.momLanguage, { languages: names(languagesOf(settings)), org: getOrg().name }),
           buildAmnexUserPrompt(meeting, settings, notes, { ...ctx, checklist }, { people, orgs: known.orgs, dateText: fmtDate(meeting.startedAt) }),
           onText,
           { temperature: TEMPERATURE.write }
@@ -3673,6 +3732,7 @@ _(Output hit the length limit and was cut off.)_`;
 -- Written by Debrief`, attachments };
   }
   function buildEmail(meeting, settings, renderHtml, transcriptText) {
+    setOrg(settings);
     const amnexDoc = parseAmnexMarkdown(meeting.mom || "");
     if (amnexDoc) return buildAmnexEmail(meeting, settings, amnexDoc, transcriptText);
     const date = new Date(meeting.startedAt).toISOString().slice(0, 10);

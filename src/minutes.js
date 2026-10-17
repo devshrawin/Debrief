@@ -16,7 +16,7 @@ import {
   buildAmnexSystemPrompt,
   buildAmnexUserPrompt,
 } from './prompt.js';
-import { buildFacts, parseDirectory, parseModelOutput, guardProse, knownParties, composeMarkdown, fmtDate } from './amnex.js';
+import { buildFacts, parseDirectory, parseModelOutput, guardProse, knownParties, composeMarkdown, fmtDate, setOrg, getOrg } from './amnex.js';
 import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
 import { languagesOf, joinNames } from './languages.js';
@@ -104,6 +104,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   let wasEmpty = false;
   if (settings.minutesFormat !== 'standard') {
     // Official Amnex format: code builds the header and attendee tables, the model writes only the language parts.
+    setOrg(settings);
     const dir = parseDirectory(settings.peopleDirectory);
     const facts = buildFacts({ meeting, settings, dir, presence, entries: ctx.entries, notes });
     const known = knownParties({ facts, meeting, dir, transcript });
@@ -112,7 +113,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     const people = [...new Set([...facts.known.people, ...(meeting.invited || []).map((p) => p.name).filter(Boolean)])];
     const raw = sanitizeMinutes(
       await gen(
-        buildAmnexSystemPrompt(settings.momLanguage, { languages: joinNames(languagesOf(settings)) }),
+        buildAmnexSystemPrompt(settings.momLanguage, { languages: joinNames(languagesOf(settings)), org: getOrg().name }),
         buildAmnexUserPrompt(meeting, settings, notes, { ...ctx, checklist }, { people, orgs: known.orgs, dateText: fmtDate(meeting.startedAt) }),
         onText,
         { temperature: TEMPERATURE.write }

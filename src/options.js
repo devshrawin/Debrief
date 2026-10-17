@@ -1,4 +1,4 @@
-import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret } from './store.js';
+import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret, AMNEX_PRESET } from './store.js';
 import { isLocalBase } from './local.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, scriptWithSecret, allowListLines } from './mailer.js';
@@ -709,6 +709,14 @@ document.querySelectorAll('#minutesFormatSeg button').forEach((b) => (b.onclick 
   $('minutesFormat').value = b.dataset.v;
   fmtSeg();
 }));
+
+// One click fills in the Amnex name, footer line, colour and domain, and picks the template. Nothing is Amnex by default.
+$('useAmnexPreset').onclick = () => {
+  for (const [k, v] of Object.entries(AMNEX_PRESET)) $(k).value = v;
+  $('minutesFormat').value = 'amnex';
+  fmtSeg();
+  $('presetMsg').textContent = 'Filled in. Press Save changes to keep it.';
+};
 
 (async () => {
   const s = await getSettings();

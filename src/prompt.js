@@ -112,8 +112,8 @@ export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
 
 // The model writes only the language parts of the house template. Header, date, time and the attendee tables are
 // built by code (src/amnex.js), so they are not asked for here.
-export function buildAmnexSystemPrompt(language, { languages = 'Hindi, English, Malayalam' } = {}) {
-  return `You write the Minutes of Meeting (MOM) of a formal project meeting, in the house template of Amnex Infotechnologies, from the raw transcript of an online meeting held in ${languages}, or a mix of them.
+export function buildAmnexSystemPrompt(language, { languages = 'Hindi, English, Malayalam', org = '' } = {}) {
+  return `You write the Minutes of Meeting (MOM) of a formal project meeting, in the house template of ${org || 'the organisation'}, from the raw transcript of an online meeting held in ${languages}, or a mix of them.
 
 ${TRANSCRIPT_NOTES}
 

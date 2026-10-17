@@ -531,12 +531,30 @@
       </section>
 
       <section class="card" id="minutesFormatCard" aria-labelledby="hFmt">
-        <h2 id="hFmt" class="lbl">Minutes format</h2>
+        <h2 id="hFmt" class="lbl">Minutes format and organisation template</h2>
         <div class="fld">
           <span class="lab" id="minutesFormatLab">Layout of the minutes</span>
-          <div class="seg-ctl" id="minutesFormatSeg" role="group" aria-labelledby="minutesFormatLab"><button type="button" data-v="amnex">Official Amnex format</button><button type="button" data-v="standard">Debrief standard</button></div>
+          <div class="seg-ctl" id="minutesFormatSeg" role="group" aria-labelledby="minutesFormatLab"><button type="button" data-v="amnex">Organisation template</button><button type="button" data-v="standard">Debrief standard</button></div>
           <input type="hidden" id="minutesFormat">
-          <p class="hint">The official format fills the Amnex house template (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting) for Print / PDF, Word and the email attachment. Debrief standard keeps the original minutes layout.</p>
+          <p class="hint">The organisation template is a formal layout (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting) for Print / PDF, Word and the email attachment, in your organisation's name and colour. Debrief standard is the plain layout. Per meeting you can switch on the minutes page.</p>
+          <div class="btnrow" style="margin-top:8px"><button type="button" class="btn" id="useAmnexPreset">Use Amnex preset</button><span class="hint" id="presetMsg" role="status"></span></div>
+        </div>
+        <div class="fgrid">
+          <div class="fld">
+            <label for="orgName">Organisation name</label>
+            <input id="orgName" placeholder="Your organisation" autocomplete="off">
+            <p class="hint">Named as the System Integrator when your email domain is recognised.</p>
+          </div>
+          <div class="fld">
+            <label for="orgConfidential">Footer line</label>
+            <input id="orgConfidential" placeholder="Confidential" autocomplete="off">
+            <p class="hint">Printed at the bottom of every page and in the email attachment. Blank means just "Confidential".</p>
+          </div>
+          <div class="fld">
+            <label for="orgAccent">Accent colour</label>
+            <input id="orgAccent" type="color" value="#334155">
+            <p class="hint">The table headers and rules.</p>
+          </div>
         </div>
         <div class="fld">
           <label for="myOrgDomains">Our email domains</label>

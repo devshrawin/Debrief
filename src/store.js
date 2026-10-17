@@ -25,7 +25,10 @@ export const DEFAULTS = {
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
   sttGeminiChunk: 'standard', // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
-  minutesFormat: 'amnex', // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
+  minutesFormat: 'standard', // amnex = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
+  orgName: '', // organisation template: name, confidentiality line (page footer) and accent colour; empty = generic. Settings has a "Use Amnex preset" button
+  orgConfidential: '',
+  orgAccent: '',
   myOrgDomains: '', // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
   peopleDirectory: '', // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
   shareList: '', // default people to share the minutes with
@@ -66,7 +69,29 @@ export const DEFAULTS = {
   geminiModel: 'gemini-3.8-flash',
 };
 
+// Installs that existed before the organisation template keep what they had: minutes in the Amnex format with the Amnex
+// name, footer and colour. A brand-new install starts generic. Runs once (schema 2), in whichever context asks first.
+export const AMNEX_PRESET = { orgName: 'Amnex Infotechnologies', orgConfidential: 'Amnex Infotechnologies Pvt Ltd | Confidential', orgAccent: '#0c2461', myOrgDomains: 'amnex.com' };
+export function migrateSettings(settings) {
+  const next = { ...settings, minutesFormat: settings.minutesFormat ?? 'amnex' };
+  for (const [k, v] of Object.entries(AMNEX_PRESET)) if (!next[k]) next[k] = v;
+  return next;
+}
+let migrating = null;
+export function ensureMigrated() {
+  migrating ||= (async () => {
+    const { settings, schema } = await chrome.storage.local.get(['settings', 'schema']);
+    if (schema >= 2) return;
+    const legacy = !!settings && Object.keys(settings).length > 0;
+    await chrome.storage.local.set({ schema: 2, ...(legacy ? { settings: migrateSettings(settings) } : {}) });
+  })().catch(() => {
+    migrating = null;
+  });
+  return migrating;
+}
+
 export async function getSettings() {
+  await ensureMigrated();
   const { settings, learned, voices } = await chrome.storage.local.get(['settings', 'learned', 'voices']);
   // Names learned from past meetings (not part of what the user typed) are used as spelling hints.
   const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
@@ -162,6 +187,7 @@ export async function setSetting(patch) {
 
 // The relay secret: random, created once, stored with the settings, never shown.
 export async function ensureEmailSecret() {
+  await ensureMigrated();
   const { settings } = await chrome.storage.local.get('settings');
   if (settings?.emailSecret) return settings.emailSecret;
   const bytes = crypto.getRandomValues(new Uint8Array(24));

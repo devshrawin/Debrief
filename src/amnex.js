@@ -12,9 +12,24 @@ import { matchPeople, personLabel } from './attendance.js';
 import { escapeHtml, renderMd } from './md.js';
 
 export const MARKER = '<!-- debrief-format: amnex -->';
-export const NAVY = '#0c2461';
+
+// ---- the organisation template: whose name, footer line and colour the official format carries ----
+// Nothing here is Amnex-specific by default. AMNEX_PRESET (a button in Settings) fills in the Amnex values.
+export const AMNEX_PRESET = { orgName: 'Amnex Infotechnologies', orgConfidential: 'Amnex Infotechnologies Pvt Ltd | Confidential', orgAccent: '#0c2461', myOrgDomains: 'amnex.com' };
+const GENERIC_ACCENT = '#334155';
+let ORG = { name: '', confidential: 'Confidential', accent: GENERIC_ACCENT, domains: [] };
+export function setOrg(settings = {}) {
+  ORG = {
+    name: String(settings.orgName || '').trim(),
+    confidential: String(settings.orgConfidential || '').trim() || 'Confidential',
+    accent: /^#[0-9a-f]{6}$/i.test(String(settings.orgAccent || '').trim()) ? settings.orgAccent.trim() : GENERIC_ACCENT,
+    domains: parseDomains(settings.myOrgDomains),
+  };
+}
+export const getOrg = () => ORG;
+// The big title uses a slightly lighter shade of the preset's navy; any other accent is used as it is.
+const titleColor = () => (ORG.accent.toLowerCase() === '#0c2461' ? '#0c2d6b' : ORG.accent);
 export const TBD = 'To be decided and communicated separately';
-export const CONFIDENTIAL = 'Amnex Infotechnologies Pvt Ltd | Confidential';
 export const PH = {
   designation: '[DESIGNATION]',
   department: '[DEPARTMENT]',
@@ -169,11 +184,11 @@ export function sideOf({ email, org }, domains) {
   return 'unknown';
 }
 
-// "amnex.com" -> "Amnex Infotechnologies" (the house name); other domains -> their first label, capitalised.
+// One of our own domains -> the organisation name (Settings); other domains -> their first label, capitalised.
 export function orgFromDomain(domain) {
   const label = String(domain || '').split('.')[0];
   if (!label) return '';
-  if (label.toLowerCase() === 'amnex') return 'Amnex Infotechnologies';
+  if (ORG.name && ORG.domains.includes(String(domain).toLowerCase())) return ORG.name;
   return label[0].toUpperCase() + label.slice(1);
 }
 
@@ -596,12 +611,12 @@ export function parseAmnexMarkdown(md) {
 
 const FONT = 'font-family:Calibri,Carlito,\'Segoe UI\',\'Nirmala UI\',Arial,sans-serif';
 const CELL = 'border:1px solid #000000;padding:5px 8px;vertical-align:top;text-align:left;font-size:10pt;line-height:1.35;color:#000000';
-const NAVYCELL = `border:1px solid ${NAVY};background:${NAVY};color:#ffffff;font-weight:bold;padding:5px 8px;font-size:10pt;line-height:1.35`;
+const navyCell = () => `border:1px solid ${ORG.accent};background:${ORG.accent};color:#ffffff;font-weight:bold;padding:5px 8px;font-size:10pt;line-height:1.35`;
 const ZEBRA = '#f2f2f2';
 
 const e = (s) => escapeHtml(s ?? '');
 const navy = (inner, { w, center = true, colspan, mid = false } = {}) =>
-  `<th${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''} bgcolor="${NAVY}" style="${NAVYCELL};text-align:${center ? 'center' : 'left'};${mid ? 'vertical-align:middle;' : 'vertical-align:top;'}${w ? `width:${w}px;` : ''}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
+  `<th${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''} bgcolor="${ORG.accent}" style="${navyCell()};text-align:${center ? 'center' : 'left'};${mid ? 'vertical-align:middle;' : 'vertical-align:top;'}${w ? `width:${w}px;` : ''}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
 const plain = (inner, { w, center = false, z = false, bold = false, colspan } = {}) =>
   `<td${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''}${z ? ` bgcolor="${ZEBRA}"` : ''} style="${CELL};${z ? `background:${ZEBRA};` : ''}${center ? 'text-align:center;' : ''}${w ? `width:${w}px;` : ''}">${bold ? `<b>${inner}</b>` : inner}</td>`;
 const tr = (cells) => `<tr style="page-break-inside:avoid">${cells}</tr>`;
@@ -612,7 +627,7 @@ const ul = (items, pad = 18) => `<ul style="margin:0;padding:0 0 0 ${pad}px">${i
 export function renderDocBody(doc) {
   const h = doc.header;
   const out = [];
-  out.push(`<h1 class="amx-h1" style="margin:0 0 14pt;font-size:32pt;line-height:1.1;font-weight:bold;color:#0c2d6b;${FONT}">Meeting<br>Minutes</h1>`);
+  out.push(`<h1 class="amx-h1" style="margin:0 0 14pt;font-size:32pt;line-height:1.1;font-weight:bold;color:${titleColor()};${FONT}">Meeting<br>Minutes</h1>`);
   out.push(table(tr(`${navy('Topic', { w: 117, mid: true })}${plain(e(h.topic), { bold: true })}`)), gap);
   out.push(table(tr(`${navy('Mode', { w: 117, mid: true })}${plain(e(h.mode), { bold: true })}`) + tr(`${navy('Location', { w: 117, mid: true })}${plain(e(h.location), { bold: true })}`)), gap);
   out.push(
@@ -677,15 +692,15 @@ export function renderPrintFragment(doc) {
   const review = (doc.review || []).length
     ? `<div class="amx-review no-print" style="margin:18px 0 0;padding:10px 14px;border:1px dashed #b45309;background:#fffbeb;color:#1f2328;border-radius:8px;font:13px/1.5 system-ui,sans-serif">${doc.review.map((r) => renderMd(r)).join('')}</div>`
     : '';
-  return `<div class="amx" style="max-width:794px;margin:0 auto;padding:12px 24px;background:#ffffff;color:#000000;${FONT}"><table class="amx-wrap" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%"><thead><tr><td class="amx-rh" style="border:0;border-bottom:1px solid #0c2461;padding:0 0 3px;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${NAVY}">${e(runningTitle(doc))}</td></tr></thead><tfoot><tr><td class="amx-ft" style="border:0;border-top:1px solid #0c2461;padding:4px 0 0;text-align:center;font-size:8.5pt;color:#000000;border-top:1px solid ${NAVY}">${e(CONFIDENTIAL)}</td></tr></tfoot><tbody><tr><td style="border:0;padding:14px 0 0">${renderDocBody(doc)}</td></tr></tbody></table>${review}</div>`;
+  return `<div class="amx" style="max-width:794px;margin:0 auto;padding:12px 24px;background:#ffffff;color:#000000;${FONT}"><table class="amx-wrap" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%"><thead><tr><td class="amx-rh" style="border:0;border-bottom:1px solid ${ORG.accent};padding:0 0 3px;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</td></tr></thead><tfoot><tr><td class="amx-ft" style="border:0;border-top:1px solid ${ORG.accent};padding:4px 0 0;text-align:center;font-size:8.5pt;color:#000000;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</td></tr></tfoot><tbody><tr><td style="border:0;padding:14px 0 0">${renderDocBody(doc)}</td></tr></tbody></table>${review}</div>`;
 }
 
 // The browser's print rules. extension/print.css must stay byte-identical (a test checks it).
-export const PRINT_CSS = `/* Debrief: official Amnex minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
+export const printCss = (confidential = 'Confidential') => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
 @page amx {
   size: A4;
   margin: 14mm 16mm 18mm 16mm;
-  @bottom-center { content: "Amnex Infotechnologies Pvt Ltd | Confidential"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
 }
 .amx { page: amx; }
@@ -704,31 +719,32 @@ export const PRINT_CSS = `/* Debrief: official Amnex minutes, A4. Linked from mo
   .amx { max-width: none !important; padding: 0 !important; margin: 0 !important; }
 }
 `;
+export const PRINT_CSS = printCss('Confidential'); // extension/print.css is exactly this; the page adds the organisation's footer line on top
 
 // A complete, self-contained A4 page (inline styles only; no outside resources).
 export function renderStandaloneHtml(doc) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${e(doc.title)} – Minutes of Meeting</title><style>body{margin:0;background:#fff}\n${PRINT_CSS}</style></head><body>${renderPrintFragment(doc)}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${e(doc.title)} – Minutes of Meeting</title><style>body{margin:0;background:#fff}\n${printCss(ORG.confidential)}</style></head><body>${renderPrintFragment(doc)}</body></html>`;
 }
 
 // Word: the same tables, plus a real Word header and footer (Page X of Y fields). Word ignores @page margin boxes
 // and the thead/tfoot trick, so the page furniture uses Word's own header/footer markup.
 export function renderWordHtml(doc) {
-  const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${NAVY}">${e(runningTitle(doc))}</p></div>`;
-  const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${NAVY}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(CONFIDENTIAL)}</p></div>`;
+  const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p></div>`;
+  const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${ORG.accent}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(ORG.confidential)}</p></div>`;
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:20mm 16mm 20mm 16mm;mso-header-margin:10mm;mso-footer-margin:10mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
 }
 
 // What the relay turns into the PDF attachment. Apps Script's converter ignores @page margin boxes and may ignore
 // repeating rows, so there is no page-number furniture here; the title and the Confidential line frame the document once.
 export function renderPdfHtml(doc) {
-  return `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}body{${FONT};font-size:10pt;color:#000}</style></head><body><p style="margin:0 0 8pt;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${NAVY}">${e(runningTitle(doc))}</p>${renderDocBody(doc)}<p style="margin:14pt 0 0;text-align:center;font-size:8.5pt;border-top:1px solid ${NAVY}">${e(CONFIDENTIAL)}</p></body></html>`;
+  return `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}body{${FONT};font-size:10pt;color:#000}</style></head><body><p style="margin:0 0 8pt;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p>${renderDocBody(doc)}<p style="margin:14pt 0 0;text-align:center;font-size:8.5pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></body></html>`;
 }
 
 // ---- email cover ----------------------------------------------------------------------------------------
 
 // A short 600 px cover: topic, when, who chaired, and the action items. The full minutes are attached.
 export function renderEmailCover(doc, { attached = [] } = {}) {
-  const th = (t, w) => `<th align="left" bgcolor="${NAVY}" style="border:1px solid ${NAVY};background:${NAVY};color:#ffffff;padding:6px 9px;font-size:13px;text-align:left${w ? `;width:${w}px` : ''}"${w ? ` width="${w}"` : ''}>${t}</th>`;
+  const th = (t, w) => `<th align="left" bgcolor="${ORG.accent}" style="border:1px solid ${ORG.accent};background:${ORG.accent};color:#ffffff;padding:6px 9px;font-size:13px;text-align:left${w ? `;width:${w}px` : ''}"${w ? ` width="${w}"` : ''}>${t}</th>`;
   const td = (t, extra = '') => `<td valign="top" style="border:1px solid #000000;padding:6px 9px;font-size:13px;vertical-align:top;${extra}">${t}</td>`;
   const when = [doc.header.date, doc.header.time].filter(Boolean).join(', ');
   const actions = doc.actions.length
@@ -738,14 +754,14 @@ export function renderEmailCover(doc, { attached = [] } = {}) {
     : '<p style="margin:6px 0 0;font-size:13px">No action items were recorded.</p>';
   const att = attached.length ? `<p style="margin:14px 0 0;font-size:12px;color:#3b4048">The full minutes in the official format are attached (${e(attached.join(' and '))}).</p>` : '';
   return `<div style="font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.45;color:#000000;max-width:600px;width:100%">
-<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%"><tr><td bgcolor="${NAVY}" style="border:1px solid ${NAVY};background:${NAVY};color:#ffffff;padding:10px 14px;font-size:12px;letter-spacing:.04em">MINUTES OF MEETING</td></tr></table>
+<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%"><tr><td bgcolor="${ORG.accent}" style="border:1px solid ${ORG.accent};background:${ORG.accent};color:#ffffff;padding:10px 14px;font-size:12px;letter-spacing:.04em">MINUTES OF MEETING</td></tr></table>
 <p style="margin:12px 0 2px;font-size:18px;font-weight:bold;color:#0c2d6b">${e(doc.header.topic)}</p>
 <p style="margin:0;font-size:13px;color:#3b4048">${e(when)}${doc.header.mode ? ` · ${e(doc.header.mode)}` : ''}</p>
 ${doc.header.chair && doc.header.chair !== PH.chair ? `<p style="margin:2px 0 0;font-size:13px;color:#3b4048">Chairperson: ${e(doc.header.chair)}</p>` : ''}
 <p style="margin:14px 0 0;font-size:14px;font-weight:bold">Action items</p>
 ${actions}
 ${att}
-<p style="margin:16px 0 0;padding-top:8px;border-top:1px solid ${NAVY};font-size:11px;color:#595959;text-align:center">${e(CONFIDENTIAL)}</p>
+<p style="margin:16px 0 0;padding-top:8px;border-top:1px solid ${ORG.accent};font-size:11px;color:#595959;text-align:center">${e(ORG.confidential)}</p>
 </div>`;
 }
 
@@ -754,7 +770,7 @@ export function emailCoverText(doc) {
   const L = [doc.header.topic, [doc.header.date, doc.header.time, doc.header.mode].filter(Boolean).join(' · '), '', 'Action items:'];
   if (doc.actions.length) doc.actions.forEach((a, i) => L.push(`${i + 1}. ${a.text} (${a.resp})`));
   else L.push('None recorded.');
-  L.push('', CONFIDENTIAL);
+  L.push('', ORG.confidential);
   return L.join('\n');
 }
 
