@@ -137,7 +137,7 @@ const ALL = [
             h('span', {}, 'Click ', h('b', {}, 'Create API key'), ' and copy it.'),
             h('span', {}, 'Paste it above and press ', h('b', {}, 'Test my key'), '.'))),
         h('div', { class: 'callout warnc' }, svg('<path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4M12 17v.5"></path>', 20, 'stroke="currentColor"'),
-          p("On the free tier Google may use what you send to improve its products, and reviewers may read it. For confidential meetings, turn on billing for the key, pick another provider in Settings, or keep everything local (step 10).")),
+          p("On the free tier Google may use what you send to improve its products, and reviewers may read it. For confidential meetings, turn on billing for the key, pick another provider in Settings, or keep everything local (Set up more → Local models).")),
         card('Good to know',
           p('The free tier has daily limits per model, so very long or many meetings in one day can hit them. Debrief switches to other models automatically, keeps any audio it could not process, and shows a red alert if a limit stops it.'),
           field('Backup key (optional)', 't-key2', S.geminiKey2, { type: 'password', placeholder: 'A key from a different Google Cloud project', hint: 'Limits count per project, so a backup only helps if it comes from a different project.' })),
