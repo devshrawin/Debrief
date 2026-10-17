@@ -85,6 +85,9 @@ try {
 
   const opts = await openPage(`chrome-extension://${id}/options.html`);
   check('options renders', await opts.evaluate(`document.getElementById('sttProvider').value === 'gemini' && document.getElementById('llmProvider').value === 'gemini' && !document.getElementById('geminiSection').classList.contains('hidden') && !document.querySelector('[data-stt=gemini]').classList.contains('hidden') && document.querySelector('[data-stt=sarvam]').classList.contains('hidden')`));
+  const preset = await opts.evaluate(`(() => { const g = (i) => document.getElementById(i).value; const before = [g('orgName'), g('orgConfidential'), g('minutesFormat')]; document.getElementById('useAmnexPreset').click(); return { before, after: [g('orgName'), g('orgConfidential'), g('orgAccent'), g('myOrgDomains'), g('minutesFormat')] }; })()`);
+  check('Settings: generic by default, one click fills the Amnex preset', preset.before.join('|') === '||standard' && preset.after.join('|') === 'Amnex Infotechnologies|Amnex Infotechnologies Pvt Ltd | Confidential|#0c2461|amnex.com|amnex', JSON.stringify(preset));
+  await opts.evaluate(`(() => { for (const i of ['orgName', 'orgConfidential', 'myOrgDomains']) document.getElementById(i).value = ''; document.getElementById('minutesFormat').value = 'standard'; })()`);
   await opts.evaluate(`(() => { const s = document.getElementById('llmProvider'); s.value = 'anthropic'; s.onchange(); const t = document.getElementById('sttProvider'); t.value = 'deepgram'; t.onchange(); })()`);
   check('options switches provider fields', await opts.evaluate(`!document.querySelector('[data-llm=anthropic]').classList.contains('hidden') && document.querySelector('[data-llm=gemini]').classList.contains('hidden')`));
 
@@ -332,18 +335,18 @@ try {
     out.noDuplicates = !document.getElementById('fmtSeg') && !document.getElementById('chkMine') && !document.getElementById('chkShare');
     document.getElementById('fmtChange').click();
     out.focus = document.activeElement?.closest('#fmtSwitch') ? 'switch' : document.activeElement?.id;
-    document.querySelector('#fmtSwitch button[data-v="standard"]').click();
+    document.querySelector('#fmtSwitch button[data-v="amnex"]').click();
     document.getElementById('shareTranscript').click();
     await new Promise((r) => setTimeout(r, 700));
     const m = (await chrome.storage.local.get('meeting:sc1'))['meeting:sc1'];
-    out.saved = m.format === 'standard' && m.transcriptShare === true;
+    out.saved = m.format === 'amnex' && m.transcriptShare === true;
     out.stopped = /ready/i.test(document.getElementById('startCount').textContent) || out.count !== document.getElementById('startCount').textContent;
     out.pressed = [...document.querySelectorAll('#fmtSwitch button')].map((b) => b.getAttribute('aria-checked'));
     out.text1 = document.getElementById('fmtText').textContent;
     out.label = document.getElementById('gen').textContent;
     return out;
   })()`);
-  check('stopping a recording offers the minutes format and transcript sharing before the minutes are written', sc.shown && /Writing automatically/.test(sc.count) && sc.saved && sc.pressed.join() === 'false,true' && sc.noDuplicates && sc.focus === 'switch' && /Amnex/.test(sc.text0) && /standard/.test(sc.text1) && sc.label === 'Write minutes', JSON.stringify(sc));
+  check('stopping a recording offers the minutes format and transcript sharing before the minutes are written', sc.shown && /Writing automatically/.test(sc.count) && sc.saved && sc.pressed.join() === 'true,false' && sc.noDuplicates && sc.focus === 'switch' && /standard/.test(sc.text0) && /template/i.test(sc.text1) && sc.label === 'Write minutes', JSON.stringify(sc));
   await opts.evaluate(`chrome.storage.local.remove(['meeting:sc1']).then(async () => { const ids = (await chrome.storage.local.get('meetingIds')).meetingIds || []; await chrome.storage.local.set({ meetingIds: ids.filter((x) => x !== 'sc1') }); })`);
 
   // ---- Pro: the setup check ----

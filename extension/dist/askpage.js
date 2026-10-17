@@ -43,8 +43,12 @@
     // thorough = extract, write, then check; quick = one pass
     sttGeminiChunk: "standard",
     // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
-    minutesFormat: "amnex",
-    // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
+    minutesFormat: "standard",
+    // amnex = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
+    orgName: "",
+    // organisation template: name, confidentiality line (page footer) and accent colour; empty = generic. Settings has a "Use Amnex preset" button
+    orgConfidential: "",
+    orgAccent: "",
     myOrgDomains: "",
     // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
     peopleDirectory: "",
@@ -101,7 +105,26 @@
     oaModel: "",
     geminiModel: "gemini-3.8-flash"
   };
+  var AMNEX_PRESET = { orgName: "Amnex Infotechnologies", orgConfidential: "Amnex Infotechnologies Pvt Ltd | Confidential", orgAccent: "#0c2461", myOrgDomains: "amnex.com" };
+  function migrateSettings(settings) {
+    const next = { ...settings, minutesFormat: settings.minutesFormat ?? "amnex" };
+    for (const [k2, v] of Object.entries(AMNEX_PRESET)) if (!next[k2]) next[k2] = v;
+    return next;
+  }
+  var migrating = null;
+  function ensureMigrated() {
+    migrating ||= (async () => {
+      const { settings, schema } = await chrome.storage.local.get(["settings", "schema"]);
+      if (schema >= 2) return;
+      const legacy = !!settings && Object.keys(settings).length > 0;
+      await chrome.storage.local.set({ schema: 2, ...legacy ? { settings: migrateSettings(settings) } : {} });
+    })().catch(() => {
+      migrating = null;
+    });
+    return migrating;
+  }
   async function getSettings() {
+    await ensureMigrated();
     const { settings, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
     const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames, voices: voices || [] };

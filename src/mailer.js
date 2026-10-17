@@ -2,7 +2,7 @@
 // so it is sent from their Gmail account with no server of ours in the middle.
 
 import { ensureEmailSecret } from './store.js';
-import { parseAmnexMarkdown, renderWordHtml, renderPdfHtml, renderEmailCover, emailCoverText, renderDocBody } from './amnex.js';
+import { parseAmnexMarkdown, renderWordHtml, renderPdfHtml, renderEmailCover, emailCoverText, renderDocBody, setOrg } from './amnex.js';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -80,6 +80,7 @@ function buildAmnexEmail(meeting, settings, doc, transcriptText) {
 
 // renderHtml: markdown -> HTML (the MOM page's own renderer, which already escapes raw HTML).
 export function buildEmail(meeting, settings, renderHtml, transcriptText) {
+  setOrg(settings); // the organisation's name, footer line and colour go into the attachments
   const amnexDoc = parseAmnexMarkdown(meeting.mom || '');
   if (amnexDoc) return buildAmnexEmail(meeting, settings, amnexDoc, transcriptText);
   const date = new Date(meeting.startedAt).toISOString().slice(0, 10);

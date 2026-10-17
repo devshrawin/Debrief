@@ -1,8 +1,8 @@
-/* Debrief: official Amnex minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
+/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
 @page amx {
   size: A4;
   margin: 14mm 16mm 18mm 16mm;
-  @bottom-center { content: "Amnex Infotechnologies Pvt Ltd | Confidential"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  @bottom-center { content: "Confidential"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
 }
 .amx { page: amx; }

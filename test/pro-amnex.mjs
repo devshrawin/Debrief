@@ -44,11 +44,14 @@ const meeting = {
   ],
 };
 const presence = { 'Suresh K.': [5, 3000, 9], 'Meera Iyer': [8, 3000, 9], 'Priya Nair': [4, 3000, 9], 'Ravi Menon': [4, 3000, 9], You: [0, 3600, 20], 'Guest Visitor': [100, 900, 3] };
-const settings = { ...DEFAULTS, myName: 'Akhil Nazim', emailTo: 'akhil@amnex.com' };
+// the official format with the Amnex preset: what an existing Amnex install keeps (a new install starts generic)
+const settings = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'amnex', myName: 'Akhil Nazim', emailTo: 'akhil@amnex.com' };
+A.setOrg(settings);
 
 // ---------------- defaults ----------------
-await test('defaults: official format is on, domains and directory are empty', () => {
-  assert.equal(DEFAULTS.minutesFormat, 'amnex');
+await test('defaults: a new install is generic: standard format, no organisation, domains and directory empty', () => {
+  assert.equal(DEFAULTS.minutesFormat, 'standard');
+  assert.deepEqual([DEFAULTS.orgName, DEFAULTS.orgConfidential, DEFAULTS.orgAccent], ['', '', '']);
   assert.equal(DEFAULTS.myOrgDomains, '');
   assert.equal(DEFAULTS.peopleDirectory, '');
 });
@@ -139,7 +142,7 @@ await test('attendees: split by domain, only people seen or heard, SR numbering 
 });
 
 await test('attendees: with no domain to split on, everyone is one list (no guessing)', () => {
-  const f = A.buildFacts({ meeting, settings: { ...settings, emailTo: '' }, dir: [], presence });
+  const f = A.buildFacts({ meeting, settings: { ...settings, emailTo: '', myOrgDomains: '' }, dir: [], presence });
   assert.equal(f.groups.length, 1);
   assert.equal(f.groups[0].kind, 'all');
   assert.ok(f.groups[0].rows.length >= 5);
@@ -367,7 +370,8 @@ await test('print: running header and Confidential footer repeat (thead/tfoot); 
   assert.match(frag, /class="amx-review no-print"/);
   assert.match(A.PRINT_CSS, /@page amx \{[^}]*size: A4/s);
   assert.match(A.PRINT_CSS, /@bottom-right \{ content: "Page " counter\(page\) " of " counter\(pages\)/);
-  assert.match(A.PRINT_CSS, /@bottom-center \{ content: "Amnex Infotechnologies Pvt Ltd \| Confidential"/);
+  assert.match(A.PRINT_CSS, /@bottom-center \{ content: "Confidential"/, 'the shipped print.css is generic');
+  assert.match(A.printCss(A.AMNEX_PRESET.orgConfidential), /@bottom-center \{ content: "Amnex Infotechnologies Pvt Ltd \| Confidential"/);
   assert.match(A.PRINT_CSS, /print-color-adjust: exact/);
   assert.match(A.PRINT_CSS, /thead \{ display: table-header-group/);
   assert.match(A.PRINT_CSS, /\.amx tr \{ break-inside: avoid/);
@@ -409,7 +413,7 @@ await test('word: same document, per-cell borders and fills, Word header/footer 
 const mailMeeting = { ...meeting, mom: md, model: 'test-model' };
 
 await test('email: a 600 px cover with the action items table; full document attached as PDF and Word', () => {
-  const m = buildEmail(mailMeeting, { ...DEFAULTS, emailPdf: true, emailWord: true, emailMd: false }, (x) => x, 'ignored');
+  const m = buildEmail(mailMeeting, { ...settings, emailPdf: true, emailWord: true, emailMd: false }, (x) => x, 'ignored');
   assert.match(m.html, /max-width:600px/);
   assert.ok(!/max-width:760px/.test(m.html));
   assert.match(m.html, /Weekly Sync and Pilot Readiness Review/);
@@ -429,14 +433,14 @@ await test('email: a 600 px cover with the action items table; full document att
 });
 
 await test('email: with no document attachment the full tables go inline so nothing is lost', () => {
-  const m = buildEmail(mailMeeting, { ...DEFAULTS, emailPdf: false, emailWord: false }, (x) => x, '');
+  const m = buildEmail(mailMeeting, { ...settings, emailPdf: false, emailWord: false }, (x) => x, '');
   assert.equal(m.attachments.length, 0);
   assert.match(m.html, /Attendees — System Integrator/);
   assert.ok(!/attached \(/.test(m.html));
 });
 
 await test('email: standard format minutes keep the old email exactly', () => {
-  const m = buildEmail({ ...meeting, mom: '# Plain\n\ntext' }, { ...DEFAULTS, emailPdf: true }, (x) => `<p>${x}</p>`, '');
+  const m = buildEmail({ ...meeting, mom: '# Plain\n\ntext' }, { ...settings, emailPdf: true }, (x) => `<p>${x}</p>`, '');
   assert.match(m.html, /max-width:760px/);
   assert.match(m.attachments[0].fromHtml, /<style>@page\{size:A4;margin:18mm\}/);
 });
@@ -523,6 +527,70 @@ await test('pipeline: standard format is untouched; an empty reply is still an e
   assert.ok(d.review.some((x) => /forgotten decision/.test(x)));
   assert.ok(!/forgotten decision/.test(A.renderDocBody(d)), 'not in the official document body');
   assert.ok(!/forgotten decision/.test(A.renderWordHtml(d)));
+});
+
+await test('organisation template: generic by default, the organisation\'s own name, footer and colour when set, Amnex only through the preset', () => {
+  const doc = A.parseAmnexMarkdown(md);
+  try {
+    A.setOrg({});
+    const plain = A.renderDocBody(doc) + A.renderPrintFragment(doc) + A.standaloneA4Html(md);
+    assert.doesNotMatch(plain, /Amnex Infotechnologies Pvt/, 'no Amnex footer');
+    assert.doesNotMatch(plain, /#0c2461/i);
+    assert.match(plain, /#334155/);
+    assert.match(A.renderPrintFragment(doc), /<tfoot>.*Confidential<\/td>/s);
+    assert.equal(A.orgFromDomain('amnex.com'), 'Amnex');
+    A.setOrg({ orgName: 'Kochi Metro Rail', orgConfidential: 'KMRL | Restricted', orgAccent: '#8b0000', myOrgDomains: 'kmrl.co.in' });
+    const own = A.renderPrintFragment(doc) + A.standaloneA4Html(md);
+    assert.match(own, /KMRL \| Restricted/);
+    assert.match(own, /bgcolor="#8b0000"/);
+    assert.doesNotMatch(own, /Amnex Infotechnologies Pvt/);
+    assert.equal(A.orgFromDomain('kmrl.co.in'), 'Kochi Metro Rail');
+    assert.match(A.standaloneA4Html(md), /content: "KMRL \| Restricted"/, 'the standalone page prints the organisation\'s footer line');
+    assert.equal(P.buildAmnexSystemPrompt('English', { org: 'Kochi Metro Rail' }).includes('house template of Kochi Metro Rail'), true);
+    assert.match(P.buildAmnexSystemPrompt('English'), /house template of the organisation/);
+    A.setOrg({ orgAccent: 'url(javascript:alert(1))', orgConfidential: 'a"; } body { display:none' });
+    assert.ok(!/javascript:/.test(A.renderPrintFragment(doc)));
+    assert.ok(!/content: "a"; \}/.test(A.standaloneA4Html(md)), 'a quote in the footer line cannot break out of the print rule');
+    A.setOrg(A.AMNEX_PRESET);
+    assert.match(A.renderPrintFragment(doc), /Amnex Infotechnologies Pvt Ltd \| Confidential/);
+    assert.match(A.renderPrintFragment(doc), /#0c2461/i);
+  } finally {
+    A.setOrg(settings);
+  }
+});
+
+await test('migration: an existing install keeps the Amnex format and preset, a new install starts generic', async () => {
+  const S = await import('../src/store.js');
+  // existing user who never touched the setting: they had the Amnex format by default
+  const legacy = S.migrateSettings({ geminiKey: 'k', myName: 'Akhil' });
+  assert.equal(legacy.minutesFormat, 'amnex');
+  assert.deepEqual([legacy.orgName, legacy.orgConfidential, legacy.orgAccent, legacy.myOrgDomains], ['Amnex Infotechnologies', 'Amnex Infotechnologies Pvt Ltd | Confidential', '#0c2461', 'amnex.com']);
+  assert.equal(legacy.geminiKey, 'k');
+  // someone who chose the standard layout keeps it; typed values are never overwritten
+  const std = S.migrateSettings({ minutesFormat: 'standard', orgName: 'Mine', myOrgDomains: 'mine.com' });
+  assert.deepEqual([std.minutesFormat, std.orgName, std.myOrgDomains], ['standard', 'Mine', 'mine.com']);
+
+  // the real flow against a fake chrome.storage: runs once, stamps schema 2
+  const mem = {};
+  globalThis.chrome = { storage: { local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in mem).map((x) => [x, JSON.parse(JSON.stringify(mem[x]))])), set: async (o) => Object.assign(mem, JSON.parse(JSON.stringify(o))) } } };
+  mem.settings = { geminiKey: 'k' };
+  const old = await import('../src/store.js?legacy');
+  const s1 = await old.getSettings();
+  assert.deepEqual([s1.minutesFormat, s1.orgName, mem.schema], ['amnex', 'Amnex Infotechnologies', 2]);
+  mem.settings.minutesFormat = 'standard';
+  assert.equal((await old.getSettings()).minutesFormat, 'standard', 'migrated once: a later choice is not overwritten');
+
+  // brand-new install: nothing stored, so nothing is filled in
+  for (const k of Object.keys(mem)) delete mem[k];
+  const fresh = await import('../src/store.js?fresh');
+  const s2 = await fresh.getSettings();
+  assert.deepEqual([s2.minutesFormat, s2.orgName, s2.orgConfidential, mem.schema, mem.settings], ['standard', '', '', 2, undefined]);
+  // a new install that stored only the e-mail secret before the migration ran is still new
+  for (const k of Object.keys(mem)) delete mem[k];
+  const fresh2 = await import('../src/store.js?fresh2');
+  await fresh2.ensureEmailSecret();
+  assert.equal((await fresh2.getSettings()).minutesFormat, 'standard');
+  delete globalThis.chrome;
 });
 
 // Debug aid: DUMP_AMNEX=<file> writes the sample document so it can be looked at in a browser.

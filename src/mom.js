@@ -1,5 +1,5 @@
 import { renderMd, decorateMinutes } from './md.js';
-import { renderMinutesHtml, isAmnexMd } from './amnex.js';
+import { renderMinutesHtml, isAmnexMd, setOrg } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { modal } from './modal.js';
@@ -31,6 +31,7 @@ const nameCtx = () => nameCtxFor(meeting, settings, labelCache);
 const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
 
 function renderMom() {
+  applyOrg();
   // Minutes in the official Amnex format show as the A4 document (and print as such); anything else as markdown.
   $('mom').innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
   if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($('mom'));
@@ -140,7 +141,18 @@ async function renderNameBox() {
 const wantTranscript = (shared) => wantT(meeting, settings, shared);
 
 // ---- the choice offered when the recording stops: format, and whether the transcript goes out ----
-const FORMATS = { amnex: 'Official Amnex format', standard: 'Debrief standard' };
+const FORMATS = { amnex: 'Organisation template', standard: 'Debrief standard' };
+
+// The organisation's name, colour and footer line (Settings) for the official format, on screen and when printing.
+function applyOrg() {
+  setOrg(settings);
+  let st = document.getElementById('orgPrint');
+  if (!st) {
+    st = document.head.appendChild(Object.assign(document.createElement('style'), { id: 'orgPrint', media: 'print' }));
+  }
+  const line = String(settings.orgConfidential || '').trim().replace(/["\\\n]/g, ' ');
+  st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; } }` : '';
+}
 const currentFormat = () => meeting.format || settings.minutesFormat || 'amnex';
 function paintFormat() {
   const f = currentFormat();

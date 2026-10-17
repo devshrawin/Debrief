@@ -124,8 +124,12 @@
     // thorough = extract, write, then check; quick = one pass
     sttGeminiChunk: "standard",
     // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
-    minutesFormat: "amnex",
-    // amnex = official Amnex template (Print/PDF, Word, email); standard = Debrief's own layout
+    minutesFormat: "standard",
+    // amnex = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
+    orgName: "",
+    // organisation template: name, confidentiality line (page footer) and accent colour; empty = generic. Settings has a "Use Amnex preset" button
+    orgConfidential: "",
+    orgAccent: "",
     myOrgDomains: "",
     // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
     peopleDirectory: "",
@@ -182,7 +186,26 @@
     oaModel: "",
     geminiModel: "gemini-3.8-flash"
   };
+  var AMNEX_PRESET = { orgName: "Amnex Infotechnologies", orgConfidential: "Amnex Infotechnologies Pvt Ltd | Confidential", orgAccent: "#0c2461", myOrgDomains: "amnex.com" };
+  function migrateSettings(settings) {
+    const next = { ...settings, minutesFormat: settings.minutesFormat ?? "amnex" };
+    for (const [k2, v] of Object.entries(AMNEX_PRESET)) if (!next[k2]) next[k2] = v;
+    return next;
+  }
+  var migrating = null;
+  function ensureMigrated() {
+    migrating ||= (async () => {
+      const { settings, schema } = await chrome.storage.local.get(["settings", "schema"]);
+      if (schema >= 2) return;
+      const legacy = !!settings && Object.keys(settings).length > 0;
+      await chrome.storage.local.set({ schema: 2, ...legacy ? { settings: migrateSettings(settings) } : {} });
+    })().catch(() => {
+      migrating = null;
+    });
+    return migrating;
+  }
   async function getSettings() {
+    await ensureMigrated();
     const { settings, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
     const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames, voices: voices || [] };
@@ -221,6 +244,7 @@
     await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
   }
   async function ensureEmailSecret() {
+    await ensureMigrated();
     const { settings } = await chrome.storage.local.get("settings");
     if (settings?.emailSecret) return settings.emailSecret;
     const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -1984,8 +2008,30 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   });
 
   // src/amnex.js
-  var NAVY = "#0c2461";
-  var NAVYCELL = `border:1px solid ${NAVY};background:${NAVY};color:#ffffff;font-weight:bold;padding:5px 8px;font-size:10pt;line-height:1.35`;
+  var printCss = (confidential = "Confidential") => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
+@page amx {
+  size: A4;
+  margin: 14mm 16mm 18mm 16mm;
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+}
+.amx { page: amx; }
+.amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.amx table { page-break-inside: auto; }
+.amx tr { break-inside: avoid; page-break-inside: avoid; }
+.amx thead { display: table-header-group; }
+.amx-gap { break-inside: avoid; }
+.amx-h1 { break-after: avoid; }
+@media print {
+  .amx tfoot { display: none; } /* on paper the Confidential line is the page footer above; on screen it closes the document */
+  .no-print, .amx-review { display: none !important; }
+  body:has(.amx) { background: #fff !important; }
+  body:has(.amx) main { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  body:has(.amx) main > header { display: none !important; }
+  .amx { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+}
+`;
+  var PRINT_CSS = printCss("Confidential");
 
   // src/mailer.js
   var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
@@ -3998,6 +4044,12 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
     $3("minutesFormat").value = b.dataset.v;
     fmtSeg();
   });
+  $3("useAmnexPreset").onclick = () => {
+    for (const [k2, v] of Object.entries(AMNEX_PRESET)) $3(k2).value = v;
+    $3("minutesFormat").value = "amnex";
+    fmtSeg();
+    $3("presetMsg").textContent = "Filled in. Press Save changes to keep it.";
+  };
   (async () => {
     const s = await getSettings();
     buildLanguageUi();
