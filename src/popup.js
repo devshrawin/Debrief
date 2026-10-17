@@ -1,5 +1,5 @@
 import { nearLimit, parseLimits, quotaCheck } from './usage.js';
-import { isMeetingSite } from './adapters/index.js';
+import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
 
@@ -401,6 +401,8 @@ for (const id of ['openSettings', 'openSettings1']) {
   } catch {}
   tabUrl = tab?.url || '';
   paintMode();
+  $('platformHint').textContent = platformHint(host);
+  show('platformHint', !!platformHint(host));
   const syncOnline = () => show('offline', !navigator.onLine);
   syncOnline();
   addEventListener('online', syncOnline);

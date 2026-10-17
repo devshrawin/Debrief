@@ -4,14 +4,14 @@ Source: docs/redesign/Brand.dc.html.
 
 ## Short description (115 of 132 characters)
 
-Records your Meet, Zoom or Teams tab and writes the minutes, in English, Hindi and Malayalam. Keys stay in your browser.
+Records your Meet, Zoom or Teams tab and writes the minutes, in English, Hindi and Malayalam. Speaker names and who joined come from Google Meet only; on other apps it records the audio. Keys stay in your browser.
 
 ## Long description
 
 Debrief records the audio of the meeting tab you choose, transcribes it, and writes the Minutes of Meeting while the call is still fresh: decisions, action items with owners and dates, and who was there.
 
 What it does
-- Records a Google Meet, Zoom or Teams tab. One click, or Alt+Shift+M.
+- Records a Google Meet, Zoom or Teams tab. One click, or Alt+Shift+M. (Speaker names, captions and attendance: Google Meet only. Other apps: audio recording, with best-effort mute follow and end-of-call.)
 - Transcribes English, Hindi, Malayalam and mixed speech such as Hinglish.
 - Writes the minutes when the meeting ends: decisions, action items, attendance.
 - Edit the minutes, share them, or email them to the people who were invited.

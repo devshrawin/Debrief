@@ -400,7 +400,7 @@ const STEPS = [
         p('Setup takes a few commands and one Debrief button each. Open Settings → Minutes and press "Use Ollama on this PC", then "Find my installed models".'),
         h('div', { class: 'btnrow' }, h('a', { class: 'btn', href: 'options.html#minutes', target: '_blank' }, 'Open Minutes settings'), h('a', { class: 'btn', href: LOCAL_GUIDE, target: '_blank' }, 'Read the local models guide'))),
       card('Other meeting apps',
-        p('Recording, transcription, minutes and email work on any web meeting tab. For Zoom (in the browser), Teams, Webex, Whereby, Jitsi, GoTo Meeting, BlueJeans, Chime, Zoho Meeting and Skype for Web, Debrief also glows amber during a call, follows your mute button and stops when the call ends. This uses generic detection, so "Check page detection" in the popup tells you what it can read. Installed desktop apps (the Zoom or Teams program) cannot be recorded by a browser extension.')),
+        p('Recording, transcription, minutes and email work on any web meeting tab. Speaker names, captions and who joined come from Google Meet only. For Zoom (in the browser), Teams, Webex, Whereby, Jitsi, GoTo Meeting, BlueJeans, Chime, Zoho Meeting and Skype for Web, Debrief also glows amber during a call, follows your mute button and stops when the call ends. This uses best-effort generic detection, so "Check page detection" in the popup tells you what it can read. Installed desktop apps (the Zoom or Teams program) cannot be recorded by a browser extension.')),
     ],
   },
   {

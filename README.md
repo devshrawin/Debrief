@@ -62,7 +62,7 @@ This branch (`pro`) adds, on top of everything above:
 | **Usage** | A Usage page counts requests, tokens, audio minutes and quota hits per model (today, 7 and 30 days), learns daily limits from Google's own error messages, and warns in the popup at 80%. |
 | **Local models** | One-click presets for Ollama and local Whisper servers, an installed-model picker, context-length advice, and smaller reading windows for small models. See the [local models guide](docs/LOCAL.md). |
 | **Who is speaking (voice recognition)** | Optional, off by default. Add people in Settings → Voices by recording about 20 seconds of each (English, Hindi, Malayalam or free speech), and the transcript, minutes, Ask and attendance name speakers by voice, saying *Unknown speaker* when unsure. It runs in your browser with a bundled model, stores only numeric fingerprints, can learn voices from Meet captions over several meetings, and voices can be exported and imported. See [Voice recognition](#voice-recognition). |
-| **Other meeting apps (experimental)** | Optional generic detection for Teams, Zoom web, Webex, Whereby and Jitsi: mute follow and end-of-call detection. |
+| **Other meeting apps (audio only, experimental)** | Recording, transcription, minutes and email work on any web meeting tab. Speaker names, captions and who joined come from **Google Meet only**. For Teams, Zoom web, Webex, Whereby and Jitsi there is optional generic detection (best effort): mute follow and end-of-call. The popup says so when you are on one of these apps. |
 
 ## Voice recognition
 
