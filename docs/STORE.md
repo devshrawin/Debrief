@@ -45,3 +45,9 @@ One claim per screenshot, set in large type on the left (360 of 960 px, indigo #
 3. **Hindi, English and Malayalam in one meeting.** The transcript with mixed-language lines and speaker names.
 4. **Ask about your meetings.** The Ask page answering a question with the meeting it came from.
 5. **Your keys, your browser.** The settings page showing provider keys and the privacy toggles.
+
+## Store package and the extension ID
+
+`npm run pack` writes `release/Debrief-Pro-v<version>.zip` from a copy of `extension/` whose manifest has **no `key` field** (the Web Store assigns the ID itself; the dev manifest keeps the key so the ID stays `nckojmcchehoejdfklcmllhpekagiddo` for local testing). I could not confirm from Google's current docs whether an uploaded `key` is rejected or ignored, so the store package leaves it out.
+
+Consequence: the store-installed extension gets a different ID, and the local helpers only accept the dev ID (`local/whisper_server.py` CORS regex, `OLLAMA_ORIGINS` in `local/start-local.ps1`). Before publishing, either upload your public key in the Developer Dashboard (Package tab) so the ID stays the same, or update those two places to the store ID.

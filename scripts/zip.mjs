@@ -1,4 +1,5 @@
-// npm run pack     -> release/Debrief-Pro-v<version>.zip   (the extension folder, built first, manifest at the root)
+// npm run pack     -> release/Debrief-Pro-v<version>.zip   (the extension folder, built first, manifest at the root,
+//                     with the dev-only "key" field removed: the Web Store assigns the extension its own ID)
 // npm run src-zip  -> release/Debrief-Pro-v<version>-source.zip   (the source, without node_modules, release, .git, extension/dist)
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -25,7 +26,12 @@ function zip(out, cwd, excludes = []) {
 if (mode === 'pack') {
   execFileSync(process.execPath, [path.join(root, 'build.mjs')], { cwd: root, stdio: 'inherit' });
   const out = path.join(outDir, `Debrief-Pro-v${version}.zip`);
-  zip(out, path.join(root, 'extension'));
+  const stage = path.join(outDir, 'store');
+  fs.rmSync(stage, { recursive: true, force: true });
+  fs.cpSync(path.join(root, 'extension'), stage, { recursive: true });
+  const { key, ...manifest } = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8'));
+  fs.writeFileSync(path.join(stage, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  zip(out, stage);
   console.log(`wrote ${out} (${(fs.statSync(out).size / 1048576).toFixed(1)} MB)`);
 } else if (mode === 'src') {
   const out = path.join(outDir, `Debrief-Pro-v${version}-source.zip`);
