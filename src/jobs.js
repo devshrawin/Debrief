@@ -280,8 +280,8 @@ export function createJobRunner(deps = {}) {
         if (meeting.attendees?.length) await patch({ attendees: meeting.attendees });
       }
 
-      // audio that failed during the meeting is transcribed first, so nothing is missing
-      if ((await listPending(id)).length) {
+      // audio that failed during the meeting is transcribed first, so nothing is missing (a rewrite leaves it: that has its own button)
+      if (!meeting.mom && (await listPending(id)).length) {
         await setJob({ state: 'transcribing-retry' });
         await retryPendingAudio({ id, meeting, settings, transcribeFn: d.transcribeFn });
       }

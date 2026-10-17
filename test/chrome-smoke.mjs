@@ -328,17 +328,22 @@ try {
   await new Promise((r) => setTimeout(r, 1500));
   const sc = await scPage.evaluate(`(async () => {
     const out = { shown: !document.getElementById('startCard').classList.contains('hidden'), count: document.getElementById('startCount').textContent };
-    out.formats = [...document.querySelectorAll('#fmtSeg button')].map((b) => b.getAttribute('aria-checked'));
-    document.querySelector('#fmtSeg button[data-v="standard"]').click();
-    document.getElementById('chkShare').click();
+    out.text0 = document.getElementById('fmtText').textContent;
+    out.noDuplicates = !document.getElementById('fmtSeg') && !document.getElementById('chkMine') && !document.getElementById('chkShare');
+    document.getElementById('fmtChange').click();
+    out.focus = document.activeElement?.closest('#fmtSwitch') ? 'switch' : document.activeElement?.id;
+    document.querySelector('#fmtSwitch button[data-v="standard"]').click();
+    document.getElementById('shareTranscript').click();
     await new Promise((r) => setTimeout(r, 700));
     const m = (await chrome.storage.local.get('meeting:sc1'))['meeting:sc1'];
     out.saved = m.format === 'standard' && m.transcriptShare === true;
     out.stopped = /ready/i.test(document.getElementById('startCount').textContent) || out.count !== document.getElementById('startCount').textContent;
-    out.pressed = [...document.querySelectorAll('#fmtSeg button')].map((b) => b.getAttribute('aria-checked'));
+    out.pressed = [...document.querySelectorAll('#fmtSwitch button')].map((b) => b.getAttribute('aria-checked'));
+    out.text1 = document.getElementById('fmtText').textContent;
+    out.label = document.getElementById('gen').textContent;
     return out;
   })()`);
-  check('stopping a recording offers the minutes format and transcript sharing before the minutes are written', sc.shown && /Writing automatically/.test(sc.count) && sc.saved && sc.pressed.join() === 'false,true', JSON.stringify(sc));
+  check('stopping a recording offers the minutes format and transcript sharing before the minutes are written', sc.shown && /Writing automatically/.test(sc.count) && sc.saved && sc.pressed.join() === 'false,true' && sc.noDuplicates && sc.focus === 'switch' && /Amnex/.test(sc.text0) && /standard/.test(sc.text1) && sc.label === 'Write minutes', JSON.stringify(sc));
   await opts.evaluate(`chrome.storage.local.remove(['meeting:sc1']).then(async () => { const ids = (await chrome.storage.local.get('meetingIds')).meetingIds || []; await chrome.storage.local.set({ meetingIds: ids.filter((x) => x !== 'sc1') }); })`);
 
   // ---- Pro: the setup check ----

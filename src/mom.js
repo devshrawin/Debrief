@@ -35,6 +35,7 @@ function renderMom() {
   $('mom').innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
   if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($('mom'));
   $('mom').classList.remove('streaming');
+  $('gen').textContent = meeting.mom ? 'Rewrite minutes' : 'Write minutes';
   syncState();
   if (meeting) paintFormat();
 }
@@ -47,7 +48,7 @@ function syncState() {
   $('failText').textContent = genFail ? `${genFail} Your transcript is safe.` : '';
   $('emptyBox').classList.toggle('hidden', !empty);
   $('mom').hidden = !meeting.mom && !busy;
-  $('emptyText').textContent = !meeting.segments.length ? 'No speech was transcribed, so there is nothing to summarise yet.' : !meeting.endedAt ? 'This meeting is still being recorded. The minutes are written when it ends.' : 'The transcript is ready. Generate the minutes when you are.';
+  $('emptyText').textContent = !meeting.segments.length ? 'No speech was transcribed, so there is nothing to summarise yet.' : !meeting.endedAt ? 'This meeting is still being recorded. The minutes are written when it ends.' : 'The transcript is ready. Press Write minutes when you are ready.';
 }
 
 function showSkeleton() {
@@ -88,9 +89,9 @@ async function renderNameBox() {
   const lines = labeledLines(true) || [];
   const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
   $('nameNote').textContent = clips.some(Boolean)
-    ? 'Press Play, type who it is, and save. Then press Regenerate so the minutes use the names.'
+    ? 'Press Play, type who it is, and save. Then press Rewrite minutes so the minutes use the names.'
     : settings.voiceSamples
-      ? 'No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate.'
+      ? 'No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Rewrite minutes.'
       : 'No audio clips are kept: switch on "Keep short samples of voices" in Settings → Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
   $('nameList').replaceChildren(
     ...here.map((v, i) => {
@@ -143,10 +144,8 @@ const FORMATS = { amnex: 'Official Amnex format', standard: 'Debrief standard' }
 const currentFormat = () => meeting.format || settings.minutesFormat || 'amnex';
 function paintFormat() {
   const f = currentFormat();
-  for (const seg of [$('fmtSeg'), $('fmtSwitch')]) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === f));
-  $('fmtSwitch').classList.toggle('hidden', !meeting.mom);
-  $('chkMine').checked = wantTranscript(false);
-  $('chkShare').checked = wantTranscript(true);
+  for (const b of $('fmtSwitch').querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === f));
+  $('fmtText').textContent = FORMATS[f];
   $('mailTranscript').checked = wantTranscript(false);
   $('shareTranscript').checked = wantTranscript(true);
 }
@@ -159,13 +158,17 @@ async function chooseFormat(v, regenerate) {
     runGenerate();
   }
 }
-for (const b of $('fmtSeg').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, false);
 for (const b of $('fmtSwitch').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, true);
-$('chkMine').onchange = $('mailTranscript').onchange = async (e) => {
+// the start card shows the chosen format as text; "change" goes to the one switch
+$('fmtChange').onclick = (e) => {
+  e.preventDefault();
+  ($('fmtSwitch').querySelector('[aria-checked="true"]') || $('fmtSwitch').querySelector('button')).focus();
+};
+$('mailTranscript').onchange = async (e) => {
   await patchMeeting({ transcriptMine: e.target.checked });
   paintFormat();
 };
-$('chkShare').onchange = $('shareTranscript').onchange = async (e) => {
+$('shareTranscript').onchange = async (e) => {
   await patchMeeting({ transcriptShare: e.target.checked });
   paintFormat();
 };
@@ -358,7 +361,7 @@ async function finishJob() {
     $('mail').textContent = 'Email again';
   }
   $('reread').classList.toggle('hidden', !meeting.extract);
-  $('gen').textContent = 'Regenerate';
+  $('gen').textContent = 'Rewrite minutes';
 }
 
 // Keeps an eye on a job that runs elsewhere: shows its stage, notices when it ends, and takes over here if its runner died.
@@ -518,7 +521,7 @@ chrome.storage.onChanged.addListener(async (c) => {
     settings = await getSettings();
     labelCache.clear();
     renderTranscript();
-    if (c.voices && meeting?.mom && !jobBusy && labeledLines()) $('genStatus').textContent = 'Voices changed since these minutes were written. Press Regenerate to use the names.';
+    if (c.voices && meeting?.mom && !jobBusy && labeledLines()) $('genStatus').textContent = 'Voices changed since these minutes were written. Press Rewrite minutes to use the names.';
   } catch {}
 });
 $('reread').onclick = () => runGenerate({ reread: true });
@@ -674,7 +677,7 @@ tabBtns.forEach((b, i) => {
   renderMom();
   $('retry').onclick = async () => {
     const left = await retryPending();
-    if (!left && meeting.segments.length) $('genStatus').textContent = 'Transcript recovered. Press Regenerate to update the minutes.';
+    if (!left && meeting.segments.length) $('genStatus').textContent = 'Transcript recovered. Press Rewrite minutes to update the minutes.';
   };
   const hadPending = (await listPending(id)).length > 0;
   const live = isActive(meeting) && Date.now() - (meeting.job.beat || 0) <= STALE_MS; // a runner is on it right now
@@ -687,14 +690,14 @@ tabBtns.forEach((b, i) => {
   }
   if (meeting.mom) {
     paintFormat();
-    $('gen').textContent = 'Regenerate';
+    $('gen').textContent = 'Rewrite minutes';
     $('reread').classList.toggle('hidden', !meeting.extract);
     if (live) {
       applyJob(meeting.job);
       watchJob();
-    } else if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Regenerate to include it in the minutes.';
+    } else if (hadPending) $('genStatus').textContent = 'Missing audio was recovered. Press Rewrite minutes to include it in the minutes.';
   } else if (!meeting.endedAt) {
-    $('genStatus').textContent = 'This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.';
+    $('genStatus').textContent = 'This meeting is still being recorded. The minutes are written when it ends, or press Write minutes to try now.';
   } else if (jobWillRun) {
     paintFormat();
     if (live) applyJob(meeting.job);

@@ -148,7 +148,7 @@ There is no server of ours in the loop: the extension posts to a tiny script in 
 3. **Deploy → New deployment → Web app**, set **Who has access** to **Anyone**, click **Deploy**, and allow access when Google asks.
 4. Paste the **Web app URL** into Debrief, tick the attachments you want, and press **Send test email**.
 
-The full walkthrough, with troubleshooting, is in the [setup guide](docs/SETUP.md#5-email-the-minutes-to-yourself-optional). Regenerating or editing never re-sends by itself; press **Email me** on the MOM page to send again.
+The full walkthrough, with troubleshooting, is in the [setup guide](docs/SETUP.md#5-email-the-minutes-to-yourself-optional). Rewriting or editing the minutes never re-sends by itself; press **Email me** on the MOM page to send again.
 
 Safety: whatever a request says, the script only ever mails **your own address** plus whatever you put in its `ALLOWED` list, and it only answers the Debrief install that has its secret: Debrief makes up a random secret on its own (you never type one) and puts it on the `SECRET` line of the script when you copy it from Settings → Email, so the web address alone is useless to anyone else, even before your first test email. After reinstalling Debrief or using a new browser profile, copy the script again from Settings → Email, paste it over the old one and deploy a new version. Consumer Gmail allows roughly 100 script emails a day. If your Workspace admin blocks Apps Script web apps, use a personal Google account for the script.
 
