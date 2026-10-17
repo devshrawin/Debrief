@@ -199,9 +199,14 @@ export function allowListLines(addresses, { domains = false } = {}) {
   return { allowed: `[${list.map(q).join(', ')}]`, domains: '[]' };
 }
 
+// The install's own secret goes on the SECRET line, so the relay never has a first-use window.
+export function scriptWithSecret(scriptText, secret) {
+  return secret ? scriptText.replace(/const SECRET = '[^']*';/, `const SECRET = '${String(secret).replace(/[^A-Za-z0-9_-]/g, '')}';`) : scriptText;
+}
+
 export function scriptWithAllowList(scriptText, addresses, opts) {
   const { allowed, domains } = allowListLines(addresses, opts);
-  return scriptText.replace(/const ALLOWED = \[[^\]]*\];/, `const ALLOWED = ${allowed};`).replace(/const ALLOWED_DOMAINS = \[[^\]]*\];/, `const ALLOWED_DOMAINS = ${domains};`);
+  return scriptWithSecret(scriptText, opts?.secret).replace(/const ALLOWED = \[[^\]]*\];/, `const ALLOWED = ${allowed};`).replace(/const ALLOWED_DOMAINS = \[[^\]]*\];/, `const ALLOWED_DOMAINS = ${domains};`);
 }
 
 // Calendar lookup through the relay: who was invited to this meeting and what they replied.

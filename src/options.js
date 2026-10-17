@@ -1,7 +1,7 @@
-import { DEFAULTS, getSettings, saveSettings } from './store.js';
+import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret } from './store.js';
 import { isLocalBase } from './local.js';
 import { generate } from './llm.js';
-import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, allowListLines } from './mailer.js';
+import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, scriptWithSecret, allowListLines } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
 import { OLLAMA_BASE, WHISPER_BASE, listOllamaModels, ollamaContext, contextAdvice, explain } from './local.js';
 import { learnAlias } from './dictionary.js';
@@ -625,14 +625,14 @@ function renderAllow() {
 ['shareList', 'shareGroups'].forEach((id) => $(id).addEventListener('input', renderAllow));
 $('shareDomains').addEventListener('change', renderAllow);
 $('copyScriptAllow').onclick = async () => {
-  await navigator.clipboard.writeText(scriptWithAllowList(scriptText, allAllowed(), { domains: $('shareDomains').checked }));
+  await navigator.clipboard.writeText(scriptWithAllowList(scriptText, allAllowed(), { domains: $('shareDomains').checked, secret: await ensureEmailSecret() }));
   $('copyAllowMsg').textContent = 'Copied. Paste it over your script, save, then deploy a new version.';
   setTimeout(() => ($('copyAllowMsg').textContent = ''), 6000);
 };
 
 $('scriptText').textContent = scriptText;
 $('copyScript').onclick = async () => {
-  await navigator.clipboard.writeText(scriptText);
+  await navigator.clipboard.writeText(scriptWithSecret(scriptText, await ensureEmailSecret()));
   $('copyMsg').textContent = 'Copied ✓';
   setTimeout(() => ($('copyMsg').textContent = ''), 1500);
 };

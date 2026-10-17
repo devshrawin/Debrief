@@ -1,8 +1,8 @@
 // First-run tour: teaches Debrief step by step, saves each answer, and tests the pieces that can be tested
 // (the Gemini key, the microphone, the email relay) so the user finds out now, not in the middle of a meeting.
-import { getSettings, setSetting, DEFAULTS } from './store.js';
+import { getSettings, setSetting, DEFAULTS, ensureEmailSecret } from './store.js';
 import { generate } from './llm.js';
-import { sendMail, mailReady, scriptWithAllowList, parseAddresses, WEBAPP_URL } from './mailer.js';
+import { sendMail, mailReady, scriptWithAllowList, scriptWithSecret, parseAddresses, WEBAPP_URL } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
 import { LANGUAGES, chosenLanguages, minutesLanguageOptions } from './languages.js';
 
@@ -323,7 +323,7 @@ const STEPS = [
           h('div', { style: 'display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap' }, h('strong', {}, 'Connect your Gmail'),
             h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn', onclick: async () => {
               try {
-                await navigator.clipboard.writeText(scriptText);
+                await navigator.clipboard.writeText(scriptWithSecret(scriptText, await ensureEmailSecret()));
                 say(copyMsg, '', 'ok', 'Copied');
               } catch (e) {
                 say(copyMsg, `Could not copy: ${e.message}`, 'bad', 'Not copied');
@@ -373,7 +373,7 @@ const STEPS = [
           h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn', onclick: async () => {
             await patch({ shareList: $('t-share').value });
             try {
-              await navigator.clipboard.writeText(scriptWithAllowList(scriptText, parseAddresses($('t-share').value), { domains: S.shareDomains }));
+              await navigator.clipboard.writeText(scriptWithAllowList(scriptText, parseAddresses($('t-share').value), { domains: S.shareDomains, secret: await ensureEmailSecret() }));
               say(msg, 'The script with these people allowed is on your clipboard.', 'ok', 'Copied');
             } catch (e) {
               say(msg, `Could not copy: ${e.message}`, 'bad', 'Not copied');

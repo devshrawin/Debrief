@@ -2051,9 +2051,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     }
     return { allowed: `[${list.map(q2).join(", ")}]`, domains: "[]" };
   }
+  function scriptWithSecret(scriptText, secret) {
+    return secret ? scriptText.replace(/const SECRET = '[^']*';/, `const SECRET = '${String(secret).replace(/[^A-Za-z0-9_-]/g, "")}';`) : scriptText;
+  }
   function scriptWithAllowList(scriptText, addresses, opts) {
     const { allowed, domains } = allowListLines(addresses, opts);
-    return scriptText.replace(/const ALLOWED = \[[^\]]*\];/, `const ALLOWED = ${allowed};`).replace(/const ALLOWED_DOMAINS = \[[^\]]*\];/, `const ALLOWED_DOMAINS = ${domains};`);
+    return scriptWithSecret(scriptText, opts?.secret).replace(/const ALLOWED = \[[^\]]*\];/, `const ALLOWED = ${allowed};`).replace(/const ALLOWED_DOMAINS = \[[^\]]*\];/, `const ALLOWED_DOMAINS = ${domains};`);
   }
 
   // apps-script/Code.gs
@@ -2067,17 +2070,19 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 // The first time (and whenever Google asks for new permissions), pick the function "authorize" in the
 // toolbar and press Run once, then allow access. That grants email sending and calendar reading.
 //
-// Security: "Anyone" can reach the URL, so the script locks itself to the Debrief install that talks to it
-// first. Debrief makes up a long random secret on its own (you never type it) and sends it with every
-// request; the script remembers the first one and refuses everything else. Mail only ever goes to YOUR
+// Security: "Anyone" can reach the URL, so the script only answers the Debrief install that has its secret.
+// Debrief makes up a long random secret on its own (you never type it) and, when you copy the script from
+// Settings > Email, puts it on the SECRET line below. Without that line the script falls back to locking itself
+// to the first secret it sees; copy the script again from Debrief to close that window. Mail only ever goes to YOUR
 // address plus the people you list below. If you reinstall Debrief or use a new browser profile and see
 // "locked", run the function "resetSecret" here once and send a test email again.
 
 const ALLOWED = []; // people you want to be able to share minutes with, e.g. ['priya@company.com']
 const ALLOWED_DOMAINS = []; // or everyone at a company, e.g. ['company.com']
+const SECRET = ''; // filled in by Debrief when you copy this script from Settings > Email; keep this script private
 
 function doGet() {
-  return out({ ok: true, message: 'Debrief mail relay is live.', version: 7, locked: !!PropertiesService.getScriptProperties().getProperty('secret') });
+  return out({ ok: true, message: 'Debrief mail relay is live.', version: 8 });
 }
 
 function authorize() {
@@ -2098,11 +2103,13 @@ function sameText(a, b) {
   return diff === 0;
 }
 
-// First secret seen is kept (trust on first use). Everything after must present the same one.
+// With SECRET set, only that secret works, from the very first request. Without it: the first secret seen is kept
+// (trust on first use) and everything after must present the same one.
 function authorized(d) {
+  const given = typeof d.secret === 'string' ? d.secret : '';
+  if (SECRET) return given.length >= 24 && sameText(SECRET, given);
   const props = PropertiesService.getScriptProperties();
   const stored = props.getProperty('secret');
-  const given = typeof d.secret === 'string' ? d.secret : '';
   if (!stored) {
     if (given.length < 24) return false;
     props.setProperty('secret', given);
@@ -2114,7 +2121,7 @@ function authorized(d) {
 function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
-    if (!authorized(d)) return out({ ok: false, error: 'This script is locked to a different Debrief install. In the script editor run the function resetSecret once, then try again.' });
+    if (!authorized(d)) return out({ ok: false, error: SECRET ? 'This script was set up for a different Debrief install. In Debrief > Settings > Email copy the script again, paste it over this one, save, and deploy a new version.' : 'This script is locked to a different Debrief install. In the script editor run the function resetSecret once, then try again.' });
     if (d.action === 'invitees') return findInvitees(d);
 
     const me = Session.getEffectiveUser().getEmail();
@@ -3315,7 +3322,7 @@ function out(o) {
       try {
         const res = await fetch(s.emailWebhook, { redirect: "follow", signal: AbortSignal.timeout(15e3) });
         const j2 = await res.json();
-        if (j2?.ok) add(Number(j2.version) >= 7 ? OK : WARN, "Email relay", `reachable, script version ${j2.version}${j2.locked ? ", locked to this Debrief" : ", not locked yet (send a test email)"}${Number(j2.version) >= 7 ? "" : ". Attendance from the calendar needs version 7: copy the script again and deploy a new version"}`);
+        if (j2?.ok) add(Number(j2.version) >= 8 ? OK : WARN, "Email relay", `reachable, script version ${j2.version}${Number(j2.version) >= 8 ? "" : ". Version 8 closes a first-use window: copy the script again from Settings > Email and deploy a new version"}`);
         else add(BAD, "Email relay", 'answered, but not as the Debrief script (is it set to "Anyone"?)', "email", "Fix email");
       } catch (e) {
         add(BAD, "Email relay", `could not be reached (${e.message}). Check the deployment is set to "Anyone"`, "email", "Fix email");
@@ -3911,13 +3918,13 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
   ["shareList", "shareGroups"].forEach((id) => $3(id).addEventListener("input", renderAllow));
   $3("shareDomains").addEventListener("change", renderAllow);
   $3("copyScriptAllow").onclick = async () => {
-    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $3("shareDomains").checked }));
+    await navigator.clipboard.writeText(scriptWithAllowList(Code_default, allAllowed(), { domains: $3("shareDomains").checked, secret: await ensureEmailSecret() }));
     $3("copyAllowMsg").textContent = "Copied. Paste it over your script, save, then deploy a new version.";
     setTimeout(() => $3("copyAllowMsg").textContent = "", 6e3);
   };
   $3("scriptText").textContent = Code_default;
   $3("copyScript").onclick = async () => {
-    await navigator.clipboard.writeText(Code_default);
+    await navigator.clipboard.writeText(scriptWithSecret(Code_default, await ensureEmailSecret()));
     $3("copyMsg").textContent = "Copied \u2713";
     setTimeout(() => $3("copyMsg").textContent = "", 1500);
   };
