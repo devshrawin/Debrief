@@ -4020,7 +4020,7 @@ ${meeting.mom || ""}
           ensureAttendees(meeting, settings, cache);
           if (meeting.attendees?.length) await patch({ attendees: meeting.attendees });
         }
-        if ((await listPending(id)).length) {
+        if (!meeting.mom && (await listPending(id)).length) {
           await setJob({ state: "transcribing-retry" });
           await retryPendingAudio({ id, meeting, settings, transcribeFn: d.transcribeFn });
         }

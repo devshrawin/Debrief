@@ -94,7 +94,7 @@ Debrief can email you the minutes as soon as they are ready. It uses a small scr
 
 **Day to day**
 - After a meeting, leave the minutes tab open until it says **Emailed to … ✓**.
-- Regenerating or editing the minutes never re-sends by itself. Press **Email me** on the minutes page to send again.
+- Rewriting or editing the minutes never re-sends by itself. Press **Email me** on the minutes page to send again.
 - Limit: about 100 emails per day for a normal Gmail account.
 
 **If you change the script later:** press **Deploy → Manage deployments → pencil → Version: New version → Deploy**. Saving alone doesn't update the live copy.
@@ -148,7 +148,7 @@ By default Debrief fills the Amnex house template (header block, Client / System
 1. Open **Settings > Minutes > Minutes format**.
 2. Put your company email domain(s) in **Our email domains**, for example `amnex.com`. Leave it blank to use the domain of your "Send to" address.
 3. Optionally fill the **People directory**, one person per line: `Name | Honorific | Department | Designation | Organisation`. Add `| Chair` at the end for the usual chairperson. People who are not listed show `[DESIGNATION]` / `[DEPARTMENT]` / `[CLIENT]` placeholders to fill in by hand.
-4. To name the chair for one meeting, write `Chairperson: Name` in the context box on the minutes page before pressing Generate.
+4. To name the chair for one meeting, write `Chairperson: Name` in the context box on the minutes page before pressing Write minutes.
 5. Choose **Debrief standard** instead if you want the older free-form minutes.
 
 For a PDF with page numbers use **Print / PDF** on the minutes page (Chrome 131 or newer) and choose *Save as PDF*. The PDF attached to the email is built by your Apps Script and has no page numbers.

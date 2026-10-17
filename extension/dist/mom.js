@@ -4465,7 +4465,7 @@ ${meeting2.mom || ""}
           ensureAttendees(meeting2, settings2, cache);
           if (meeting2.attendees?.length) await patch({ attendees: meeting2.attendees });
         }
-        if ((await listPending(id2)).length) {
+        if (!meeting2.mom && (await listPending(id2)).length) {
           await setJob({ state: "transcribing-retry" });
           await retryPendingAudio({ id: id2, meeting: meeting2, settings: settings2, transcribeFn: d.transcribeFn });
         }
@@ -4563,6 +4563,7 @@ ${meeting2.mom || ""}
     $2("mom").innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
     if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($2("mom"));
     $2("mom").classList.remove("streaming");
+    $2("gen").textContent = meeting.mom ? "Rewrite minutes" : "Write minutes";
     syncState();
     if (meeting) paintFormat();
   }
@@ -4573,7 +4574,7 @@ ${meeting2.mom || ""}
     $2("failText").textContent = genFail ? `${genFail} Your transcript is safe.` : "";
     $2("emptyBox").classList.toggle("hidden", !empty);
     $2("mom").hidden = !meeting.mom && !busy;
-    $2("emptyText").textContent = !meeting.segments.length ? "No speech was transcribed, so there is nothing to summarise yet." : !meeting.endedAt ? "This meeting is still being recorded. The minutes are written when it ends." : "The transcript is ready. Generate the minutes when you are.";
+    $2("emptyText").textContent = !meeting.segments.length ? "No speech was transcribed, so there is nothing to summarise yet." : !meeting.endedAt ? "This meeting is still being recorded. The minutes are written when it ends." : "The transcript is ready. Press Write minutes when you are ready.";
   }
   function showSkeleton() {
     $2("mom").innerHTML = '<div class="skel" aria-hidden="true"><div class="busy"><span class="spin"></span>Writing the minutes\u2026</div><div class="sk h"></div><div class="sk" style="width:96%"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:92%"></div><div class="sk h"></div><div class="sk" style="width:70%"></div><div class="sk" style="width:82%"></div></div>';
@@ -4606,7 +4607,7 @@ ${meeting2.mom || ""}
     if (!here.length) return;
     const lines = labeledLines(true) || [];
     const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
-    $2("nameNote").textContent = clips.some(Boolean) ? "Press Play, type who it is, and save. Then press Regenerate so the minutes use the names." : settings.voiceSamples ? "No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Regenerate." : 'No audio clips are kept: switch on "Keep short samples of voices" in Settings \u2192 Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
+    $2("nameNote").textContent = clips.some(Boolean) ? "Press Play, type who it is, and save. Then press Rewrite minutes so the minutes use the names." : settings.voiceSamples ? "No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Rewrite minutes." : 'No audio clips are kept: switch on "Keep short samples of voices" in Settings \u2192 Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';
     $2("nameList").replaceChildren(
       ...here.map((v, i) => {
         const row2 = document.createElement("div");
@@ -4654,10 +4655,8 @@ ${meeting2.mom || ""}
   var currentFormat = () => meeting.format || settings.minutesFormat || "amnex";
   function paintFormat() {
     const f = currentFormat();
-    for (const seg of [$2("fmtSeg"), $2("fmtSwitch")]) for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.v === f));
-    $2("fmtSwitch").classList.toggle("hidden", !meeting.mom);
-    $2("chkMine").checked = wantTranscript2(false);
-    $2("chkShare").checked = wantTranscript2(true);
+    for (const b of $2("fmtSwitch").querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.v === f));
+    $2("fmtText").textContent = FORMATS[f];
     $2("mailTranscript").checked = wantTranscript2(false);
     $2("shareTranscript").checked = wantTranscript2(true);
   }
@@ -4670,13 +4669,16 @@ ${meeting2.mom || ""}
       runGenerate();
     }
   }
-  for (const b of $2("fmtSeg").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, false);
   for (const b of $2("fmtSwitch").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, true);
-  $2("chkMine").onchange = $2("mailTranscript").onchange = async (e2) => {
+  $2("fmtChange").onclick = (e2) => {
+    e2.preventDefault();
+    ($2("fmtSwitch").querySelector('[aria-checked="true"]') || $2("fmtSwitch").querySelector("button")).focus();
+  };
+  $2("mailTranscript").onchange = async (e2) => {
     await patchMeeting({ transcriptMine: e2.target.checked });
     paintFormat();
   };
-  $2("chkShare").onchange = $2("shareTranscript").onchange = async (e2) => {
+  $2("shareTranscript").onchange = async (e2) => {
     await patchMeeting({ transcriptShare: e2.target.checked });
     paintFormat();
   };
@@ -4850,7 +4852,7 @@ ${meeting2.mom || ""}
       $2("mail").textContent = "Email again";
     }
     $2("reread").classList.toggle("hidden", !meeting.extract);
-    $2("gen").textContent = "Regenerate";
+    $2("gen").textContent = "Rewrite minutes";
   }
   function watchJob() {
     if (jobUi.timer) return;
@@ -4991,7 +4993,7 @@ ${meeting2.mom || ""}
       settings = await getSettings();
       labelCache.clear();
       renderTranscript();
-      if (c.voices && meeting?.mom && !jobBusy && labeledLines()) $2("genStatus").textContent = "Voices changed since these minutes were written. Press Regenerate to use the names.";
+      if (c.voices && meeting?.mom && !jobBusy && labeledLines()) $2("genStatus").textContent = "Voices changed since these minutes were written. Press Rewrite minutes to use the names.";
     } catch {
     }
   });
@@ -5142,7 +5144,7 @@ ${meeting2.mom || ""}
     renderMom();
     $2("retry").onclick = async () => {
       const left = await retryPending();
-      if (!left && meeting.segments.length) $2("genStatus").textContent = "Transcript recovered. Press Regenerate to update the minutes.";
+      if (!left && meeting.segments.length) $2("genStatus").textContent = "Transcript recovered. Press Rewrite minutes to update the minutes.";
     };
     const hadPending = (await listPending(id)).length > 0;
     const live = isActive(meeting) && Date.now() - (meeting.job.beat || 0) <= STALE_MS;
@@ -5154,14 +5156,14 @@ ${meeting2.mom || ""}
     }
     if (meeting.mom) {
       paintFormat();
-      $2("gen").textContent = "Regenerate";
+      $2("gen").textContent = "Rewrite minutes";
       $2("reread").classList.toggle("hidden", !meeting.extract);
       if (live) {
         applyJob(meeting.job);
         watchJob();
-      } else if (hadPending) $2("genStatus").textContent = "Missing audio was recovered. Press Regenerate to include it in the minutes.";
+      } else if (hadPending) $2("genStatus").textContent = "Missing audio was recovered. Press Rewrite minutes to include it in the minutes.";
     } else if (!meeting.endedAt) {
-      $2("genStatus").textContent = "This meeting is still being recorded. The minutes are written when it ends, or press Generate to try now.";
+      $2("genStatus").textContent = "This meeting is still being recorded. The minutes are written when it ends, or press Write minutes to try now.";
     } else if (jobWillRun) {
       paintFormat();
       if (live) applyJob(meeting.job);
