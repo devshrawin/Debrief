@@ -83,10 +83,29 @@ function renderChips() {
 // Right after a meeting: the voices Debrief found in it that have no name yet, each with its audio clip (if kept) and
 // what it said, so they can be named here and now. Naming confirms the voice for this and every later meeting.
 let playing = null;
+// A meeting with fingerprinted speech but no trace of voice learning (it was off when the meeting ended, or it did not
+// finish) is learned from now, once, so the voices can still be named. Audio clips exist only if they were kept at the time.
+let catchUpTried = false;
+async function catchUpVoices() {
+  const rep = meeting.voiceLearn;
+  if (catchUpTried || !settings.voiceLearn || !meeting.endedAt || (meeting.voiceSegs || []).length < 8 || (rep && !rep.off && !rep.error)) return;
+  catchUpTried = true;
+  $('nameWhy').textContent = 'Looking for voices in this meeting…';
+  $('nameWhy').classList.remove('hidden');
+  await chrome.runtime.sendMessage({ target: 'bg', type: 'learn-voices', id }).catch(() => null);
+  const latest = await getMeeting(id);
+  if (latest) Object.assign(meeting, { voiceLearn: latest.voiceLearn, debug: latest.debug });
+  settings = await getSettings();
+  labelCache.clear();
+  renderTranscript();
+}
+
 // Why this meeting has no "Unnamed voice" to play and name.
 function whyNoVoices(m, s) {
   if (!s.voiceLearn) return 'No voices to name: "Learn voices on its own" is off, so Debrief did not keep any voices or audio clips from this meeting. Switch it on in Settings → Voices (with "Keep short samples of voices"); it works from the next meeting.';
   const rep = m.voiceLearn;
+  if (rep?.error) return `No voices to name: voice learning failed for this meeting (${rep.error}).`;
+  if (rep?.off) return 'No voices to name: voice learning was off when this meeting ended, so no audio clips were kept for it. It is on now and will work from the next meeting.';
   if (!rep) return 'No voices to name: voice learning did not run for this meeting (it was switched on after it ended, or the recording stopped early).';
   if (!(m.voiceSegs || []).length) return 'No voices to name: no speech was fingerprinted. Voices come from the audio of the meeting tab, so this happens when only your own microphone was recorded or the model could not start.';
   const skipped = (rep.skipped || []).map((x) => x.why).filter(Boolean);
@@ -101,7 +120,10 @@ async function renderNameBox() {
   const why = here.length || !meeting.endedAt ? '' : whyNoVoices(meeting, settings);
   $('nameWhy').textContent = why;
   $('nameWhy').classList.toggle('hidden', !why);
-  if (!here.length) return;
+  if (!here.length) {
+    catchUpVoices().catch(() => {});
+    return;
+  }
   const lines = labeledLines(true) || [];
   const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
   $('nameNote').textContent = clips.some(Boolean)

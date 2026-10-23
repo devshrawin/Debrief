@@ -4670,9 +4670,25 @@ ${meeting2.mom || ""}
     $2("chips").replaceChildren(...list);
   }
   var playing = null;
+  var catchUpTried = false;
+  async function catchUpVoices() {
+    const rep = meeting.voiceLearn;
+    if (catchUpTried || !settings.voiceLearn || !meeting.endedAt || (meeting.voiceSegs || []).length < 8 || rep && !rep.off && !rep.error) return;
+    catchUpTried = true;
+    $2("nameWhy").textContent = "Looking for voices in this meeting\u2026";
+    $2("nameWhy").classList.remove("hidden");
+    await chrome.runtime.sendMessage({ target: "bg", type: "learn-voices", id }).catch(() => null);
+    const latest = await getMeeting(id);
+    if (latest) Object.assign(meeting, { voiceLearn: latest.voiceLearn, debug: latest.debug });
+    settings = await getSettings();
+    labelCache.clear();
+    renderTranscript();
+  }
   function whyNoVoices(m, s) {
     if (!s.voiceLearn) return 'No voices to name: "Learn voices on its own" is off, so Debrief did not keep any voices or audio clips from this meeting. Switch it on in Settings \u2192 Voices (with "Keep short samples of voices"); it works from the next meeting.';
     const rep = m.voiceLearn;
+    if (rep?.error) return `No voices to name: voice learning failed for this meeting (${rep.error}).`;
+    if (rep?.off) return "No voices to name: voice learning was off when this meeting ended, so no audio clips were kept for it. It is on now and will work from the next meeting.";
     if (!rep) return "No voices to name: voice learning did not run for this meeting (it was switched on after it ended, or the recording stopped early).";
     if (!(m.voiceSegs || []).length) return "No voices to name: no speech was fingerprinted. Voices come from the audio of the meeting tab, so this happens when only your own microphone was recorded or the model could not start.";
     const skipped = (rep.skipped || []).map((x2) => x2.why).filter(Boolean);
@@ -4685,7 +4701,11 @@ ${meeting2.mom || ""}
     const why = here.length || !meeting.endedAt ? "" : whyNoVoices(meeting, settings);
     $2("nameWhy").textContent = why;
     $2("nameWhy").classList.toggle("hidden", !why);
-    if (!here.length) return;
+    if (!here.length) {
+      catchUpVoices().catch(() => {
+      });
+      return;
+    }
     const lines = labeledLines(true) || [];
     const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));
     $2("nameNote").textContent = clips.some(Boolean) ? "Press Play, type who it is, and save. Then press Rewrite minutes so the minutes use the names." : settings.voiceSamples ? "No audio clip was kept for these voices. Read what each one said below and type who it is. Then press Rewrite minutes." : 'No audio clips are kept: switch on "Keep short samples of voices" in Settings \u2192 Voices before the next meeting to get a Play button. Meanwhile read what each voice said and type who it is.';

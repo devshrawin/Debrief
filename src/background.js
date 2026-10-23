@@ -325,22 +325,38 @@ async function setPaused(want) {
 }
 
 // Opt-in: learn who is who from this meeting's captions and voice fingerprints (see voice/learn.js).
+// Always leaves a trace on the meeting (a report, "off", or the error), so "no voices to name" can say why. Safe to run again
+// later from the minutes page: a voice already learned from this meeting is not counted twice.
 async function learnVoices(meetingId) {
-  const s = await getSettings();
-  const m = await getMeeting(meetingId);
-  if (!s.voiceLearn || !m) {
-    await saveSamples(meetingId, null, []).catch(() => {}); // only clears waiting audio
-    return;
+  try {
+    const s = await getSettings();
+    const m = await getMeeting(meetingId);
+    if (!m) return { ok: false, error: 'meeting not found' };
+    if (!s.voiceLearn) {
+      await saveSamples(meetingId, null, []).catch(() => {}); // only clears waiting audio
+      await updateMeeting(meetingId, (mm) => {
+        mm.voiceLearn = { off: true };
+      });
+      return { ok: true, off: true };
+    }
+    const blocked = await getBlockedVoices();
+    const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
+    const r2 = learnRecurring(m, r.list, { blocked });
+    if (r.changed || r2.changed) await saveVoices(r2.list);
+    // keep one short clip per unnamed voice (if switched on), and always delete the waiting audio
+    await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {});
+    await updateMeeting(meetingId, (mm) => {
+      mm.voiceLearn = { ...r.report, recurring: r2.report };
+      (mm.debug ||= []).push(`voice learning: ${r2.report.created.length} new, ${r2.report.updated.length + r.report.learned.length} updated, from ${(m.voiceSegs || []).length} pieces`);
+    });
+    return { ok: true, created: r2.report.created.length };
+  } catch (e) {
+    await updateMeeting(meetingId, (mm) => {
+      mm.voiceLearn = { error: String(e?.message || e) };
+      (mm.debug ||= []).push(`voice learning failed: ${e?.message || e}`);
+    }).catch(() => {});
+    return { ok: false, error: String(e?.message || e) };
   }
-  const blocked = await getBlockedVoices();
-  const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
-  const r2 = learnRecurring(m, r.list, { blocked });
-  if (r.changed || r2.changed) await saveVoices(r2.list);
-  // keep one short clip per unnamed voice (if switched on), and always delete the waiting audio
-  await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {});
-  await updateMeeting(meetingId, (mm) => {
-    mm.voiceLearn = { ...r.report, recurring: r2.report };
-  });
 }
 
 let stopping = null;
@@ -457,6 +473,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return { ok: true };
     },
     'mic-silent': () => raiseAlert(msg.meetingId, 'MIC_SILENT'),
+    // the minutes page asks for this when voice learning left no trace for a meeting that has voice pieces
+    'learn-voices': () => learnVoices(msg.id),
     'job-run': () => jobCommand('job-run', { id: msg.id, force: !!msg.force, reread: !!msg.reread }),
     'job-hold': () => jobCommand('job-hold', { id: msg.id }, { create: false }),
     'job-abort': () => jobCommand('job-abort', { id: msg.id }, { create: false }),

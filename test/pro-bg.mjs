@@ -291,5 +291,40 @@ await test('toolbar: recording ends the glow, shows REC with a live tooltip, ! o
   assert.equal(state.title[7], 'Debrief');
 });
 
+await test('voice learning always leaves a trace, and can be run again from the minutes page', async () => {
+  const { pack } = await import('../src/voice/match.js');
+  const vec = (k) => Float32Array.from({ length: 256 }, (_, i) => Math.sin(i * 0.37 + k) + 0.02 * Math.sin(i * k * 3.1));
+  const segs = Array.from({ length: 14 }, (_, i) => ({ t0: i * 5, t1: i * 5 + 3.2, e: pack(vec(1 + (i % 3) * 0.001)) }));
+  const meet = { id: 'lv', title: 'T', startedAt: Date.now() - 600000, endedAt: Date.now() - 1000, segments: [], errors: [], mom: '', captions: [], voiceSegs: segs };
+  // learning was OFF when the meeting ended: the meeting says so
+  state.mem.local.settings = { voiceLearn: false, schema: 2 };
+  state.mem.local.schema = 2;
+  state.mem.local['meeting:lv'] = { ...meet };
+  state.mem.local.meetingIds = ['lv'];
+  assert.deepEqual((await send({ type: 'learn-voices', id: 'lv' }, OWN)).off, true);
+  assert.deepEqual(state.mem.local['meeting:lv'].voiceLearn, { off: true });
+  // it is on now: asking again learns from the stored pieces
+  state.mem.local.settings = { voiceLearn: true, voiceSamples: true, schema: 2 };
+  const r = await send({ type: 'learn-voices', id: 'lv' }, OWN);
+  assert.equal(r.ok, true);
+  const m = state.mem.local['meeting:lv'];
+  assert.ok(m.voiceLearn.recurring, 'a report was written');
+  assert.equal(m.voiceLearn.recurring.created.length, 1);
+  assert.match(state.mem.local.voices[0].name, /^Unnamed voice 1$/);
+  assert.deepEqual(state.mem.local.voices[0].learnedFrom, ['lv']);
+  assert.ok(m.debug.some((x) => /voice learning: 1 new/.test(x)));
+  // asking a third time does not make a second voice from the same pieces
+  await send({ type: 'learn-voices', id: 'lv' }, OWN);
+  assert.equal(state.mem.local.voices.length, 1);
+  // a crash inside leaves the error on the meeting instead of nothing
+  state.mem.local['meeting:lv'] = { ...meet };
+  state.mem.local.voices = [];
+  state.mem.local.voiceBlock = 'corrupt'; // a damaged list of blocked voices makes learning throw
+  const bad = await send({ type: 'learn-voices', id: 'lv' }, OWN);
+  assert.equal(bad.ok, false);
+  assert.ok(state.mem.local['meeting:lv'].voiceLearn.error);
+  delete state.mem.local.voiceBlock;
+});
+
 console.log(`\n${passed} passed`);
 process.exit(process.exitCode || 0);
