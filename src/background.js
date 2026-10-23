@@ -473,6 +473,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.op === 'settings') return { ok: true, value: await getSettings() };
       if (msg.op === 'getMeeting') return { ok: true, value: await getMeeting(msg.id) };
       if (msg.op === 'saveMeeting') return serial(async () => (await saveMeeting(msg.meeting), { ok: true }));
+      if (msg.op === 'patchMeeting') return { ok: true, value: await updateMeeting(msg.id, (m) => Object.assign(m, msg.fields)) };
       if (msg.op === 'mergeEmailNames') return { ok: true, value: await mergeEmailNames(msg.found) };
       if (msg.op === 'emailNames') return { ok: true, value: await getEmailNames() };
       return { ok: false };

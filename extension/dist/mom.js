@@ -2363,6 +2363,13 @@ ${att}
   async function saveMeeting(m) {
     await chrome.storage.local.set({ [key(m.id)]: m });
   }
+  async function patchMeeting(id2, fields) {
+    const m = await getMeeting(id2);
+    if (!m) return null;
+    Object.assign(m, fields);
+    await saveMeeting(m);
+    return m;
+  }
   async function deleteMeeting(id2) {
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: meetingIds.filter((x2) => x2 !== id2) });
@@ -4282,7 +4289,7 @@ ${meeting2.mom || ""}
   var COUNTDOWN_MS = 1e4;
 
   // src/jobs.js
-  var IO = { getMeeting, saveMeeting, getSettings, mergeEmailNames };
+  var IO = { getMeeting, saveMeeting, patchMeeting, getSettings, mergeEmailNames };
   var wantTranscript = (meeting2, settings2, shared) => shared ? !!meeting2.transcriptShare : meeting2.transcriptMine ?? !!settings2.emailTranscript;
   function labeledLinesFor(meeting2, settings2, forDisplay = false, cache = /* @__PURE__ */ new Map()) {
     const people = forDisplay ? settings2.voices || [] : usableVoices(settings2.voices);
@@ -4455,6 +4462,7 @@ ${meeting2.mom || ""}
       getSettings: () => IO.getSettings(),
       getMeeting: (i) => IO.getMeeting(i),
       saveMeeting: (m) => IO.saveMeeting(m),
+      patchMeeting: (i, f) => IO.patchMeeting(i, f),
       emit: () => {
       },
       notify: () => {
@@ -4479,10 +4487,8 @@ ${meeting2.mom || ""}
       let chain = Promise.resolve();
       const patch = (fields) => {
         const run3 = chain.then(async () => {
-          const latest = await d.getMeeting(id2) || meeting2;
-          Object.assign(latest, fields);
           if (meeting2) Object.assign(meeting2, fields);
-          await d.saveMeeting(latest);
+          await d.patchMeeting(id2, fields);
         });
         chain = run3.catch(() => {
         });
@@ -4505,7 +4511,9 @@ ${meeting2.mom || ""}
       const ui = {
         onStatus: (t, o) => {
           if (!o?.keep) buf = "";
-          emit({ type: "job-progress", id: id2, status: t });
+          emit({ type: "job-progress", id: id2, status: t, keep: !!o?.keep });
+          setJob({ status: t }).catch(() => {
+          });
         },
         onText: (delta) => {
           buf += delta;
@@ -4543,7 +4551,7 @@ ${meeting2.mom || ""}
         await patch({ decided: true });
         let result = { stats: meeting2.job?.stats };
         if (!skipWrite) {
-          await setJob({ state: "writing", countdownEnd: null, held: false });
+          await setJob({ state: "writing", status: null, countdownEnd: null, held: false });
           try {
             result = await writeAndStore({ id: id2, meeting: meeting2, settings: settings2, reread, signal: job.ctl.signal, ui, patch, cache, generate: d.generate });
           } catch (e2) {
@@ -4744,7 +4752,7 @@ ${meeting2.mom || ""}
   }
   async function chooseFormat(v, regenerate) {
     if (v === currentFormat()) return;
-    await patchMeeting({ format: v });
+    await patchMeeting2({ format: v });
     paintFormat();
     if (regenerate && meeting.mom && !jobBusy) {
       $2("genStatus").textContent = `Switching to the ${FORMATS[v]}\u2026`;
@@ -4757,11 +4765,11 @@ ${meeting2.mom || ""}
     ($2("fmtSwitch").querySelector('[aria-checked="true"]') || $2("fmtSwitch").querySelector("button")).focus();
   };
   $2("mailTranscript").onchange = async (e2) => {
-    await patchMeeting({ transcriptMine: e2.target.checked });
+    await patchMeeting2({ transcriptMine: e2.target.checked });
     paintFormat();
   };
   $2("shareTranscript").onchange = async (e2) => {
-    await patchMeeting({ transcriptShare: e2.target.checked });
+    await patchMeeting2({ transcriptShare: e2.target.checked });
     paintFormat();
   };
   var cd = { timer: null };
@@ -4827,7 +4835,7 @@ ${meeting2.mom || ""}
     }
   }
   var patchChain = Promise.resolve();
-  function patchMeeting(fields) {
+  function patchMeeting2(fields) {
     const run2 = patchChain.then(async () => {
       const latest = await getMeeting(id) || meeting;
       Object.assign(latest, fields);
@@ -4865,6 +4873,9 @@ ${meeting2.mom || ""}
     $2("mom").classList.add("streaming");
     $2("mom").hidden = false;
   }
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === "job-progress") onJobEvent(msg);
+  });
   function onJobEvent(msg) {
     if (!msg || msg.id !== id || !meeting) return;
     if (msg.status) {
@@ -4899,6 +4910,7 @@ ${meeting2.mom || ""}
       clearInterval(cd.timer);
       setBusy(true);
       if (JOB_STATUS[job.state]) $2("genStatus").textContent = JOB_STATUS[job.state];
+      else if (job.status) $2("genStatus").textContent = job.status;
       else if (first2) $2("genStatus").textContent = `Writing with ${modelLabel(settings)}\u2026`;
       if (first2 && !jobUi.buf) showSkeleton();
     }
@@ -4943,7 +4955,7 @@ ${meeting2.mom || ""}
       if (!m) return;
       if (isActive(m)) {
         if (Date.now() - (m.job.beat || 0) > STALE_MS) runner.run(id, { resume: true });
-        else if (m.job.state !== meeting.job?.state || m.job.countdownEnd !== meeting.job?.countdownEnd) applyJob(m.job);
+        else if (m.job.state !== meeting.job?.state || m.job.countdownEnd !== meeting.job?.countdownEnd || m.job.status !== meeting.job?.status) applyJob(m.job);
       } else if (meeting.job?.state !== m.job?.state || jobBusy) finishJob();
     }, 1500);
   }
@@ -4958,7 +4970,7 @@ ${meeting2.mom || ""}
     }
     setEditing(false);
     meeting.notes = $2("notes").value;
-    await patchMeeting({ notes: meeting.notes });
+    await patchMeeting2({ notes: meeting.notes });
     genFail = "";
     jobUi.buf = "";
     $2("genStatus").textContent = `Writing with ${modelLabel(settings)}\u2026`;
@@ -4971,7 +4983,7 @@ ${meeting2.mom || ""}
     setEditing(false);
     $2("mail").disabled = true;
     $2("mailStatus").textContent = "Sending\u2026";
-    const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: "basic", iconUrl: "icons/icon128.png", title: n.title, message: n.message }) });
+    const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting2, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: "basic", iconUrl: "icons/icon128.png", title: n.title, message: n.message }) });
     $2("mailStatus").textContent = r.status;
     if (r.sent) {
       renderChips();
@@ -4986,7 +4998,7 @@ ${meeting2.mom || ""}
       getMeetings: async () => [await getMeeting(id) || meeting],
       getCtx: () => ({ ...nameCtx(), myName: settings.myName }),
       history: meeting.qa || [],
-      onEntry: (entry) => patchMeeting({ qa: [...meeting.qa || [], entry].slice(-10) }),
+      onEntry: (entry) => patchMeeting2({ qa: [...meeting.qa || [], entry].slice(-10) }),
       placeholder: 'Ask about these minutes, e.g. "who owns the Kerala mapping?"'
     });
   }
@@ -5014,7 +5026,7 @@ ${meeting2.mom || ""}
     $2("shareSend").disabled = true;
     $2("shareStatus").textContent = `Sending to ${list.length} ${list.length === 1 ? "person" : "people"}\u2026`;
     try {
-      const r = await shareMinutes({ meeting, settings, list, how: $2("shareHowSel").value, patch: patchMeeting, ctxFor: nameCtx });
+      const r = await shareMinutes({ meeting, settings, list, how: $2("shareHowSel").value, patch: patchMeeting2, ctxFor: nameCtx });
       $2("shareStatus").textContent = r.status;
     } catch (e2) {
       $2("shareStatus").textContent = `Share failed: ${e2.message}`;
@@ -5026,7 +5038,7 @@ ${meeting2.mom || ""}
   $2("shareSend").onclick = () => shareMom();
   $2("shareInvited").onclick = () => addTo(inviteeEmails(meeting));
   $2("shareAbsent").onclick = () => addTo(inviteeEmails(meeting, { absentOnly: true, absentNames: absentNames() }));
-  var ensureInvited2 = () => ensureInvited(meeting, settings, patchMeeting);
+  var ensureInvited2 = () => ensureInvited(meeting, settings, patchMeeting2);
   var rememberEmailNames2 = () => rememberEmailNames(meeting, settings, labelCache);
   var ensureAttendees2 = () => ensureAttendees(meeting, settings, labelCache);
   async function retryPending() {
@@ -5146,7 +5158,7 @@ ${meeting2.mom || ""}
     for (const a of accepted) settings.dictionary = learnAlias(settings.dictionary, a.suggest, a.found);
     if (accepted.length) await setSetting({ dictionary: settings.dictionary });
     await chrome.storage.local.set({ learned: next });
-    await patchMeeting({ learnedAt: Date.now() });
+    await patchMeeting2({ learnedAt: Date.now() });
   }
   async function fixName(wrong, right, remember) {
     wrong = wrong.trim();
@@ -5173,7 +5185,7 @@ ${meeting2.mom || ""}
   }
   $2("fixApply").onclick = () => fixName($2("fixWrong").value, $2("fixRight").value, $2("fixRemember").checked);
   $2("attendees").onchange = async () => {
-    await patchMeeting({ attendees: parseAttendees($2("attendees").value) });
+    await patchMeeting2({ attendees: parseAttendees($2("attendees").value) });
     renderMeta();
     renderTranscript();
     renderSuggestions();

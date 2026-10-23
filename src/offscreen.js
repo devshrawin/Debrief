@@ -259,6 +259,7 @@ useStore({
   getSettings: () => viaBg({ op: 'settings' }),
   getMeeting: (id) => viaBg({ op: 'getMeeting', id }),
   saveMeeting: (meeting) => viaBg({ op: 'saveMeeting', meeting }),
+  patchMeeting: (id, fields) => viaBg({ op: 'patchMeeting', id, fields }),
   mergeEmailNames: (found) => viaBg({ op: 'mergeEmailNames', found }),
 });
 const jobs = createJobRunner({

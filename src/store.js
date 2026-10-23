@@ -128,6 +128,15 @@ export async function saveMeeting(m) {
   await chrome.storage.local.set({ [key(m.id)]: m });
 }
 
+// Changes only the given fields of a stored meeting (the job writes small updates, not the whole record every few seconds).
+export async function patchMeeting(id, fields) {
+  const m = await getMeeting(id);
+  if (!m) return null;
+  Object.assign(m, fields);
+  await saveMeeting(m);
+  return m;
+}
+
 export async function listMeetings() {
   const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
   const r = await chrome.storage.local.get(meetingIds.map(key));

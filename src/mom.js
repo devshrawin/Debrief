@@ -316,6 +316,11 @@ function paintStream() {
   $('mom').hidden = false;
 }
 
+// The background runner reports its progress as runtime messages; this page just listens.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === 'job-progress') onJobEvent(msg);
+});
+
 function onJobEvent(msg) {
   if (!msg || msg.id !== id || !meeting) return;
   if (msg.status) {
@@ -351,6 +356,7 @@ function applyJob(job) {
     clearInterval(cd.timer);
     setBusy(true);
     if (JOB_STATUS[job.state]) $('genStatus').textContent = JOB_STATUS[job.state];
+    else if (job.status) $('genStatus').textContent = job.status;
     else if (first) $('genStatus').textContent = `Writing with ${modelLabel(settings)}…`;
     if (first && !jobUi.buf) showSkeleton();
   }
@@ -399,7 +405,7 @@ function watchJob() {
     if (!m) return;
     if (isActive(m)) {
       if (Date.now() - (m.job.beat || 0) > STALE_MS) runner.run(id, { resume: true });
-      else if (m.job.state !== meeting.job?.state || m.job.countdownEnd !== meeting.job?.countdownEnd) applyJob(m.job);
+      else if (m.job.state !== meeting.job?.state || m.job.countdownEnd !== meeting.job?.countdownEnd || m.job.status !== meeting.job?.status) applyJob(m.job);
     } else if (meeting.job?.state !== m.job?.state || jobBusy) finishJob();
   }, 1500);
 }

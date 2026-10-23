@@ -370,6 +370,13 @@
   async function saveMeeting(m) {
     await chrome.storage.local.set({ [key(m.id)]: m });
   }
+  async function patchMeeting(id, fields) {
+    const m = await getMeeting(id);
+    if (!m) return null;
+    Object.assign(m, fields);
+    await saveMeeting(m);
+    return m;
+  }
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec));
     const h2 = Math.floor(sec / 3600);
@@ -3834,7 +3841,7 @@ ${meeting.mom || ""}
   var COUNTDOWN_MS = 1e4;
 
   // src/jobs.js
-  var IO = { getMeeting, saveMeeting, getSettings, mergeEmailNames };
+  var IO = { getMeeting, saveMeeting, patchMeeting, getSettings, mergeEmailNames };
   function useStore(io) {
     IO = { ...IO, ...io };
   }
@@ -4010,6 +4017,7 @@ ${meeting.mom || ""}
       getSettings: () => IO.getSettings(),
       getMeeting: (i) => IO.getMeeting(i),
       saveMeeting: (m) => IO.saveMeeting(m),
+      patchMeeting: (i, f) => IO.patchMeeting(i, f),
       emit: () => {
       },
       notify: () => {
@@ -4034,10 +4042,8 @@ ${meeting.mom || ""}
       let chain = Promise.resolve();
       const patch = (fields) => {
         const run3 = chain.then(async () => {
-          const latest = await d.getMeeting(id) || meeting;
-          Object.assign(latest, fields);
           if (meeting) Object.assign(meeting, fields);
-          await d.saveMeeting(latest);
+          await d.patchMeeting(id, fields);
         });
         chain = run3.catch(() => {
         });
@@ -4060,7 +4066,9 @@ ${meeting.mom || ""}
       const ui = {
         onStatus: (t, o) => {
           if (!o?.keep) buf = "";
-          emit({ type: "job-progress", id, status: t });
+          emit({ type: "job-progress", id, status: t, keep: !!o?.keep });
+          setJob({ status: t }).catch(() => {
+          });
         },
         onText: (delta) => {
           buf += delta;
@@ -4098,7 +4106,7 @@ ${meeting.mom || ""}
         await patch({ decided: true });
         let result = { stats: meeting.job?.stats };
         if (!skipWrite) {
-          await setJob({ state: "writing", countdownEnd: null, held: false });
+          await setJob({ state: "writing", status: null, countdownEnd: null, held: false });
           try {
             result = await writeAndStore({ id, meeting, settings, reread, signal: job.ctl.signal, ui, patch, cache, generate: d.generate });
           } catch (e2) {
@@ -4482,6 +4490,7 @@ ${meeting.mom || ""}
     getSettings: () => viaBg({ op: "settings" }),
     getMeeting: (id) => viaBg({ op: "getMeeting", id }),
     saveMeeting: (meeting) => viaBg({ op: "saveMeeting", meeting }),
+    patchMeeting: (id, fields) => viaBg({ op: "patchMeeting", id, fields }),
     mergeEmailNames: (found) => viaBg({ op: "mergeEmailNames", found })
   });
   var jobs = createJobRunner({

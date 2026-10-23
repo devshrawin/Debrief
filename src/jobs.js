@@ -6,7 +6,7 @@
 //   queued -> transcribing-retry -> writing -> emailing -> done | failed
 // "held" = the person touched the minutes page during the countdown, so nothing starts until they press Write minutes.
 
-import { getMeeting, saveMeeting, getSettings, llmReady, mergeEmailNames } from './store.js';
+import { getMeeting, saveMeeting, patchMeeting, getSettings, llmReady, mergeEmailNames } from './store.js';
 import { parseDictionary } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { matchPeople, setEmailNames, learnEmailNames, personLabel } from './attendance.js';
@@ -24,7 +24,7 @@ import { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs } from './jobstate.
 export { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs };
 
 // The offscreen document has no chrome.storage: there, the store calls are sent to the service worker (see useStore).
-let IO = { getMeeting, saveMeeting, getSettings, mergeEmailNames };
+let IO = { getMeeting, saveMeeting, patchMeeting, getSettings, mergeEmailNames };
 export function useStore(io) {
   IO = { ...IO, ...io };
 }
@@ -217,7 +217,7 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
 // deps: { getSettings, getMeeting, saveMeeting, emit(msg), notify(n), onIdle(), generate, transcribeFn, now, countdownMs, beatMs }
 export function createJobRunner(deps = {}) {
   const d = {
-    getSettings: () => IO.getSettings(), getMeeting: (i) => IO.getMeeting(i), saveMeeting: (m) => IO.saveMeeting(m), emit: () => {}, notify: () => {}, onIdle: () => {}, generate: realGenerate, transcribeFn: transcribe,
+    getSettings: () => IO.getSettings(), getMeeting: (i) => IO.getMeeting(i), saveMeeting: (m) => IO.saveMeeting(m), patchMeeting: (i, f) => IO.patchMeeting(i, f), emit: () => {}, notify: () => {}, onIdle: () => {}, generate: realGenerate, transcribeFn: transcribe,
     now: () => Date.now(), countdownMs: COUNTDOWN_MS, beatMs: 5000, ...deps,
   };
   // whoever is watching (the minutes page) may be gone: that must never stop the job
@@ -231,11 +231,10 @@ export function createJobRunner(deps = {}) {
   async function pipeline(id, job, { force, reread, resume }) {
     let chain = Promise.resolve();
     const patch = (fields) => {
+      // a small update of just these fields (the heartbeat and the status are written every few seconds)
       const run = chain.then(async () => {
-        const latest = (await d.getMeeting(id)) || meeting;
-        Object.assign(latest, fields);
         if (meeting) Object.assign(meeting, fields);
-        await d.saveMeeting(latest);
+        await d.patchMeeting(id, fields);
       });
       chain = run.catch(() => {});
       return run;
@@ -257,7 +256,9 @@ export function createJobRunner(deps = {}) {
     const ui = {
       onStatus: (t, o) => {
         if (!o?.keep) buf = '';
-        emit({ type: 'job-progress', id, status: t });
+        emit({ type: 'job-progress', id, status: t, keep: !!o?.keep });
+        // also on the meeting, so a page that opens later (or missed the message) shows the same stage
+        setJob({ status: t }).catch(() => {});
       },
       onText: (delta) => {
         buf += delta;
@@ -302,7 +303,7 @@ export function createJobRunner(deps = {}) {
       await patch({ decided: true });
       let result = { stats: meeting.job?.stats };
       if (!skipWrite) {
-        await setJob({ state: 'writing', countdownEnd: null, held: false });
+        await setJob({ state: 'writing', status: null, countdownEnd: null, held: false });
         try {
           result = await writeAndStore({ id, meeting, settings, reread, signal: job.ctl.signal, ui, patch, cache, generate: d.generate });
         } catch (e) {
