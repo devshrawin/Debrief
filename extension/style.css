@@ -53,9 +53,9 @@
   --green-soft: rgb(52 199 89 / .14);
 
   /* Ambient room behind the glass */
-  --amb-1: #c7c4f7;
-  --amb-2: #ffd6b0;
-  --amb-3: #bfe3f7;
+  --amb-1: #b9b4ff;
+  --amb-2: #ffc89a;
+  --amb-3: #9fd8ff;
   --amb-base: #eef0f6;
 
   /* Materials: tinted glass, four thicknesses */
@@ -87,7 +87,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --label: #f5f5f7;
     --label-2: #a3a3ad;
@@ -117,9 +117,9 @@
     --green-fill: #30d158;
     --green-soft: rgb(48 209 88 / .14);
 
-    --amb-1: #2b2670;
-    --amb-2: #4d2c12;
-    --amb-3: #123049;
+    --amb-1: #3a32a0;
+    --amb-2: #6a3a14;
+    --amb-3: #14507a;
     --amb-base: #121214;
 
     --glass-rgb: 30 30 34;
@@ -130,6 +130,49 @@
     --focus: 0 0 0 3px rgb(169 166 255 / .55);
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --label: #f5f5f7;
+  --label-2: #a3a3ad;
+  --label-3: #6e6e78;
+  --separator: rgb(84 84 88 / .50);
+  --separator-strong: rgb(120 120 128 / .55);
+  --fill: rgb(120 120 128 / .30);
+  --fill-2: rgb(120 120 128 / .22);
+  --fill-3: rgb(120 120 128 / .14);
+  --surface-read: #1c1c1e;
+  --surface-solid: #222226;
+
+  --tint: #a9a6ff;
+  --tint-hover: #bdbaff;
+  --on-tint: #14123a;
+  --tint-soft: rgb(169 166 255 / .14);
+  --tint-soft-strong: rgb(169 166 255 / .22);
+  --red: #ff7a72;
+  --red-fill: #ff6961;
+  --on-red: #2a0705;
+  --red-soft: rgb(255 105 97 / .14);
+  --orange: #ffb340;
+  --orange-fill: #ffb340;
+  --on-orange: #241500;
+  --orange-soft: rgb(255 179 64 / .14);
+  --green: #30db5b;
+  --green-fill: #30d158;
+  --green-soft: rgb(48 209 88 / .14);
+
+  --amb-1: #3a32a0;
+  --amb-2: #6a3a14;
+  --amb-3: #14507a;
+  --amb-base: #121214;
+
+  --glass-rgb: 30 30 34;
+  --edge: inset 0 1px 0 rgb(255 255 255 / .08), inset 0 0 0 1px rgb(255 255 255 / .06);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .30), 0 4px 14px -6px rgb(0 0 0 / .45);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / .30), 0 14px 34px -14px rgb(0 0 0 / .60);
+  --shadow-3: 0 8px 24px rgb(0 0 0 / .40), 0 30px 70px -20px rgb(0 0 0 / .70);
+  --focus: 0 0 0 3px rgb(169 166 255 / .55);
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 /* Backdrop blur switches on right after the first paint (theme.js adds
    html.glass), so opening a page never waits on blur rasterisation. */
@@ -524,27 +567,36 @@ pre { white-space: pre-wrap; font: 12px/1.6 var(--font-mono); background: var(--
 /* Fluid colour: the room behind the glass slowly moves. Six soft blobs (two palettes that cross-fade), drawn by
    fx/theme.js into one fixed layer; only transform and opacity animate, so it stays on the GPU. */
 :root {
-  --amb-4: #f9c9e6;
-  --amb-5: #b8f0dd;
-  --amb-6: #d8c8ff;
+  --amb-4: #ffb3dc;
+  --amb-5: #94ecd0;
+  --amb-6: #c4b0ff;
+  --fx-t: 1;
 }
-@media (prefers-color-scheme: dark) { :root { --amb-4: #4a1d45; --amb-5: #0f3d36; --amb-6: #2c2370; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --amb-4: #6a2160; --amb-5: #0f5a4c; --amb-6: #3b2ea0; } }
+:root[data-theme="dark"] { --amb-4: #6a2160; --amb-5: #0f5a4c; --amb-6: #3b2ea0; }
 .fx-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
 .fx-bg i { position: absolute; border-radius: 50%; filter: blur(var(--fx-blur, 60px)); will-change: transform, opacity; opacity: .85; }
-.fx-bg .b1 { width: 62vmax; height: 52vmax; left: -14vmax; top: -16vmax; background: radial-gradient(closest-side, var(--amb-1), transparent); animation: fx-d1 26s ease-in-out infinite alternate; }
-.fx-bg .b2 { width: 56vmax; height: 46vmax; right: -16vmax; top: 2vmax; background: radial-gradient(closest-side, var(--amb-3), transparent); animation: fx-d2 30s ease-in-out infinite alternate; }
-.fx-bg .b3 { width: 64vmax; height: 50vmax; left: 18vmax; bottom: -24vmax; background: radial-gradient(closest-side, var(--amb-2), transparent); animation: fx-d3 28s ease-in-out infinite alternate; }
-.fx-bg .b4 { width: 48vmax; height: 40vmax; left: 6vmax; bottom: -10vmax; background: radial-gradient(closest-side, var(--amb-4), transparent); opacity: 0; animation: fx-d2 34s ease-in-out infinite alternate-reverse, fx-fade 22s ease-in-out infinite alternate; }
-.fx-bg .b5 { width: 46vmax; height: 40vmax; right: 8vmax; top: -12vmax; background: radial-gradient(closest-side, var(--amb-5), transparent); opacity: 0; animation: fx-d1 32s ease-in-out infinite alternate-reverse, fx-fade 26s ease-in-out -12s infinite alternate; }
-.fx-bg .b6 { width: 52vmax; height: 42vmax; right: -8vmax; bottom: -16vmax; background: radial-gradient(closest-side, var(--amb-6), transparent); opacity: 0; animation: fx-d3 30s ease-in-out infinite alternate-reverse, fx-fade 24s ease-in-out -20s infinite alternate; }
-@keyframes fx-d1 { from { transform: translate3d(-8%, -4%, 0) scale(1); } 50% { transform: translate3d(18%, 14%, 0) scale(1.2); } to { transform: translate3d(4%, 24%, 0) scale(.92); } }
-@keyframes fx-d2 { from { transform: translate3d(10%, 6%, 0) scale(1.05); } 50% { transform: translate3d(-20%, 16%, 0) scale(.9); } to { transform: translate3d(-6%, -14%, 0) scale(1.18); } }
-@keyframes fx-d3 { from { transform: translate3d(0, 10%, 0) scale(.94); } 50% { transform: translate3d(24%, -14%, 0) scale(1.18); } to { transform: translate3d(-16%, -6%, 0) scale(1); } }
-@keyframes fx-fade { from { opacity: 0; } to { opacity: .9; } }
+.fx-bg .b1 { width: 62vmax; height: 52vmax; left: -14vmax; top: -16vmax; background: radial-gradient(closest-side, var(--amb-1), transparent); animation: fx-d1 calc(15s * var(--fx-t)) ease-in-out infinite alternate; }
+.fx-bg .b2 { width: 56vmax; height: 46vmax; right: -16vmax; top: 2vmax; background: radial-gradient(closest-side, var(--amb-3), transparent); animation: fx-d2 calc(18s * var(--fx-t)) ease-in-out infinite alternate; }
+.fx-bg .b3 { width: 64vmax; height: 50vmax; left: 18vmax; bottom: -24vmax; background: radial-gradient(closest-side, var(--amb-2), transparent); animation: fx-d3 calc(16s * var(--fx-t)) ease-in-out infinite alternate; }
+.fx-bg .b4 { width: 50vmax; height: 42vmax; left: 4vmax; bottom: -12vmax; background: radial-gradient(closest-side, var(--amb-4), transparent); opacity: 0; animation: fx-d2 calc(21s * var(--fx-t)) ease-in-out infinite alternate-reverse, fx-fade calc(12s * var(--fx-t)) ease-in-out infinite alternate; }
+.fx-bg .b5 { width: 48vmax; height: 42vmax; right: 6vmax; top: -14vmax; background: radial-gradient(closest-side, var(--amb-5), transparent); opacity: 0; animation: fx-d1 calc(19s * var(--fx-t)) ease-in-out infinite alternate-reverse, fx-fade calc(14s * var(--fx-t)) ease-in-out -5s infinite alternate; }
+.fx-bg .b6 { width: 54vmax; height: 44vmax; right: -10vmax; bottom: -18vmax; background: radial-gradient(closest-side, var(--amb-6), transparent); opacity: 0; animation: fx-d3 calc(17s * var(--fx-t)) ease-in-out infinite alternate-reverse, fx-fade calc(13s * var(--fx-t)) ease-in-out -8s infinite alternate; }
+@keyframes fx-d1 { from { transform: translate3d(-14%, -8%, 0) scale(1); } 50% { transform: translate3d(32%, 24%, 0) scale(1.28); } to { transform: translate3d(8%, 44%, 0) scale(.88); } }
+@keyframes fx-d2 { from { transform: translate3d(18%, 10%, 0) scale(1.08); } 50% { transform: translate3d(-34%, 28%, 0) scale(.86); } to { transform: translate3d(-10%, -26%, 0) scale(1.26); } }
+@keyframes fx-d3 { from { transform: translate3d(0, 18%, 0) scale(.9); } 50% { transform: translate3d(40%, -26%, 0) scale(1.26); } to { transform: translate3d(-30%, -10%, 0) scale(1); } }
+@keyframes fx-fade { from { opacity: 0; } to { opacity: .95; } }
 html:not(.glass) .fx-bg i { animation-play-state: paused; }
 html.paused .fx-bg i { animation-play-state: paused; }
 html.solid .fx-bg, html.solid body::before { display: none; }
 @media (prefers-reduced-motion: reduce) { .fx-bg i { animation: none !important; } .fx-bg .b4, .fx-bg .b5, .fx-bg .b6 { opacity: .35; } }
+/* Appearance settings (fx/theme.js puts these on <html>): Motion off / Calm / Lively (default), Effects off */
+html.motion-calm { --fx-t: 2.8; }
+html.motion-off .fx-bg i { animation: none !important; }
+html.motion-off .fx-bg .b4, html.motion-off .fx-bg .b5, html.motion-off .fx-bg .b6 { opacity: .35; }
+html.fx-off [data-beam]::before, html.fx-off [data-beam]::after, html.fx-off [data-beam] [data-beam-bloom], html.fx-off [data-beam-bloom], html.fx-off .metal-on canvas { display: none !important; }
+html.fx-off .goo-layer { display: none; }
+html.fx-off .has-goo > button[aria-selected="true"], html.fx-off .has-goo > button[aria-checked="true"], html.fx-off .has-goo > button.active { background: var(--surface-read) !important; box-shadow: var(--shadow-1) !important; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) { .fx-bg { display: none; } }
 @media print { .fx-bg { display: none !important; } }
 /* the popup is small: smaller blur radius keeps it cheap */
@@ -599,3 +651,15 @@ button.sw[aria-checked="true"]::after, .sw:not(input)[aria-checked="true"]::afte
 .search-beam { border-radius: var(--r-md); }
 
 input[type=color] { width: 72px; min-height: 36px; padding: 2px 4px; cursor: pointer; }
+
+/* ---------- 6. Shared layout pieces (one place, every page) ---------- */
+#modeSeg, #tabs.tabs { display: flex; width: 100%; }
+#modeSeg > button { flex: 1; white-space: nowrap; padding-inline: 8px; }
+.icon-btn { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--fill-2); color: var(--label-2); text-decoration: none; flex: none; box-shadow: inset 0 0 0 1px var(--separator); }
+.icon-btn:hover { background: var(--fill); color: var(--label); }
+.foot-links { text-align: left; margin: 2px 0 0; }
+.foot-links a { font: var(--t-subheadline); font-weight: 600; }
+/* a floating panel for the sidebars of Settings and the tour; a floating capsule for Save and the tour's Back / Next */
+.panel-glass { border-radius: var(--r-lg); background: var(--mat-thin); -webkit-backdrop-filter: var(--blur-thin); backdrop-filter: var(--blur-thin); box-shadow: var(--edge), var(--shadow-2); }
+.capsule { border-radius: var(--r-pill); background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3); }
+.metal-badge-slot { display: inline-flex; }

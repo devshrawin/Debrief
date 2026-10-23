@@ -7,8 +7,9 @@ import PULSE from '../generated/beam-pulse.json';
 
 const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches
   || matchMedia('(prefers-reduced-transparency: reduce)').matches
-  || document.documentElement.classList.contains('solid');
-const dark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+  || document.documentElement.classList.contains('solid')
+  || document.documentElement.classList.contains('fx-off');
+const dark = () => (document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
 
 let cssLoaded = false;
 /** Load this page's generated beam stylesheet once, off the first-paint path. */
@@ -48,6 +49,7 @@ export function beam(el, id, { strength = 1 } = {}) {
   }, { rootMargin: '256px' });
   io.observe(el);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncPulse);
+  document.addEventListener('db-fx-change', syncPulse);
   el.addEventListener('animationend', (e) => {
     if (e.animationName.includes('fade-out')) el.removeAttribute('data-fading');
   });

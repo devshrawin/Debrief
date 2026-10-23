@@ -12,6 +12,9 @@ const LABELS = {
 };
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const darkMq = matchMedia('(prefers-color-scheme: dark)');
+// Appearance: an explicit theme wins over the system; "animated effects off" holds the orbs still
+const isDark = () => (document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : darkMq.matches);
+const still = () => reduceMotion.matches || document.documentElement.classList.contains('fx-off');
 
 class DbOrb extends HTMLElement {
   static get observedAttributes() { return ['state', 'size', 'label']; }
@@ -30,6 +33,7 @@ class DbOrb extends HTMLElement {
     this._io = new IntersectionObserver(([e]) => { this._visible = e.isIntersecting; this._sync(); });
     this._io.observe(this);
     document.addEventListener('visibilitychange', this._onVis);
+    document.addEventListener('db-fx-change', this._onTheme);
     darkMq.addEventListener('change', this._onTheme);
     reduceMotion.addEventListener('change', this._onTheme);
     this._setup();
@@ -37,6 +41,7 @@ class DbOrb extends HTMLElement {
   disconnectedCallback() {
     this._stop(); this._io?.disconnect();
     document.removeEventListener('visibilitychange', this._onVis);
+    document.removeEventListener('db-fx-change', this._onTheme);
     darkMq.removeEventListener('change', this._onTheme);
     reduceMotion.removeEventListener('change', this._onTheme);
   }
@@ -60,10 +65,10 @@ class DbOrb extends HTMLElement {
     ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
     ctx.clearRect(0, 0, s, s);
     // Orbs ink in the label colour: dark dots on light surfaces, light on dark.
-    paintFrame(ctx, this._fn(s, reduceMotion.matches ? 0.6 : tSec * this._speed, this._opts), darkMq.matches);
+    paintFrame(ctx, this._fn(s, still() ? 0.6 : tSec * this._speed, this._opts), isDark());
   }
   _sync() {
-    const want = this._visible && document.visibilityState !== 'hidden' && !reduceMotion.matches;
+    const want = this._visible && document.visibilityState !== 'hidden' && !still();
     if (want && !this._running) { this._running = true; this._raf = requestAnimationFrame(this._loop); }
     else if (!want) this._stop();
   }

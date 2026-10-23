@@ -68,6 +68,10 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 <td width="50%" valign="top"><img src="docs/img/usage.png" alt="Usage page"><br><sub><b>Usage.</b> Requests, tokens and audio per model, and an honest estimate of the free quota left.</sub></td>
 </tr>
 <tr>
+<td width="50%" valign="top"><img src="docs/img/appearance.png" alt="Settings, Appearance: theme, transparency, moving background and effects"><br><sub><b>Appearance.</b> Light, dark or follow the computer; reduce transparency; moving background Off / Calm / Lively; switch the animated effects off.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/minutes-dark.png" alt="The minutes page in the dark theme"><br><sub><b>Dark.</b> The same glass over a darker, moving field of colour.</sub></td>
+</tr>
+<tr>
 <td width="50%" valign="top"><img src="docs/img/tour-key.png" alt="First-run tour"><br><sub><b>Two-step first run.</b> Paste a free Gemini key (tested live), allow the microphone, record.</sub></td>
 <td width="50%" valign="top"><img src="docs/img/organisation-template.png" alt="Organisation template settings"><br><sub><b>Organisation template.</b> Your name, footer line and colour on the formal minutes.</sub></td>
 </tr>
@@ -77,7 +81,7 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 
 ### The look
 
-Glass over a slowly moving field of colour. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md)) follows Apple's Human Interface Guidelines: content on opaque reading surfaces, glass only for the frame, system type scale, 44 px hit targets, light and dark. Effects come from [Libraries.dev](https://github.com/Jakubantalik/Libraries.dev) by Jakub Antalik (MIT), ported to plain JavaScript: **thinking orbs** for every wait, the **border beam** on search and question fields and on the recording bar, **liquid** segmented controls, and a **liquid-metal** ring on the Start button during a call. Reduced motion, reduced transparency and high contrast turn the moving parts off.
+Glass over a slowly moving field of colour. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md)) follows Apple's Human Interface Guidelines: content on opaque reading surfaces, glass only for the frame, system type scale, 44 px hit targets, light and dark. Effects come from [Libraries.dev](https://github.com/Jakubantalik/Libraries.dev) by Jakub Antalik (MIT), ported to plain JavaScript: **thinking orbs** for every wait, the **border beam** on search and question fields and on the recording bar, **liquid** segmented controls, and a **liquid-metal** ring on the Start button during a call. **Settings → Appearance** sets the theme (light, dark or follow your computer), reduces transparency, chooses the moving background (Off, Calm or Lively) and switches the animated effects off. Your computer's reduced-motion, reduced-transparency and high-contrast settings always win.
 
 ---
 

@@ -1,17 +1,31 @@
-// Loaded first on every page (sync, in <head>, ~1.5 KB).
-// 1. Applies the in-app "Reduce transparency" choice before paint (own storage key: uiSolid).
-// 2. Draws the fluid colour layer behind the glass: six soft blobs that drift and cross-fade (CSS only, see style.css).
+// Loaded first on every page (sync, in <head>, ~2 KB).
+// 1. Applies the Appearance choices before paint: theme (auto / light / dark), reduce transparency, moving background
+//    (off / calm / lively), animated effects (on / off). They live in chrome.storage.local (uiTheme, uiSolid, uiMotion,
+//    uiEffects) and are mirrored in localStorage so the first frame is already right.
+// 2. Draws the fluid colour room behind the glass: six soft blobs that drift and cross-fade (CSS only, see style.css).
 // 3. After the first frame has painted, switches on backdrop blur (html.glass) and loads this page's effects script,
 //    so effects never delay opening.
 const html = document.documentElement;
-try { if (localStorage.getItem('db.solid') === '1') html.classList.add('solid'); } catch {}
-const apply = (on) => {
-  html.classList.toggle('solid', !!on);
-  try { localStorage.setItem('db.solid', on ? '1' : '0'); } catch {}
+const KEYS = ['uiTheme', 'uiSolid', 'uiMotion', 'uiEffects'];
+const read = () => { try { return JSON.parse(localStorage.getItem('db.ui') || '{}'); } catch { return {}; } };
+const apply = (ui) => {
+  html.classList.toggle('solid', !!ui.uiSolid);
+  html.classList.toggle('motion-off', ui.uiMotion === 'off');
+  html.classList.toggle('motion-calm', ui.uiMotion === 'calm');
+  html.classList.toggle('fx-off', ui.uiEffects === false);
+  if (ui.uiTheme === 'light' || ui.uiTheme === 'dark') html.dataset.theme = ui.uiTheme; else delete html.dataset.theme;
+  try { localStorage.setItem('db.ui', JSON.stringify(ui)); } catch {}
+  document.dispatchEvent(new Event('db-fx-change'));
 };
+let ui = read();
+apply(ui);
 try {
-  chrome.storage?.local.get('uiSolid').then((r) => apply(r.uiSolid));
-  chrome.storage?.onChanged.addListener((c, area) => { if (area === 'local' && 'uiSolid' in c) apply(c.uiSolid.newValue); });
+  chrome.storage?.local.get(KEYS).then((r) => { ui = { ...ui, ...r }; apply(ui); });
+  chrome.storage?.onChanged.addListener((c, area) => {
+    if (area !== 'local' || !KEYS.some((k) => k in c)) return;
+    for (const k of KEYS) if (k in c) ui = { ...ui, [k]: c[k].newValue };
+    apply(ui);
+  });
 } catch {}
 
 const PAGES = { popup: 1, mom: 1, options: 1, welcome: 1, ask: 1 };

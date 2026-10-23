@@ -1,6 +1,6 @@
 // Minutes page enhancer: liquid Minutes/Transcript tabs and format switch, an orb for every wait (writing, reading,
 // transcribing, emailing, looking for voices), the beam on the toolbar while minutes are written, and on the Ask box.
-import { beam, gooSegmented, orbForStatus, orbifySpinners, searchBeam, ready } from '../common.js';
+import { beam, gooSegmented, orbForStatus, orbifySpinners, searchBeam, withMetal, ready } from '../common.js';
 
 ready(() => {
   const $ = (id) => document.getElementById(id);
@@ -31,6 +31,24 @@ ready(() => {
   const write = beam(bar, 'db-write', { strength: 0.9 });
   orbForStatus($('genStatus'), { onChange: (s) => write(!!s && s !== 'breathing') });
   for (const id of ['pendingText', 'shareStatus', 'mailStatus', 'nameWhy', 'startCount']) orbForStatus($(id));
+
+  // "Emailed 12:30 pm" in the status chips gets a liquid-metal rim, once the page says so
+  const chips = $('chips');
+  let metal = null;
+  const syncMail = () => {
+    const chip = [...(chips?.children || [])].find((c) => /^Emailed/.test(c.textContent.trim()));
+    if (chip && !chip.dataset.metal) {
+      chip.dataset.metal = '1';
+      chip.classList.add('metal-badge');
+      const core = document.createElement('span');
+      core.className = 'core';
+      core.textContent = chip.textContent.trim();
+      chip.replaceChildren(core);
+      withMetal((M) => { if (chip.isConnected) { metal?.destroy(); metal = M.ring(chip, { strength: 0.9, ring: 2 }); if (metal) chip.classList.add('metal-on'); } });
+    } else if (!chip && metal) { metal.destroy(); metal = null; }
+  };
+  if (chips) new MutationObserver(syncMail).observe(chips, { childList: true });
+  syncMail();
 
   // the Ask box (built by the page script into #askBox)
   const askBox = $('askBox');

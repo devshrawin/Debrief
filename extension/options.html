@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Debrief Settings</title>
+  <title>Settings · Debrief</title>
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
   <script src="fx/theme.js"></script>
@@ -12,7 +12,7 @@
     .shell { display: flex; align-items: flex-start; max-width: 1240px; margin: 0 auto; min-height: 100vh; }
 
     /* ---- sidebar ---- */
-    .side { position: sticky; top: 0; flex: 0 0 248px; height: 100vh; overflow-y: auto; padding: 28px 16px; display: flex; flex-direction: column; gap: 2px; }
+    .side { position: sticky; top: 16px; flex: 0 0 248px; height: calc(100vh - 32px); margin: 16px 0 16px 16px; overflow-y: auto; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; border-radius: var(--r-lg); background: var(--mat-thin); -webkit-backdrop-filter: var(--blur-thin); backdrop-filter: var(--blur-thin); box-shadow: var(--edge), var(--shadow-2); }
     .side .brand { padding: 0 10px 18px; }
     .side .brand strong { font-size: 16px; }
     .nav { display: flex; flex-direction: column; gap: 2px; }
@@ -20,10 +20,11 @@
     .nav button:hover { background: var(--sunk); }
     .nav .n { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--sunk); color: var(--muted); }
     .nav button:hover .n { background: var(--card); }
-    .nav button.active { background: var(--tint-soft); color: var(--tint); font-weight: 700; }
-    .nav button.active .n { background: var(--brand); color: var(--on-brand); }
+    .nav button.active { background: var(--tint); color: var(--on-tint); font-weight: 650; }
+    .nav button.active .n { background: rgb(255 255 255 / .22); color: var(--on-tint); }
+    .nav button.active:hover { background: var(--tint-hover); }
     .side .foot { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; }
-    .side .foot a { display: flex; align-items: center; min-height: 34px; padding: 0 10px; border-radius: 9px; color: var(--muted); font-size: 13px; text-decoration: none; }
+    .side .foot a { display: flex; align-items: center; min-height: 34px; padding: 0 10px; border-radius: 9px; color: var(--tint); font-size: 13px; font-weight: 600; text-decoration: none; }
     .side .foot a:hover { background: var(--sunk); color: var(--text); }
 
     /* ---- content column ---- */
@@ -138,11 +139,13 @@
     /* Usage */
     .page > .card.usage-card { padding: 6px 0 0; gap: 0; }
     .usage-scroll { overflow-x: auto; }
-    #usageTable { min-width: 820px; }
-    #usageTable th { white-space: nowrap; font-size: 12.5px; vertical-align: bottom; }
+    .usage-scroll th, .usage-scroll td { white-space: normal; padding-inline: 8px; }
+    .usage-scroll table { min-width: 0; width: 100%; }
+    #usageTable { min-width: 0; }
+    #usageTable th { white-space: normal; font-size: 12.5px; vertical-align: bottom; }
     #usageTable td { vertical-align: top; }
     #usageTable th:first-child, #usageTable td:first-child { padding-left: 22px; }
-    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 160px; }
+    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 130px; }
     #usageTable .svc { font-weight: 700; text-transform: capitalize; }
     #usageTable .hint { margin: 0; }
     #usageTable .fail { color: var(--amber-ink); }
@@ -195,7 +198,8 @@
     .ulist .name-row input { flex: 1 1 200px; width: auto; }
 
     /* ---- sticky save bar ---- */
-    .savebar { position: sticky; bottom: 0; z-index: 10; margin: auto -32px 0; padding: 14px 32px; background: var(--card); border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    /* a floating glass capsule, not a strip: nothing is cut off at the sidebar edge and the page keeps its width */
+    .savebar { position: sticky; bottom: 16px; z-index: 10; margin: auto 0 16px auto; width: fit-content; max-width: 100%; padding: 8px 8px 8px 18px; border-radius: var(--r-pill); background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3); display: flex; align-items: center; gap: 12px; }
     .content > .page + .savebar, .content > .page.active ~ .savebar { margin-top: auto; }
     .page.active { margin-bottom: 28px; }
     .savebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
@@ -214,7 +218,8 @@
       .nav button { width: auto; }
       .side .foot { flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
       .content { min-height: 0; padding: 20px 16px 0; }
-      .savebar { margin: auto -16px 0; padding: 12px 16px; }
+      .savebar { margin: auto 0 12px auto; }
+      .side { margin: 12px 12px 0; height: auto; position: static; }
       .page > header h1 { font-size: 24px; }
       .page > .card, .page > .grid2 > .card { padding: 16px; }
       .prompt { font-size: 18px; padding: 16px; }
@@ -225,7 +230,7 @@
 <body>
 <div class="shell">
   <aside class="side">
-    <div class="brand"><img src="icons/icon48.png" alt=""><strong>Debrief settings</strong></div>
+    <div class="brand"><img src="icons/icon48.png" alt=""><div><strong>Debrief</strong><span class="tag">Settings</span></div></div>
     <nav class="nav" id="nav" aria-label="Settings">
       <button type="button" data-tab="start" class="active" aria-current="page"><span class="n">1</span>Get started</button>
       <button type="button" data-tab="general"><span class="n">2</span>General</button>
@@ -234,6 +239,7 @@
       <button type="button" data-tab="email"><span class="n">5</span>Email</button>
       <button type="button" data-tab="voices"><span class="n">6</span>Voices</button>
       <button type="button" data-tab="usage"><span class="n">7</span>Usage</button>
+      <button type="button" data-tab="appearance"><span class="n">8</span>Appearance</button>
     </nav>
     <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a><a href="https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md" target="_blank" rel="noopener">Setup guide</a></div>
   </aside>
@@ -767,6 +773,38 @@
         </section>
       </div>
       <div class="btnrow"><button type="button" id="usageReset" class="btn danger">Reset counters…</button><span class="hint">Clears these numbers only. Meetings and settings are kept.</span></div>
+    </section>
+
+    <section class="page" id="page-appearance">
+      <header><h1>Appearance</h1><p class="lede">How Debrief looks and moves. These apply at once, on every Debrief page, and are kept on this computer.</p></header>
+
+      <section class="card" aria-labelledby="hTheme">
+        <h2 id="hTheme" class="lbl">Colour</h2>
+        <div class="fld">
+          <span class="lab" id="uiThemeLab">Theme</span>
+          <div class="seg-ctl" id="uiTheme" role="radiogroup" aria-labelledby="uiThemeLab">
+            <button type="button" role="radio" data-v="auto" aria-checked="true">Match my computer</button>
+            <button type="button" role="radio" data-v="light" aria-checked="false">Light</button>
+            <button type="button" role="radio" data-v="dark" aria-checked="false">Dark</button>
+          </div>
+          <p class="hint">Match my computer follows your system setting. Light and Dark stay as chosen.</p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hGlass">
+        <h2 id="hGlass" class="lbl">Glass and motion</h2>
+        <div class="trow"><div class="tx"><label for="uiSolid">Reduce transparency</label><p class="hint" id="uiSolid-d">Solid surfaces instead of frosted glass and the colour field behind. Easier to read on a busy background and lighter on an older computer.</p></div><input type="checkbox" class="sw" role="switch" id="uiSolid" aria-describedby="uiSolid-d"></div>
+        <div class="fld">
+          <span class="lab" id="uiMotionLab">Moving background</span>
+          <div class="seg-ctl" id="uiMotion" role="radiogroup" aria-labelledby="uiMotionLab">
+            <button type="button" role="radio" data-v="off" aria-checked="false">Off</button>
+            <button type="button" role="radio" data-v="calm" aria-checked="false">Calm</button>
+            <button type="button" role="radio" data-v="lively" aria-checked="true">Lively</button>
+          </div>
+          <p class="hint">The colours behind everything drift: slowly in Calm, clearly in Lively. Off holds still. Your computer's "reduce motion" setting always wins.</p>
+        </div>
+        <div class="trow"><div class="tx"><label for="uiEffects">Animated borders, orbs and sliding highlights</label><p class="hint" id="uiEffects-d">The glowing border on search and recording, the thinking orb while Debrief works, and the sliding highlight on tabs. Off keeps everything still and shows the same information plainly.</p></div><input type="checkbox" class="sw" role="switch" id="uiEffects" aria-describedby="uiEffects-d" checked></div>
+      </section>
     </section>
 
     <div class="savebar" id="savebar">

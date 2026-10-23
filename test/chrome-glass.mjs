@@ -130,6 +130,52 @@ try {
   })()`);
   check('Ask page: the question box carries the beam while focused', ak.on, JSON.stringify(ak));
 
+  // 5b. popup: the mode switch fits on one line; Settings is a gear and the tour link sits at the bottom
+  // a popup opened as a page cannot record its own tab, so the mode box is hidden; show it to measure how it is laid out
+  await pop.evaluate(`document.getElementById('tabHome').click(); const mb = document.getElementById('modeBox'); mb.hidden = false; mb.classList.remove('hidden'); mb.style.display = 'block'; document.getElementById('paneRec').hidden = false;`);
+  await sleep(300);
+  const mode = await pop.evaluate(`({ h: document.querySelector('#modeSeg > button').getBoundingClientRect().height, w: document.getElementById('modeSeg').getBoundingClientRect().width, gear: !!document.querySelector('#openSettings svg'), tour: document.querySelector('.foot-links #openTour')?.textContent })`);
+  check('popup: mode switch is one line at full width, Settings is the gear, the tour link is at the bottom', mode.h < 44 && mode.w > 300 && mode.gear && /tour/i.test(mode.tour || ''), JSON.stringify(mode));
+
+  // 5c. Settings: the Save bar is a floating capsule, not a strip cut off at the sidebar
+  const opt2 = await openPage(`chrome-extension://${id}/options.html`);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false }, opt2.sessionId);
+  await sleep(900);
+  const sb = await opt2.evaluate(`(() => { const b = document.getElementById('savebar'); const r = b.getBoundingClientRect(); const c = getComputedStyle(b); const side = document.querySelector('.side').getBoundingClientRect(); return { w: Math.round(r.width), vw: innerWidth, radius: c.borderTopLeftRadius, left: Math.round(r.left), sideRight: Math.round(side.right), floating: c.position }; })()`);
+  check('Settings: the Save bar is a glass capsule that does not run under the sidebar', sb.w < sb.vw * 0.6 && parseInt(sb.radius) >= 40 && sb.left > sb.sideRight, JSON.stringify(sb));
+
+  // 5d. Appearance: theme, motion speed, effects and transparency apply to every page at once
+  const ap = await opt2.evaluate(`(async () => {
+    const w = (ms) => new Promise((r) => setTimeout(r, ms));
+    document.querySelector('#nav [data-tab="appearance"]').click();
+    await w(300);
+    const out = { shown: document.getElementById('page-appearance').classList.contains('active') };
+    document.querySelector('#uiTheme [data-v="dark"]').click();
+    await w(500);
+    out.dark = document.documentElement.dataset.theme === 'dark' && getComputedStyle(document.body).color !== 'rgb(29, 29, 31)';
+    document.querySelector('#uiMotion [data-v="calm"]').click();
+    await w(500);
+    out.calm = document.documentElement.classList.contains('motion-calm');
+    out.calmDur = getComputedStyle(document.querySelector('.fx-bg .b1')).animationDuration;
+    document.querySelector('#uiMotion [data-v="lively"]').click();
+    await w(500);
+    out.livelyDur = getComputedStyle(document.querySelector('.fx-bg .b1')).animationDuration;
+    document.querySelector('#uiMotion [data-v="off"]').click();
+    await w(500);
+    out.off = getComputedStyle(document.querySelector('.fx-bg .b1')).animationName === 'none';
+    document.getElementById('uiEffects').click();
+    await w(500);
+    out.fxOff = document.documentElement.classList.contains('fx-off');
+    return out;
+  })()`);
+  check('Appearance: dark theme, calm / lively / off motion and animated-effects off all apply', ap.shown && ap.dark && ap.calm && ap.off && ap.fxOff && parseFloat(ap.calmDur) > parseFloat(ap.livelyDur) * 2, JSON.stringify(ap));
+  const other = await openPage(`chrome-extension://${id}/ask.html`);
+  await sleep(900);
+  const oc = await other.evaluate(`({ theme: document.documentElement.dataset.theme, motionOff: document.documentElement.classList.contains('motion-off'), fxOff: document.documentElement.classList.contains('fx-off') })`);
+  check('Appearance choices follow you to the other pages', oc.theme === 'dark' && oc.motionOff && oc.fxOff, JSON.stringify(oc));
+  await opt2.evaluate(`chrome.storage.local.remove(['uiTheme', 'uiMotion', 'uiEffects', 'uiSolid'])`);
+  await sleep(400);
+
   // 6. calm: reduced motion stops the room; "Reduce transparency" removes it
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }, ask.sessionId);
   await sleep(300);

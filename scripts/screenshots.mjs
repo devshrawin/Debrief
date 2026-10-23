@@ -250,7 +250,7 @@ try {
   await opts.evaluate(`chrome.storage.session.remove(['rec', 'levels'])`);
 
   // ---- the minutes page while a job is writing (orb, glowing toolbar)
-  await opts.evaluate(`(async () => { const k = 'meeting:demo4'; const base = (await chrome.storage.local.get('meeting:demo1'))['meeting:demo1']; await chrome.storage.local.set({ [k]: { ...base, id: 'demo4', title: 'Writing right now', mom: '', emailedAt: null, job: { state: 'writing', status: 'Reading the transcript carefully (part 2 of 3)…', beat: Date.now() + 600000 } }, meetingIds: ['demo4', 'demo3', 'demo1', 'demo2'] }); })()`);
+  await opts.evaluate(`(async () => { const k = 'meeting:demo4'; const base = (await chrome.storage.local.get('meeting:demo1'))['meeting:demo1']; await chrome.storage.local.set({ [k]: { ...base, id: 'demo4', title: 'Weekly planning', mom: '', emailedAt: null, job: { state: 'writing', status: 'Reading the transcript carefully (part 2 of 3)…', beat: Date.now() + 600000 } }, meetingIds: ['demo3', 'demo1', 'demo2', 'demo4'] }); })()`);
   const wr = await openPage(`chrome-extension://${id}/mom.html?id=demo4`, { width: 1100, height: 760 });
   await sleep(2200);
   await wr.shot('writing', { full: false, clip: { x: 0, y: 0, width: 1100, height: 640 } });
@@ -264,6 +264,24 @@ try {
   const st = await openPage(`chrome-extension://${id}/options.html`, { width: 1100, height: 900 });
   await sleep(900);
   await st.shot('settings-start', { maxHeight: 1500 });
+
+  // ---- Appearance, and the popup + minutes in the dark theme
+  const ap = await openPage(`chrome-extension://${id}/options.html`, { width: 1100, height: 900 });
+  await ap.evaluate(`document.querySelector('#nav [data-tab="appearance"]').click()`);
+  await sleep(900);
+  await ap.shot('appearance', { full: false, clip: { x: 0, y: 0, width: 1100, height: 760 } });
+  await opts.evaluate(`chrome.storage.local.set({ uiTheme: 'dark' })`);
+  await sleep(400);
+  const dk = await openPage(`chrome-extension://${id}/mom.html?id=demo2`, { width: 1100, height: 800 });
+  await sleep(1500);
+  await dk.shot('minutes-dark', { full: false, clip: { x: 0, y: 0, width: 1100, height: 800 } });
+  const dp = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 640, scale: 2 });
+  await sleep(900);
+  await dp.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('start').disabled = false;`);
+  await sleep(400);
+  await dp.shot('popup-dark', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
+  await opts.evaluate(`chrome.storage.local.remove('uiTheme')`);
+  await sleep(300);
 
   // ---- Chrome Web Store screenshots, exactly 1280 x 800
   const store = async (name, url, prep) => {
@@ -280,9 +298,9 @@ try {
   // ---- the popup, as it looks outside a meeting
   const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
   // a popup opened as a page cannot record its own tab: show the idle popup as it looks on a meeting tab
-  await p.evaluate(`document.getElementById('cantRecord')?.classList.add('hidden'); document.getElementById('modeOnline')?.click(); document.getElementById('start').disabled = false;`);
+  await p.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('modeOnline')?.click(); document.getElementById('modeHint').textContent = 'Online meeting: the call is recorded from this tab and your voice from your microphone.'; document.getElementById('start').disabled = false;`);
   await sleep(500);
-  await p.shot('popup', { full: false, clip: { x: 0, y: 0, width: 400, height: 360 } });
+  await p.shot('popup', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
 } catch (e) {
   console.error('FAILED', e.stack);
   process.exitCode = 1;
