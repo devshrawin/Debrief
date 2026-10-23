@@ -377,6 +377,26 @@ $('pause').onclick = async () => {
   refresh();
 };
 
+// Started by mistake: stop without transcribing or writing anything, and delete the recording. Two taps, so it is never an accident.
+let discardTimer = null;
+$('discard').onclick = async () => {
+  const b = $('discard');
+  if (b.dataset.sure !== '1') {
+    b.dataset.sure = '1';
+    b.textContent = 'Tap again to delete it. No transcript, no minutes.';
+    clearTimeout(discardTimer);
+    discardTimer = setTimeout(() => {
+      b.dataset.sure = '';
+      b.textContent = 'Started by mistake? Discard this recording';
+    }, 5000);
+    return;
+  }
+  clearTimeout(discardTimer);
+  b.disabled = true;
+  await send({ type: 'discard' });
+  closePanel();
+};
+
 $('stop').onclick = async () => {
   $('stop').disabled = true;
   await send({ type: 'stop' });

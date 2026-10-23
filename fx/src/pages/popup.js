@@ -8,7 +8,6 @@ ready(async () => {
   gooSegmented($('modeSeg'));
   orbifySpinners();
   orbForStatus($('statusText'));
-  orbForStatus($('finText'));
   orbForStatus($('error'));
 
   // search in the Meetings tab

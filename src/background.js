@@ -6,7 +6,7 @@ import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
 import { stuckJobs } from './jobstate.js';
-import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, addMeetingId, getState, setState, saveVoices, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
+import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, deleteMeeting, addMeetingId, getState, setState, saveVoices, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -372,6 +372,13 @@ function stop(opts = {}) {
     try {
       await chrome.runtime.sendMessage({ target: 'offscreen', type: 'stop' });
     } catch {}
+    if (opts.discard) {
+      // an accidental recording: nothing is kept, nothing is transcribed, no minutes, no email
+      await deleteMeeting(st.meetingId).catch(() => {});
+      await mutateState(() => ({ recording: false }));
+      hideRec(st.tabId);
+      return { ok: true, discarded: true };
+    }
     await updateMeeting(st.meetingId, (m) => {
       m.endedAt = Date.now();
       const open = (m.pauses || []).at(-1); // stopped while paused: the pause ends with the meeting
@@ -431,7 +438,7 @@ async function autoStop(reason) {
 }
 
 // What a page script (running on a meeting site) may ask for. Everything else must come from Debrief's own pages.
-const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'set-follow', 'dismiss-alert']);
+const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'discard', 'set-follow', 'dismiss-alert']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.target !== 'bg') return;
@@ -441,6 +448,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handlers = {
     start: () => start(msg),
     stop: () => stop(),
+    discard: () => stop({ discard: true }),
     // Full screen for the whole browser window. Chrome keeps a tab that is being captured from taking the window full
     // screen when the page asks (Meet's "Full screen" button), so Debrief does it through the window itself. A page
     // sets `auto` when it only follows its own full screen: then Debrief only undoes what it did itself.

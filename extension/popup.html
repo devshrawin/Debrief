@@ -33,6 +33,8 @@
     .tabs button:hover:not(:disabled) { background: transparent; color: var(--label); }
     .tabs button[aria-selected="true"] { color: var(--label); }
     .tabs:not(.has-goo) button[aria-selected="true"] { background: var(--surface-read); box-shadow: var(--shadow-1); }
+    #discard { background: none; box-shadow: none; min-height: 32px; font: var(--t-footnote); color: var(--label-2); text-decoration: underline; padding: 4px 8px; }
+    #discard[data-sure="1"] { color: var(--rec-ink); font-weight: 600; }
     .tabs .chip { margin-left: 4px; padding: 0 6px; min-height: 0; font-size: 11px; line-height: 18px; }
 
     .banner { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); font-size: 13.5px; line-height: 1.45; }
@@ -221,6 +223,7 @@
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="currentColor"></rect></svg>Stop and write minutes
       </button>
       <p class="hint" style="text-align:center">Nothing is lost when you stop. The last minute is still transcribed.</p>
+      <button id="discard" class="btn quiet" type="button" style="align-self:center">Started by mistake? Discard this recording</button>
     </div>
   </div>
 

@@ -460,6 +460,21 @@ import { adapterFor } from './adapters/index.js';
     stop.innerHTML = STOP_ICON + 'Stop and write minutes';
     stop.onclick = () => send({ type: 'stop' });
     panel.append(stop);
+    const discard = el('button', 'stop');
+    discard.type = 'button';
+    discard.dataset.k = 'discard';
+    discard.textContent = 'Started by mistake? Discard';
+    discard.style.cssText = 'background:none;box-shadow:none;font-size:12px;text-decoration:underline;min-height:28px;opacity:.85';
+    discard.onclick = () => {
+      if (discard.dataset.sure !== '1') {
+        discard.dataset.sure = '1';
+        discard.textContent = 'Tap again to delete it';
+        setTimeout(() => { discard.dataset.sure = ''; discard.textContent = 'Started by mistake? Discard'; }, 5000);
+        return;
+      }
+      send({ type: 'discard' });
+    };
+    panel.append(discard);
     if (keep) panel.querySelector(`[data-k="${keep}"]`)?.focus();
   }
 

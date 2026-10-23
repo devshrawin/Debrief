@@ -114,6 +114,16 @@ try {
   await inject();
   await sleep(300);
   check('injecting while open toggles it closed', !(await page.evaluate(`!!document.getElementById('debrief-panel-host')`)));
+
+  // Discard: an accidental recording is deleted without transcript, minutes or a minutes tab
+  await ext.evaluate(`(async () => { await chrome.storage.local.set({ 'meeting:dx': { id: 'dx', title: 'Oops', startedAt: Date.now() - 5000, segments: [], errors: [] }, meetingIds: ['dx'] });
+    await chrome.storage.session.set({ rec: { recording: true, meetingId: 'dx', tabId: 1, startedAt: Date.now() - 5000 } }); return true; })()`);
+  const before = (await send('Target.getTargets')).targetInfos.filter((t) => /mom\.html/.test(t.url)).length;
+  const r = await ext.evaluate(`chrome.runtime.sendMessage({ target: 'bg', type: 'discard' })`);
+  await sleep(800);
+  const after = await ext.evaluate(`(async () => { const s = await chrome.storage.local.get(['meeting:dx', 'meetingIds']); const st = await chrome.storage.session.get('rec'); return { gone: !s['meeting:dx'], ids: s.meetingIds, rec: st.rec }; })()`);
+  const moms = (await send('Target.getTargets')).targetInfos.filter((t) => /mom\.html/.test(t.url)).length;
+  check('discard: recording stops, the meeting is deleted, no job and no minutes tab', r?.ok && after.gone && !after.ids.includes('dx') && !after.rec.recording && moms === before, JSON.stringify({ r, after, moms, before }));
 } catch (e) {
   console.log('FAIL', e.stack || e);
   failed = true;

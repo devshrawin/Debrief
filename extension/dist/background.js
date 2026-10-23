@@ -504,6 +504,36 @@
     return meetings.filter((m) => m && isActive(m) && !m.job?.held && now - (m.job?.beat || 0) > STALE_MS).map((m) => m.id);
   }
 
+  // src/audiostore.js
+  var DB2 = "debrief";
+  var STORE = "pending";
+  function open2() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB2, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true }).createIndex("meetingId", "meetingId");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function run(mode, fn) {
+    const db = await open2();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx2 = db.transaction(STORE, mode);
+        const req = fn(tx2.objectStore(STORE));
+        tx2.oncomplete = () => resolve(req?.result);
+        tx2.onerror = () => reject(tx2.error);
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var listPending = (meetingId) => run("readonly", (s) => s.index("meetingId").getAll(meetingId));
+  var deletePending = (id) => run("readwrite", (s) => s.delete(id));
+  async function deleteAllPending(meetingId) {
+    for (const p of await listPending(meetingId)) await deletePending(p.id);
+  }
+
   // src/store.js
   var DEFAULTS = {
     myName: "",
@@ -651,6 +681,12 @@
   async function addMeetingId(id) {
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: [id, ...meetingIds] });
+  }
+  async function deleteMeeting(id) {
+    const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
+    await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
+    await chrome.storage.local.remove(key(id));
+    await Promise.allSettled([deletePieces(id), deleteAllPending(id)]);
   }
   async function getState() {
     const { rec: rec2 } = await chrome.storage.session.get("rec");
@@ -1016,10 +1052,17 @@
         await chrome.runtime.sendMessage({ target: "offscreen", type: "stop" });
       } catch {
       }
+      if (opts.discard) {
+        await deleteMeeting(st.meetingId).catch(() => {
+        });
+        await mutateState(() => ({ recording: false }));
+        hideRec(st.tabId);
+        return { ok: true, discarded: true };
+      }
       await updateMeeting(st.meetingId, (m) => {
         m.endedAt = Date.now();
-        const open2 = (m.pauses || []).at(-1);
-        if (open2 && open2.to == null) open2.to = Math.round((m.endedAt - m.startedAt) / 1e3);
+        const open3 = (m.pauses || []).at(-1);
+        if (open3 && open3.to == null) open3.to = Math.round((m.endedAt - m.startedAt) / 1e3);
       });
       await learnVoices(st.meetingId).catch(() => {
       });
@@ -1069,7 +1112,7 @@
       message: `${reason} Writing the minutes now.`
     });
   }
-  var PAGE_MAY = /* @__PURE__ */ new Set(["window-fullscreen", "whoami", "meet-mute", "meet-ended", "meet-snap", "in-call", "pill-state", "mic", "stop", "set-follow", "dismiss-alert"]);
+  var PAGE_MAY = /* @__PURE__ */ new Set(["window-fullscreen", "whoami", "meet-mute", "meet-ended", "meet-snap", "in-call", "pill-state", "mic", "stop", "discard", "set-follow", "dismiss-alert"]);
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.target !== "bg") return;
     if (sender.id !== chrome.runtime.id) return;
@@ -1078,6 +1121,7 @@
     const handlers = {
       start: () => start(msg),
       stop: () => stop(),
+      discard: () => stop({ discard: true }),
       // Full screen for the whole browser window. Chrome keeps a tab that is being captured from taking the window full
       // screen when the page asks (Meet's "Full screen" button), so Debrief does it through the window itself. A page
       // sets `auto` when it only follows its own full screen: then Debrief only undoes what it did itself.
