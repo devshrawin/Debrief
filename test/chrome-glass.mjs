@@ -132,7 +132,7 @@ try {
 
   // 5b. popup: the mode switch fits on one line; Settings is a gear and the tour link sits at the bottom
   // a popup opened as a page cannot record its own tab, so the mode box is hidden; show it to measure how it is laid out
-  await pop.evaluate(`document.getElementById('tabHome').click(); const mb = document.getElementById('modeBox'); mb.hidden = false; mb.classList.remove('hidden'); mb.style.display = 'block'; document.getElementById('paneRec').hidden = false;`);
+  await pop.evaluate(`document.getElementById('tabHome').click(); const mb = document.getElementById('modeBox'); mb.hidden = false; mb.classList.remove('hidden'); mb.style.display = 'block'; document.getElementById('paneRec').hidden = false; const st = document.createElement('style'); st.textContent = '#modeBox, #paneRec { display: block !important; visibility: visible !important; }'; document.head.append(st);`);
   await sleep(300);
   const mode = await pop.evaluate(`({ h: document.querySelector('#modeSeg > button').getBoundingClientRect().height, w: document.getElementById('modeSeg').getBoundingClientRect().width, gear: !!document.querySelector('#openSettings svg'), tour: document.querySelector('.foot-links #openTour')?.textContent })`);
   check('popup: mode switch is one line at full width, Settings is the gear, the tour link is at the bottom', mode.h < 44 && mode.w > 300 && mode.gear && /tour/i.test(mode.tour || ''), JSON.stringify(mode));
