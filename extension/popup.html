@@ -27,11 +27,13 @@
     header.top h1 > span { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
     header.top h1 .tag { font: var(--t-footnote); color: var(--label-2); font-weight: 400; }
 
-    .tabs { display: flex; gap: 4px; margin: 0 16px; padding: 4px; border-radius: 11px; background: var(--sunk); border: 1px solid var(--line); }
-    .tabs button { flex: 1; min-height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); padding: 4px 10px; }
-    .tabs button:hover:not(:disabled) { background: transparent; color: var(--text); }
-    .tabs button[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(20, 22, 40, 0.12); }
-    .tabs .chip { margin-left: 4px; padding: 0 7px; }
+    /* same look as the mode switch below (style.css .seg-ctl) */
+    .tabs { position: relative; isolation: isolate; display: flex; gap: 2px; margin: 0 16px; padding: 2px; border-radius: var(--r-sm); background: var(--fill); }
+    .tabs button { position: relative; z-index: 1; flex: 1; min-height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--label-2); padding: 4px 10px; font: var(--t-headline); font-size: 13px; white-space: nowrap; box-shadow: none; }
+    .tabs button:hover:not(:disabled) { background: transparent; color: var(--label); }
+    .tabs button[aria-selected="true"] { color: var(--label); }
+    .tabs:not(.has-goo) button[aria-selected="true"] { background: var(--surface-read); box-shadow: var(--shadow-1); }
+    .tabs .chip { margin-left: 4px; padding: 0 6px; min-height: 0; font-size: 11px; line-height: 18px; }
 
     .banner { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); font-size: 13.5px; line-height: 1.45; }
     .banner .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(255, 122, 26, 0.25); flex: none; }
