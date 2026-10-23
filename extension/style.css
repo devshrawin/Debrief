@@ -670,3 +670,8 @@ input[type=color] { width: 72px; min-height: 36px; padding: 2px 4px; cursor: poi
 html.in-panel, html.in-panel body { background: transparent !important; }
 html.in-panel .fx-bg, html.in-panel body::before { display: none !important; }
 html.in-panel body { max-height: none; overflow-y: auto; }
+
+/* ---------- 8. Polish rules from the review ---------- */
+input[type="checkbox"]:not([role="switch"]):not(.sw) { accent-color: var(--tint); width: 18px; height: 18px; min-height: 0; margin: 0 6px 0 0; vertical-align: -3px; }
+button:disabled, .btn:disabled, .seg-ctl:has(> button:disabled) { opacity: .5; cursor: not-allowed; }
+.chip, .btn { white-space: nowrap; }

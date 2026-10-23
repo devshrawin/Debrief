@@ -137,10 +137,10 @@
     .usage-scroll th, .usage-scroll td { white-space: normal; padding-inline: 8px; }
     .usage-scroll table { min-width: 0; width: 100%; }
     #usageTable { min-width: 0; }
-    #usageTable th { white-space: normal; font-size: 12.5px; vertical-align: bottom; }
+    #usageTable th { white-space: normal; font-size: 12.5px; vertical-align: bottom; text-align: left; }
     #usageTable td { vertical-align: top; }
     #usageTable th:first-child, #usageTable td:first-child { padding-left: 22px; }
-    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 130px; }
+    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 150px; }
     #usageTable .svc { font-weight: 700; text-transform: capitalize; }
     #usageTable .hint { margin: 0; }
     #usageTable .fail { color: var(--amber-ink); }
@@ -149,7 +149,7 @@
     .usage-left .hint { margin-top: 4px; }
     .usage-left .hint.low { color: var(--amber-ink); }
     #usageTotals { display: flex; gap: 8px 24px; flex-wrap: wrap; align-items: baseline; padding: 14px 22px; background: var(--sunk); border-radius: 0 0 14px 14px; }
-    #usageTotals .paid { font-weight: 700; }
+    #usageTotals .paid { font-weight: 400; flex-basis: 100%; }
     .tilde { display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 6px; background: var(--tint-soft); color: var(--tint); font-weight: 800; flex: none; }
 
     /* Voices */
@@ -244,7 +244,7 @@
 
     <!-- ============ Get started ============ -->
     <section class="page active" id="page-start">
-      <header><h1>Get started</h1><p class="lede" id="startLede">Debrief records a Google Meet tab, transcribes it, and writes the minutes. Four things make it work.</p><p class="hint" style="margin-top:8px">Only the key is needed. For the guided version with a test for each step, <a href="welcome.html?restart=1" target="_blank">take the short tour</a> (two steps), or <a href="welcome.html?restart=1#ready" target="_blank">go straight to the optional set-ups</a>: name, voices, email, sharing, local models, limits.</p></header>
+      <header><h1>Get started</h1><p class="lede" id="startLede">Debrief records a Google Meet tab, transcribes it, and writes the minutes. Four things make it work.</p><p class="hint" style="margin-top:8px">Only the key is needed. For the guided version with a test for each step, <a href="welcome.html?restart=1" target="_blank">take the short tour</a> (three short steps), or <a href="welcome.html?restart=1#ready" target="_blank">go straight to the optional set-ups</a>: name, voices, email, sharing, local models, limits.</p></header>
 
       <section class="card" aria-labelledby="hSetup">
         <h2 id="hSetup" class="lbl">Your setup</h2>

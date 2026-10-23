@@ -481,7 +481,7 @@ function renderNav() {
   $('stepsNav').replaceChildren(
     ...visibleSteps().map((st, i) => {
       const cur = i === tour.step;
-      const done = tour.visited.includes(i) && !cur;
+      const done = tour.visited.includes(i) && !cur && i < tour.step; // steps ahead of you are not done, whatever you visited before
       const b = h('button', { type: 'button', class: done ? 'isdone' : '', 'aria-current': cur ? 'step' : false, onclick: () => go(i) },
         h('span', { class: 'num', 'aria-hidden': 'true' }, done ? '✓' : String(i + 1)),
         h('span', { class: 'nm' }, st.label, done ? h('span', { class: 'vh' }, ' (done)') : null),

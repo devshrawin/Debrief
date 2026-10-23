@@ -313,7 +313,7 @@ async function renderUsage() {
     el('span', { textContent: `${reqs} requests` }),
     el('span', { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
     ...(cost != null ? [el('span', { textContent: `about ${rupees(cost, $('usdInr').value)} at your prices` })] : []),
-    el('span', { className: 'paid', textContent: `if this were paid: about ${rupees(paid.usd, $('usdInr').value)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
+    el('span', { className: 'paid', textContent: `If this were paid: about ${rupees(paid.usd, $('usdInr').value)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
     el('span', { className: 'hint', style: 'margin-left:auto', textContent: `Daily quota resets at ${istClock(nextQuotaReset())} (midnight Pacific)` })
   );
 }

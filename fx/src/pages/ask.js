@@ -15,5 +15,5 @@ ready(() => {
     hook();
   }
   const pick = document.getElementById('pickQ');
-  if (pick) searchBeam(pick.closest('.row') || pick.parentElement, { id: 'db-search' });
+  void pick; // the question chips take no beam: a glow clipped by their row looked like a rendering glitch
 });

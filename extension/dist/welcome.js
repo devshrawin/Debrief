@@ -2608,7 +2608,7 @@ function out(o) {
     $2("stepsNav").replaceChildren(
       ...visibleSteps().map((st2, i) => {
         const cur = i === tour.step;
-        const done = tour.visited.includes(i) && !cur;
+        const done = tour.visited.includes(i) && !cur && i < tour.step;
         const b = h2(
           "button",
           { type: "button", class: done ? "isdone" : "", "aria-current": cur ? "step" : false, onclick: () => go(i) },

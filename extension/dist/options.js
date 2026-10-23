@@ -3682,7 +3682,7 @@ function out(o) {
       el2("span", { textContent: `${reqs} requests` }),
       el2("span", { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
       ...cost != null ? [el2("span", { textContent: `about ${rupees(cost, $3("usdInr").value)} at your prices` })] : [],
-      el2("span", { className: "paid", textContent: `if this were paid: about ${rupees(paid.usd, $3("usdInr").value)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""}` }),
+      el2("span", { className: "paid", textContent: `If this were paid: about ${rupees(paid.usd, $3("usdInr").value)}${paid.assumed ? " (Gemini Flash list prices assumed where you set none)" : ""}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ""}` }),
       el2("span", { className: "hint", style: "margin-left:auto", textContent: `Daily quota resets at ${istClock(nextQuotaReset())} (midnight Pacific)` })
     );
   }
