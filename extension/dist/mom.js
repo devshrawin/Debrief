@@ -4454,7 +4454,7 @@ ${meeting2.mom || ""}
       onStatus: (t) => ui.onStatus(t),
       coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting2.errors || []).length }
     });
-    await patch({ mom: text, model: modelLabel(settings2), notes: meeting2.notes, attendees: meeting2.attendees, ...extract ? { extract } : {} });
+    await patch({ mom: text, editedAt: null, model: modelLabel(settings2), notes: meeting2.notes, attendees: meeting2.attendees, ...extract ? { extract } : {} });
     return { text, stats };
   }
   function createJobRunner(deps = {}) {
@@ -4663,6 +4663,7 @@ ${meeting2.mom || ""}
     const chip = (text, cls = "") => Object.assign(document.createElement("span"), { className: `chip ${cls}`.trim(), textContent: text });
     const list = [];
     if (meeting.emailedAt) list.push(chip(`Emailed ${new Date(meeting.emailedAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}`, "brand"));
+    if (meeting.editedAt) list.push(chip("Edited by you", "brand"));
     if (meeting.room) list.push(chip("In a room", "brand"));
     if (meeting.mom && meeting.model) list.push(chip(meeting.model));
     if (meeting.stt) list.push(chip(`STT: ${meeting.stt}`));
@@ -4963,7 +4964,7 @@ ${meeting2.mom || ""}
     if (emailProblem) $2("mailStatus").textContent = job.error;
     else if (meeting.emailedAt) {
       $2("mailStatus").textContent = `Emailed to ${meeting.emailedTo || "you"} \u2713`;
-      $2("mail").textContent = "Email again";
+      paintMailButton();
     }
     $2("reread").classList.toggle("hidden", !meeting.extract);
     $2("gen").textContent = "Rewrite minutes";
@@ -5007,7 +5008,7 @@ ${meeting2.mom || ""}
     $2("mailStatus").textContent = r.status;
     if (r.sent) {
       renderChips();
-      $2("mail").textContent = "Email again";
+      paintMailButton();
     }
     $2("mail").disabled = false;
   }
@@ -5082,16 +5083,50 @@ ${meeting2.mom || ""}
       $2("pendingText").textContent = `${pending.length} audio piece${pending.length > 1 ? "s" : ""} (~${mins} min) still not transcribed. Last error: ${(lastError || pending[pending.length - 1].error).slice(0, 200)}`;
     }
   }
+  var editTimer = null;
+  var paintPreview = () => {
+    const md = $2("mdEdit").value;
+    $2("mdPreview").innerHTML = renderMinutesHtml(md, renderMd);
+    if (!isAmnexMd(md)) decorateMinutes($2("mdPreview"));
+  };
+  function saveEdit() {
+    clearTimeout(editTimer);
+    editTimer = null;
+    const mom = $2("mdEdit").value;
+    if (mom === meeting.mom) return Promise.resolve();
+    meeting.mom = mom;
+    meeting.editedAt = Date.now();
+    return patchMeeting2({ mom, editedAt: meeting.editedAt });
+  }
+  $2("mdEdit").addEventListener("input", () => {
+    paintPreview();
+    clearTimeout(editTimer);
+    editTimer = setTimeout(() => saveEdit().catch(() => {
+    }), 700);
+  });
   function setEditing(on) {
-    if (!on && !$2("mdEdit").classList.contains("hidden")) {
-      meeting.mom = $2("mdEdit").value;
-      saveMeeting(meeting);
+    const was = !$2("mdEdit").classList.contains("hidden");
+    if (!on && was) {
+      saveEdit().catch(() => {
+      });
       renderMom();
+      renderChips();
+      paintMailButton();
+      if (meeting.editedAt) $2("mailStatus").textContent = "Saved. Press Email me, or open Share, to send the corrected minutes.";
     }
     $2("mdEdit").classList.toggle("hidden", !on);
+    $2("mdPreview").classList.toggle("hidden", !on);
+    $2("editHelp").classList.toggle("hidden", !on);
     $2("mom").classList.toggle("hidden", on);
-    $2("edit").textContent = on ? "Done editing" : "Edit";
-    if (on) $2("mdEdit").value = meeting.mom;
+    $2("edit").textContent = on ? "Done editing" : "Edit minutes";
+    $2("edit").classList.toggle("primary", on);
+    if (on && !was) {
+      $2("mdEdit").value = meeting.mom;
+      paintPreview();
+    }
+  }
+  function paintMailButton() {
+    $2("mail").textContent = !meeting.emailedAt ? "Email me" : meeting.editedAt > meeting.emailedAt ? "Email corrected minutes" : "Email again";
   }
   function download(name, type, content) {
     const url = URL.createObjectURL(new Blob([content], { type }));
@@ -5100,7 +5135,13 @@ ${meeting2.mom || ""}
     setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
   var fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, "-");
-  $2("gen").onclick = () => runGenerate();
+  $2("gen").onclick = async () => {
+    if (meeting.editedAt && meeting.mom) {
+      const ok = await modal({ title: "Rewrite the minutes?", text: "You edited these minutes by hand. Rewriting replaces your edits with new minutes written from the transcript.", buttons: [{ label: "Keep my edits", value: "no" }, { label: "Rewrite anyway", value: "yes", danger: true }] });
+      if (ok?.value !== "yes") return;
+    }
+    runGenerate();
+  };
   chrome.storage.onChanged.addListener(async (c) => {
     if (!c.voices && !c.settings) return;
     try {
@@ -5266,7 +5307,7 @@ ${meeting2.mom || ""}
     if (hadPending && !jobWillRun) await retryPending();
     if (meeting.emailedAt) {
       $2("mailStatus").textContent = `Emailed to ${meeting.emailedTo || "you"} \u2713`;
-      $2("mail").textContent = "Email again";
+      paintMailButton();
     }
     if (meeting.mom) {
       paintFormat();

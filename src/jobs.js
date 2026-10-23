@@ -209,7 +209,7 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
     onStatus: (t) => ui.onStatus(t),
     coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length },
   });
-  await patch({ mom: text, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
+  await patch({ mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
   return { text, stats };
 }
 

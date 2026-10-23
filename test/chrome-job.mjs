@@ -141,6 +141,28 @@ try {
   const bText = await pageB.evaluate(`document.getElementById('mom').textContent`);
   check('the second page shows them too', /ship on Friday/i.test(bText));
 
+  // the minutes can be corrected by hand: live preview, autosave, and the email button says it sends the corrected version
+  const ed = await pageA.evaluate(`(async () => {
+    const q = (i) => document.getElementById(i);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const out = { label0: q('edit').textContent };
+    q('edit').click();
+    await wait(200);
+    out.split = getComputedStyle(q('mdEdit')).display !== 'none' && getComputedStyle(q('mdPreview')).display !== 'none' && !q('editHelp').classList.contains('hidden');
+    q('mdEdit').value = q('mdEdit').value.replace('ship on Friday', 'ship on Monday');
+    q('mdEdit').dispatchEvent(new Event('input'));
+    await wait(150);
+    out.preview = q('mdPreview').textContent.includes('ship on Monday');
+    await wait(1200);
+    const m = (await chrome.storage.local.get('meeting:jb3'))['meeting:jb3'];
+    out.autosaved = m.mom.includes('ship on Monday') && !!m.editedAt;
+    q('edit').click();
+    await wait(400);
+    out.done = { label: q('edit').textContent, shown: q('mom').textContent.includes('ship on Monday'), status: q('mailStatus').textContent, chip: [...document.querySelectorAll('#chips .chip')].some((c) => /Edited/.test(c.textContent)) };
+    return out;
+  })()`);
+  check('Edit minutes: split view with preview, autosave, "Edited by you", and a clear next step', ed.label0 === 'Edit minutes' && ed.split && ed.preview && ed.autosaved && ed.done.label === 'Edit minutes' && ed.done.shown && /Email me/.test(ed.done.status) && ed.done.chip, JSON.stringify(ed));
+
   // 4. the background document closes itself when nothing is left to do
   await sleep(4000);
   const left = (await send('Target.getTargets')).targetInfos.filter((t) => t.url.includes('offscreen.html'));

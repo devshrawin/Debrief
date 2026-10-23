@@ -73,6 +73,7 @@ function renderChips() {
   const chip = (text, cls = '') => Object.assign(document.createElement('span'), { className: `chip ${cls}`.trim(), textContent: text });
   const list = [];
   if (meeting.emailedAt) list.push(chip(`Emailed ${new Date(meeting.emailedAt).toLocaleTimeString('en-IN', { timeStyle: 'short' })}`, 'brand'));
+  if (meeting.editedAt) list.push(chip('Edited by you', 'brand'));
   if (meeting.room) list.push(chip('In a room', 'brand'));
   if (meeting.mom && meeting.model) list.push(chip(meeting.model));
   if (meeting.stt) list.push(chip(`STT: ${meeting.stt}`));
@@ -413,7 +414,7 @@ async function finishJob() {
   if (emailProblem) $('mailStatus').textContent = job.error;
   else if (meeting.emailedAt) {
     $('mailStatus').textContent = `Emailed to ${meeting.emailedTo || 'you'} ✓`;
-    $('mail').textContent = 'Email again';
+    paintMailButton();
   }
   $('reread').classList.toggle('hidden', !meeting.extract);
   $('gen').textContent = 'Rewrite minutes';
@@ -462,7 +463,7 @@ async function emailMom() {
   $('mailStatus').textContent = r.status;
   if (r.sent) {
     renderChips();
-    $('mail').textContent = 'Email again';
+    paintMailButton();
   }
   $('mail').disabled = false;
 }
@@ -547,16 +548,53 @@ function renderPending(pending, lastError) {
   }
 }
 
+// The minutes are Markdown. Edit mode shows it next to a live preview, saves every change a moment after you stop typing, and
+// marks the minutes as edited so "Email me" says it will send the corrected version.
+let editTimer = null;
+const paintPreview = () => {
+  const md = $('mdEdit').value;
+  $('mdPreview').innerHTML = renderMinutesHtml(md, renderMd);
+  if (!isAmnexMd(md)) decorateMinutes($('mdPreview'));
+};
+function saveEdit() {
+  clearTimeout(editTimer);
+  editTimer = null;
+  const mom = $('mdEdit').value;
+  if (mom === meeting.mom) return Promise.resolve();
+  meeting.mom = mom;
+  meeting.editedAt = Date.now();
+  return patchMeeting({ mom, editedAt: meeting.editedAt });
+}
+$('mdEdit').addEventListener('input', () => {
+  paintPreview();
+  clearTimeout(editTimer);
+  editTimer = setTimeout(() => saveEdit().catch(() => {}), 700);
+});
+
 function setEditing(on) {
-  if (!on && !$('mdEdit').classList.contains('hidden')) {
-    meeting.mom = $('mdEdit').value;
-    saveMeeting(meeting);
+  const was = !$('mdEdit').classList.contains('hidden');
+  if (!on && was) {
+    saveEdit().catch(() => {});
     renderMom();
+    renderChips();
+    paintMailButton();
+    if (meeting.editedAt) $('mailStatus').textContent = 'Saved. Press Email me, or open Share, to send the corrected minutes.';
   }
   $('mdEdit').classList.toggle('hidden', !on);
+  $('mdPreview').classList.toggle('hidden', !on);
+  $('editHelp').classList.toggle('hidden', !on);
   $('mom').classList.toggle('hidden', on);
-  $('edit').textContent = on ? 'Done editing' : 'Edit';
-  if (on) $('mdEdit').value = meeting.mom;
+  $('edit').textContent = on ? 'Done editing' : 'Edit minutes';
+  $('edit').classList.toggle('primary', on);
+  if (on && !was) {
+    $('mdEdit').value = meeting.mom;
+    paintPreview();
+  }
+}
+
+// "Email me" says what it will send: the first time, again, or the version you corrected.
+function paintMailButton() {
+  $('mail').textContent = !meeting.emailedAt ? 'Email me' : meeting.editedAt > meeting.emailedAt ? 'Email corrected minutes' : 'Email again';
 }
 
 function download(name, type, content) {
@@ -568,7 +606,13 @@ function download(name, type, content) {
 
 const fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
-$('gen').onclick = () => runGenerate();
+$('gen').onclick = async () => {
+  if (meeting.editedAt && meeting.mom) {
+    const ok = await modal({ title: 'Rewrite the minutes?', text: 'You edited these minutes by hand. Rewriting replaces your edits with new minutes written from the transcript.', buttons: [{ label: 'Keep my edits', value: 'no' }, { label: 'Rewrite anyway', value: 'yes', danger: true }] });
+    if (ok?.value !== 'yes') return;
+  }
+  runGenerate();
+};
 // Voices named, merged or deleted while a meeting is open: show the new names and say what to press.
 chrome.storage.onChanged.addListener(async (c) => {
   if (!c.voices && !c.settings) return;
@@ -741,7 +785,7 @@ tabBtns.forEach((b, i) => {
   if (hadPending && !jobWillRun) await retryPending();
   if (meeting.emailedAt) {
     $('mailStatus').textContent = `Emailed to ${meeting.emailedTo || 'you'} ✓`;
-    $('mail').textContent = 'Email again';
+    paintMailButton();
   }
   if (meeting.mom) {
     paintFormat();

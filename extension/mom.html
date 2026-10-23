@@ -134,6 +134,11 @@
     #mom .skel .sk.h { height: 12px; width: 120px; margin-top: 14px; }
     #mom .skel .busy { display: flex; gap: 10px; align-items: center; color: var(--brand); font-weight: 600; }
     #mdEdit { min-height: 480px; font: 13px/1.6 ui-monospace, Consolas, monospace; }
+    .editsplit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .editsplit > .hidden { display: none; }
+    .editsplit:has(> .hidden) { grid-template-columns: minmax(0, 1fr); }
+    @media (max-width: 1000px) { .editsplit { grid-template-columns: minmax(0, 1fr); } }
+    #editHelp { margin: 0 0 8px; }
 
     /* transcript */
     #transcript { padding: 8px 0; }
@@ -227,13 +232,13 @@
     <div class="toolbar no-print">
       <button id="gen" class="primary">Write minutes</button>
       <div class="seg-ctl small" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="amnex">Amnex</button><button type="button" role="radio" data-v="standard">Standard</button></div>
+      <button id="edit" title="Fix the minutes by hand: remove what is wrong, add what was missed. Then email or share the corrected version.">Edit minutes</button>
       <button id="reread" class="hidden" title="Read the transcript again from scratch instead of reusing the items found last time">Re-read transcript</button>
       <button id="abort" class="hidden">Stop</button>
       <span id="genStatus" class="hint stat" role="status"></span>
       <span id="mailStatus" class="hint stat" role="status"></span>
       <span class="grow"></span>
       <div class="acts">
-        <button id="edit">Edit</button>
         <button id="copy">Copy</button>
         <button id="dlMd">.md</button>
         <button id="dlDoc">Word</button>
@@ -241,6 +246,11 @@
         <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> attach transcript to my email</label>
         <button id="mail" title="Send this MOM to your email">Email me</button>
       </div>
+    </div>
+    <p id="editHelp" class="hint no-print hidden">Editing the minutes. Change any text, delete a line you do not want, add what was missed. The preview on the right updates as you type, and your changes are saved by themselves. Table rows start with <code>|</code>; a bullet starts with <code>-</code>. Press <b>Done editing</b>, then <b>Email me</b> or <b>Share</b> to send the corrected minutes.</p>
+    <div class="editsplit">
+      <textarea id="mdEdit" class="hidden" aria-label="Edit the minutes (Markdown)"></textarea>
+      <article id="mdPreview" class="card hidden" aria-label="Preview of your edits"></article>
     </div>
     <details class="box no-print" id="shareBox">
       <summary>Share these minutes with others</summary>
@@ -261,7 +271,6 @@
     <div id="failBox" class="state fail hidden no-print" role="alert"><div><strong>The minutes couldn't be written</strong><p id="failText"></p></div><button id="failRetry">Try again</button></div>
     <div id="emptyBox" class="card state none hidden no-print"><div><strong>No minutes yet</strong></div><p class="hint" id="emptyText">The transcript is ready. Press Write minutes when you are ready.</p><button id="genEmpty" class="primary">Write minutes</button></div>
     <article id="mom" class="card"><p class="muted">No minutes yet.</p></article>
-    <textarea id="mdEdit" class="hidden" aria-label="Edit the minutes (Markdown)"></textarea>
   </div>
 
   <div id="trTab" class="panel hidden" role="tabpanel" aria-labelledby="tabTr">
