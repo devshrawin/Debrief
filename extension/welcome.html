@@ -6,6 +6,7 @@
   <title>Welcome to Debrief</title>
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
+  <script src="fx/theme.js"></script>
   <style>
     /* Tour layout only. Tokens, buttons, .sw, .chip, .inp, .callout, .steps ... come from style.css. */
     .shell { display: flex; min-height: 100vh; }
@@ -20,7 +21,7 @@
     .steps-nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
     .steps-nav button { width: 100%; min-height: 38px; justify-content: flex-start; gap: 10px; padding: 4px 8px; border: 0; border-radius: 9px; background: transparent; font-weight: 500; text-align: left; }
     .steps-nav button:hover { background: var(--sunk); }
-    .steps-nav button[aria-current="step"] { background: var(--tint); font-weight: 700; }
+    .steps-nav button[aria-current="step"] { background: var(--tint-soft); font-weight: 700; }
     .steps-nav .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .steps-nav .opt { font-size: 11px; color: var(--muted); font-weight: 500; }
     .num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; flex: none; background: var(--card); color: var(--muted); border: 1px solid var(--line-strong); }
@@ -61,10 +62,10 @@
     label.chip { position: relative; margin: 0; min-height: 36px; padding: 6px 14px; background: var(--card); cursor: pointer; user-select: none; font-weight: 600; }
     label.chip:hover { background: var(--sunk); }
     label.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; padding: 0; min-height: 0; pointer-events: none; }
-    label.chip:has(input:checked) { background: var(--tint); color: var(--tint-ink); border-color: var(--brand); }
+    label.chip:has(input:checked) { background: var(--tint-soft); color: var(--tint); border-color: var(--brand); }
     label.chip:has(input:checked)::before { content: "\2713"; font-size: 11px; }
-    label.chip:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-    .wrap .steps li::before { background: var(--tint); color: var(--tint-ink); border-color: transparent; }
+    label.chip:has(input:focus-visible) { outline: 2px solid var(--focus-color); outline-offset: 2px; }
+    .wrap .steps li::before { background: var(--tint-soft); color: var(--tint); border-color: transparent; }
     .wrap .steps li { margin: 0; }
     .wrap .steps { display: flex; flex-direction: column; gap: 10px; }
     .tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }

@@ -478,7 +478,7 @@ function mountAskBox() {
     getCtx: () => ({ ...nameCtx(), myName: settings.myName }),
     history: meeting.qa || [],
     onEntry: (entry) => patchMeeting({ qa: [...(meeting.qa || []), entry].slice(-10) }),
-    placeholder: 'Ask about these minutes, e.g. "who owns the Kerala mapping?"',
+    placeholder: 'Ask about these minutes, e.g. "who owns the vendor contract?"',
   });
 }
 

@@ -3002,7 +3002,7 @@ Rules:
 .ask-a li { margin: 4px 0; }
 .ask-a.live > :last-child::after { content: ""; display: inline-block; width: 8px; height: 18px; margin-left: 3px; background: var(--brand); vertical-align: text-bottom; animation: bl 1s steps(2) infinite; }
 @keyframes bl { 50% { opacity: 0; } }
-.ask-a .src, .ask-srcs .src { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; background: var(--tint); color: var(--tint-ink); font-size: 11.5px; font-weight: 800; text-decoration: none; vertical-align: 2px; margin-left: 2px; }
+.ask-a .src, .ask-srcs .src { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; background: var(--tint-soft); color: var(--tint); font-size: 11.5px; font-weight: 800; text-decoration: none; vertical-align: 2px; margin-left: 2px; }
 .ask-a a.src:hover { background: var(--brand); color: var(--on-brand); }
 .ask-src { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
 .ask-srcs { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
@@ -3021,7 +3021,7 @@ Rules:
 /* the big version on the all-meetings page */
 .ask.large { display: flex; flex-direction: column; gap: 16px; padding: 0; background: none; border: 0; box-shadow: none; }
 .ask.large > * { margin: 0; }
-.ask.large .ask-row { order: 1; padding: 8px 8px 8px 18px; gap: 10px; background: var(--card); border: 1px solid var(--brand); border-radius: 14px; box-shadow: 0 0 0 3px var(--tint); }
+.ask.large .ask-row { order: 1; padding: 8px 8px 8px 18px; gap: 10px; background: var(--card); border: 1px solid var(--brand); border-radius: 14px; box-shadow: 0 0 0 3px var(--tint-soft); }
 .ask.large .ask-row input { border: 0; background: transparent; font-size: 17px; min-height: 44px; padding: 8px 0; box-shadow: none; }
 .ask.large .ask-row input:focus-visible { outline: none; }
 .ask.large .ask-row .primary { width: 44px; height: 44px; padding: 0; border-radius: 12px; flex: none; }
@@ -3083,7 +3083,7 @@ Rules:
     const row2 = h2("div", "ask-row");
     const input = h2("input");
     input.type = "text";
-    input.placeholder = opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the Kerala mapping?"';
+    input.placeholder = opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the vendor contract?"';
     input.setAttribute("aria-label", "Your question");
     const go = h2("button", "primary");
     if (opts.large) {
@@ -5267,7 +5267,7 @@ ${meeting2.mom || ""}
       getCtx: () => ({ ...nameCtx(), myName: settings.myName }),
       history: meeting.qa || [],
       onEntry: (entry) => patchMeeting2({ qa: [...meeting.qa || [], entry].slice(-10) }),
-      placeholder: 'Ask about these minutes, e.g. "who owns the Kerala mapping?"'
+      placeholder: 'Ask about these minutes, e.g. "who owns the vendor contract?"'
     });
   }
   function absentNames() {

@@ -125,6 +125,17 @@ async function openPage(url, { width = 1100, height = 800, scale = 1.5 } = {}) {
     // sticky save / navigation bars would float in the middle of a full-page capture
     await evaluate(`document.querySelectorAll('body *').forEach((el) => { const p = getComputedStyle(el).position; const cs = getComputedStyle(el); if ((p === 'fixed' || p === 'sticky') && cs.bottom !== 'auto' && cs.top === 'auto') el.style.display = 'none'; })`);
     let c = clip;
+    if (full && !clip && !rectJs) {
+      const m0 = await send('Page.getLayoutMetrics', {}, sessionId);
+      const h = Math.min(maxHeight, Math.ceil(m0.cssContentSize.height));
+      await send('Emulation.setDeviceMetricsOverride', { width, height: h, deviceScaleFactor: scale, mobile: false }, sessionId);
+      await sleep(250);
+      const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+      writeFileSync(path.join(OUT, `${name}.png`), Buffer.from(data, 'base64'));
+      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false }, sessionId);
+      console.log('wrote', name);
+      return;
+    }
     if (rectJs) {
       const r = await evaluate(rectJs);
       c = { x: Math.max(0, r.x - 16), y: Math.max(0, r.y - 16), width: Math.min(width, r.width + 32), height: r.height + 32 };
@@ -229,6 +240,31 @@ try {
   await t.shot('tour-key', { maxHeight: 1000 });
 
   await opts.evaluate(`chrome.storage.local.remove(['usage', 'learnedLimits'])`);
+  // ---- the popup while recording
+  await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetCode: 'abc-defg-hij' }, levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
+  const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 640, scale: 2 });
+  await sleep(1500);
+  await pr.evaluate(`chrome.storage.session.set({ levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
+  await sleep(800);
+  await pr.shot('popup-recording', { full: false, clip: { x: 0, y: 0, width: 400, height: 560 } });
+  await opts.evaluate(`chrome.storage.session.remove(['rec', 'levels'])`);
+
+  // ---- the minutes page while a job is writing (orb, glowing toolbar)
+  await opts.evaluate(`(async () => { const k = 'meeting:demo4'; const base = (await chrome.storage.local.get('meeting:demo1'))['meeting:demo1']; await chrome.storage.local.set({ [k]: { ...base, id: 'demo4', title: 'Writing right now', mom: '', emailedAt: null, job: { state: 'writing', status: 'Reading the transcript carefully (part 2 of 3)…', beat: Date.now() + 600000 } }, meetingIds: ['demo4', 'demo3', 'demo1', 'demo2'] }); })()`);
+  const wr = await openPage(`chrome-extension://${id}/mom.html?id=demo4`, { width: 1100, height: 760 });
+  await sleep(2200);
+  await wr.shot('writing', { full: false, clip: { x: 0, y: 0, width: 1100, height: 640 } });
+
+  // ---- Ask page, the first settings page
+  const ask = await openPage(`chrome-extension://${id}/ask.html`, { width: 1100, height: 760 });
+  await sleep(900);
+  await ask.evaluate(`document.querySelector('#askBox input')?.focus()`);
+  await sleep(900);
+  await ask.shot('ask', { full: false, clip: { x: 0, y: 0, width: 1100, height: 700 } });
+  const st = await openPage(`chrome-extension://${id}/options.html`, { width: 1100, height: 900 });
+  await sleep(900);
+  await st.shot('settings-start', { maxHeight: 1500 });
+
   // ---- the popup, as it looks outside a meeting
   const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
   // a popup opened as a page cannot record its own tab: show the idle popup as it looks on a meeting tab

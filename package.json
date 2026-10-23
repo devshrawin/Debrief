@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "description": "Chrome extension: Google Meet -> Hindi/English transcript -> MOM",
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && node scripts/build-fx.mjs",
     "watch": "node build.mjs --watch",
     "pack": "node scripts/zip.mjs pack",
     "src-zip": "node scripts/zip.mjs src",
-    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice-clips.mjs && node test/pro-room.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs && node test/pro-relay.mjs && node test/pro-mix.mjs && node test/pro-jobs.mjs && node test/pro-mdedit.mjs"
+    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice-clips.mjs && node test/pro-room.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs && node test/pro-relay.mjs && node test/pro-mix.mjs && node test/pro-jobs.mjs && node test/pro-mdedit.mjs",
+    "build:fx": "node scripts/build-fx.mjs",
+    "build:app": "node build.mjs"
   },
   "keywords": [],
   "author": "",
@@ -16,7 +18,8 @@
   "devDependencies": {
     "esbuild": "^0.28.2",
     "fake-indexeddb": "^6.2.5",
-    "jsdom": "^30.1.2"
+    "jsdom": "^30.1.2",
+    "@paper-design/shaders": "^0.0.80"
   },
   "dependencies": {
     "marked": "^18.0.14",

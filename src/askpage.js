@@ -98,7 +98,7 @@ const span = (sec) => {
     getMeetings: scoped,
     getCtx: () => ({ entries: parseDictionary(settings.dictionary), attendees: [], learned: (settings.learnedNames || []).slice(-40), myName: settings.myName }),
     openLink: true,
-    placeholder: 'e.g. "What did we decide about the scheme master review?"',
-    suggestions: ['What action items are still open?', 'What did we decide about the Kerala mapping?', 'Which risks came up recently?', 'What did Amal say about the data validation?'],
+    placeholder: 'e.g. "What did we decide about the budget?"',
+    suggestions: ['What action items are still open?', 'What did we decide about the budget?', 'Which risks came up recently?', 'Who agreed to do what this week?'],
   });
 })();

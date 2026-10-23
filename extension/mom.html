@@ -6,6 +6,7 @@
   <title>Minutes of Meeting</title>
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
+  <script src="fx/theme.js"></script>
   <link rel="stylesheet" href="print.css" media="print">
   <style>
     main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
@@ -56,7 +57,7 @@
     #suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     #suggest.hidden { display: none; }
     #suggest .chip { cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; min-height: 32px; padding: 2px 12px; }
-    #suggest .chip:hover { background: var(--tint); color: var(--tint-ink); }
+    #suggest .chip:hover { background: var(--tint-soft); color: var(--tint); }
 
     /* tabs */
     .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
@@ -171,7 +172,7 @@
     .seg:first-child { border-top: 0; }
     .seg .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--brand); white-space: nowrap; }
     .seg .who { justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
-    .seg .who.named { background: var(--tint); color: var(--tint-ink); border-color: transparent; }
+    .seg .who.named { background: var(--tint-soft); color: var(--tint); border-color: transparent; }
     .seg .who.me { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
     .seg .who.unknown { background: transparent; color: var(--muted); border: 1px dashed var(--line-strong); }
     .seg .who.conflict { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
