@@ -365,13 +365,13 @@ hr { border: 0; border-top: 1px solid var(--separator); margin: var(--s4) 0; }
 /* Switch: any checkbox with role=switch, or inside .toggle / .switch-host */
 input[role=switch], .toggle input[type=checkbox] {
   appearance: none; -webkit-appearance: none; flex: none; position: relative;
-  width: 44px !important; height: 26px; min-height: 0; padding: 0 !important; margin: 0 !important; max-width: none !important;
+  box-sizing: border-box; width: 44px !important; height: 26px; min-height: 0; padding: 0 !important; margin: 0 !important; max-width: none !important;
   border: 0 !important; border-radius: var(--r-pill); background: var(--fill); cursor: pointer;
   box-shadow: inset 0 0 0 1px var(--separator);
   transition: background var(--d-base) ease;
 }
 input[role=switch]::after, .toggle input[type=checkbox]::after {
-  content: ""; position: absolute; left: 2px; top: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff;
+  content: ""; position: absolute; left: 2px; top: 2px; width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; background: #fff;
   box-shadow: 0 2px 4px rgb(0 0 0 / .18), 0 0 0 .5px rgb(0 0 0 / .04);
   transition: transform var(--d-base) var(--spring);
 }
@@ -473,7 +473,8 @@ dialog::backdrop { background: rgb(10 10 20 / .32); -webkit-backdrop-filter: blu
 textarea.mono, .card textarea.mono { font: 12.5px/1.6 var(--font-mono); min-height: 80px; }
 
 .toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); min-height: var(--hit); padding: 12px 0; border-top: 1px solid var(--separator); cursor: pointer; margin: 0; font: inherit; }
-.toggle .t { flex: 1; min-width: 0; }
+.toggle .t { flex: 1; min-width: 0; padding-right: var(--s3, 12px); }
+.toggle input[type=checkbox], .toggle > input[role=switch] { margin-left: auto !important; }
 .toggle .t b { display: block; font: var(--t-headline); font-size: 14px; }
 .toggle .t span { display: block; font: var(--t-footnote); color: var(--label-2); margin-top: 2px; }
 .card label.toggle { display: flex; font-weight: 400; }
@@ -612,7 +613,7 @@ body.popup { --fx-blur: 40px; }
 
 /* Button switch (pill and a few controls use a role=switch button) */
 button.sw, .sw:not(input) { width: 44px; height: 26px; min-height: 0; padding: 0; border-radius: var(--r-pill); background: var(--fill); position: relative; flex: none; box-shadow: inset 0 0 0 1px var(--separator); }
-button.sw::after, .sw:not(input)::after { content: ""; position: absolute; left: 2px; top: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgb(0 0 0 / .18); transition: transform var(--d-base) var(--spring); }
+button.sw::after, .sw:not(input)::after { content: ""; position: absolute; left: 2px; top: 2px; width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgb(0 0 0 / .18); transition: transform var(--d-base) var(--spring); }
 button.sw[aria-checked="true"], .sw:not(input)[aria-checked="true"] { background: var(--green-fill); box-shadow: none; }
 button.sw[aria-checked="true"]::after, .sw:not(input)[aria-checked="true"]::after { transform: translateX(18px); }
 

@@ -64,12 +64,7 @@
     textarea.mono { font: 13px/1.6 ui-monospace, Consolas, monospace; min-height: 76px; }
     .localbox { padding: 14px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 
-    /* switches: a real checkbox, drawn as the shared .sw */
-    input.sw[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 40px; height: 24px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 999px; background: var(--line-strong); }
-    input.sw:checked { background: var(--brand); }
-    input.sw:checked::after { transform: translateX(16px); }
-    input.sw:hover:not(:disabled) { background: var(--line-strong); }
-    input.sw:checked:hover:not(:disabled) { background: var(--brand-hover); }
+    /* switches: a real checkbox with role=switch, drawn by style.css (44 x 26, knob travels 18) */
 
     /* secret fields: once saved, shown as dots with Replace, never rendered */
     .secret { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -206,7 +201,8 @@
     .savebar.dirty .dot { background: var(--amber); }
     .savebar.saved .dot { background: var(--ok); }
     .savebar.bad .dot { background: var(--rec); }
-    #msg { flex: 1 1 160px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+    #msg { flex: 0 1 auto; font-weight: 600; min-width: 0; white-space: nowrap; margin-right: 6px; }
+    .savebar #save { flex: none; white-space: nowrap; min-height: 40px; padding: 0 22px; border-radius: var(--r-pill); }
     .savebar:not(.dirty):not(.saved):not(.bad) #msg { font-weight: 400; color: var(--muted); }
     .savebar.saved #msg { color: var(--ok); }
     .savebar.bad #msg { color: var(--rec-ink); }
