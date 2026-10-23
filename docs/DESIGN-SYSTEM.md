@@ -108,3 +108,17 @@ Built by `npm run build:fx` from `fx/src/` and `third_party/libraries-dev/`.
 - Icon-only buttons carry `aria-label`. Status text uses `aria-live="polite"`. Orbs are `role="img"` with the status as their label.
 - RTL-safe: logical properties are used, and the smoke test runs the pages with `dir="rtl"` without overflow.
 - Pages hold from 360 to 1440 px and at 200% zoom without horizontal scroll.
+
+## The colour room (fluid background)
+
+Every page draws the same slow, fluid backdrop behind the glass: six soft blobs of colour that drift and cross-fade (`.fx-bg`, added by `fx/theme.js`, styled in `extension/style.css`). Only `transform` and `opacity` animate, so it runs on the GPU; the layer is fixed, `contain: strict`, and pauses when the tab is hidden. It is switched off by `prefers-reduced-motion` (it holds still), `prefers-reduced-transparency`, `prefers-contrast: more`, forced colours, print, and the in-app **Reduce transparency** setting (`html.solid`). Palettes: `--amb-1..3` (first set) and `--amb-4..6` (second set, cross-faded in), light and dark.
+
+## Older names
+
+Pages written before the glass pass use short names (`--card`, `--line`, `--muted`, `--brand`, `--rec`, `--amber`, `--ok`...). Section 5 of `style.css` maps each onto the glass tokens, so they follow light and dark and the materials automatically. New code should use the tokens named above.
+
+## Loading and search
+
+- Every wait shows a **thinking orb** (`fx/src/orb.js`, from thinking-orbs): the state follows the words ("Reading the transcript…" is *searching*, "Writing…" is *composing*, "Sending…" is *connecting*). Any `.spin` element a page adds is swapped for an orb.
+- Any search or question field (Meetings search, Ask box, Find a meeting) carries the **border beam** while it has focus or is working (`searchBeam` in `fx/src/common.js`; CSS generated at build time from border-beam).
+

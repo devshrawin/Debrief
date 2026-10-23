@@ -531,15 +531,15 @@ pre { white-space: pre-wrap; font: 12px/1.6 var(--font-mono); background: var(--
 @media (prefers-color-scheme: dark) { :root { --amb-4: #4a1d45; --amb-5: #0f3d36; --amb-6: #2c2370; } }
 .fx-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
 .fx-bg i { position: absolute; border-radius: 50%; filter: blur(var(--fx-blur, 60px)); will-change: transform, opacity; opacity: .85; }
-.fx-bg .b1 { width: 62vmax; height: 52vmax; left: -14vmax; top: -16vmax; background: radial-gradient(closest-side, var(--amb-1), transparent); animation: fx-d1 38s ease-in-out infinite alternate; }
-.fx-bg .b2 { width: 56vmax; height: 46vmax; right: -16vmax; top: 2vmax; background: radial-gradient(closest-side, var(--amb-3), transparent); animation: fx-d2 46s ease-in-out infinite alternate; }
-.fx-bg .b3 { width: 64vmax; height: 50vmax; left: 18vmax; bottom: -24vmax; background: radial-gradient(closest-side, var(--amb-2), transparent); animation: fx-d3 42s ease-in-out infinite alternate; }
-.fx-bg .b4 { width: 48vmax; height: 40vmax; left: 6vmax; bottom: -10vmax; background: radial-gradient(closest-side, var(--amb-4), transparent); opacity: 0; animation: fx-d2 52s ease-in-out infinite alternate-reverse, fx-fade 34s ease-in-out infinite alternate; }
-.fx-bg .b5 { width: 46vmax; height: 40vmax; right: 8vmax; top: -12vmax; background: radial-gradient(closest-side, var(--amb-5), transparent); opacity: 0; animation: fx-d1 48s ease-in-out infinite alternate-reverse, fx-fade 40s ease-in-out -12s infinite alternate; }
-.fx-bg .b6 { width: 52vmax; height: 42vmax; right: -8vmax; bottom: -16vmax; background: radial-gradient(closest-side, var(--amb-6), transparent); opacity: 0; animation: fx-d3 44s ease-in-out infinite alternate-reverse, fx-fade 36s ease-in-out -20s infinite alternate; }
-@keyframes fx-d1 { from { transform: translate3d(-4%, -2%, 0) scale(1); } 50% { transform: translate3d(10%, 8%, 0) scale(1.14); } to { transform: translate3d(2%, 14%, 0) scale(.94); } }
-@keyframes fx-d2 { from { transform: translate3d(6%, 4%, 0) scale(1.05); } 50% { transform: translate3d(-12%, 10%, 0) scale(.92); } to { transform: translate3d(-4%, -8%, 0) scale(1.12); } }
-@keyframes fx-d3 { from { transform: translate3d(0, 6%, 0) scale(.96); } 50% { transform: translate3d(14%, -8%, 0) scale(1.12); } to { transform: translate3d(-10%, -4%, 0) scale(1); } }
+.fx-bg .b1 { width: 62vmax; height: 52vmax; left: -14vmax; top: -16vmax; background: radial-gradient(closest-side, var(--amb-1), transparent); animation: fx-d1 26s ease-in-out infinite alternate; }
+.fx-bg .b2 { width: 56vmax; height: 46vmax; right: -16vmax; top: 2vmax; background: radial-gradient(closest-side, var(--amb-3), transparent); animation: fx-d2 30s ease-in-out infinite alternate; }
+.fx-bg .b3 { width: 64vmax; height: 50vmax; left: 18vmax; bottom: -24vmax; background: radial-gradient(closest-side, var(--amb-2), transparent); animation: fx-d3 28s ease-in-out infinite alternate; }
+.fx-bg .b4 { width: 48vmax; height: 40vmax; left: 6vmax; bottom: -10vmax; background: radial-gradient(closest-side, var(--amb-4), transparent); opacity: 0; animation: fx-d2 34s ease-in-out infinite alternate-reverse, fx-fade 22s ease-in-out infinite alternate; }
+.fx-bg .b5 { width: 46vmax; height: 40vmax; right: 8vmax; top: -12vmax; background: radial-gradient(closest-side, var(--amb-5), transparent); opacity: 0; animation: fx-d1 32s ease-in-out infinite alternate-reverse, fx-fade 26s ease-in-out -12s infinite alternate; }
+.fx-bg .b6 { width: 52vmax; height: 42vmax; right: -8vmax; bottom: -16vmax; background: radial-gradient(closest-side, var(--amb-6), transparent); opacity: 0; animation: fx-d3 30s ease-in-out infinite alternate-reverse, fx-fade 24s ease-in-out -20s infinite alternate; }
+@keyframes fx-d1 { from { transform: translate3d(-8%, -4%, 0) scale(1); } 50% { transform: translate3d(18%, 14%, 0) scale(1.2); } to { transform: translate3d(4%, 24%, 0) scale(.92); } }
+@keyframes fx-d2 { from { transform: translate3d(10%, 6%, 0) scale(1.05); } 50% { transform: translate3d(-20%, 16%, 0) scale(.9); } to { transform: translate3d(-6%, -14%, 0) scale(1.18); } }
+@keyframes fx-d3 { from { transform: translate3d(0, 10%, 0) scale(.94); } 50% { transform: translate3d(24%, -14%, 0) scale(1.18); } to { transform: translate3d(-16%, -6%, 0) scale(1); } }
 @keyframes fx-fade { from { opacity: 0; } to { opacity: .9; } }
 html:not(.glass) .fx-bg i { animation-play-state: paused; }
 html.paused .fx-bg i { animation-play-state: paused; }
@@ -597,3 +597,5 @@ button.sw[aria-checked="true"]::after, .sw:not(input)[aria-checked="true"]::afte
 /* Where we search or ask: the border beam draws attention (fx/beam.js adds it while focused or busy) */
 [data-beam] { position: relative; }
 .search-beam { border-radius: var(--r-md); }
+
+input[type=color] { width: 72px; min-height: 36px; padding: 2px 4px; cursor: pointer; }

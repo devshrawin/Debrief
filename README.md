@@ -52,24 +52,32 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/popup.png" alt="The Debrief popup"><br><sub><b>The popup.</b> Start recording, switch your mic, open the last meeting. Past meetings and Ask are one tab away.</sub></td>
-<td width="50%" valign="top"><img src="docs/popup-recording.png" alt="The popup while recording"><br><sub><b>While recording.</b> Audio meters for the meeting and your mic, so a dead recorder shows up now, not after the call.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/popup.png" alt="The popup"><br><sub><b>The popup.</b> Liquid tabs, one big button. When a call is on, the button glows.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/popup-recording.png" alt="The popup while recording"><br><sub><b>Recording.</b> Live meters for the meeting and your mic, and a breathing glass bar.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/countdown.png" alt="The countdown before the minutes are written"><br><sub><b>After the call.</b> A 10 second window to pick the format, then the minutes are written for you. Touch the page and it waits.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/minutes-standard.png" alt="Standard minutes with the attendance table"><br><sub><b>Standard layout</b> with an attendance table: who was invited, who was seen, when they joined and left.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/writing.png" alt="Minutes being written: a thinking orb shows the stage"><br><sub><b>Writing.</b> A thinking orb shows the stage (reading, writing, checking, emailing). Close the tab; it keeps going.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/countdown.png" alt="The countdown before the minutes are written"><br><sub><b>After the call.</b> A 10 second window to pick the format; touch the page and it waits.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/voices.png" alt="Voices settings with Play sample buttons"><br><sub><b>Voices.</b> Name speakers by their voice, on your computer. Press ▶ Play sample to hear who "Unnamed voice 1" is.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/usage.png" alt="Usage page with request counts and quota left today"><br><sub><b>Usage.</b> Requests, tokens and audio per model, and an honest estimate of the free quota left today.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/minutes-standard.png" alt="Standard minutes with the attendance table"><br><sub><b>Standard layout</b> with an attendance table: invited, seen, joined and left.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/ask.png" alt="Ask your meetings: the question box glows with the border beam"><br><sub><b>Ask your meetings.</b> Anywhere you search or ask, the border beam lights the field.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/tour-key.png" alt="First-run tour: add your Gemini key"><br><sub><b>Two-step first run.</b> Paste a free Gemini key (tested live), allow the microphone, and you can record.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/organisation-template.png" alt="Organisation template settings"><br><sub><b>Organisation template.</b> Your name, footer line and colour on the formal minutes. One click fills the Amnex preset.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/voices.png" alt="Voices settings with Play sample buttons"><br><sub><b>Voices.</b> Name speakers by voice, on your computer. ▶ Play sample tells you who "Unnamed voice 1" is.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/usage.png" alt="Usage page"><br><sub><b>Usage.</b> Requests, tokens and audio per model, and an honest estimate of the free quota left.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/img/tour-key.png" alt="First-run tour"><br><sub><b>Two-step first run.</b> Paste a free Gemini key (tested live), allow the microphone, record.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/organisation-template.png" alt="Organisation template settings"><br><sub><b>Organisation template.</b> Your name, footer line and colour on the formal minutes.</sub></td>
 </tr>
 </table>
 
-<div align="center"><img src="docs/pill.png" width="300" alt="The optional on-page pill"><br><sub>The optional pill on the Meet page: timer, mic button, alerts. Off by default.</sub></div>
+<div align="center"><img src="docs/img/pill.png" width="640" alt="The optional on-page pill in dark and light"><br><sub>The optional pill on the Meet page: timer, mic button, alerts. Off by default.</sub></div>
+
+### The look
+
+Glass over a slowly moving field of colour. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md)) follows Apple's Human Interface Guidelines: content on opaque reading surfaces, glass only for the frame, system type scale, 44 px hit targets, light and dark. Effects come from [Libraries.dev](https://github.com/Jakubantalik/Libraries.dev) by Jakub Antalik (MIT), ported to plain JavaScript: **thinking orbs** for every wait, the **border beam** on search and question fields and on the recording bar, **liquid** segmented controls, and a **liquid-metal** ring on the Start button during a call. Reduced motion, reduced transparency and high contrast turn the moving parts off.
 
 ---
 
@@ -265,12 +273,13 @@ Model IDs follow each provider's naming; `gemini-3.5-transcribe` and `nova-3` ar
 ## Develop
 
 ```bash
-npm run build        # bundle src/ into extension/dist/
+npm run build        # bundle src/ into extension/dist/ and the glass effects into extension/fx/
 npm run watch        # rebuild on change
 npm test             # 17 suites (243 checks): chunker, mixer, providers on a mocked fetch,
                      # minutes pipeline, jobs, relay script, voices, org template, migration
 node test/chrome-smoke.mjs   # real headless Chrome drives every page
 node test/chrome-job.mjs     # real Chrome: minutes written with no tab, resumed after a restart
+node test/chrome-glass.mjs   # real Chrome: the colour room, orbs, beams and liquid controls on every page
 npm run pack         # release/Debrief-Pro-v<version>.zip for the Web Store (no dev key)
 npm run src-zip      # source zip without node_modules, release, .git, dist
 node scripts/screenshots.mjs # regenerate the screenshots in docs/img
@@ -284,6 +293,7 @@ src/
   mixer.js            mic + tab mixing, me / others from levels
   chunker.js          pause-aware chunking
   stt.js, gemini.js   speech-to-text clients and model fallback
+  ../fx/src           the glass effects layer (orbs, border beam, liquid controls, metal), built into extension/fx/
   jobs.js             the minutes job: pipeline, runner, email and share (shared by the page and the background)
   jobstate.js         job states and resume rules
   minutes.js          the multi-pass minutes pipeline

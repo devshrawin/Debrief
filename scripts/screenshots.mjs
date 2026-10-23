@@ -265,6 +265,18 @@ try {
   await sleep(900);
   await st.shot('settings-start', { maxHeight: 1500 });
 
+  // ---- Chrome Web Store screenshots, exactly 1280 x 800
+  const store = async (name, url, prep) => {
+    const pg = await openPage(url, { width: 1280, height: 800, scale: 1 });
+    await sleep(900);
+    if (prep) { await pg.evaluate(prep); await sleep(700); }
+    await pg.shot(name, { full: false, clip: { x: 0, y: 0, width: 1280, height: 800 } });
+  };
+  await store('store-1-minutes', `chrome-extension://${id}/mom.html?id=demo1`);
+  await store('store-2-settings', `chrome-extension://${id}/options.html`, `document.querySelector('[data-tab="voices"]').click()`);
+  await store('store-3-tour', `chrome-extension://${id}/welcome.html?restart=1`);
+  await store('store-4-ask', `chrome-extension://${id}/ask.html`, `document.querySelector('#askBox input')?.focus()`);
+
   // ---- the popup, as it looks outside a meeting
   const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
   // a popup opened as a page cannot record its own tab: show the idle popup as it looks on a meeting tab
