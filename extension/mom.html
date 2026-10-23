@@ -134,11 +134,36 @@
     #mom .skel .sk.h { height: 12px; width: 120px; margin-top: 14px; }
     #mom .skel .busy { display: flex; gap: 10px; align-items: center; color: var(--brand); font-weight: 600; }
     #mdEdit { min-height: 480px; font: 13px/1.6 ui-monospace, Consolas, monospace; }
-    .editsplit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-    .editsplit > .hidden { display: none; }
-    .editsplit:has(> .hidden) { grid-template-columns: minmax(0, 1fr); }
-    @media (max-width: 1000px) { .editsplit { grid-template-columns: minmax(0, 1fr); } }
-    #editHelp { margin: 0 0 8px; }
+    .editor { margin: 12px 0 20px; }
+    .editor.hidden, .editor .hidden { display: none; }
+    .ed-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .ed { display: flex; flex-direction: column; gap: 14px; }
+    .ed-block { background: var(--card, #fff); border: 1px solid var(--line, #e3e5ea); border-radius: 14px; padding: 12px 14px; }
+    .ed-block.ed-head { padding: 6px 10px; background: transparent; border-color: transparent; }
+    .ed-f { width: 100%; box-sizing: border-box; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; resize: none; overflow: hidden; line-height: 1.5; }
+    .ed-f:hover { border-color: var(--line, #e3e5ea); }
+    .ed-f:focus { outline: 2px solid var(--brand, #3b2fa8); outline-offset: 0; background: var(--bg, #fff); border-color: transparent; }
+    .ed-h { font-weight: 700; }
+    .ed-h1 { font-size: 24px; }
+    .ed-h2 { font-size: 18px; }
+    .ed-h3 { font-size: 15px; }
+    .ed-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) 32px; align-items: start; gap: 4px; }
+    .ed-item.sub { margin-left: 28px; }
+    .ed-bullet { text-align: center; padding-top: 7px; color: var(--muted, #6b7280); }
+    .ed-x { border: 0; background: transparent; color: var(--muted, #6b7280); font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
+    .ed-x:hover, .ed-x:focus-visible { background: var(--rec-bg, #fde8e8); color: var(--rec-ink, #b42318); }
+    .ed-add { border: 1px dashed var(--line-strong, #c9cdd6); background: transparent; color: var(--brand, #3b2fa8); border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; margin-top: 8px; }
+    .ed-add:hover { background: var(--tint, #eeecfb); }
+    .ed-rm { display: block; margin: 10px 0 0 auto; border: 0; background: transparent; color: var(--muted, #6b7280); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
+    .ed-rm:hover { color: var(--rec-ink, #b42318); }
+    .ed-scroll { overflow-x: auto; }
+    .ed-table { border-collapse: collapse; width: 100%; min-width: 520px; }
+    .ed-table th { text-align: left; font-size: 12.5px; color: var(--muted, #6b7280); padding: 0 2px 6px; }
+    .ed-table td { vertical-align: top; padding: 2px; border-top: 1px solid var(--line, #e3e5ea); }
+    .ed-th { font-weight: 600; font-size: 12.5px; }
+    .ed-no { width: 36px; text-align: center; color: var(--muted, #6b7280); padding-top: 9px !important; }
+    .ed-gutter { width: 36px; }
+    #mdEdit { width: 100%; box-sizing: border-box; }
 
     /* transcript */
     #transcript { padding: 8px 0; }
@@ -247,11 +272,20 @@
         <button id="mail" title="Send this MOM to your email">Email me</button>
       </div>
     </div>
-    <p id="editHelp" class="hint no-print hidden">Editing the minutes. Change any text, delete a line you do not want, add what was missed. The preview on the right updates as you type, and your changes are saved by themselves. Table rows start with <code>|</code>; a bullet starts with <code>-</code>. Press <b>Done editing</b>, then <b>Email me</b> or <b>Share</b> to send the corrected minutes.</p>
-    <div class="editsplit">
-      <textarea id="mdEdit" class="hidden" aria-label="Edit the minutes (Markdown)"></textarea>
+    <section id="editor" class="editor no-print hidden" aria-label="Edit the minutes">
+      <div class="ed-bar">
+        <div class="seg-ctl small" id="edTabs" role="radiogroup" aria-label="How to edit">
+          <button type="button" role="radio" data-v="edit" aria-checked="true">Edit</button>
+          <button type="button" role="radio" data-v="preview" aria-checked="false">Preview</button>
+          <button type="button" role="radio" data-v="text" aria-checked="false">Text</button>
+        </div>
+        <button type="button" id="edUndo">Undo</button>
+        <span class="hint" id="edHint">Change any text, remove what is wrong with ×, add what was missed. Changes save by themselves.</span>
+      </div>
+      <div id="edBlocks" class="ed"></div>
       <article id="mdPreview" class="card hidden" aria-label="Preview of your edits"></article>
-    </div>
+      <textarea id="mdEdit" class="hidden" aria-label="The minutes as plain text (Markdown)"></textarea>
+    </section>
     <details class="box no-print" id="shareBox">
       <summary>Share these minutes with others</summary>
       <div class="box-body">

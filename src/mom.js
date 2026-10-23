@@ -2,6 +2,7 @@ import { renderMd, decorateMinutes } from './md.js';
 import { renderMinutesHtml, isAmnexMd, setOrg } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
+import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
 import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
 import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes } from './jobs.js';
@@ -548,48 +549,76 @@ function renderPending(pending, lastError) {
   }
 }
 
-// The minutes are Markdown. Edit mode shows it next to a live preview, saves every change a moment after you stop typing, and
-// marks the minutes as edited so "Email me" says it will send the corrected version.
+// Editing the minutes. They are Markdown underneath, but nobody has to type it: Edit shows headings, points and tables as
+// ordinary fields (src/mdedit.js), Preview shows the finished document, Text is the raw Markdown for anyone who wants it.
+// Every change is saved a moment after it is made and the minutes are marked as edited.
+let editor = null;
+let editing = false;
+let editTab = 'edit';
 let editTimer = null;
-const paintPreview = () => {
-  const md = $('mdEdit').value;
+const currentMd = () => (editTab === 'text' ? $('mdEdit').value : editor ? editor.getMd() : meeting.mom);
+function paintPreview() {
+  const md = currentMd();
   $('mdPreview').innerHTML = renderMinutesHtml(md, renderMd);
   if (!isAmnexMd(md)) decorateMinutes($('mdPreview'));
-};
+}
 function saveEdit() {
   clearTimeout(editTimer);
   editTimer = null;
-  const mom = $('mdEdit').value;
+  const mom = currentMd();
   if (mom === meeting.mom) return Promise.resolve();
   meeting.mom = mom;
   meeting.editedAt = Date.now();
   return patchMeeting({ mom, editedAt: meeting.editedAt });
 }
-$('mdEdit').addEventListener('input', () => {
-  paintPreview();
+const afterEdit = () => {
   clearTimeout(editTimer);
   editTimer = setTimeout(() => saveEdit().catch(() => {}), 700);
-});
+  $('edUndo').disabled = !editor?.canUndo();
+};
+function showEditTab(tab) {
+  const md = currentMd();
+  if (tab === 'edit' && editTab === 'text') editor.load($('mdEdit').value);
+  editTab = tab;
+  if (tab === 'text') $('mdEdit').value = md;
+  if (tab === 'preview') paintPreview();
+  $('edBlocks').classList.toggle('hidden', tab !== 'edit');
+  $('mdPreview').classList.toggle('hidden', tab !== 'preview');
+  $('mdEdit').classList.toggle('hidden', tab !== 'text');
+  $('edUndo').classList.toggle('hidden', tab !== 'edit');
+  for (const b of $('edTabs').querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === tab));
+}
+for (const b of $('edTabs').querySelectorAll('button')) b.onclick = () => showEditTab(b.dataset.v);
+$('edUndo').onclick = () => {
+  editor?.undo();
+  afterEdit();
+};
+$('mdEdit').addEventListener('input', afterEdit);
 
 function setEditing(on) {
-  const was = !$('mdEdit').classList.contains('hidden');
-  if (!on && was) {
+  if (on === editing) return;
+  if (!on) {
     saveEdit().catch(() => {});
+    editing = false;
+    $('editor').classList.add('hidden');
+    $('mom').classList.remove('hidden');
+    $('edit').textContent = 'Edit minutes';
+    $('edit').classList.remove('primary');
     renderMom();
     renderChips();
     paintMailButton();
     if (meeting.editedAt) $('mailStatus').textContent = 'Saved. Press Email me, or open Share, to send the corrected minutes.';
+    return;
   }
-  $('mdEdit').classList.toggle('hidden', !on);
-  $('mdPreview').classList.toggle('hidden', !on);
-  $('editHelp').classList.toggle('hidden', !on);
-  $('mom').classList.toggle('hidden', on);
-  $('edit').textContent = on ? 'Done editing' : 'Edit minutes';
-  $('edit').classList.toggle('primary', on);
-  if (on && !was) {
-    $('mdEdit').value = meeting.mom;
-    paintPreview();
-  }
+  editing = true;
+  editTab = 'edit';
+  editor = mountEditor($('edBlocks'), meeting.mom || '', afterEdit);
+  showEditTab('edit');
+  $('editor').classList.remove('hidden');
+  $('mom').classList.add('hidden');
+  $('edit').textContent = 'Done editing';
+  $('edit').classList.add('primary');
+  $('edUndo').disabled = true;
 }
 
 // "Email me" says what it will send: the first time, again, or the version you corrected.
@@ -629,7 +658,7 @@ $('abort').onclick = () => {
   chrome.runtime?.sendMessage?.({ target: 'bg', type: 'job-abort', id })?.catch?.(() => {});
   runner.abort(id);
 };
-$('edit').onclick = () => setEditing($('mdEdit').classList.contains('hidden'));
+$('edit').onclick = () => setEditing(!editing);
 $('print').onclick = () => {
   setEditing(false);
   window.print();

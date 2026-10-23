@@ -7,7 +7,7 @@
     "watch": "node build.mjs --watch",
     "pack": "node scripts/zip.mjs pack",
     "src-zip": "node scripts/zip.mjs src",
-    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice-clips.mjs && node test/pro-room.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs && node test/pro-relay.mjs && node test/pro-mix.mjs && node test/pro-jobs.mjs"
+    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice-clips.mjs && node test/pro-room.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs && node test/pro-relay.mjs && node test/pro-mix.mjs && node test/pro-jobs.mjs && node test/pro-mdedit.mjs"
   },
   "keywords": [],
   "author": "",

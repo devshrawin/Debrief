@@ -1354,7 +1354,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
         td.replaceChildren(chip);
       }
     }
-    const head = [...root.querySelectorAll("h2")].find((h3) => /^added by the completeness check/i.test(h3.textContent.trim()));
+    const head = [...root.querySelectorAll("h2")].find((h4) => /^added by the completeness check/i.test(h4.textContent.trim()));
     if (head) {
       const box = document.createElement("div");
       box.className = "added";
@@ -1470,8 +1470,8 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
     const rows = (invited || []).map((p) => ({ ...p, ids: identities(p, entries), match: null }));
     const pairs = [];
-    rows.forEach((r, ri) => here.forEach((h3, hi) => {
-      const hid = identities({ name: h3.name }, entries);
+    rows.forEach((r, ri) => here.forEach((h4, hi) => {
+      const hid = identities({ name: h4.name }, entries);
       let best = Math.max(0, ...r.ids.flatMap((a) => hid.map((b) => score(a, b))));
       if (best > 0 && best < 0.9) {
         const first2 = hid[0]?.split(" ")[0];
@@ -1489,20 +1489,20 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       usedH.add(p.hi);
       rows[p.ri].match = here[p.hi];
     }
-    const left = here.map((h3, i) => ({ h: h3, i })).filter((x2) => !usedH.has(x2.i));
+    const left = here.map((h4, i) => ({ h: h4, i })).filter((x2) => !usedH.has(x2.i));
     const couldBe = /* @__PURE__ */ new Map();
     const mayBe = /* @__PURE__ */ new Map();
-    for (const { h: h3, i } of left) {
-      const first2 = identities({ name: h3.name }, entries)[0]?.split(" ")[0];
+    for (const { h: h4, i } of left) {
+      const first2 = identities({ name: h4.name }, entries)[0]?.split(" ")[0];
       const cands = rows.map((r, ri) => ({ r, ri })).filter((x2) => !usedR.has(x2.ri) && x2.r.ids.some((id2) => id2.split(" ")[0] === first2 && id2.split(" ").length === 1));
       if (cands.length > 1) {
         couldBe.set(i, cands.map((x2) => x2.r.email || personLabel(x2.r)));
-        for (const c of cands) mayBe.set(c.ri, [...mayBe.get(c.ri) || [], h3.name]);
+        for (const c of cands) mayBe.set(c.ri, [...mayBe.get(c.ri) || [], h4.name]);
       }
     }
     return {
       rows: rows.map((r, ri) => ({ name: personLabel(r), email: r.email, status: r.status, present: r.match || null, mayBe: mayBe.get(ri) || null })),
-      uninvited: here.filter((_2, i) => !usedH.has(i)).map((h3) => ({ ...h3, couldBe: couldBe.get(here.indexOf(h3)) || null }))
+      uninvited: here.filter((_2, i) => !usedH.has(i)).map((h4) => ({ ...h4, couldBe: couldBe.get(here.indexOf(h4)) || null }))
     };
   }
   var withAddress = (r) => r.email && r.name && !String(r.name).toLowerCase().includes(String(r.email).toLowerCase()) ? `${r.name} (${r.email})` : String(r.name || r.email || "");
@@ -1594,8 +1594,8 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   function fmtTime12(ms) {
     const d = new Date(ms);
     if (!Number.isFinite(d.getTime())) return "";
-    const h3 = d.getHours();
-    return `${pad(h3 % 12 || 12)}:${pad(d.getMinutes())} ${h3 < 12 ? "AM" : "PM"}`;
+    const h4 = d.getHours();
+    return `${pad(h4 % 12 || 12)}:${pad(d.getMinutes())} ${h4 < 12 ? "AM" : "PM"}`;
   }
   var APPS = [
     [/(^|\.)meet\.google\.com$/i, "Google Meet"],
@@ -1621,8 +1621,8 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var HONORIFICS = /* @__PURE__ */ new Set(["sri", "shri", "smt", "shrimati", "mr", "mrs", "ms", "miss", "dr", "prof", "kumari", "km"]);
   var normTokens = (s) => String(s || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").split(/\s+/).filter((t) => t && !HONORIFICS.has(t));
   var normName = (s) => normTokens(s).join(" ");
-  function tidyHonorific(h3) {
-    const t = String(h3 || "").trim();
+  function tidyHonorific(h4) {
+    const t = String(h4 || "").trim();
     if (!t) return "";
     const w = t.replace(/\.$/, "");
     return HONORIFICS.has(w.toLowerCase()) ? `${w[0].toUpperCase()}${w.slice(1).toLowerCase()}.` : t;
@@ -1829,9 +1829,9 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
           continue;
         }
         const hits = known.names.map((n) => ({ n, s: nameMatch(n, part) })).filter((x2) => x2.s > 0);
-        const best = hits.length ? Math.max(...hits.map((h3) => h3.s)) : 0;
-        const top = hits.filter((h3) => h3.s === best);
-        const distinct = new Set(top.map((h3) => normName(h3.n)));
+        const best = hits.length ? Math.max(...hits.map((h4) => h4.s)) : 0;
+        const top = hits.filter((h4) => h4.s === best);
+        const distinct = new Set(top.map((h4) => normName(h4.n)));
         if (distinct.size === 1) kept.push(top[0].n);
         else if (!top.length && known.heard) {
           const t = normTokens(part);
@@ -1988,9 +1988,9 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var groupHeading = (g) => g.kind === "client" ? `Attendees \u2013 Client Side (${g.org || PH.client})` : g.kind === "si" ? `Attendees \u2013 System Integrator (${g.org})` : "Attendees";
   var groupCols = (g) => ["SR", "Name", g.kind === "client" ? "Department" : "Organisation", "Designation"];
   function composeMarkdown({ facts, prose, review = [] }) {
-    const h3 = facts.header;
+    const h4 = facts.header;
     const L2 = [MARKER, `# ${facts.title}`, "", "## Meeting details", "| Field | Value |", "|---|---|"];
-    for (const [k2, v] of [["Topic", h3.topic], ["Mode", h3.mode], ["Location", h3.location], ["Date", h3.date], ["Time", h3.time], ["Chairperson", h3.chair]]) L2.push(row([k2, v]));
+    for (const [k2, v] of [["Topic", h4.topic], ["Mode", h4.mode], ["Location", h4.location], ["Date", h4.date], ["Time", h4.time], ["Chairperson", h4.chair]]) L2.push(row([k2, v]));
     for (const g of facts.groups) {
       L2.push("", `## ${groupHeading(g)}`, row(groupCols(g)), `|${groupCols(g).map(() => "---").join("|")}|`);
       const rows = g.rows.length ? g.rows : [{ name: "\u2014", a: "\u2014", desig: "\u2014" }];
@@ -2047,14 +2047,14 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var gap = '<p class="amx-gap" style="margin:0;font-size:8pt;line-height:10pt">&nbsp;</p>';
   var ul = (items, pad2 = 18) => `<ul style="margin:0;padding:0 0 0 ${pad2}px">${items.map((i) => `<li style="margin:0 0 2px">${e(i)}</li>`).join("")}</ul>`;
   function renderDocBody(doc) {
-    const h3 = doc.header;
+    const h4 = doc.header;
     const out = [];
     out.push(`<h1 class="amx-h1" style="margin:0 0 14pt;font-size:32pt;line-height:1.1;font-weight:bold;color:${titleColor()};${FONT}">Meeting<br>Minutes</h1>`);
-    out.push(table(tr(`${navy("Topic", { w: 117, mid: true })}${plain(e(h3.topic), { bold: true })}`)), gap);
-    out.push(table(tr(`${navy("Mode", { w: 117, mid: true })}${plain(e(h3.mode), { bold: true })}`) + tr(`${navy("Location", { w: 117, mid: true })}${plain(e(h3.location), { bold: true })}`)), gap);
+    out.push(table(tr(`${navy("Topic", { w: 117, mid: true })}${plain(e(h4.topic), { bold: true })}`)), gap);
+    out.push(table(tr(`${navy("Mode", { w: 117, mid: true })}${plain(e(h4.mode), { bold: true })}`) + tr(`${navy("Location", { w: 117, mid: true })}${plain(e(h4.location), { bold: true })}`)), gap);
     out.push(
       table(
-        `<thead>${tr(`${navy("Date", { w: 117 })}${navy("Time", { w: 128 })}${navy("Chairperson")}`)}</thead><tbody>${tr(`${plain(e(h3.date), { center: true, bold: true })}${plain(e(h3.time), { center: true, bold: true })}${plain(e(h3.chair), { center: true, bold: true })}`)}</tbody>`
+        `<thead>${tr(`${navy("Date", { w: 117 })}${navy("Time", { w: 128 })}${navy("Chairperson")}`)}</thead><tbody>${tr(`${plain(e(h4.date), { center: true, bold: true })}${plain(e(h4.time), { center: true, bold: true })}${plain(e(h4.chair), { center: true, bold: true })}`)}</tbody>`
       ),
       gap
     );
@@ -2378,12 +2378,12 @@ ${att}
   }
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec));
-    const h3 = Math.floor(sec / 3600);
+    const h4 = Math.floor(sec / 3600);
     const m = Math.floor(sec % 3600 / 60);
     const s = sec % 60;
     const mm = String(m).padStart(2, "0");
     const ss = String(s).padStart(2, "0");
-    return h3 ? `${h3}:${mm}:${ss}` : `${mm}:${ss}`;
+    return h4 ? `${h4}:${mm}:${ss}` : `${mm}:${ss}`;
   }
   function errorDetail(text) {
     try {
@@ -2955,7 +2955,7 @@ Rules:
     if (names2) lines.push(`Names (spell exactly like this): ${names2}`, "");
     if (history.length) {
       lines.push("Earlier in this conversation:");
-      for (const h3 of history.slice(-4)) lines.push(`Q: ${h3.q}`, `A: ${String(h3.a).slice(0, 600)}`);
+      for (const h4 of history.slice(-4)) lines.push(`Q: ${h4.q}`, `A: ${String(h4.a).slice(0, 600)}`);
       lines.push("");
     }
     lines.push("<excerpts>");
@@ -3291,15 +3291,262 @@ Rules:
     return out;
   }
 
+  // src/mdedit.js
+  var HEAD = /^(#{1,6})\s+(.*)$/;
+  var ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+  var COMMENT = /^\s*<!--.*-->\s*$/;
+  var isPipeRow = (l3) => /^\s*\|.*\|\s*$/.test(l3);
+  var isSep2 = (l3) => isPipeRow(l3) && /-/.test(l3) && /^[\s|:-]+$/.test(l3);
+  function splitRow2(line) {
+    const inner = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+    const cells = [];
+    let cur = "";
+    for (let i = 0; i < inner.length; i++) {
+      const c = inner[i];
+      if (c === "\\" && inner[i + 1] === "|") {
+        cur += "|";
+        i++;
+      } else if (c === "|") {
+        cells.push(cur);
+        cur = "";
+      } else cur += c;
+    }
+    cells.push(cur);
+    return cells.map((x2) => x2.trim().replace(/<br\s*\/?>/gi, "\n"));
+  }
+  var joinCell = (x2) => String(x2).replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>").trim();
+  var joinRow = (cells) => `| ${cells.map(joinCell).join(" | ")} |`;
+  function parseBlocks(md) {
+    const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+    const blocks = [];
+    for (let i = 0; i < lines.length; ) {
+      const l3 = lines[i];
+      if (!l3.trim()) {
+        i++;
+      } else if (COMMENT.test(l3)) {
+        blocks.push({ t: "raw", text: l3.trim() });
+        i++;
+      } else if (HEAD.test(l3)) {
+        const m = l3.match(HEAD);
+        blocks.push({ t: "h", level: m[1].length, text: m[2].trim() });
+        i++;
+      } else if (isPipeRow(l3)) {
+        const rows = [];
+        while (i < lines.length && isPipeRow(lines[i])) rows.push(lines[i++]);
+        const head = splitRow2(rows[0]);
+        const hasSep = rows[1] && isSep2(rows[1]);
+        blocks.push({ t: "table", head, sep: hasSep ? rows[1].trim() : "", rows: rows.slice(hasSep ? 2 : 1).map(splitRow2) });
+      } else if (ITEM.test(l3)) {
+        const items = [];
+        const ordered = /\d/.test(l3.match(ITEM)[2]);
+        while (i < lines.length && ITEM.test(lines[i])) {
+          const m = lines[i++].match(ITEM);
+          items.push({ indent: m[1].replace(/\t/g, "  ").length >= 2 ? 1 : 0, text: m[3].trim() });
+        }
+        blocks.push({ t: "list", ordered, items });
+      } else {
+        const para = [];
+        while (i < lines.length && lines[i].trim() && !COMMENT.test(lines[i]) && !HEAD.test(lines[i]) && !isPipeRow(lines[i]) && !ITEM.test(lines[i])) para.push(lines[i++].trim());
+        blocks.push({ t: "p", text: para.join("\n") });
+      }
+    }
+    return blocks;
+  }
+  function serializeBlocks(blocks) {
+    const out = [];
+    for (const b of blocks) {
+      if (b.t === "raw") out.push(b.text);
+      else if (b.t === "h") out.push(`${"#".repeat(b.level)} ${b.text}`.trimEnd());
+      else if (b.t === "p") out.push(b.text.split("\n").map((x2) => x2.trimEnd()).join("\n"));
+      else if (b.t === "list") {
+        let n = 0;
+        out.push(
+          b.items.map((it2) => `${it2.indent ? "  " : ""}${b.ordered ? `${it2.indent ? 1 : ++n}.` : "-"} ${it2.text}`.trimEnd()).join("\n")
+        );
+      } else if (b.t === "table") {
+        const cols = b.head.length;
+        const sep = b.sep && splitRow2(b.sep).length === cols ? b.sep : `|${Array(cols).fill("---").join("|")}|`;
+        out.push([joinRow(b.head), sep, ...b.rows.map((r) => joinRow(Array.from({ length: cols }, (_2, k2) => r[k2] ?? "")))].join("\n"));
+      }
+    }
+    return out.reduce((acc, part, i) => i === 0 ? part : `${acc}${out[i - 1].startsWith("<!--") ? "\n" : "\n\n"}${part}`, "") + "\n";
+  }
+  var isCounter = (head) => /^(sr\.?( no\.?)?|#|no\.?|sl\.?( no\.?)?)$/i.test((head[0] || "").trim());
+  function renumber(block) {
+    if (block.t === "table" && isCounter(block.head)) block.rows.forEach((r, i) => r[0] = String(i + 1));
+  }
+  function h3(tag, props = {}, ...kids) {
+    const e2 = document.createElement(tag);
+    for (const [k2, v] of Object.entries(props)) {
+      if (k2 === "class") e2.className = v;
+      else if (k2.startsWith("on")) e2[k2] = v;
+      else if (v !== false && v != null) e2.setAttribute(k2, v === true ? "" : v);
+    }
+    e2.append(...kids.flat().filter((x2) => x2 != null && x2 !== false));
+    return e2;
+  }
+  var grow = (ta) => {
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight + 2}px`;
+  };
+  var field = (value, label2, onInput, { multiline = true, cls = "" } = {}) => {
+    const el = multiline ? h3("textarea", { rows: 1, "aria-label": label2, class: `ed-f ${cls}` }) : h3("input", { type: "text", "aria-label": label2, class: `ed-f ${cls}` });
+    el.value = value;
+    el.addEventListener("input", () => {
+      if (multiline) grow(el);
+      onInput(el.value);
+    });
+    if (multiline) requestAnimationFrame(() => grow(el));
+    return el;
+  };
+  function mountEditor(root, md, onChange) {
+    let blocks = parseBlocks(md);
+    const history = [];
+    let focusNext = null;
+    const emit = () => onChange(serializeBlocks(blocks));
+    const snapshot = () => {
+      history.push(JSON.stringify(blocks));
+      if (history.length > 60) history.shift();
+    };
+    let typing = null;
+    const typed = () => {
+      if (!typing) snapshot();
+      clearTimeout(typing);
+      typing = setTimeout(() => typing = null, 900);
+      emit();
+    };
+    const change = (fn2, focus) => {
+      snapshot();
+      fn2();
+      focusNext = focus || null;
+      draw();
+      emit();
+    };
+    function drawList(b, bi) {
+      const ul2 = h3("div", { class: "ed-list", role: "list" });
+      b.items.forEach((it2, ii) => {
+        const f = field(it2.text, `Point ${ii + 1}`, (v) => {
+          it2.text = v;
+          typed();
+        });
+        f.dataset.key = `${bi}.${ii}`;
+        f.addEventListener("keydown", (e2) => {
+          if (e2.key === "Enter" && !e2.shiftKey) {
+            e2.preventDefault();
+            change(() => b.items.splice(ii + 1, 0, { indent: it2.indent, text: "" }), `${bi}.${ii + 1}`);
+          } else if (e2.key === "Backspace" && !f.value && b.items.length > 1) {
+            e2.preventDefault();
+            change(() => b.items.splice(ii, 1), `${bi}.${Math.max(0, ii - 1)}`);
+          }
+        });
+        ul2.append(
+          h3(
+            "div",
+            { class: `ed-item${it2.indent ? " sub" : ""}`, role: "listitem" },
+            h3("span", { class: "ed-bullet", "aria-hidden": "true" }, b.ordered ? `${ii + 1}.` : "\u2022"),
+            f,
+            h3("button", { type: "button", class: "ed-x", title: "Remove this point", "aria-label": `Remove point ${ii + 1}`, onclick: () => change(() => b.items.splice(ii, 1)) }, "\xD7")
+          )
+        );
+      });
+      return h3(
+        "div",
+        { class: "ed-block" },
+        ul2,
+        h3("button", { type: "button", class: "ed-add", onclick: () => change(() => b.items.push({ indent: 0, text: "" }), `${bi}.${b.items.length}`) }, "+ Add a point")
+      );
+    }
+    function drawTable(b, bi) {
+      const counter = isCounter(b.head);
+      const head = h3("tr", {}, ...b.head.map((t, ci) => h3("th", {}, field(t, `Column ${ci + 1} title`, (v) => {
+        b.head[ci] = v;
+        typed();
+      }, { multiline: false, cls: "ed-th" }))), h3("th", { class: "ed-gutter" }));
+      const body = b.rows.map(
+        (r, ri) => h3("tr", {}, ...b.head.map((_2, ci) => {
+          if (counter && ci === 0) return h3("td", { class: "ed-no" }, String(ri + 1));
+          const f = field(r[ci] ?? "", `${b.head[ci] || `Column ${ci + 1}`}, row ${ri + 1}`, (v) => {
+            r[ci] = v;
+            typed();
+          });
+          f.dataset.key = `${bi}.${ri}.${ci}`;
+          return h3("td", {}, f);
+        }), h3(
+          "td",
+          { class: "ed-gutter" },
+          h3("button", { type: "button", class: "ed-x", title: "Remove this row", "aria-label": `Remove row ${ri + 1}`, onclick: () => change(() => {
+            b.rows.splice(ri, 1);
+            renumber(b);
+          }) }, "\xD7")
+        ))
+      );
+      return h3(
+        "div",
+        { class: "ed-block" },
+        h3("div", { class: "ed-scroll" }, h3("table", { class: "ed-table" }, h3("thead", {}, head), h3("tbody", {}, ...body))),
+        h3("button", { type: "button", class: "ed-add", onclick: () => change(() => {
+          b.rows.push(Array(b.head.length).fill(""));
+          renumber(b);
+        }, `${bi}.${b.rows.length}.${counter ? 1 : 0}`) }, "+ Add a row")
+      );
+    }
+    function draw() {
+      root.replaceChildren();
+      blocks.forEach((b, bi) => {
+        if (b.t === "raw") return;
+        let el;
+        if (b.t === "h") {
+          const f = field(b.text, "Heading", (v) => {
+            b.text = v;
+            typed();
+          }, { multiline: false, cls: `ed-h ed-h${Math.min(b.level, 3)}` });
+          el = h3("div", { class: "ed-block ed-head" }, f);
+        } else if (b.t === "p") {
+          el = h3("div", { class: "ed-block" }, field(b.text, "Text", (v) => {
+            b.text = v;
+            typed();
+          }, { cls: "ed-p" }));
+        } else if (b.t === "list") el = drawList(b, bi);
+        else el = drawTable(b, bi);
+        if (b.t !== "h") el.append(h3("button", { type: "button", class: "ed-rm", onclick: () => change(() => blocks.splice(bi, 1)) }, b.t === "table" ? "Remove this table" : b.t === "list" ? "Remove this list" : "Remove this text"));
+        root.append(el);
+      });
+      root.append(h3("div", { class: "ed-foot" }, h3("button", { type: "button", class: "ed-add", onclick: () => change(() => blocks.push({ t: "h", level: 2, text: "New section" }, { t: "list", ordered: false, items: [{ indent: 0, text: "" }] }), "last") }, "+ Add a section")));
+      if (focusNext) {
+        const key2 = focusNext === "last" ? [...root.querySelectorAll(".ed-f")].at(-1) : root.querySelector(`[data-key="${focusNext}"]`);
+        key2?.focus();
+        focusNext = null;
+      }
+    }
+    draw();
+    return {
+      undo() {
+        const prev = history.pop();
+        if (!prev) return false;
+        blocks = JSON.parse(prev);
+        draw();
+        emit();
+        return true;
+      },
+      canUndo: () => history.length > 0,
+      // used when the text version was edited by hand
+      load(newMd) {
+        blocks = parseBlocks(newMd);
+        draw();
+      },
+      getMd: () => serializeBlocks(blocks)
+    };
+  }
+
   // src/modal.js
   function modal({ title = "", text = "", input = null, select = null, buttons = [{ label: "OK", value: "ok", primary: true }] } = {}) {
     return new Promise((resolve) => {
       const dlg = document.createElement("dialog");
       dlg.className = "dbmodal";
-      const h3 = document.createElement("div");
-      h3.style.cssText = "white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)";
-      h3.textContent = [title, text].filter(Boolean).join("\n\n");
-      dlg.append(h3);
+      const h4 = document.createElement("div");
+      h4.style.cssText = "white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)";
+      h4.textContent = [title, text].filter(Boolean).join("\n\n");
+      dlg.append(h4);
       let inp = null;
       let sel = null;
       if (input) {
@@ -3571,8 +3818,8 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
   // src/local.js
   function isLocalBase(base) {
     try {
-      const h3 = new URL(base).hostname;
-      return h3 === "localhost" || h3 === "127.0.0.1" || h3 === "[::1]" || h3.endsWith(".localhost");
+      const h4 = new URL(base).hostname;
+      return h4 === "localhost" || h4 === "127.0.0.1" || h4 === "[::1]" || h4.endsWith(".localhost");
     } catch {
       return false;
     }
@@ -4127,7 +4374,7 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
   var WEBAPP_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+\/|a\/[\w.-]+\/macros\/|macros\/)s\/[\w-]+\/exec(?:[?#]|$)/;
   var mailReady = (s) => WEBAPP_URL.test(String(s.emailWebhook || "").trim());
   function inlineStyles(html) {
-    const add = (tag, style) => (h3) => h3.replace(new RegExp(`<${tag}(?=[\\s>])(?![^>]*\\sstyle=)`, "g"), `<${tag} style="${style}"`);
+    const add = (tag, style) => (h4) => h4.replace(new RegExp(`<${tag}(?=[\\s>])(?![^>]*\\sstyle=)`, "g"), `<${tag} style="${style}"`);
     const th = "border:1px solid #d0d4da;padding:7px 10px;background:#f1f3f9;text-align:left";
     const td = "border:1px solid #d0d4da;padding:7px 10px;vertical-align:top";
     return [
@@ -5083,47 +5330,74 @@ ${meeting2.mom || ""}
       $2("pendingText").textContent = `${pending.length} audio piece${pending.length > 1 ? "s" : ""} (~${mins} min) still not transcribed. Last error: ${(lastError || pending[pending.length - 1].error).slice(0, 200)}`;
     }
   }
+  var editor = null;
+  var editing = false;
+  var editTab = "edit";
   var editTimer = null;
-  var paintPreview = () => {
-    const md = $2("mdEdit").value;
+  var currentMd = () => editTab === "text" ? $2("mdEdit").value : editor ? editor.getMd() : meeting.mom;
+  function paintPreview() {
+    const md = currentMd();
     $2("mdPreview").innerHTML = renderMinutesHtml(md, renderMd);
     if (!isAmnexMd(md)) decorateMinutes($2("mdPreview"));
-  };
+  }
   function saveEdit() {
     clearTimeout(editTimer);
     editTimer = null;
-    const mom = $2("mdEdit").value;
+    const mom = currentMd();
     if (mom === meeting.mom) return Promise.resolve();
     meeting.mom = mom;
     meeting.editedAt = Date.now();
     return patchMeeting2({ mom, editedAt: meeting.editedAt });
   }
-  $2("mdEdit").addEventListener("input", () => {
-    paintPreview();
+  var afterEdit = () => {
     clearTimeout(editTimer);
     editTimer = setTimeout(() => saveEdit().catch(() => {
     }), 700);
-  });
+    $2("edUndo").disabled = !editor?.canUndo();
+  };
+  function showEditTab(tab) {
+    const md = currentMd();
+    if (tab === "edit" && editTab === "text") editor.load($2("mdEdit").value);
+    editTab = tab;
+    if (tab === "text") $2("mdEdit").value = md;
+    if (tab === "preview") paintPreview();
+    $2("edBlocks").classList.toggle("hidden", tab !== "edit");
+    $2("mdPreview").classList.toggle("hidden", tab !== "preview");
+    $2("mdEdit").classList.toggle("hidden", tab !== "text");
+    $2("edUndo").classList.toggle("hidden", tab !== "edit");
+    for (const b of $2("edTabs").querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.v === tab));
+  }
+  for (const b of $2("edTabs").querySelectorAll("button")) b.onclick = () => showEditTab(b.dataset.v);
+  $2("edUndo").onclick = () => {
+    editor?.undo();
+    afterEdit();
+  };
+  $2("mdEdit").addEventListener("input", afterEdit);
   function setEditing(on) {
-    const was = !$2("mdEdit").classList.contains("hidden");
-    if (!on && was) {
+    if (on === editing) return;
+    if (!on) {
       saveEdit().catch(() => {
       });
+      editing = false;
+      $2("editor").classList.add("hidden");
+      $2("mom").classList.remove("hidden");
+      $2("edit").textContent = "Edit minutes";
+      $2("edit").classList.remove("primary");
       renderMom();
       renderChips();
       paintMailButton();
       if (meeting.editedAt) $2("mailStatus").textContent = "Saved. Press Email me, or open Share, to send the corrected minutes.";
+      return;
     }
-    $2("mdEdit").classList.toggle("hidden", !on);
-    $2("mdPreview").classList.toggle("hidden", !on);
-    $2("editHelp").classList.toggle("hidden", !on);
-    $2("mom").classList.toggle("hidden", on);
-    $2("edit").textContent = on ? "Done editing" : "Edit minutes";
-    $2("edit").classList.toggle("primary", on);
-    if (on && !was) {
-      $2("mdEdit").value = meeting.mom;
-      paintPreview();
-    }
+    editing = true;
+    editTab = "edit";
+    editor = mountEditor($2("edBlocks"), meeting.mom || "", afterEdit);
+    showEditTab("edit");
+    $2("editor").classList.remove("hidden");
+    $2("mom").classList.add("hidden");
+    $2("edit").textContent = "Done editing";
+    $2("edit").classList.add("primary");
+    $2("edUndo").disabled = true;
   }
   function paintMailButton() {
     $2("mail").textContent = !meeting.emailedAt ? "Email me" : meeting.editedAt > meeting.emailedAt ? "Email corrected minutes" : "Email again";
@@ -5159,7 +5433,7 @@ ${meeting2.mom || ""}
     });
     runner.abort(id);
   };
-  $2("edit").onclick = () => setEditing($2("mdEdit").classList.contains("hidden"));
+  $2("edit").onclick = () => setEditing(!editing);
   $2("print").onclick = () => {
     setEditing(false);
     window.print();
