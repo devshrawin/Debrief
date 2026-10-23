@@ -4,6 +4,19 @@ import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Opened inside the floating panel on a web page (src/panel.js), the popup is an iframe: it cannot close itself, so it asks
+// the panel, and it tells the panel when it is ready and how tall it is.
+const framed = window.top !== window;
+const tell = (m) => { if (framed) window.parent.postMessage({ debriefPanel: true, ...m }, '*'); };
+const closePanel = () => (framed ? tell({ type: 'close' }) : window.close());
+if (framed) {
+  tell({ type: 'ready' });
+  const size = () => tell({ type: 'size', h: Math.ceil(Math.max(document.body.scrollHeight, document.body.getBoundingClientRect().height)) });
+  new ResizeObserver(size).observe(document.body);
+  for (const ms of [150, 600, 1500]) setTimeout(size, ms); // content that arrives after the first paint
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') tell({ type: 'close' }); });
+}
 const send = (msg) => chrome.runtime.sendMessage({ target: 'bg', ...msg });
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
@@ -354,7 +367,7 @@ $('start').onclick = async () => {
 
 $('fullscreen').onclick = async () => {
   await send({ type: 'window-fullscreen' });
-  window.close();
+  closePanel();
 };
 
 $('pause').onclick = async () => {
@@ -367,7 +380,7 @@ $('pause').onclick = async () => {
 $('stop').onclick = async () => {
   $('stop').disabled = true;
   await send({ type: 'stop' });
-  window.close();
+  closePanel();
 };
 
 $('micToggle').onclick = () => {

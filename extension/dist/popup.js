@@ -337,6 +337,20 @@
 
   // src/popup.js
   var $ = (id) => document.getElementById(id);
+  var framed = window.top !== window;
+  var tell = (m) => {
+    if (framed) window.parent.postMessage({ debriefPanel: true, ...m }, "*");
+  };
+  var closePanel = () => framed ? tell({ type: "close" }) : window.close();
+  if (framed) {
+    tell({ type: "ready" });
+    const size = () => tell({ type: "size", h: Math.ceil(Math.max(document.body.scrollHeight, document.body.getBoundingClientRect().height)) });
+    new ResizeObserver(size).observe(document.body);
+    for (const ms of [150, 600, 1500]) setTimeout(size, ms);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") tell({ type: "close" });
+    });
+  }
   var send = (msg) => chrome.runtime.sendMessage({ target: "bg", ...msg });
   var show = (id, on) => $(id).classList.toggle("hidden", !on);
   var levelWord = (v) => v == null ? "Off" : v < 3e-3 ? "Silent" : v < 0.012 ? "Quiet" : "Good";
@@ -660,7 +674,7 @@
   };
   $("fullscreen").onclick = async () => {
     await send({ type: "window-fullscreen" });
-    window.close();
+    closePanel();
   };
   $("pause").onclick = async () => {
     $("pause").disabled = true;
@@ -671,7 +685,7 @@
   $("stop").onclick = async () => {
     $("stop").disabled = true;
     await send({ type: "stop" });
-    window.close();
+    closePanel();
   };
   $("micToggle").onclick = () => {
     const on = $("micToggle").getAttribute("aria-checked") !== "true";

@@ -665,3 +665,8 @@ input[type=color] { width: 72px; min-height: 36px; padding: 2px 4px; cursor: poi
 .panel-glass { border-radius: var(--r-lg); background: var(--mat-thin); -webkit-backdrop-filter: var(--blur-thin); backdrop-filter: var(--blur-thin); box-shadow: var(--edge), var(--shadow-2); }
 .capsule { border-radius: var(--r-pill); background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3); }
 .metal-badge-slot { display: inline-flex; }
+
+/* ---------- 7. Inside the floating panel (src/panel.js): the panel supplies the blur and the tint, the page shows through ---------- */
+html.in-panel, html.in-panel body { background: transparent !important; }
+html.in-panel .fx-bg, html.in-panel body::before { display: none !important; }
+html.in-panel body { max-height: none; overflow-y: auto; }
