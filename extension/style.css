@@ -654,7 +654,8 @@ button.sw[aria-checked="true"]::after, .sw:not(input)[aria-checked="true"]::afte
 input[type=color] { width: 72px; min-height: 36px; padding: 2px 4px; cursor: pointer; }
 
 /* ---------- 6. Shared layout pieces (one place, every page) ---------- */
-#modeSeg, #tabs.tabs { display: flex; width: 100%; }
+#modeSeg { display: flex; width: 100%; }
+#tabs.tabs { display: flex; width: auto; }
 #modeSeg > button { flex: 1; white-space: nowrap; padding-inline: 8px; }
 .icon-btn { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--fill-2); color: var(--label-2); text-decoration: none; flex: none; box-shadow: inset 0 0 0 1px var(--separator); }
 .icon-btn:hover { background: var(--fill); color: var(--label); }
