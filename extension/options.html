@@ -137,10 +137,13 @@
     .usage-scroll th, .usage-scroll td { white-space: normal; padding-inline: 8px; }
     .usage-scroll table { min-width: 0; width: 100%; }
     #usageTable { min-width: 0; }
-    #usageTable th { white-space: normal; font-size: 12.5px; vertical-align: bottom; text-align: left; }
+    #usageTable th { white-space: normal; font-size: 12px; vertical-align: bottom; text-align: left; }
     #usageTable td { vertical-align: top; }
+    #usageTable th, #usageTable td { padding-left: 6px; padding-right: 6px; }
+    #usageTable th:first-child, #usageTable td:first-child { min-width: 150px; }
+    #usageTable td:first-child .hint, #usageTable td:first-child small, #usageTable td:first-child code { white-space: nowrap; font-size: 12px; }
     #usageTable th:first-child, #usageTable td:first-child { padding-left: 22px; }
-    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 150px; }
+    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 120px; }
     #usageTable .svc { font-weight: 700; text-transform: capitalize; }
     #usageTable .hint { margin: 0; }
     #usageTable .fail { color: var(--amber-ink); }
