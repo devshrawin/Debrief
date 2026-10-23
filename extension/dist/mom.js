@@ -4662,9 +4662,21 @@ ${meeting2.mom || ""}
     $2("chips").replaceChildren(...list);
   }
   var playing = null;
+  function whyNoVoices(m, s) {
+    if (!s.voiceLearn) return 'No voices to name: "Learn voices on its own" is off, so Debrief did not keep any voices or audio clips from this meeting. Switch it on in Settings \u2192 Voices (with "Keep short samples of voices"); it works from the next meeting.';
+    const rep = m.voiceLearn;
+    if (!rep) return "No voices to name: voice learning did not run for this meeting (it was switched on after it ended, or the recording stopped early).";
+    if (!(m.voiceSegs || []).length) return "No voices to name: no speech was fingerprinted. Voices come from the audio of the meeting tab, so this happens when only your own microphone was recorded or the model could not start.";
+    const skipped = (rep.skipped || []).map((x2) => x2.why).filter(Boolean);
+    if (skipped.length) return `No new voices to name: ${skipped[0]}.`;
+    return "No new voices to name: everyone heard sounded like a voice you already have, or no one spoke clearly for long enough (about 15 seconds each).";
+  }
   async function renderNameBox() {
     const here = (settings.voices || []).filter((v) => v.auto && isAnon(v) && (v.learnedFrom || []).includes(meeting.id));
     $2("nameBox").classList.toggle("hidden", !here.length);
+    const why = here.length || !meeting.endedAt ? "" : whyNoVoices(meeting, settings);
+    $2("nameWhy").textContent = why;
+    $2("nameWhy").classList.toggle("hidden", !why);
     if (!here.length) return;
     const lines = labeledLines(true) || [];
     const clips = await Promise.all(here.map((v) => hasSample(v.id).catch(() => false)));

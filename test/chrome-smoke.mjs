@@ -516,6 +516,8 @@ try {
   await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguages: [], dictionary: '' } }))`);
   const qx = await popup.evaluate(`(async () => { document.getElementById('quotaWarn').classList.remove('hidden'); document.getElementById('quotaWarnX').click(); await new Promise((r) => setTimeout(r, 200)); const r = { hidden: document.getElementById('quotaWarn').classList.contains('hidden'), saved: (await chrome.storage.local.get('quotaWarnHidden')).quotaWarnHidden }; await chrome.storage.local.remove('quotaWarnHidden'); return r; })()`);
   check('the quota warning has a close button that hides it and remembers', qx.hidden && qx.saved === true, JSON.stringify(qx));
+  const why = await mom.evaluate(`({ text: document.getElementById('nameWhy').textContent, shown: !document.getElementById('nameWhy').classList.contains('hidden'), box: document.getElementById('nameBox').classList.contains('hidden') })`);
+  check('a meeting with no learned voices says why there is nothing to play', why.shown && why.box && /Learn voices on its own/.test(why.text), JSON.stringify(why));
   check('popup links to the tour', await popup.evaluate(`!!document.getElementById('openTour') && !!document.getElementById('openTour1')`));
 
   // The amber "a call is on" dot comes from the page script on any supported site.
