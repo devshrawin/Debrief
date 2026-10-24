@@ -59,7 +59,7 @@ No. All code is in the package. There is no `eval`, and no scripts, fonts or sty
 `PRIVACY.md` in this repository, as a public page: `https://github.com/devshrawin/Debrief/blob/main/PRIVACY.md` (it exists on `main` once the `redesign` branch is merged; until then use the `redesign` branch link).
 
 ## Pre-flight checklist (do in this order)
-1. Developer Dashboard: one-time fee paid, **trader declaration** made, contact email verified.
+1. Developer Dashboard: one-time fee paid, trader declaration = **non-trader** (free personal project; no contact details are shown on the listing), contact email verified. If Debrief ever becomes a paid or company product, change this to trader first.
 2. `npm test` and the three Chrome tests pass; bump the version (docs/VERSIONING.md) and add a CHANGELOG line.
 3. `npm run pack` -> `release/<date>/Debrief-store-v<version>.zip` (no dev `key`). Upload it in the dashboard (Package tab).
 4. Store listing tab: name, short and detailed description above, category *Productivity*, language English, icon 128, screenshots `docs/img/store-1..4` (1280x800), optional small promo tile 440x280.
