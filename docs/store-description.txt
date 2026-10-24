@@ -1,0 +1,28 @@
+Debrief turns an online meeting into clear minutes while the call is still fresh.
+
+Record the meeting tab in Google Meet, Zoom, Microsoft Teams, Webex and other browser meeting apps with one click or Alt+Shift+M. When the call ends, Debrief writes the minutes: a summary, discussion, decisions, action items with owners and due dates, and who was there.
+
+WHAT IT DOES
+• Records the audio of the meeting tab you choose, and your own microphone if you allow it.
+• Transcribes English, Hindi, Malayalam and mixed speech such as Hinglish.
+• Writes the minutes in the background, so you can close the tab and carry on.
+• Lets you read, edit, copy, download as Markdown or Word, print to PDF, email them to yourself, or share them with colleagues.
+• Ask a question about one meeting, or across all your past meetings. Every answer shows which meeting it came from.
+• Optional: name speakers by voice. This runs on your computer.
+• Started a recording by mistake? Discard it in one tap and nothing is kept.
+• A floating glass panel opens over your page, in light or dark, with calm motion you can switch off.
+
+YOUR DATA STAYS YOURS
+Debrief has no server of its own. Your API keys stay in your browser. Audio and text go directly from your browser to the service you pick (Google Gemini, Sarvam, Deepgram, Anthropic Claude, an OpenAI-compatible service, or a model running on your own computer), under your own account. Nothing goes anywhere else, and there is no advertising or tracking. Voice fingerprints never leave your device.
+
+GETTING STARTED
+A free Google Gemini key is enough. The set-up tour takes about three minutes and tests each step. Debrief tells you plainly what each key is used for.
+
+PLEASE NOTE
+• Tell people before you record them. The rules on recording differ by country and workplace, and that responsibility is yours.
+• Google's free Gemini tier may use submitted content to improve Google's products. For confidential meetings use a paid key or a local model.
+• Speaker names, captions and attendance come from Google Meet only. On other apps Debrief records the audio.
+
+Debrief is an independent project. It is not affiliated with or endorsed by Google, Zoom or Microsoft. Google Meet, Zoom and Microsoft Teams are trademarks of their owners.
+
+Privacy policy: https://github.com/devshrawin/Debrief/blob/main/PRIVACY.md
