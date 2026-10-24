@@ -20,6 +20,8 @@ You choose the services that do the work: Google Gemini (a free key is enough), 
 
 Please tell people before you record them.
 
+Debrief is an independent project. It is not affiliated with or endorsed by Google, Zoom or Microsoft; Google Meet, Zoom and Microsoft Teams are trademarks of their owners.
+
 ## Single purpose
 Debrief records the audio of a meeting tab the user chooses and turns it into a transcript and minutes of meeting.
 
