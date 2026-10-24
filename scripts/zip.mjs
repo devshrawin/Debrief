@@ -1,6 +1,6 @@
 // Everything goes to release/<YYYY-MM-DD>/ (today's date), one folder per day. See docs/VERSIONING.md.
 // npm run share    -> release/<date>/Debrief-v<version>.zip   (the file to hand to someone: extension + INSTALL.txt, nothing else)
-// npm run pack     -> release/Debrief-Pro-v<version>.zip   (the extension folder, built first, manifest at the root,
+// npm run pack     -> release/<date>/Debrief-store-v<version>.zip   (the extension folder, built first, manifest at the root,
 //                     with the dev-only "key" field removed: the Web Store assigns the extension its own ID)
 // npm run src-zip  -> release/Debrief-Pro-v<version>-source.zip   (the source, without node_modules, release, .git, extension/dist)
 import { execFileSync } from 'node:child_process';
@@ -65,7 +65,7 @@ function zip(out, cwd, excludes = []) {
 
 if (mode === 'pack') {
   execFileSync(process.execPath, [path.join(root, 'build.mjs')], { cwd: root, stdio: 'inherit' });
-  const out = path.join(outDir, `Debrief-Pro-v${version}.zip`);
+  const out = path.join(outDir, `Debrief-store-v${version}.zip`);
   const stage = path.join(root, 'release', '.stage-store');
   fs.rmSync(stage, { recursive: true, force: true });
   fs.cpSync(path.join(root, 'extension'), stage, { recursive: true });

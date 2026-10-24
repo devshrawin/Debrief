@@ -32,12 +32,13 @@ Debrief records the audio of a meeting tab the user chooses and turns it into a 
 | `storage` | Saves settings, the user's own API keys and meeting metadata locally. |
 | `unlimitedStorage` | Transcripts, short audio pieces waiting to be retried, and voice fingerprints for long meetings can exceed the default quota. All of it stays on the device. |
 | `activeTab` | Identifies the current tab when the user clicks the toolbar button, so that tab can be recorded. |
-| `scripting` | Injects the small on-page recording pill and the mute or caption detector into a meeting tab, when the user enables other meeting sites. |
+| `scripting` | Injects the small on-page recording pill and the mute or caption detector into a meeting tab, and opens the Debrief panel over the current page when the user clicks the toolbar button. |
 | `notifications` | Tells the user when recording stops and when the minutes are ready or emailed. |
 | Host: `meet.google.com` | Reads the call's mute button, people list and captions so the transcript can name speakers and pause the user's mic while muted. |
 | Hosts: `api.sarvam.ai`, `api.deepgram.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.openai.com`, `api.groq.com` | Sends audio or text **only** to the speech-to-text or minutes provider the user selected, using the user's own key. |
 | Hosts: `script.google.com`, `script.googleusercontent.com` | Delivers the minutes by email through an Apps Script web app the user deploys in their own Google account. |
 | Optional hosts: `https://*/*`, `http://localhost/*`, `http://127.0.0.1/*` | Asked for at run time only, when the user adds another meeting site, a custom OpenAI-compatible endpoint, or a local model (Whisper or Ollama on this computer). |
+| `web_accessible_resources`: `popup.html` on `<all_urls>` | The Debrief panel is the popup page shown in a frame on top of the current page, so the page shows through its glass background. Only the user's own click on the toolbar button opens it. |
 | Content scripts on Zoom, Teams, Webex, Whereby, Jitsi, 8x8, GoTo, BlueJeans, Chime, Zoho Meeting, Skype | Shows the recording pill and detects when a call starts or ends, so recording can stop automatically. No page content is sent anywhere. |
 
 ## Remote code
@@ -53,6 +54,19 @@ No. All code is in the package. There is no `eval`, and no scripts, fonts or sty
 
 ## Privacy policy wording (to host at the listing's privacy URL)
 > Debrief runs entirely in your browser. Audio and text go directly from your browser to the speech and AI services you select, under your own account and key. We operate no server and receive none of your data. Voice fingerprints and any optional voice clips stay on your device. You can delete any meeting, or all voice data, at any time in the extension.
+
+## Privacy policy URL
+`PRIVACY.md` in this repository, as a public page: `https://github.com/devshrawin/Debrief/blob/main/PRIVACY.md` (it exists on `main` once the `redesign` branch is merged; until then use the `redesign` branch link).
+
+## Pre-flight checklist (do in this order)
+1. Developer Dashboard: one-time fee paid, **trader declaration** made, contact email verified.
+2. `npm test` and the three Chrome tests pass; bump the version (docs/VERSIONING.md) and add a CHANGELOG line.
+3. `npm run pack` -> `release/<date>/Debrief-store-v<version>.zip` (no dev `key`). Upload it in the dashboard (Package tab).
+4. Store listing tab: name, short and detailed description above, category *Productivity*, language English, icon 128, screenshots `docs/img/store-1..4` (1280x800), optional small promo tile 440x280.
+5. Privacy tab: single purpose, each permission justification above, remote code = No, data-use answers above, privacy policy URL.
+6. Distribution tab: visibility **Unlisted** first (share the link), regions all or chosen, pricing free.
+7. Submit for review. Sensitive permissions (tab capture, access to all sites) mean a longer first review; do not change the package while it is pending.
+8. After approval: the store assigns the extension ID. The local helpers (`local/whisper_server.py` CORS regex, `OLLAMA_ORIGINS` in `local/start-local.ps1`) only know the dev ID; update both to the store ID, or upload the public key in the Package tab to keep the dev ID.
 
 ## Assets
 - Icon 128×128: `extension/icons/icon128.png`
