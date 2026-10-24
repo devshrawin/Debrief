@@ -1,0 +1,38 @@
+SINGLE PURPOSE
+Debrief records the audio of a meeting tab the user chooses and turns it into a transcript and minutes of meeting.
+
+PERMISSION JUSTIFICATIONS
+tabCapture: Records the audio of the meeting tab the user asks to record. Nothing is captured until the user clicks Start.
+offscreen: Manifest V3 service workers cannot hold a media stream, so recording and audio encoding run in an offscreen document.
+storage: Saves the user's settings, their own API keys and meeting records on their computer.
+unlimitedStorage: Transcripts, short audio pieces waiting to be retried, and voice fingerprints for long meetings can exceed the default quota. All of it stays on the device.
+activeTab: Identifies the current tab when the user clicks the toolbar button, so that tab can be recorded and the Debrief panel can be shown on it.
+scripting: Shows the Debrief panel over the current page when the user clicks the toolbar button, and injects the small on-page recording pill and mute detector into a meeting tab.
+notifications: Tells the user when recording stops and when the minutes are ready or emailed.
+
+HOST PERMISSIONS
+meet.google.com and the other meeting sites in content scripts (Zoom, Teams, Webex, Whereby, Jitsi, 8x8, GoTo, BlueJeans, Chime, Zoho Meeting, Skype): show the recording pill and detect when a call starts, ends or is muted, so recording can pause or stop. On Google Meet the participants list and captions are read to name speakers and record attendance. No page content is sent anywhere except the audio and transcript described below.
+api.sarvam.ai, api.deepgram.com, api.anthropic.com, generativelanguage.googleapis.com, api.openai.com, api.groq.com: audio or text is sent only to the speech or minutes service the user selected, with the user's own key.
+script.google.com, script.googleusercontent.com: delivers minutes by email through an Apps Script web app the user deploys in their own Google account.
+Optional (asked at run time): https://*/*, http://localhost/*, http://127.0.0.1/*: only when the user adds another meeting site, a custom OpenAI-compatible endpoint, or a local model (Whisper or Ollama on their computer).
+
+REMOTE CODE
+No, I am not using remote code. All code is in the package. There is no eval, and no scripts, fonts or styles are loaded from the network.
+
+DATA USAGE: tick these
+[x] Personally identifiable information (names and emails of meeting participants, from the meeting page)
+[x] Authentication information (the user's own API keys, stored on their device)
+[x] Personal communications (audio and transcripts of the meetings the user records)
+[x] Website content (captions and participant list read from the meeting page)
+[ ] Health, Financial and payment, Location, Web history, User activity: leave unticked
+
+CERTIFY (tick all three)
+[x] I do not sell or transfer user data to third parties, outside of the approved use cases
+[x] I do not use or transfer user data for purposes unrelated to the item's single purpose
+[x] I do not use or transfer user data to determine creditworthiness or for lending purposes
+
+PRIVACY POLICY URL
+https://github.com/devshrawin/Debrief/blob/main/PRIVACY.md  (works once redesign is merged into main)
+
+SETTINGS PAGE (account level)
+Enter a contact email and press Verify; open the mail Google sends and click the link.
