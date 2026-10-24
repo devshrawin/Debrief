@@ -290,7 +290,7 @@ try {
     fs.writeFileSync(`${process.env.SHOTS}/usage.png`, Buffer.from((await send('Page.captureScreenshot', {}, opts.sessionId)).data, 'base64'));
   }
   check('settings has dictionary, sharing, local presets, other sites, minutes mode', proOpts.dict && proOpts.share && proOpts.local && proOpts.sites && proOpts.mode);
-  check('usage table has a cost-if-paid column and total', proOpts.rows.length > 0 && /if this were paid: about ₹[0-9.,]+/.test(proOpts.totals), proOpts.totals);
+  check('usage table has a cost-if-paid column and total', proOpts.rows.length > 0 && /if this were paid: about ₹[0-9.,]+/i.test(proOpts.totals), proOpts.totals);
 
   // ---- Pro: naming this meeting's voices on the minutes page ----
   const named = await opts.evaluate(`(async () => {

@@ -165,6 +165,8 @@
 
   // src/store.js
   var DEFAULTS = {
+    noticeAck: false,
+    // the person has confirmed once that they will tell others on the call they are recording
     myName: "",
     captureMic: true,
     meetingLanguages: [],
@@ -332,6 +334,11 @@
     const mm = String(m).padStart(2, "0");
     const ss = String(s).padStart(2, "0");
     return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+  async function setSetting(patch) {
+    const { settings } = await chrome.storage.local.get("settings");
+    const { learnedNames, voices, ...clean } = patch;
+    await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
   }
   var nameQueue = Promise.resolve();
 
@@ -648,7 +655,7 @@
     $("modeOnline").setAttribute("aria-checked", String(!room));
     $("modeRoom").setAttribute("aria-checked", String(room));
     $("modeHint").textContent = modeHint(tabUrl, room, chosenRoom !== null && chosenRoom !== !isMeetingUrl(tabUrl));
-    $("startLabel").textContent = room ? "Start recording the room" : "Start recording this tab";
+    if ($("start").dataset.notice !== "1") $("startLabel").textContent = room ? "Start recording the room" : "Start recording this tab";
   }
   for (const [id, value] of [["modeOnline", false], ["modeRoom", true]]) {
     $(id).onclick = () => {
@@ -656,7 +663,21 @@
       paintMode();
     };
   }
+  var noticeAck = null;
   $("start").onclick = async () => {
+    if (noticeAck === null) noticeAck = !!(await getSettings()).noticeAck;
+    if (!noticeAck) {
+      const label = $("startLabel");
+      if ($("start").dataset.notice !== "1") {
+        $("start").dataset.notice = "1";
+        label.textContent = "I will tell everyone I am recording. Start";
+        $("shortcutHint").textContent = "Recording people without telling them can be illegal where you work or live. Debrief records only the tab you pick, and keeps it on your computer and with the services you chose.";
+        return;
+      }
+      noticeAck = true;
+      setSetting({ noticeAck: true }).catch(() => {
+      });
+    }
     $("start").disabled = true;
     try {
       show("error", false);

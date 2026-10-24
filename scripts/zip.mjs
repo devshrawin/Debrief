@@ -63,8 +63,11 @@ function zip(out, cwd, excludes = []) {
   fs.writeFileSync(out, Buffer.concat([...chunks, cenBuf, end]));
 }
 
-if (mode === 'pack') {
+if (mode === 'pack' || mode === 'share') {
   execFileSync(process.execPath, [path.join(root, 'build.mjs')], { cwd: root, stdio: 'inherit' });
+  execFileSync(process.execPath, [path.join(root, 'scripts', 'store-check.mjs')], { cwd: root, stdio: 'inherit' }); // stops here if anything would get the package flagged
+}
+if (mode === 'pack') {
   const out = path.join(outDir, `Debrief-store-v${version}.zip`);
   const stage = path.join(root, 'release', '.stage-store');
   fs.rmSync(stage, { recursive: true, force: true });
@@ -75,7 +78,6 @@ if (mode === 'pack') {
   fs.rmSync(stage, { recursive: true, force: true });
   console.log(`wrote ${out} (${(fs.statSync(out).size / 1048576).toFixed(1)} MB)`);
 } else if (mode === 'share') {
-  execFileSync(process.execPath, [path.join(root, 'build.mjs')], { cwd: root, stdio: 'inherit' });
   const out = path.join(outDir, `Debrief-v${version}.zip`);
   const stage = path.join(root, 'release', '.stage-share');
   fs.rmSync(stage, { recursive: true, force: true });

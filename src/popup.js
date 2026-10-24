@@ -1,7 +1,7 @@
 import { nearLimit, parseLimits, quotaCheck } from './usage.js';
 import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
-import { getSettings, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -339,7 +339,7 @@ function paintMode() {
   $('modeOnline').setAttribute('aria-checked', String(!room));
   $('modeRoom').setAttribute('aria-checked', String(room));
   $('modeHint').textContent = modeHint(tabUrl, room, chosenRoom !== null && chosenRoom !== !isMeetingUrl(tabUrl));
-  $('startLabel').textContent = room ? 'Start recording the room' : 'Start recording this tab';
+  if ($('start').dataset.notice !== '1') $('startLabel').textContent = room ? 'Start recording the room' : 'Start recording this tab';
 }
 for (const [id, value] of [['modeOnline', false], ['modeRoom', true]]) {
   $(id).onclick = () => {
@@ -348,7 +348,21 @@ for (const [id, value] of [['modeOnline', false], ['modeRoom', true]]) {
   };
 }
 
+// The first time ever, recording asks for one more tap: the person confirms they will tell the others on the call.
+let noticeAck = null;
 $('start').onclick = async () => {
+  if (noticeAck === null) noticeAck = !!(await getSettings()).noticeAck;
+  if (!noticeAck) {
+    const label = $('startLabel');
+    if ($('start').dataset.notice !== '1') {
+      $('start').dataset.notice = '1';
+      label.textContent = 'I will tell everyone I am recording. Start';
+      $('shortcutHint').textContent = 'Recording people without telling them can be illegal where you work or live. Debrief records only the tab you pick, and keeps it on your computer and with the services you chose.';
+      return;
+    }
+    noticeAck = true;
+    setSetting({ noticeAck: true }).catch(() => {});
+  }
   $('start').disabled = true;
   try {
     show('error', false);

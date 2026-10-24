@@ -3,6 +3,7 @@ import { deleteAllPending } from './audiostore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
 export const DEFAULTS = {
+  noticeAck: false, // the person has confirmed once that they will tell others on the call they are recording
   myName: '',
   captureMic: true,
   meetingLanguages: [], // languages to expect (codes from languages.js); empty = automatic

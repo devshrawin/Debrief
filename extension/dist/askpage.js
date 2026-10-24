@@ -1,6 +1,8 @@
 (() => {
   // src/store.js
   var DEFAULTS = {
+    noticeAck: false,
+    // the person has confirmed once that they will tell others on the call they are recording
     myName: "",
     captureMic: true,
     meetingLanguages: [],

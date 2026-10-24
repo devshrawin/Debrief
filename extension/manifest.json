@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Debrief – Meeting Minutes",
   "version": "0.2.0",
-  "description": "Records an online meeting tab (Google Meet, Zoom, Teams and more), transcribes Hindi/English/Malayalam, and writes Minutes of Meeting.",
+  "description": "Records a meeting tab (Meet, Zoom, Teams and more), transcribes Hindi, English and Malayalam, and writes the minutes.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxF0ss4fQ/HOIKvnLFudxEkEGrD4yPsgMtfqoJChOg65lvF6LPuGzTd/v065ceUGLfE3R4WHTZDCBJ7Rc2cSncgHlsl909hHs8918pWN6jO4sVXJ24HIwggFmwyqfyPEaSzBMMIQtM358FY43W9my72uSDP6wST6tAE06oGNUeVkeNC4EWHorLzARI6cNThLy9+d+G+7Uc/nv4fDZp09J5ybJhmYOrCq8Cda77PBcn7VxZiRnS8i9iRlXb0n8eXzdQdpJ92MApvCmmp/CQzF6e/NFAuZCqstPgup5CJVRDrQfG+dSg2WH7tSsX3eQwSFqfS0VYQT6dj/+pzTiEhcAaQIDAQAB",
   "minimum_chrome_version": "116",
   "icons": {
@@ -110,7 +110,8 @@
       ],
       "matches": [
         "<all_urls>"
-      ]
+      ],
+      "use_dynamic_url": true
     }
   ],
   "options_page": "options.html",

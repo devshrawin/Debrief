@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node build.mjs && node scripts/build-fx.mjs",
     "watch": "node build.mjs --watch",
+    "store-check": "node scripts/store-check.mjs",
     "share": "node scripts/zip.mjs share",
     "pack": "node scripts/zip.mjs pack",
     "src-zip": "node scripts/zip.mjs src",
