@@ -114,6 +114,22 @@ try {
   const t1 = await pg.evaluate(`({ rows: document.querySelectorAll('#dirTable .dir-body .dir-row').length, text: document.getElementById('peopleDirectory').value, bar: document.getElementById('savebar').className })`);
   check('editing a cell writes the text, Enter adds a person, and Settings sees unsaved changes', t1.rows === 3 && /^Suresh Kumar \| Sri\./.test(t1.text) && /dirty/.test(t1.bar), JSON.stringify(t1));
   if (process.env.SHOT2) { const r = await send('Page.captureScreenshot', { format: 'png' }, pg.sessionId); writeFileSync(process.env.SHOT2, Buffer.from(r.data, 'base64')); }
+
+  // ---- Settings > Email: the recipients table sits in the same step as the script, and the allow-list follows it
+  await pg.evaluate(`chrome.storage.local.set({ settings: { voiceOn: true, shareList: 'priya@company.com', shareGroups: 'Cadence Call | amal@company.com' } })`);
+  await send('Page.reload', {}, pg.sessionId);
+  await sleep(1500);
+  await pg.evaluate(`document.querySelector('#nav [data-tab="email"]').click()`);
+  await sleep(600);
+  const e0 = await pg.evaluate(`({ rows: document.querySelectorAll('#recTable .rec-body .rec-row').length, inConnectCard: !!document.querySelector('#page-email section[aria-labelledby="hConn"] #recTable'), noSeparateCard: !document.querySelector('#page-email section[aria-labelledby="hShare"]'), copy: !!document.querySelector('#page-email section[aria-labelledby="hConn"] #copyScriptAllow') })`);
+  check('Email: the recipients table and the copy-script button are in the same card as the script setup', e0.rows === 2 && e0.inConnectCard && e0.noSeparateCard && e0.copy, JSON.stringify(e0));
+  await pg.evaluate(`(() => { const r = document.querySelector('#recTable .rec-body .rec-row:last-child .rec-in'); r.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
+  await sleep(200);
+  await pg.evaluate(`(() => { const i = document.querySelector('#recTable .rec-body .rec-row:last-child .rec-in'); i.value = 'new.person@company.com'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await sleep(300);
+  const e1 = await pg.evaluate(`({ rows: document.querySelectorAll('#recTable .rec-body .rec-row').length, groups: document.getElementById('shareGroups').value, list: document.getElementById('shareList').value, allow: document.getElementById('allowLines').textContent, bar: document.getElementById('savebar').className })`);
+  check('Email: adding a person updates the settings, the allow-list lines and the unsaved-changes bar', e1.rows === 3 && /new.person@company.com/.test(e1.groups + e1.list) && /new.person@company.com/.test(e1.allow) && /dirty/.test(e1.bar), JSON.stringify(e1));
+  if (process.env.SHOT3) { await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1400, deviceScaleFactor: 1, mobile: false }, pg.sessionId); await sleep(500); await pg.evaluate(`document.getElementById('hShare').scrollIntoView()`); const r = await send('Page.captureScreenshot', { format: 'png' }, pg.sessionId); writeFileSync(process.env.SHOT3, Buffer.from(r.data, 'base64')); }
 } catch (e) {
   console.log('FAIL', e.stack || e);
   failed = true;

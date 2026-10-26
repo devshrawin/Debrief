@@ -209,6 +209,19 @@
     .dir-foot { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
     .dir-foot .hint { margin: 0; }
     @media (max-width: 900px) { .dir-row { grid-template-columns: 1fr 1fr; } .dir-head { display: none; } .c-chair, .c-x { justify-self: start; } }
+    /* one step: connect the script, then say who else gets the minutes */
+    .subsec { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--separator); display: flex; flex-direction: column; gap: 12px; }
+    .sub-h { margin: 0; font: var(--t-headline); font-size: 15px; color: var(--label); }
+    .rec-table { display: flex; flex-direction: column; gap: 6px; }
+    .rec-row { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(160px, 1fr) 32px; gap: 8px; align-items: center; }
+    .rec-row.one { grid-template-columns: 1fr 32px; }
+    .rec-head { font: var(--t-caption); font-weight: 600; color: var(--label-2); padding: 0 2px; }
+    .rec-in { width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; }
+    .rec-in[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--rec); }
+    .rec-x { width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--label-2); font-size: 18px; line-height: 1; }
+    .rec-x:hover { background: var(--fill); color: var(--rec-ink); }
+    .rec-foot { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .rec-foot .hint { margin: 0; }
     .ulist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
     .ulist li { padding: 14px; border-radius: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
     .ulist .ut { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -601,7 +614,7 @@
       <header><h1>Email</h1><p class="lede">Get the minutes in your inbox the moment they are written. The email is sent from your own Google account through a small script you control. No Debrief server is involved.</p></header>
 
       <section class="card" aria-labelledby="hConn">
-        <h2 id="hConn" class="lbl">Connect</h2>
+        <h2 id="hConn" class="lbl">Connect and send</h2>
         <details class="guide">
           <summary>How to set it up (2 minutes)</summary>
           <ol class="steps">
@@ -625,26 +638,13 @@
           <p class="hint">The script only ever sends to your own address, plus any you list in its <code>ALLOWED</code> setting.</p>
         </div>
         <div class="btnrow"><button type="button" id="testMail" class="btn">Send test email</button><span id="mailMsg" class="status" role="status"></span></div>
-      </section>
-
-      <section class="card" aria-labelledby="hDeliv">
-        <h2 id="hDeliv" class="lbl">Delivery</h2>
-        <div class="trow"><div class="tx"><label for="emailAuto">Send automatically</label><p class="hint" id="emailAuto-d">Email the minutes as soon as they are written. You can always send again from the minutes page.</p></div><input type="checkbox" class="sw" role="switch" id="emailAuto" aria-describedby="emailAuto-d"></div>
-      </section>
-
-      <section class="card" aria-labelledby="hShare">
-        <h2 id="hShare" class="lbl">Sharing with others</h2>
-        <p class="hint">You always get the email. People listed here can get a copy as well: after you review the minutes and press <b>Share</b> on the minutes page, or automatically.</p>
-        <div class="rows">
-          <div class="fld">
-            <label for="shareList">Default people</label>
-            <textarea id="shareList" class="mono" style="min-height:60px" placeholder="priya@company.com, ravi@company.com"></textarea>
-          </div>
-          <div class="fld">
-            <label for="shareGroups">Recurring meetings</label>
-            <textarea id="shareGroups" class="mono" style="min-height:70px" placeholder="Cadence Call | priya@company.com, ravi@company.com&#10;Data Discussion | amal@company.com"></textarea>
-            <p class="hint">One per line: words from the meeting title, then who gets it. A matching meeting uses its own list instead of the default.</p>
-          </div>
+        <div class="subsec" id="shareSec">
+          <h3 id="hShare" class="sub-h">Who else gets a copy</h3>
+          <p class="hint">You always get the email. People listed here can get a copy as well: after you check the minutes and press <b>Share</b> on the minutes page, or automatically. They are allowed in your script below, in the same step.</p>
+          <div id="recTable"></div>
+          <textarea id="shareList" hidden aria-hidden="true" tabindex="-1"></textarea>
+          <textarea id="shareGroups" hidden aria-hidden="true" tabindex="-1"></textarea>
+          <div class="rows">
           <div class="trow"><div class="tx"><label for="shareAuto">Send to them automatically</label><p class="hint" id="shareAuto-d">Off (recommended): you get the minutes first and press Share after checking names and numbers. On: they get a copy the moment it is written.</p></div><input type="checkbox" class="sw" role="switch" id="shareAuto" aria-describedby="shareAuto-d"></div>
           <div class="fld">
             <label for="shareHow">Address them as</label>
@@ -660,7 +660,13 @@
             <div class="code"><div class="code-h"><span class="hint">Lines changed in the script</span></div><pre id="allowLines"></pre></div>
             <div class="btnrow"><button type="button" id="copyScriptAllow" class="btn">Copy script with these people allowed</button><span id="copyAllowMsg" class="status" role="status"></span></div>
           </div>
+          </div>
         </div>
+      </section>
+
+      <section class="card" aria-labelledby="hDeliv">
+        <h2 id="hDeliv" class="lbl">Delivery</h2>
+        <div class="trow"><div class="tx"><label for="emailAuto">Send automatically</label><p class="hint" id="emailAuto-d">Email the minutes as soon as they are written. You can always send again from the minutes page.</p></div><input type="checkbox" class="sw" role="switch" id="emailAuto" aria-describedby="emailAuto-d"></div>
       </section>
 
       <section class="card" aria-labelledby="hCal">

@@ -412,6 +412,116 @@ _(Output hit the length limit and was cut off.)_`;
     return fn2(opts);
   }
 
+  // src/recipients.js
+  var EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+  var emailsIn = (text) => [...new Set((String(text || "").match(EMAIL) || []).map((x2) => x2.toLowerCase()))];
+  var looksValid = (x2) => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(String(x2).trim());
+  function rowsFrom(listText, groupsText) {
+    const rows = emailsIn(listText).map((email) => ({ email, group: "" }));
+    for (const raw of String(groupsText || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || !line.includes("|")) continue;
+      const i = line.indexOf("|");
+      const group = line.slice(0, i).trim();
+      for (const email of emailsIn(line.slice(i + 1))) rows.push({ email, group });
+    }
+    return rows;
+  }
+  function textsFrom(rows) {
+    const ok = rows.filter((r) => looksValid(r.email));
+    const list = [...new Set(ok.filter((r) => !r.group.trim()).map((r) => r.email.trim().toLowerCase()))].join(", ");
+    const groups = /* @__PURE__ */ new Map();
+    for (const r of ok.filter((x2) => x2.group.trim())) {
+      const g = r.group.trim().replace(/\|/g, " ");
+      if (!groups.has(g)) groups.set(g, /* @__PURE__ */ new Set());
+      groups.get(g).add(r.email.trim().toLowerCase());
+    }
+    return { list, groups: [...groups].map(([g, set]) => `${g} | ${[...set].join(", ")}`).join("\n") };
+  }
+  function mountRecipients(host, listTa, groupsTa) {
+    if (!host || !listTa) return;
+    let rows = [];
+    const blank = () => ({ email: "", group: "" });
+    const make = (tag, props = {}, ...kids) => {
+      const e = document.createElement(tag);
+      for (const [k2, v] of Object.entries(props)) {
+        if (k2 === "class") e.className = v;
+        else if (k2.startsWith("on")) e[k2] = v;
+        else if (v != null && v !== false) e.setAttribute(k2, v === true ? "" : v);
+      }
+      e.append(...kids.filter((x2) => x2 != null));
+      return e;
+    };
+    const emit = () => {
+      const t = textsFrom(rows);
+      listTa.value = t.list;
+      listTa.dispatchEvent(new Event("input", { bubbles: true }));
+      if (groupsTa) {
+        groupsTa.value = t.groups;
+        groupsTa.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    function draw(focus) {
+      host.replaceChildren();
+      const head = make("div", { class: `rec-row rec-head${groupsTa ? "" : " one"}`, role: "row" }, make("span", { role: "columnheader" }, "Email"), groupsTa ? make("span", { role: "columnheader" }, "Only for meetings titled\u2026") : null, make("span"));
+      const body = make("div", { class: "rec-body", role: "rowgroup" });
+      rows.forEach((r, ri) => {
+        const email = make("input", { class: "rec-in", type: "text", inputmode: "email", value: r.email, placeholder: ri === 0 ? "priya@company.com" : "", "aria-label": `Email, person ${ri + 1}`, autocomplete: "off", spellcheck: "false" });
+        const mark = () => email.setAttribute("aria-invalid", String(!!email.value.trim() && !looksValid(email.value)));
+        mark();
+        email.addEventListener("input", () => {
+          r.email = email.value;
+          mark();
+          emit();
+        });
+        email.addEventListener("paste", (e) => {
+          const found = emailsIn(e.clipboardData?.getData("text") || "");
+          if (found.length < 2) return;
+          e.preventDefault();
+          rows.splice(ri, 1, ...found.map((x2) => ({ email: x2, group: r.group })));
+          emit();
+          draw();
+        });
+        email.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          rows.splice(ri + 1, 0, { email: "", group: r.group });
+          emit();
+          draw(`${ri + 1}.email`);
+        });
+        email.dataset.key = `${ri}.email`;
+        const group = groupsTa ? make("input", { class: "rec-in", type: "text", value: r.group, placeholder: "all meetings", "aria-label": `Only for meetings titled, person ${ri + 1}`, autocomplete: "off" }) : null;
+        group?.addEventListener("input", () => {
+          r.group = group.value;
+          emit();
+        });
+        const del = make("button", { class: "rec-x", type: "button", title: "Remove", "aria-label": `Remove ${r.email || `person ${ri + 1}`}` }, "\xD7");
+        del.addEventListener("click", () => {
+          rows.splice(ri, 1);
+          emit();
+          draw();
+        });
+        body.append(make("div", { class: `rec-row${groupsTa ? "" : " one"}`, role: "row" }, email, group, del));
+      });
+      const add = make("button", { class: "btn sm", type: "button" }, "+ Add a person");
+      add.addEventListener("click", () => {
+        rows.push(blank());
+        draw(`${rows.length - 1}.email`);
+      });
+      host.append(make("div", { class: "rec-table", role: "table", "aria-label": "Who else gets a copy" }, head, body), make("div", { class: "rec-foot" }, add, make("span", { class: "hint" }, groupsTa ? "Leave the second box empty for people who get every meeting. Words from a meeting title (like Cadence Call) give that meeting its own list." : "Paste several addresses at once if you like.")));
+      if (focus) host.querySelector(`[data-key="${focus}"]`)?.focus();
+    }
+    const load = () => {
+      rows = rowsFrom(listTa.value, groupsTa?.value);
+      if (!rows.length) rows = [blank()];
+      draw();
+    };
+    listTa.hidden = true;
+    if (groupsTa) groupsTa.hidden = true;
+    listTa.addEventListener("rec-refresh", load);
+    load();
+  }
+
   // node_modules/marked/lib/marked.esm.js
   function I() {
     return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
@@ -1810,13 +1920,13 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   function sendMail(mail, settings, who = {}) {
     return callRelay({ to: who.to ?? settings.emailTo ?? "", cc: who.cc || "", bcc: who.bcc || "", ...mail }, settings);
   }
-  var EMAIL = /^[^\s@,;<>'"`\\()[\]]+@[^\s@,;<>'"`\\()[\]]+\.[^\s@,;<>'"`\\()[\]]+$/;
+  var EMAIL2 = /^[^\s@,;<>'"`\\()[\]]+@[^\s@,;<>'"`\\()[\]]+\.[^\s@,;<>'"`\\()[\]]+$/;
   function parseAddresses(text) {
     const seen = /* @__PURE__ */ new Set();
     const out = [];
     for (const raw of String(text || "").split(/[\s,;]+/)) {
       const a = raw.trim().replace(/^<|>$/g, "");
-      if (EMAIL.test(a) && !seen.has(a.toLowerCase())) {
+      if (EMAIL2.test(a) && !seen.has(a.toLowerCase())) {
         seen.add(a.toLowerCase());
         out.push(a);
       }
@@ -2463,6 +2573,31 @@ function out(o) {
               }
             } }, "Send test email"), st2)
           ),
+          (() => {
+            const msg = status();
+            const ta = h2("textarea", { id: "t-share", hidden: true, "aria-hidden": "true", tabindex: "-1" });
+            ta.value = S2.shareList || "";
+            const table = h2("div", { id: "t-share-table" });
+            queueMicrotask(() => mountRecipients(table, ta, null));
+            return card(
+              "Who else gets a copy (optional)",
+              p("You always get the email. Add anyone who should get a copy too. After you check the minutes and press Share, they receive it. Several recurring-meeting lists are in Settings \u2192 Email.", "hint"),
+              table,
+              ta,
+              tight(toggle("shareAutoFlag", "Send to them automatically", "They get a copy the moment the minutes are written, without your review.", { onChange: (on) => patch({ shareMode: on ? "auto" : "review" }) })),
+              p("Your script only mails people you allow, so nobody else can use it to send mail. After you add people, press the button, replace the script at script.google.com with the copy, and deploy a new version (Deploy \u2192 Manage deployments \u2192 pencil \u2192 New version).", "hint"),
+              toggle("shareDomains", "Allow everyone at their company", "Uses the part after the @, so new colleagues work without editing the script."),
+              h2("div", { class: "btnrow" }, h2("button", { type: "button", class: "btn", onclick: async () => {
+                await patch({ shareList: ta.value });
+                try {
+                  await navigator.clipboard.writeText(scriptWithAllowList(Code_default, parseAddresses(ta.value), { domains: S2.shareDomains, secret: await ensureEmailSecret() }));
+                  say(msg, "The script with these people allowed is on your clipboard.", "ok", "Copied");
+                } catch (e) {
+                  say(msg, `Could not copy: ${e.message}`, "bad", "Not copied");
+                }
+              } }, "Copy script with these people allowed"), msg)
+            );
+          })(),
           tight(
             toggle("emailAuto", "Send automatically", "Email the minutes as soon as they are written."),
             toggle("emailPdf", "Attach a PDF", "A formatted A4 copy of the minutes."),
@@ -2471,44 +2606,21 @@ function out(o) {
           )
         ];
       },
-      save: async () => patch({ emailWebhook: $2("t-hook")?.value.trim() ?? S2.emailWebhook })
+      save: async () => patch({ emailWebhook: $2("t-hook")?.value.trim() ?? S2.emailWebhook, shareList: $2("t-share")?.value ?? S2.shareList })
     },
     {
       id: "share",
-      label: "Share and calendar",
-      title: "Share with your team",
-      lede: "Optional. Debrief can send the minutes to colleagues and show who was invited versus who actually came.",
+      label: "Calendar",
+      title: "Who was invited, who came",
+      lede: "Optional. Debrief can show who was invited versus who actually came.",
       optional: true,
-      nodes: () => {
-        const msg = status();
-        return [
-          card(
-            "Who should get a copy",
-            field("Usually share the minutes with", "t-share", S2.shareList, { area: true, placeholder: "priya@company.com, ravi@company.com", hint: 'You always get the email first. After you check names and numbers on the minutes page, press Share. For a recurring meeting with its own team, add lines like "Cadence Call | a@x.com, b@x.com" later in Settings \u2192 Email.' }),
-            tight(toggle("shareAutoFlag", "Send to them automatically", "They get a copy the moment the minutes are written, without your review.", { onChange: (on) => patch({ shareMode: on ? "auto" : "review" }) }))
-          ),
-          card(
-            "Allow them in your script",
-            p("Your script only mails people you allow, so nobody else can use it to send mail. After you add people, copy the updated script, replace the one at script.google.com, and deploy a new version (Deploy \u2192 Manage deployments \u2192 pencil \u2192 Version: New version \u2192 Deploy)."),
-            toggle("shareDomains", "Allow everyone at their company", "Uses the part after the @, so new colleagues work without editing the script."),
-            h2("div", { class: "btnrow" }, h2("button", { type: "button", class: "btn", onclick: async () => {
-              await patch({ shareList: $2("t-share").value });
-              try {
-                await navigator.clipboard.writeText(scriptWithAllowList(Code_default, parseAddresses($2("t-share").value), { domains: S2.shareDomains, secret: await ensureEmailSecret() }));
-                say(msg, "The script with these people allowed is on your clipboard.", "ok", "Copied");
-              } catch (e) {
-                say(msg, `Could not copy: ${e.message}`, "bad", "Not copied");
-              }
-            } }, "Copy script with these people allowed"), msg)
-          ),
-          card(
-            "Invited versus attended",
-            toggle("calendarLookup", "Look up who was invited", "Reads each meeting's invite from your Google Calendar through the same script. Needs the authorize step from the email page to have been run, and a new deployment if you changed the script."),
-            p("The minutes then include an attendance table: who came, who was absent, who joined late or left early, and anyone who was not invited. Who actually attended is read from the people shown in the Meet call.", "hint")
-          )
-        ];
-      },
-      save: async () => patch({ shareList: $2("t-share")?.value ?? S2.shareList })
+      nodes: () => [
+        card(
+          "Invited versus attended",
+          toggle("calendarLookup", "Look up who was invited", "Reads each meeting's invite from your Google Calendar through the same script. Needs the authorize step from the email page to have been run, and a new deployment if you changed the script."),
+          p("The minutes then include an attendance table: who came, who was absent, who joined late or left early, and anyone who was not invited. Who actually attended is read from the people shown in the Meet call.", "hint")
+        )
+      ]
     },
     {
       id: "local",

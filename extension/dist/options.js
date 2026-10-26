@@ -3580,6 +3580,116 @@ function out(o) {
     load();
   }
 
+  // src/recipients.js
+  var EMAIL2 = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+  var emailsIn = (text) => [...new Set((String(text || "").match(EMAIL2) || []).map((x2) => x2.toLowerCase()))];
+  var looksValid = (x2) => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(String(x2).trim());
+  function rowsFrom(listText, groupsText) {
+    const rows = emailsIn(listText).map((email) => ({ email, group: "" }));
+    for (const raw of String(groupsText || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || !line.includes("|")) continue;
+      const i = line.indexOf("|");
+      const group = line.slice(0, i).trim();
+      for (const email of emailsIn(line.slice(i + 1))) rows.push({ email, group });
+    }
+    return rows;
+  }
+  function textsFrom(rows) {
+    const ok = rows.filter((r) => looksValid(r.email));
+    const list = [...new Set(ok.filter((r) => !r.group.trim()).map((r) => r.email.trim().toLowerCase()))].join(", ");
+    const groups = /* @__PURE__ */ new Map();
+    for (const r of ok.filter((x2) => x2.group.trim())) {
+      const g = r.group.trim().replace(/\|/g, " ");
+      if (!groups.has(g)) groups.set(g, /* @__PURE__ */ new Set());
+      groups.get(g).add(r.email.trim().toLowerCase());
+    }
+    return { list, groups: [...groups].map(([g, set]) => `${g} | ${[...set].join(", ")}`).join("\n") };
+  }
+  function mountRecipients(host, listTa, groupsTa) {
+    if (!host || !listTa) return;
+    let rows = [];
+    const blank = () => ({ email: "", group: "" });
+    const make = (tag, props = {}, ...kids) => {
+      const e = document.createElement(tag);
+      for (const [k2, v] of Object.entries(props)) {
+        if (k2 === "class") e.className = v;
+        else if (k2.startsWith("on")) e[k2] = v;
+        else if (v != null && v !== false) e.setAttribute(k2, v === true ? "" : v);
+      }
+      e.append(...kids.filter((x2) => x2 != null));
+      return e;
+    };
+    const emit = () => {
+      const t = textsFrom(rows);
+      listTa.value = t.list;
+      listTa.dispatchEvent(new Event("input", { bubbles: true }));
+      if (groupsTa) {
+        groupsTa.value = t.groups;
+        groupsTa.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    function draw(focus) {
+      host.replaceChildren();
+      const head = make("div", { class: `rec-row rec-head${groupsTa ? "" : " one"}`, role: "row" }, make("span", { role: "columnheader" }, "Email"), groupsTa ? make("span", { role: "columnheader" }, "Only for meetings titled\u2026") : null, make("span"));
+      const body = make("div", { class: "rec-body", role: "rowgroup" });
+      rows.forEach((r, ri) => {
+        const email = make("input", { class: "rec-in", type: "text", inputmode: "email", value: r.email, placeholder: ri === 0 ? "priya@company.com" : "", "aria-label": `Email, person ${ri + 1}`, autocomplete: "off", spellcheck: "false" });
+        const mark = () => email.setAttribute("aria-invalid", String(!!email.value.trim() && !looksValid(email.value)));
+        mark();
+        email.addEventListener("input", () => {
+          r.email = email.value;
+          mark();
+          emit();
+        });
+        email.addEventListener("paste", (e) => {
+          const found = emailsIn(e.clipboardData?.getData("text") || "");
+          if (found.length < 2) return;
+          e.preventDefault();
+          rows.splice(ri, 1, ...found.map((x2) => ({ email: x2, group: r.group })));
+          emit();
+          draw();
+        });
+        email.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          rows.splice(ri + 1, 0, { email: "", group: r.group });
+          emit();
+          draw(`${ri + 1}.email`);
+        });
+        email.dataset.key = `${ri}.email`;
+        const group = groupsTa ? make("input", { class: "rec-in", type: "text", value: r.group, placeholder: "all meetings", "aria-label": `Only for meetings titled, person ${ri + 1}`, autocomplete: "off" }) : null;
+        group?.addEventListener("input", () => {
+          r.group = group.value;
+          emit();
+        });
+        const del = make("button", { class: "rec-x", type: "button", title: "Remove", "aria-label": `Remove ${r.email || `person ${ri + 1}`}` }, "\xD7");
+        del.addEventListener("click", () => {
+          rows.splice(ri, 1);
+          emit();
+          draw();
+        });
+        body.append(make("div", { class: `rec-row${groupsTa ? "" : " one"}`, role: "row" }, email, group, del));
+      });
+      const add = make("button", { class: "btn sm", type: "button" }, "+ Add a person");
+      add.addEventListener("click", () => {
+        rows.push(blank());
+        draw(`${rows.length - 1}.email`);
+      });
+      host.append(make("div", { class: "rec-table", role: "table", "aria-label": "Who else gets a copy" }, head, body), make("div", { class: "rec-foot" }, add, make("span", { class: "hint" }, groupsTa ? "Leave the second box empty for people who get every meeting. Words from a meeting title (like Cadence Call) give that meeting its own list." : "Paste several addresses at once if you like.")));
+      if (focus) host.querySelector(`[data-key="${focus}"]`)?.focus();
+    }
+    const load = () => {
+      rows = rowsFrom(listTa.value, groupsTa?.value);
+      if (!rows.length) rows = [blank()];
+      draw();
+    };
+    listTa.hidden = true;
+    if (groupsTa) groupsTa.hidden = true;
+    listTa.addEventListener("rec-refresh", load);
+    load();
+  }
+
   // src/options.js
   var $3 = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
@@ -3699,6 +3809,7 @@ function out(o) {
       else f.value = s[k2] ?? "";
     }
     $3("peopleDirectory")?.dispatchEvent(new Event("dir-refresh"));
+    $3("shareList")?.dispatchEvent(new Event("rec-refresh"));
     removed.clear();
     editing.clear();
     $3("shareAuto").checked = s.shareMode === "auto";
@@ -4237,6 +4348,7 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
     initSecrets();
     initSegs();
     mountDirectoryTable($3("peopleDirectory"), $3("dirTable"));
+    mountRecipients($3("recTable"), $3("shareList"), $3("shareGroups"));
     fill(s);
     setLanguages(s);
     fmtSeg();

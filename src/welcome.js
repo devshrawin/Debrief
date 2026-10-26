@@ -2,6 +2,7 @@
 // (the Gemini key, the microphone, the email relay) so the user finds out now, not in the middle of a meeting.
 import { getSettings, setSetting, DEFAULTS, ensureEmailSecret } from './store.js';
 import { generate } from './llm.js';
+import { mountRecipients } from './recipients.js';
 import { sendMail, mailReady, scriptWithAllowList, scriptWithSecret, parseAddresses, WEBAPP_URL } from './mailer.js';
 import scriptText from '../apps-script/Code.gs';
 import { LANGUAGES, chosenLanguages, minutesLanguageOptions } from './languages.js';
@@ -359,6 +360,29 @@ const ALL = [
               say(st, e.message, 'bad', 'Failed');
             }
           } }, 'Send test email'), st)),
+        (() => {
+          const msg = status();
+          const ta = h('textarea', { id: 't-share', hidden: true, 'aria-hidden': 'true', tabindex: '-1' });
+          ta.value = S.shareList || '';
+          const table = h('div', { id: 't-share-table' });
+          queueMicrotask(() => mountRecipients(table, ta, null));
+          return card('Who else gets a copy (optional)',
+            p('You always get the email. Add anyone who should get a copy too. After you check the minutes and press Share, they receive it. Several recurring-meeting lists are in Settings → Email.', 'hint'),
+            table,
+            ta,
+            tight(toggle('shareAutoFlag', 'Send to them automatically', 'They get a copy the moment the minutes are written, without your review.', { onChange: (on) => patch({ shareMode: on ? 'auto' : 'review' }) })),
+            p('Your script only mails people you allow, so nobody else can use it to send mail. After you add people, press the button, replace the script at script.google.com with the copy, and deploy a new version (Deploy → Manage deployments → pencil → New version).', 'hint'),
+            toggle('shareDomains', 'Allow everyone at their company', 'Uses the part after the @, so new colleagues work without editing the script.'),
+            h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn', onclick: async () => {
+              await patch({ shareList: ta.value });
+              try {
+                await navigator.clipboard.writeText(scriptWithAllowList(scriptText, parseAddresses(ta.value), { domains: S.shareDomains, secret: await ensureEmailSecret() }));
+                say(msg, 'The script with these people allowed is on your clipboard.', 'ok', 'Copied');
+              } catch (e) {
+                say(msg, `Could not copy: ${e.message}`, 'bad', 'Not copied');
+              }
+            } }, 'Copy script with these people allowed'), msg));
+        })(),
         tight(
           toggle('emailAuto', 'Send automatically', 'Email the minutes as soon as they are written.'),
           toggle('emailPdf', 'Attach a PDF', 'A formatted A4 copy of the minutes.'),
@@ -366,38 +390,19 @@ const ALL = [
           toggle('emailTranscript', 'Attach the transcript', 'The full transcript as a text file.')),
       ];
     },
-    save: async () => patch({ emailWebhook: $('t-hook')?.value.trim() ?? S.emailWebhook }),
+    save: async () => patch({ emailWebhook: $('t-hook')?.value.trim() ?? S.emailWebhook, shareList: $('t-share')?.value ?? S.shareList }),
   },
   {
     id: 'share',
-    label: 'Share and calendar',
-    title: 'Share with your team',
-    lede: 'Optional. Debrief can send the minutes to colleagues and show who was invited versus who actually came.',
+    label: 'Calendar',
+    title: 'Who was invited, who came',
+    lede: 'Optional. Debrief can show who was invited versus who actually came.',
     optional: true,
-    nodes: () => {
-      const msg = status();
-      return [
-        card('Who should get a copy',
-          field('Usually share the minutes with', 't-share', S.shareList, { area: true, placeholder: 'priya@company.com, ravi@company.com', hint: 'You always get the email first. After you check names and numbers on the minutes page, press Share. For a recurring meeting with its own team, add lines like "Cadence Call | a@x.com, b@x.com" later in Settings → Email.' }),
-          tight(toggle('shareAutoFlag', 'Send to them automatically', 'They get a copy the moment the minutes are written, without your review.', { onChange: (on) => patch({ shareMode: on ? 'auto' : 'review' }) }))),
-        card('Allow them in your script',
-          p('Your script only mails people you allow, so nobody else can use it to send mail. After you add people, copy the updated script, replace the one at script.google.com, and deploy a new version (Deploy → Manage deployments → pencil → Version: New version → Deploy).'),
-          toggle('shareDomains', 'Allow everyone at their company', 'Uses the part after the @, so new colleagues work without editing the script.'),
-          h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn', onclick: async () => {
-            await patch({ shareList: $('t-share').value });
-            try {
-              await navigator.clipboard.writeText(scriptWithAllowList(scriptText, parseAddresses($('t-share').value), { domains: S.shareDomains, secret: await ensureEmailSecret() }));
-              say(msg, 'The script with these people allowed is on your clipboard.', 'ok', 'Copied');
-            } catch (e) {
-              say(msg, `Could not copy: ${e.message}`, 'bad', 'Not copied');
-            }
-          } }, 'Copy script with these people allowed'), msg)),
-        card('Invited versus attended',
-          toggle('calendarLookup', 'Look up who was invited', "Reads each meeting's invite from your Google Calendar through the same script. Needs the authorize step from the email page to have been run, and a new deployment if you changed the script."),
-          p('The minutes then include an attendance table: who came, who was absent, who joined late or left early, and anyone who was not invited. Who actually attended is read from the people shown in the Meet call.', 'hint')),
-      ];
-    },
-    save: async () => patch({ shareList: $('t-share')?.value ?? S.shareList }),
+    nodes: () => [
+      card('Invited versus attended',
+        toggle('calendarLookup', 'Look up who was invited', "Reads each meeting's invite from your Google Calendar through the same script. Needs the authorize step from the email page to have been run, and a new deployment if you changed the script."),
+        p('The minutes then include an attendance table: who came, who was absent, who joined late or left early, and anyone who was not invited. Who actually attended is read from the people shown in the Meet call.', 'hint')),
+    ],
   },
   {
     id: 'local',

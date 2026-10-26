@@ -11,6 +11,7 @@ import { runCheckup, checkupText } from './checkup.js';
 import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, rupees, rate, nextQuotaReset, istClock } from './usage.js';
 import { modal } from './modal.js';
 import { mountDirectoryTable } from './dirtable.js';
+import { mountRecipients } from './recipients.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -143,6 +144,7 @@ function fill(s) {
     else f.value = s[k] ?? '';
   }
   $('peopleDirectory')?.dispatchEvent(new Event('dir-refresh')); // the people table shows the new text
+  $('shareList')?.dispatchEvent(new Event('rec-refresh')); // and the recipients table
   removed.clear();
   editing.clear();
   $('shareAuto').checked = s.shareMode === 'auto';
@@ -728,6 +730,7 @@ $('useAmnexPreset').onclick = () => {
   initSecrets();
   initSegs();
   mountDirectoryTable($('peopleDirectory'), $('dirTable'));
+  mountRecipients($('recTable'), $('shareList'), $('shareGroups'));
   fill(s);
   setLanguages(s);
   fmtSeg();
