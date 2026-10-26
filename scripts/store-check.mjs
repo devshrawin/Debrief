@@ -52,6 +52,10 @@ const shots = fs.readdirSync(path.join(root, 'docs', 'img')).filter((f) => /^sto
 check('at least one 1280x800 screenshot', shots.some((f) => { const b = fs.readFileSync(path.join(root, 'docs', 'img', f)); return b.readUInt32BE(16) === 1280 && b.readUInt32BE(20) === 800; }));
 check('screenshots are all 1280x800', shots.every((f) => { const b = fs.readFileSync(path.join(root, 'docs', 'img', f)); return b.readUInt32BE(16) === 1280 && b.readUInt32BE(20) === 800; }));
 
+// The only place the author's GitHub may appear is the privacy policy link on the store listing (not inside the extension)
+const gh = files.filter((f) => /\.(js|json|html|css)$/.test(f) && !/[\/](vendor|models)[\/]/.test(f)).filter((f) => /devshrawin/i.test(fs.readFileSync(f, 'utf8')));
+check('no link to the author GitHub inside the extension (third-party licence credits are fine)', !gh.length, gh.map((f) => path.relative(root, f)).join(', '));
+
 // 5. nothing secret or developer-only ships
 const secrets = files.filter((f) => /\.(js|json|html|css)$/.test(f)).filter((f) => /AIza[0-9A-Za-z_-]{30}|sk-[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(fs.readFileSync(f, 'utf8')));
 check('no API keys or private keys in the package', !secrets.length, secrets.map((f) => path.relative(root, f)).join(', '));

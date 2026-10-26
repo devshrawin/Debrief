@@ -2055,8 +2055,6 @@ function out(o) {
   var minutesLanguageOptions = () => [...LANGUAGES.map((l3) => ({ value: l3.code === "hi" ? "Hindi (Devanagari)" : l3.name, label: l3.code === "hi" ? "Hindi (Devanagari)" : l3.name })), { value: "the same language mix used in the meeting", label: "Same as the meeting" }];
 
   // src/welcome.js
-  var GUIDE = "https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md";
-  var LOCAL_GUIDE = "https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md";
   var S2 = { ...DEFAULTS };
   var tour = { step: 0, visited: [], keyOk: false };
   var micOk = false;
@@ -2273,7 +2271,7 @@ function out(o) {
               h2("div", { class: "mini" }, h2("b", {}, "Past meetings"), "Popup \u2192 Meetings tab"),
               h2("div", { class: "mini" }, h2("b", {}, "Change anything"), "Popup \u2192 Settings")
             ),
-            h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html", target: "_blank" }, "Open Settings"), h2("a", { class: "btn", href: GUIDE, target: "_blank" }, "Read the full guide"))
+            h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html", target: "_blank" }, "Open Settings"))
           )
         ];
       }
@@ -2528,7 +2526,7 @@ function out(o) {
             h2("div", { class: "mini" }, h2("b", {}, "Speech to text"), "A local Whisper-style server. Good for English and Hindi; Malayalam needs a Malayalam model.")
           ),
           p('Setup takes a few commands and one Debrief button each. Open Settings \u2192 Minutes and press "Use Ollama on this PC", then "Find my installed models".'),
-          h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html#minutes", target: "_blank" }, "Open Minutes settings"), h2("a", { class: "btn", href: LOCAL_GUIDE, target: "_blank" }, "Read the local models guide"))
+          h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html#minutes", target: "_blank" }, "Open Minutes settings"))
         ),
         card(
           "Other meeting apps",
@@ -2594,7 +2592,7 @@ function out(o) {
               h2("div", { class: "mini" }, h2("b", {}, "Past meetings"), "Popup \u2192 Meetings tab"),
               h2("div", { class: "mini" }, h2("b", {}, "Change anything"), "Popup \u2192 Settings")
             ),
-            h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html", target: "_blank" }, "Open Settings"), h2("a", { class: "btn", href: GUIDE, target: "_blank" }, "Read the full guide"))
+            h2("div", { class: "btnrow" }, h2("a", { class: "btn", href: "options.html", target: "_blank" }, "Open Settings"))
           ),
           h2("div", { class: "callout" }, p("Next: join an online meeting in Chrome, click the Debrief icon, and press Start recording this tab. You can reopen this tour any time from the popup (Take the tour)."))
         ];

@@ -240,7 +240,7 @@
       <button type="button" data-tab="usage"><span class="n">7</span>Usage</button>
       <button type="button" data-tab="appearance"><span class="n">8</span>Appearance</button>
     </nav>
-    <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a><a href="https://github.com/devshrawin/Debrief/blob/pro/docs/SETUP.md" target="_blank" rel="noopener">Setup guide</a></div>
+    <div class="foot"><a href="welcome.html?restart=1" target="_blank">Take the tour</a></div>
   </aside>
 
   <main class="content">
@@ -455,7 +455,7 @@
           <div class="localbox">
             <span class="flabel lbl-l">Run it on this computer</span>
             <div class="btnrow"><button type="button" id="useWhisper" class="btn">Use a local Whisper server</button><button type="button" id="testWhisper" class="btn">Test it</button><span id="whisperStatus" class="status" role="status"></span></div>
-            <p class="hint">Any server that offers <code>/v1/audio/transcriptions</code> works (faster-whisper based servers, whisper.cpp server, LocalAI). Good for English and Hindi; for Malayalam use a Malayalam fine-tuned model. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank" rel="noopener">Setup guide</a>.</p>
+            <p class="hint">Any server that offers <code>/v1/audio/transcriptions</code> works (faster-whisper based servers, whisper.cpp server, LocalAI). Good for English and Hindi; for Malayalam use a Malayalam fine-tuned model.</p>
           </div>
           <div class="fld"><label for="sttBase">Base URL</label><input id="sttBase" placeholder="https://api.groq.com/openai/v1" autocomplete="off" spellcheck="false"><p class="hint">Groq: https://api.groq.com/openai/v1 · OpenAI: https://api.openai.com/v1 · local: http://localhost:8000/v1</p></div>
           <div class="fgrid">
@@ -500,7 +500,7 @@
             <div class="btnrow"><button type="button" id="useOllama" class="btn">Use Ollama on this PC</button><button type="button" id="findOllama" class="btn">Find my installed models</button></div>
             <div id="ollamaPick" class="hidden"><label for="ollamaModels" class="sr-only">Installed models</label><select id="ollamaModels"></select></div>
             <p class="hint" id="localStatus" role="status"></p>
-            <p class="hint">Nothing leaves your computer, and there are no quotas. Quality is lower than Gemini or Claude on messy Hindi, Hinglish or Malayalam, and a CPU-only PC takes a few minutes per meeting. <a href="https://github.com/devshrawin/Debrief/blob/pro/docs/LOCAL.md" target="_blank" rel="noopener">Setup guide for local models</a>.</p>
+            <p class="hint">Nothing leaves your computer, and there are no quotas. Quality is lower than Gemini or Claude on messy Hindi, Hinglish or Malayalam, and a CPU-only PC takes a few minutes per meeting.</p>
           </div>
           <div class="fld"><label for="oaBase">Base URL</label><input id="oaBase" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false"><p class="hint">Ollama: http://localhost:11434/v1 · OpenRouter: https://openrouter.ai/api/v1 · Groq: https://api.groq.com/openai/v1</p></div>
           <div class="fgrid">

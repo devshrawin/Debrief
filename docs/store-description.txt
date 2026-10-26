@@ -24,5 +24,3 @@ PLEASE NOTE
 • Speaker names, captions and attendance come from Google Meet only. On other apps Debrief records the audio.
 
 Debrief is an independent project. It is not affiliated with or endorsed by Google, Zoom or Microsoft. Google Meet, Zoom and Microsoft Teams are trademarks of their owners.
-
-Privacy policy: https://github.com/devshrawin/Debrief/blob/main/PRIVACY.md
