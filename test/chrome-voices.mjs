@@ -99,6 +99,21 @@ try {
   await sleep(900);
   const after2 = await pg.evaluate(`({ rows: document.querySelectorAll('#voiceList .voice-row').length, errs: window.__errs, dialog: !!document.querySelector('dialog.dbmodal') })`);
   check('merging into a recorded person works too', after2.rows === 2 && !after2.errs.length && !after2.dialog, JSON.stringify(after2));
+
+  // ---- the people directory table in Settings > Minutes
+  await pg.evaluate(`chrome.storage.local.set({ settings: { voiceOn: true, peopleDirectory: 'Suresh K. | Sri. | Transport | Joint Secretary | Kochi Metro | Chair\\nDana Whitfield | Ms. | Operations | Programme Director | Contoso Transit' } })`);
+  await send('Page.reload', {}, pg.sessionId);
+  await sleep(1500);
+  await pg.evaluate(`document.querySelector('#nav [data-tab="minutes"]').click()`);
+  await sleep(600);
+  const t0 = await pg.evaluate(`({ rows: document.querySelectorAll('#dirTable .dir-body .dir-row').length, first: document.querySelector('#dirTable .dir-in').value, chair: document.querySelector('#dirTable .dir-chair').checked, hidden: document.getElementById('peopleDirectory').hidden })`);
+  check('the people directory shows as a table with both people, Chair ticked, text field hidden', t0.rows === 2 && t0.first === 'Suresh K.' && t0.chair && t0.hidden, JSON.stringify(t0));
+  await pg.evaluate(`(() => { const i = document.querySelectorAll('#dirTable .dir-in')[0]; i.value = 'Suresh Kumar'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await pg.evaluate(`(() => { const i = document.querySelector('#dirTable .dir-body .dir-row:last-child .c-name'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
+  await sleep(300);
+  const t1 = await pg.evaluate(`({ rows: document.querySelectorAll('#dirTable .dir-body .dir-row').length, text: document.getElementById('peopleDirectory').value, bar: document.getElementById('savebar').className })`);
+  check('editing a cell writes the text, Enter adds a person, and Settings sees unsaved changes', t1.rows === 3 && /^Suresh Kumar \| Sri\./.test(t1.text) && /dirty/.test(t1.bar), JSON.stringify(t1));
+  if (process.env.SHOT2) { const r = await send('Page.captureScreenshot', { format: 'png' }, pg.sessionId); writeFileSync(process.env.SHOT2, Buffer.from(r.data, 'base64')); }
 } catch (e) {
   console.log('FAIL', e.stack || e);
   failed = true;

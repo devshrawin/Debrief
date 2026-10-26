@@ -10,6 +10,7 @@ import { initVoices } from './voices-ui.js';
 import { runCheckup, checkupText } from './checkup.js';
 import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal, rupees, rate, nextQuotaReset, istClock } from './usage.js';
 import { modal } from './modal.js';
+import { mountDirectoryTable } from './dirtable.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -141,6 +142,7 @@ function fill(s) {
     } else if (f.type === 'checkbox') f.checked = !!s[k];
     else f.value = s[k] ?? '';
   }
+  $('peopleDirectory')?.dispatchEvent(new Event('dir-refresh')); // the people table shows the new text
   removed.clear();
   editing.clear();
   $('shareAuto').checked = s.shareMode === 'auto';
@@ -725,6 +727,7 @@ $('useAmnexPreset').onclick = () => {
   buildLanguageUi();
   initSecrets();
   initSegs();
+  mountDirectoryTable($('peopleDirectory'), $('dirTable'));
   fill(s);
   setLanguages(s);
   fmtSeg();

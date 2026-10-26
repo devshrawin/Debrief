@@ -148,7 +148,7 @@ async function openPage(url, { width = 1100, height = 800, scale = 1.5 } = {}) {
     writeFileSync(path.join(OUT, `${name}.png`), Buffer.from(data, 'base64'));
     console.log('wrote', name);
   };
-  return { targetId, evaluate, shot };
+  return { targetId, sessionId, evaluate, shot };
 }
 
 try {
@@ -301,6 +301,18 @@ try {
   await p.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('modeOnline')?.click(); document.getElementById('modeHint').textContent = 'Online meeting: the call is recorded from this tab and your voice from your microphone.'; document.getElementById('start').disabled = false;`);
   await sleep(500);
   await p.shot('popup', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
+
+  // ---- PDF=<dir>: the official and the standard minutes as the print preview makes them (page footer and header included)
+  if (process.env.PDF) {
+    for (const [name, url] of [['official', 'mom.html?id=demo1'], ['standard', 'mom.html?id=demo2']]) {
+      const pg = await openPage(`chrome-extension://${id}/${url}`, { width: 1100, height: 900 });
+      await sleep(1500);
+      await send('Emulation.setEmulatedMedia', { media: 'print' }, pg.sessionId);
+      const r = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false }, pg.sessionId);
+      writeFileSync(path.join(process.env.PDF, `minutes-${name}.pdf`), Buffer.from(r.data, 'base64'));
+      console.log('wrote pdf', name);
+    }
+  }
 
   // ---- UI audit set (AUDIT=1): every Settings page, the tour, the popup and the minutes, in light and dark, into docs/img/audit
   if (process.env.AUDIT) {
