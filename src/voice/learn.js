@@ -251,5 +251,5 @@ export function unnamedGroups(meeting, people, { max = 4, minSecs = 15, cap = 30
   return clusterVoices(sample)
     .filter((g) => g.seconds * step >= minSecs)
     .slice(0, max)
-    .map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_, k) => k % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)) }));
+    .map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_, k) => k % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)), segs: g.members.slice(0, 8).map((i) => ({ t0: sample[i].t0, s: sample[i].s })) }));
 }

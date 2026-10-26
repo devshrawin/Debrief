@@ -102,4 +102,19 @@ await test('clips: a voice that already has a clip keeps it, and a named voice g
   assert.ok(await S.hasSample(named[1].id), 'still unnamed: clip');
 });
 
+await test('clips: voices nobody has named yet (the "name this voice" list) get a playable clip too, and it goes with the meeting', async () => {
+  const m = await recordMeeting('m7');
+  await saveSamples('m7', m, []); // no one is known yet
+  const groups = L.unnamedGroups(m, [], { max: 6 });
+  assert.ok(groups.length >= 1, 'there are unnamed voices');
+  for (const g of groups) {
+    const blob = await S.getSample(S.unnamedKey('m7', g.at[0]));
+    assert.ok(blob, 'a clip for the unnamed voice');
+    const bytes = await bytesOf(blob);
+    assert.equal(String.fromCharCode(...bytes.slice(0, 4)), 'RIFF');
+  }
+  await S.deleteUnnamedClips('m7');
+  assert.equal(await S.hasSample(S.unnamedKey('m7', groups[0].at[0])), false);
+});
+
 console.log(`\n${passed} passed`);

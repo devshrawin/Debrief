@@ -205,6 +205,7 @@ try {
     press();
     await new Promise((r) => setTimeout(r, 300));
     out.clickOpens = !panelEl.classList.contains('hidden');
+    out.catchesClicks = getComputedStyle(pillEl).pointerEvents === 'auto' && getComputedStyle(document.querySelector('[data-debrief]')).pointerEvents === 'none'; // a real mouse reaches the pill (synthetic events skip this)
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
     await new Promise((r) => setTimeout(r, 300));
     out.outsideCloses = panelEl.classList.contains('hidden');
@@ -215,7 +216,7 @@ try {
     await chrome.storage.session.set({ rec: { recording: false } });
     return out;
   })()`);
-  check('pill shows timer and mic state, click toggles mic, panel opens on click not hover', pillRes.hoverClosed && pillRes.clickOpens && pillRes.outsideCloses && pillRes.shown && /^01:0/.test(pillRes.time) && pillRes.mic === 'Mic on' && pillRes.after === 'Mic off' && pillRes.state === false, JSON.stringify(pillRes));
+  check('pill shows timer and mic state, click toggles mic, panel opens on click not hover, and a real click can reach it (draggable)', pillRes.catchesClicks && pillRes.hoverClosed && pillRes.clickOpens && pillRes.outsideCloses && pillRes.shown && /^01:0/.test(pillRes.time) && pillRes.mic === 'Mic on' && pillRes.after === 'Mic off' && pillRes.state === false, JSON.stringify(pillRes));
 
   // Screenshots of the recording UI (popup + on-page pill) with a quota alert showing.
   const alertRec = (tabId) => `chrome.storage.session.set({ rec: { recording: true, meetingId: 'mtest', tabId: ${tabId}, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetMuted: false, alert: { kind: 'quota', title: 'API limit reached', detail: 'gemini-3.8-flash: free-tier limit used up, resets in about 18h. Debrief tries other models first; chunks that still fail are kept and retried from the MOM page.', at: Date.now(), notifiedAt: Date.now() } }, levels: { tab: 0.14, mic: 0.02, ctx: 'running', at: Date.now() } })`;

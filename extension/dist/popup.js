@@ -132,6 +132,17 @@
   async function deletePieces(meetingId) {
     await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
   }
+  async function deleteUnnamedClips(meetingId) {
+    await tx("samples", "readwrite", (s) => {
+      const r = s.openCursor();
+      r.onsuccess = () => {
+        const c = r.result;
+        if (!c) return;
+        if (String(c.key).startsWith(`u:${meetingId}:`)) c.delete();
+        c.continue();
+      };
+    });
+  }
 
   // src/audiostore.js
   var DB2 = "debrief";
@@ -320,7 +331,7 @@
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
     await chrome.storage.local.remove(key(id));
-    await Promise.allSettled([deletePieces(id), deleteAllPending(id)]);
+    await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id)]);
   }
   async function getState() {
     const { rec } = await chrome.storage.session.get("rec");

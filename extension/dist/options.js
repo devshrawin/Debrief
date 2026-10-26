@@ -58,6 +58,7 @@
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
   var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
   var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
+  var unnamedKey = (meetingId, firstAt) => `u:${meetingId}:${Math.round(firstAt)}`;
   async function clearAllAudio() {
     await tx("pieces", "readwrite", (s) => s.clear());
     await tx("samples", "readwrite", (s) => s.clear());
@@ -2493,7 +2494,7 @@ function out(o) {
     if (segs.length < 4) return [];
     const step = Math.max(1, Math.ceil(segs.length / cap));
     const sample = segs.filter((_2, i) => i % step === 0);
-    return clusterVoices(sample).filter((g) => g.seconds * step >= minSecs).slice(0, max).map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_2, k2) => k2 % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)) }));
+    return clusterVoices(sample).filter((g) => g.seconds * step >= minSecs).slice(0, max).map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_2, k2) => k2 % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)), segs: g.members.slice(0, 8).map((i) => ({ t0: sample[i].t0, s: sample[i].s })) }));
   }
 
   // src/voice/client.js
@@ -3000,6 +3001,9 @@ function out(o) {
           try {
             people = upsertPerson(people, { name: input.value, lang: "free", print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
             await saveVoices(people);
+            const named = people.find((x2) => x2.name.toLowerCase() === input.value.trim().replace(/\s+/g, " ").toLowerCase());
+            getSample(key2).then((b) => b && named && putSample(named.id, b)).catch(() => {
+            });
             renderList();
             renderUnnamed();
           } catch (e) {
@@ -3008,12 +3012,30 @@ function out(o) {
         };
         save3.onclick = doSave;
         input.onkeydown = (e) => e.key === "Enter" && doSave();
+        const key2 = unnamedKey(m.id, g.at[0]);
+        const play = el("button", { type: "button", className: "btn sm", hidden: true }, el("span", { className: "tri" }), "Play");
+        play.setAttribute("aria-label", `Play a clip of Voice ${i + 1}`);
+        hasSample(key2).then((yes) => play.hidden = !yes).catch(() => {
+        });
+        play.onclick = async () => {
+          try {
+            stopPlaying();
+            const blob = await getSample(key2);
+            if (!blob) return play.hidden = true;
+            playingUrl = URL.createObjectURL(blob);
+            playing = new Audio(playingUrl);
+            playing.onended = stopPlaying;
+            await playing.play();
+          } catch {
+            stopPlaying();
+          }
+        };
         return el(
           "li",
           {},
           el("div", { className: "ut" }, el("strong", { textContent: `Voice ${i + 1}` }), el("span", { className: "hint", textContent: `spoke ${g.seconds} s` })),
           el("p", { className: "hint", textContent: `For example at ${g.at.map(fmtTime).join(", ")}` }),
-          el("div", { className: "name-row" }, label, input, save3)
+          el("div", { className: "name-row" }, play, label, input, save3)
         );
       })
     );

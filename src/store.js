@@ -1,4 +1,4 @@
-import { clearAllAudio, deletePieces } from './voice/samples.js';
+import { clearAllAudio, deletePieces, deleteUnnamedClips } from './voice/samples.js';
 import { deleteAllPending } from './audiostore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
@@ -154,7 +154,7 @@ export async function deleteMeeting(id) {
   await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
   await chrome.storage.local.remove(key(id));
   // the audio that belonged to it too: waiting voice pieces and chunks that failed to transcribe
-  await Promise.allSettled([deletePieces(id), deleteAllPending(id)]);
+  await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id)]);
 }
 
 export async function getState() {

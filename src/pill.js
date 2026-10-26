@@ -15,7 +15,9 @@ import { adapterFor } from './adapters/index.js';
   /* Dark glass that reads over any video: a scrim plus blur, hairline edge, layered shadow */
   .wrap { --ink:#f5f5f7; --dim:#c7c7d1; --line:rgba(255,255,255,.14); --ok:#30d158; --warn:#ffb340; --bad:#ff6961; --tint:#a9a6ff;
     --glass: rgba(24,24,30,.72); --glass-thick: rgba(24,24,30,.86);
-    display:flex; flex-direction:column; align-items:flex-end; gap:8px; color:var(--ink); -webkit-font-smoothing:antialiased; }
+    display:flex; flex-direction:column; align-items:flex-end; gap:8px; color:var(--ink); -webkit-font-smoothing:antialiased;
+    pointer-events:none; } /* the host and wrapper let clicks through to the page; only the pill and panel catch them */
+  .wrap > * { pointer-events:auto; }
 
   .pill { position:relative; display:flex; align-items:center; gap:10px; min-height:40px; padding:4px 4px 4px 14px; border-radius:999px;
     background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(170%); backdrop-filter:blur(20px) saturate(170%);

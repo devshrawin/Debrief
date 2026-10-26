@@ -54,6 +54,19 @@ export const putSample = (personId, blob) => tx('samples', 'readwrite', (s) => s
 export const getSample = (personId) => tx('samples', 'readonly', (s) => s.get(personId));
 export const hasSample = async (personId) => (await tx('samples', 'readonly', (s) => s.count(personId))) > 0;
 export const deleteSample = (personId) => tx('samples', 'readwrite', (s) => s.delete(personId));
+// A clip of a voice in a meeting that nobody has named yet, so it can be played from "name this voice".
+export const unnamedKey = (meetingId, firstAt) => `u:${meetingId}:${Math.round(firstAt)}`;
+export async function deleteUnnamedClips(meetingId) {
+  await tx('samples', 'readwrite', (s) => {
+    const r = s.openCursor();
+    r.onsuccess = () => {
+      const c = r.result;
+      if (!c) return;
+      if (String(c.key).startsWith(`u:${meetingId}:`)) c.delete();
+      c.continue();
+    };
+  });
+}
 
 export async function clearAllAudio() {
   await tx('pieces', 'readwrite', (s) => s.clear());

@@ -7,7 +7,7 @@ import { buildPrint, upsertPerson, addRecording, speechPieces, PROMPTS, ENROL, S
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
 import { modal } from './modal.js';
-import { getSample, putSample, deleteSample, hasSample, makeClip } from './voice/samples.js';
+import { getSample, putSample, deleteSample, hasSample, makeClip, unnamedKey } from './voice/samples.js';
 
 const OKBTN = [{ label: 'OK', value: 'ok', primary: true }];
 const tell = (text) => modal({ text, buttons: OKBTN });
@@ -216,6 +216,9 @@ async function renderUnnamed() {
         try {
           people = upsertPerson(people, { name: input.value, lang: 'free', print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
           await saveVoices(people);
+          // the named voice keeps its clip, so "Play sample" works in the list
+          const named = people.find((x) => x.name.toLowerCase() === input.value.trim().replace(/\s+/g, ' ').toLowerCase());
+          getSample(key).then((b) => b && named && putSample(named.id, b)).catch(() => {});
           renderList();
           renderUnnamed();
         } catch (e) {
@@ -224,12 +227,30 @@ async function renderUnnamed() {
       };
       save.onclick = doSave;
       input.onkeydown = (e) => e.key === 'Enter' && doSave();
+      // a short clip of this voice, kept after the meeting so you can hear who it is
+      const key = unnamedKey(m.id, g.at[0]);
+      const play = el('button', { type: 'button', className: 'btn sm', hidden: true }, el('span', { className: 'tri' }), 'Play');
+      play.setAttribute('aria-label', `Play a clip of Voice ${i + 1}`);
+      hasSample(key).then((yes) => (play.hidden = !yes)).catch(() => {});
+      play.onclick = async () => {
+        try {
+          stopPlaying();
+          const blob = await getSample(key);
+          if (!blob) return (play.hidden = true);
+          playingUrl = URL.createObjectURL(blob);
+          playing = new Audio(playingUrl);
+          playing.onended = stopPlaying;
+          await playing.play();
+        } catch {
+          stopPlaying();
+        }
+      };
       return el(
         'li',
         {},
         el('div', { className: 'ut' }, el('strong', { textContent: `Voice ${i + 1}` }), el('span', { className: 'hint', textContent: `spoke ${g.seconds} s` })),
         el('p', { className: 'hint', textContent: `For example at ${g.at.map(fmtTime).join(', ')}` }),
-        el('div', { className: 'name-row' }, label, input, save)
+        el('div', { className: 'name-row' }, play, label, input, save)
       );
     })
   );

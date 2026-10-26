@@ -290,6 +290,15 @@
     const n = norm(name);
     return (blocked || []).some((b) => n && !isAnon({ name }) && norm(b.name) === n || centroid && b.centroid && cosine(unpack(b.centroid), centroid) >= 0.7);
   }
+  var usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready || p.confirmed);
+  function unnamedGroups(meeting, people, { max = 4, minSecs = 15, cap = 300 } = {}) {
+    const usable = usableVoices(people);
+    const segs = (meeting.voiceSegs || []).filter((s) => !usable.length || !classify(unpack(s.e), usable).id);
+    if (segs.length < 4) return [];
+    const step = Math.max(1, Math.ceil(segs.length / cap));
+    const sample = segs.filter((_, i) => i % step === 0);
+    return clusterVoices(sample).filter((g) => g.seconds * step >= minSecs).slice(0, max).map((g) => ({ seconds: Math.round(g.seconds * step), pieces: g.members.length, centroid: g.centroid, windows: g.members.filter((_, k) => k % Math.max(1, Math.floor(g.members.length / 8)) === 0).slice(0, 8).map((i) => sample[i].e), at: g.members.slice(0, 3).map((i) => Math.round(sample[i].t0)), segs: g.members.slice(0, 8).map((i) => ({ t0: sample[i].t0, s: sample[i].s })) }));
+  }
 
   // src/meetend.js
   var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
@@ -396,6 +405,18 @@
   }
   var putSample = (personId, blob) => tx("samples", "readwrite", (s) => s.put(blob, personId));
   var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
+  var unnamedKey = (meetingId, firstAt) => `u:${meetingId}:${Math.round(firstAt)}`;
+  async function deleteUnnamedClips(meetingId) {
+    await tx("samples", "readwrite", (s) => {
+      const r = s.openCursor();
+      r.onsuccess = () => {
+        const c = r.result;
+        if (!c) return;
+        if (String(c.key).startsWith(`u:${meetingId}:`)) c.delete();
+        c.continue();
+      };
+    });
+  }
   function makeClip(pieces) {
     const gap = new Float32Array(Math.round(SR * 0.3));
     const parts = [];
@@ -420,6 +441,15 @@
       if (!meeting) return;
       const todo = [];
       for (const p of people) if (p.auto && !await hasSample(p.id)) todo.push(p);
+      for (const g of unnamedGroups(meeting, people, { max: 6 })) {
+        const pcms = [];
+        for (const sg of g.segs) {
+          const i16 = await getPiece(pieceKey(meetingId, sg.t0, sg.s));
+          if (i16) pcms.push(fromInt16(i16));
+          if (pcms.length >= 3) break;
+        }
+        if (pcms.length) await putSample(unnamedKey(meetingId, g.at[0]), makeClip(pcms));
+      }
       if (!todo.length) return;
       const best = new Map(todo.map((p) => [p.id, []]));
       for (const s of meeting.voiceSegs || []) {
@@ -688,7 +718,7 @@
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
     await chrome.storage.local.remove(key(id));
-    await Promise.allSettled([deletePieces(id), deleteAllPending(id)]);
+    await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id)]);
   }
   async function getState() {
     const { rec: rec2 } = await chrome.storage.session.get("rec");

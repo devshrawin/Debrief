@@ -2189,6 +2189,17 @@ ${att}
   }
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
   var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
+  async function deleteUnnamedClips(meetingId) {
+    await tx("samples", "readwrite", (s) => {
+      const r = s.openCursor();
+      r.onsuccess = () => {
+        const c = r.result;
+        if (!c) return;
+        if (String(c.key).startsWith(`u:${meetingId}:`)) c.delete();
+        c.continue();
+      };
+    });
+  }
 
   // src/audiostore.js
   var DB2 = "debrief";
@@ -2376,7 +2387,7 @@ ${att}
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     await chrome.storage.local.set({ meetingIds: meetingIds.filter((x2) => x2 !== id2) });
     await chrome.storage.local.remove(key(id2));
-    await Promise.allSettled([deletePieces(id2), deleteAllPending(id2)]);
+    await Promise.allSettled([deletePieces(id2), deleteAllPending(id2), deleteUnnamedClips(id2)]);
   }
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec));

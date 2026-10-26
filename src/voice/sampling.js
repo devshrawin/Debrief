@@ -1,6 +1,7 @@
 // After a meeting: turn the waiting pieces of audio into one short clip per unnamed voice, then delete them all.
 import { classify, unpack } from './match.js';
-import { getPiece, pieceKey, fromInt16, makeClip, putSample, hasSample, deletePieces } from './samples.js';
+import { getPiece, pieceKey, fromInt16, makeClip, putSample, hasSample, deletePieces, unnamedKey } from './samples.js';
+import { unnamedGroups } from './learn.js';
 
 // meeting === null only clears the waiting audio.
 export async function saveSamples(meetingId, meeting, people) {
@@ -8,6 +9,16 @@ export async function saveSamples(meetingId, meeting, people) {
     if (!meeting) return;
     const todo = [];
     for (const p of people) if (p.auto && !(await hasSample(p.id))) todo.push(p); // named voices too: the clip stays so it can be played in Settings
+    // voices nobody has named yet get a clip too, so "name this voice" can play it
+    for (const g of unnamedGroups(meeting, people, { max: 6 })) {
+      const pcms = [];
+      for (const sg of g.segs) {
+        const i16 = await getPiece(pieceKey(meetingId, sg.t0, sg.s));
+        if (i16) pcms.push(fromInt16(i16));
+        if (pcms.length >= 3) break;
+      }
+      if (pcms.length) await putSample(unnamedKey(meetingId, g.at[0]), makeClip(pcms));
+    }
     if (!todo.length) return;
     // which waiting piece belongs to which voice, best matches first
     const best = new Map(todo.map((p) => [p.id, []]));
