@@ -220,6 +220,8 @@ export function mergePeople(list, fromId, intoId) {
   const from = list.find((p) => p.id === fromId);
   const into = list.find((p) => p.id === intoId);
   if (!from || !into || from.id === into.id) throw new Error('Pick two different voices to merge.');
+  if (!from.centroid || !into.centroid) throw new Error('One of these voices has no voice fingerprint, so it cannot be merged. Delete it and let Debrief learn it again.');
+  if (unpack(from.centroid).length !== unpack(into.centroid).length) throw new Error('These two voices were made with different speaker models and cannot be merged.');
   const wf = Math.max(1, from.secs || 1);
   const wi = Math.max(1, into.secs || 1);
   const merged = {

@@ -2472,6 +2472,8 @@ function out(o) {
     const from = list.find((p) => p.id === fromId);
     const into = list.find((p) => p.id === intoId);
     if (!from || !into || from.id === into.id) throw new Error("Pick two different voices to merge.");
+    if (!from.centroid || !into.centroid) throw new Error("One of these voices has no voice fingerprint, so it cannot be merged. Delete it and let Debrief learn it again.");
+    if (unpack(from.centroid).length !== unpack(into.centroid).length) throw new Error("These two voices were made with different speaker models and cannot be merged.");
     const wf = Math.max(1, from.secs || 1);
     const wi = Math.max(1, into.secs || 1);
     const merged = {
@@ -2999,6 +3001,19 @@ function out(o) {
         const save3 = el("button", { type: "button", className: "btn primary", textContent: "Name this voice" });
         const doSave = async () => {
           try {
+            const typed = input.value.trim().replace(/\s+/g, " ");
+            const same2 = people.find((x2) => x2.name.toLowerCase() === typed.toLowerCase());
+            if (same2) {
+              const ask = await modal({ text: `${same2.name} already has a voice. Is this the same person? Their voices will be joined.`, buttons: [{ label: "No, keep it separate", value: "no" }, { label: `Add to ${same2.name}`, value: "merge", primary: true }] });
+              if (ask?.value !== "merge") return;
+              people = addRecording(people, same2.id, { lang: "free", print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
+              await saveVoices(people);
+              getSample(key2).then((b) => b && !same2.hasClip && hasSample(same2.id).then((has) => !has && putSample(same2.id, b))).catch(() => {
+              });
+              renderList();
+              renderUnnamed();
+              return;
+            }
             people = upsertPerson(people, { name: input.value, lang: "free", print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
             await saveVoices(people);
             const named = people.find((x2) => x2.name.toLowerCase() === input.value.trim().replace(/\s+/g, " ").toLowerCase());
@@ -3046,7 +3061,12 @@ function out(o) {
     try {
       const clean = r.input.trim().replace(/\s+/g, " ").slice(0, 60);
       if (!clean) throw new Error("A name cannot be empty.");
-      if (people.some((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
+      const taken = people.find((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean.toLowerCase());
+      if (taken) {
+        const ask = await modal({ text: `${taken.name} already has a voice. Is this the same person? Merging joins the two, and the result is called ${taken.name}.`, buttons: [{ label: "No, keep both", value: "no" }, { label: `Merge into ${taken.name}`, value: "merge", primary: true }] });
+        if (ask?.value === "merge") await mergeVoices(p, taken.id);
+        return;
+      }
       people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean, ...x2.auto ? { confirmed: true } : {} } : x2);
       await saveVoices(people);
       renderList();
@@ -3076,6 +3096,22 @@ function out(o) {
       renderList();
     } catch (e) {
       tell(`Could not delete: ${e.message}`);
+    }
+  }
+  async function mergeVoices(p, intoId) {
+    try {
+      people = mergePeople(people, p.id, intoId);
+      await saveVoices(people);
+      const mine = await getSample(p.id).catch(() => null);
+      if (mine && !await hasSample(intoId).catch(() => true)) await putSample(intoId, mine).catch(() => {
+      });
+      deleteSample(p.id).catch(() => {
+      });
+      renderList();
+      renderUnnamed().catch(() => {
+      });
+    } catch (e) {
+      tell(e.message);
     }
   }
   async function mergeInto(p) {

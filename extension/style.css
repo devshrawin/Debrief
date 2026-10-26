@@ -433,6 +433,11 @@ dialog, .dbmodal {
   border: 0; padding: 0; border-radius: var(--r-lg); color: var(--label);
   background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3);
 }
+/* the small in-page dialog made by modal(): padded, a sensible width, full-width fields */
+.dbmodal { padding: 24px; width: min(460px, calc(100vw - 32px)); max-width: none; }
+.dbmodal > div:first-child { font-size: 14.5px; line-height: 1.55; }
+.dbmodal input, .dbmodal select { width: 100%; box-sizing: border-box; }
+.dbmodal .dbbtns { margin-top: 20px; }
 dialog::backdrop { background: rgb(10 10 20 / .32); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 
 /* Motion off when asked */

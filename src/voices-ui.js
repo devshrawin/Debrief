@@ -214,6 +214,18 @@ async function renderUnnamed() {
       const save = el('button', { type: 'button', className: 'btn primary', textContent: 'Name this voice' });
       const doSave = async () => {
         try {
+          const typed = input.value.trim().replace(/\s+/g, ' ');
+          const same = people.find((x) => x.name.toLowerCase() === typed.toLowerCase());
+          if (same) {
+            const ask = await modal({ text: `${same.name} already has a voice. Is this the same person? Their voices will be joined.`, buttons: [{ label: 'No, keep it separate', value: 'no' }, { label: `Add to ${same.name}`, value: 'merge', primary: true }] });
+            if (ask?.value !== 'merge') return;
+            people = addRecording(people, same.id, { lang: 'free', print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
+            await saveVoices(people);
+            getSample(key).then((b) => b && !same.hasClip && hasSample(same.id).then((has) => !has && putSample(same.id, b))).catch(() => {});
+            renderList();
+            renderUnnamed();
+            return;
+          }
           people = upsertPerson(people, { name: input.value, lang: 'free', print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
           await saveVoices(people);
           // the named voice keeps its clip, so "Play sample" works in the list
@@ -262,7 +274,13 @@ async function rename(p) {
   try {
     const clean = r.input.trim().replace(/\s+/g, ' ').slice(0, 60);
     if (!clean) throw new Error('A name cannot be empty.');
-    if (people.some((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase())) throw new Error(`There is already a voice called ${clean}.`);
+    const taken = people.find((x) => x.id !== p.id && x.name.toLowerCase() === clean.toLowerCase());
+    if (taken) {
+      // the same person under two voices: offer to join them instead of refusing
+      const ask = await modal({ text: `${taken.name} already has a voice. Is this the same person? Merging joins the two, and the result is called ${taken.name}.`, buttons: [{ label: 'No, keep both', value: 'no' }, { label: `Merge into ${taken.name}`, value: 'merge', primary: true }] });
+      if (ask?.value === 'merge') await mergeVoices(p, taken.id);
+      return;
+    }
     // naming a learned voice confirms it: it is used from now on, including for meetings already recorded
     people = people.map((x) => (x.id === p.id ? { ...x, name: clean, ...(x.auto ? { confirmed: true } : {}) } : x));
     await saveVoices(people);
@@ -297,6 +315,21 @@ async function remove(p) {
 }
 
 // Two learned voices that are really one person (for example a laptop and a headset): fold one into the other.
+async function mergeVoices(p, intoId) {
+  try {
+    people = mergePeople(people, p.id, intoId);
+    await saveVoices(people);
+    // the clip moves to the voice it was merged into when that one has none
+    const mine = await getSample(p.id).catch(() => null);
+    if (mine && !(await hasSample(intoId).catch(() => true))) await putSample(intoId, mine).catch(() => {});
+    deleteSample(p.id).catch(() => {});
+    renderList();
+    renderUnnamed().catch(() => {});
+  } catch (e) {
+    tell(e.message);
+  }
+}
+
 async function mergeInto(p) {
   const others = people.filter((x) => x.id !== p.id);
   const r = await modal({ text: `Merge ${p.name} into which voice? The result keeps that voice's name.`, select: others.map((x) => ({ value: x.id, label: x.name })), buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Merge', value: 'ok', primary: true }] });
