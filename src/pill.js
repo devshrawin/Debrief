@@ -358,16 +358,14 @@ import { adapterFor } from './adapters/index.js';
 
     const wanted = rec.micWanted ?? rec.micOn;
     const paused = wanted && !rec.micOn;
-    micBtn.className = 'mic ' + (!rec.mic ? 'off' : paused ? 'muted' : wanted ? 'on' : 'off');
-    micBtn.innerHTML = (wanted && !paused ? MIC_ON : MIC_OFF) + (!rec.mic ? 'No mic' : paused ? 'Muted in call' : wanted ? 'Mic on' : 'Mic off');
+    micBtn.className = 'mic ' + (!rec.mic ? 'off' : wanted ? 'on' : 'off');
+    micBtn.innerHTML = (wanted ? MIC_ON : MIC_OFF) + (!rec.mic ? 'No mic' : wanted ? 'Mic on' : 'Mic off');
     micBtn.disabled = !rec.mic;
     const micTitle = !rec.mic
       ? 'Microphone not available to Debrief'
-      : paused
-        ? 'You are muted in the call, so Debrief is ignoring your mic. Click to stop including it.'
-        : wanted
-          ? 'Your mic is in the transcript. Click to ignore it.'
-          : 'Your mic is ignored. Click to include it.';
+      : wanted
+        ? 'Your mic is in the transcript. Click to ignore it.'
+        : 'Your mic is ignored. Click to include it.';
     micBtn.title = micTitle;
     micBtn.setAttribute('aria-label', 'Microphone: ' + micBtn.textContent.trim() + '. ' + (rec.mic ? 'Click to change' : 'Not available'));
 
@@ -375,7 +373,7 @@ import { adapterFor } from './adapters/index.js';
     pill.classList.toggle('open', expanded);
     pill.setAttribute('aria-label', `Debrief recording, ${timeEl.textContent}. ${expanded ? 'Hide' : 'Show'} details`);
     // Announce only changes of state, never the ticking timer.
-    const say = alert ? alert.title : isPaused ? 'Recording is paused' : !fresh ? 'No audio is arriving' : paused ? 'You are muted in the call' : 'Debrief is recording';
+    const say = alert ? alert.title : isPaused ? 'Recording is paused' : !fresh ? 'No audio is arriving' : 'Debrief is recording';
     if (say !== lastStatus) {
       lastStatus = say;
       status.textContent = say;
@@ -401,11 +399,9 @@ import { adapterFor } from './adapters/index.js';
     else panel.append(meter('Your mic', fresh ? lv.mic : null));
     const line = !rec.mic
       ? "Debrief can't reach your microphone. The call is still recorded."
-      : paused
-        ? 'You are muted in the call, so Debrief pauses your mic.'
-        : wanted
-          ? 'Your voice is going into the transcript.'
-          : 'Your mic is not recorded. The call still is.';
+      : wanted
+        ? 'Your voice is going into the transcript.'
+        : 'Your mic is not recorded. The call still is.';
     panel.append(el('p', 'line', line));
     panel.append(el('p', 'line', `${S.counts.segs} pieces transcribed · ${S.counts.errs} ${S.counts.errs === 1 ? 'error' : 'errors'}`));
     if (!fresh) {
