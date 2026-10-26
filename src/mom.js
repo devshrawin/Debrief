@@ -191,7 +191,7 @@ function applyOrg() {
     st = document.head.appendChild(Object.assign(document.createElement('style'), { id: 'orgPrint', media: 'print' }));
   }
   const line = String(settings.orgConfidential || '').trim().replace(/["\\\n]/g, ' ');
-  st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; } }` : '';
+  st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-left { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-right { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } }` : '';
 }
 const currentFormat = () => meeting.format || settings.minutesFormat || 'amnex';
 function paintFormat() {

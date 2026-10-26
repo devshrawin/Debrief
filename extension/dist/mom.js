@@ -2100,9 +2100,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var printCss = (confidential = "Confidential") => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
 @page amx {
   size: A4;
-  margin: 14mm 16mm 18mm 16mm;
-  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  margin: 22.5mm 12.7mm 25mm 19mm; /* the template: 2.25 cm top, 1.27 cm right, 2.5 cm bottom, 1.9 cm left */
+  @bottom-left { content: ""; width: 42mm; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); width: 42mm; font: 700 12pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: right; vertical-align: top; padding-top: 1mm; white-space: nowrap; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 9pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.5pt solid ${ORG.accent}; }
 }
 .amx { page: amx; }
 .amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -2123,8 +2124,8 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var PRINT_CSS = printCss("Confidential");
   function renderWordHtml(doc) {
     const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p></div>`;
-    const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${ORG.accent}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(ORG.confidential)}</p></div>`;
-    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:20mm 16mm 20mm 16mm;mso-header-margin:10mm;mso-footer-margin:10mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
+    const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:12pt;font-weight:bold">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:9pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></div>`;
+    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:22.5mm 12.7mm 25mm 19mm;mso-header-margin:13mm;mso-footer-margin:12mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
   }
   function renderPdfHtml(doc) {
     return `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}body{${FONT};font-size:10pt;color:#000}</style></head><body><p style="margin:0 0 8pt;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p>${renderDocBody(doc)}<p style="margin:14pt 0 0;text-align:center;font-size:8.5pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></body></html>`;
@@ -2375,7 +2376,12 @@ ${att}
     return r[key(id2)] || null;
   }
   async function saveMeeting(m) {
-    await chrome.storage.local.set({ [key(m.id)]: m });
+    try {
+      await chrome.storage.local.set({ [key(m.id)]: m });
+    } catch (e2) {
+      if (!/serialize/i.test(String(e2?.message))) throw e2;
+      await chrome.storage.local.set({ [key(m.id)]: plain2(m) });
+    }
   }
   async function patchMeeting(id2, fields) {
     const m = await getMeeting(id2);
@@ -2426,8 +2432,11 @@ ${att}
     const { voices } = await chrome.storage.local.get("voices");
     return voices || [];
   }
+  function plain2(v) {
+    return JSON.parse(JSON.stringify(v, (_k, x2) => ArrayBuffer.isView(x2) ? Array.from(x2) : x2));
+  }
   async function saveVoices(list) {
-    await chrome.storage.local.set({ voices: list });
+    await chrome.storage.local.set({ voices: plain2(list) });
   }
   async function getEmailNames() {
     const { emailNames } = await chrome.storage.local.get("emailNames");
@@ -3820,17 +3829,17 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
   var LATIN = /[A-Za-z]/;
   function guardOwners(items, windowText) {
     const sentences2 = String(windowText).split(/(?<=[.!?।])\s+|\n+/).map((x2) => x2.trim()).filter(Boolean);
-    const plain2 = sentences2.map((x2) => wordsOf(x2).join(" "));
+    const plain3 = sentences2.map((x2) => wordsOf(x2).join(" "));
     return items.map((it2) => {
       if (!it2.owner || it2.owner === "-") return it2;
       const probe = wordsOf(it2.quote || it2.text).slice(0, 5).join(" ");
       if (probe.split(" ").length < 3) return it2;
-      const at2 = plain2.findIndex((p) => p.includes(probe));
+      const at2 = plain3.findIndex((p) => p.includes(probe));
       if (at2 < 0) return it2;
       const first2 = wordsOf(it2.owner)[0];
-      if (first2 && LATIN.test(first2) && !LATIN.test(plain2[at2])) return it2;
+      if (first2 && LATIN.test(first2) && !LATIN.test(plain3[at2])) return it2;
       const short = (x2) => x2 && x2.split(" ").length <= 5 ? x2 : "";
-      const near = [short(plain2[at2 - 1]), plain2[at2], short(plain2[at2 + 1])].filter(Boolean).join(" ");
+      const near = [short(plain3[at2 - 1]), plain3[at2], short(plain3[at2 + 1])].filter(Boolean).join(" ");
       return first2 && near.split(" ").includes(first2) ? it2 : { ...it2, owner: "-", ownerDropped: it2.owner };
     });
   }
@@ -5052,7 +5061,7 @@ ${meeting2.mom || ""}
       st2 = document.head.appendChild(Object.assign(document.createElement("style"), { id: "orgPrint", media: "print" }));
     }
     const line = String(settings.orgConfidential || "").trim().replace(/["\\\n]/g, " ");
-    st2.textContent = line ? `@page amx { @bottom-center { content: "${line}"; } }` : "";
+    st2.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || "#3b2fa8"}; } @bottom-left { border-top-color: ${settings.orgAccent || "#3b2fa8"}; } @bottom-right { border-top-color: ${settings.orgAccent || "#3b2fa8"}; } }` : "";
   }
   var currentFormat = () => meeting.format || settings.minutesFormat || "amnex";
   function paintFormat() {

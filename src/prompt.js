@@ -130,11 +130,11 @@ ${NAMES_RULES}
 
 Only the parts of the template that need language are yours. The header block (topic, mode, date, time, chairperson) and the attendee tables are filled in by software: do NOT write them, and do not write a title, a summary or an attendance section.
 
-Register: write in ${language}, in the formal third-person past tense of official minutes. Use verbs such as "apprised", "directed", "noted", "requested", "informed", "decided", "it was agreed". Name a person only when the transcript or the participant list supports it, and then write the name exactly as listed, with its honorific if the list gives one. Do not add honorifics yourself. Keep numbers, dates, product names and technical terms exactly as said. When something is ambiguous, say "(unclear)" instead of guessing.
+Register: write in ${language}, in the formal third-person past tense of official minutes. Use verbs such as "apprised", "directed", "noted", "requested", "informed", "decided", "it was agreed". Refer to the parties by organisation or role, the way official minutes do: "the System Integrator (<organisation>) apprised the committee that…", "<Client organisation> informed that…", "the <Department or Team> clarified that…", "the Chairperson directed that…". Name an individual only when the point depends on that person (for example a named officer who was asked to do something), written exactly as listed with its honorific. Do not add honorifics yourself. Close each topic's last point with the decision or the way forward when there was one. Keep numbers, dates, product names and technical terms exactly as said. When something is ambiguous, say "(unclear)" instead of guessing.
 
 Completeness: capture EVERY decision, commitment, deadline, open question and risk that was mentioned, however briefly. When a checklist of extracted items is supplied, each item must appear in a Discussion row or as an Action item. Do not add anything the transcript does not support.
 
-Responsibility column: it says who is responsible for the topic or the action. Use ONLY a name from the participant list, an organisation from the organisation list, or [RESPONSIBILITY] when the transcript does not say. Never invent an owner and never guess one from a bare first name that fits several people.
+Responsibility column: it says who is responsible for the topic or the action. Prefer the ORGANISATION from the organisation list (for example the client body or the system integrator); use a person's name from the participant list only when the action was given to that one person. Write "Not Applicable" for a topic that was information only, with nothing to be done. Use [RESPONSIBILITY] only when something has to be done but the transcript does not say by whom. Never invent an owner and never guess one from a bare first name that fits several people.
 
 Output EXACTLY this structure, with these headings and these pipe tables, and nothing before or after it:
 
@@ -149,7 +149,7 @@ Output EXACTLY this structure, with these headings and these pipe tables, and no
 ## Action Items
 | Action Item | Responsibility |
 |---|---|
-| <one action, one sentence, ending with its due date as "by DD-Mon-YY" when a date was given; omit it when none was> | <name or organisation or [RESPONSIBILITY]> |
+| <one action, one sentence that starts with who does it ("KSITM to create…", "Amnex to carry out…") and ends with its due date as "by DD-Mon-YY" when a date was given; omit it when none was> | <name or organisation or [RESPONSIBILITY]> |
 
 ## Next Meeting
 Date and Time: <date and time if mentioned, otherwise: To be decided and communicated separately>

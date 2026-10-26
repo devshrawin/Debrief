@@ -259,8 +259,11 @@
     const { voices } = await chrome.storage.local.get("voices");
     return voices || [];
   }
+  function plain(v) {
+    return JSON.parse(JSON.stringify(v, (_k, x2) => ArrayBuffer.isView(x2) ? Array.from(x2) : x2));
+  }
   async function saveVoices(list) {
-    await chrome.storage.local.set({ voices: list });
+    await chrome.storage.local.set({ voices: plain(list) });
   }
   async function forgetAllVoices() {
     await chrome.storage.local.remove(["voices", "voiceBlock", "emailNames"]);
@@ -2011,12 +2014,15 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   });
 
   // src/amnex.js
+  var GENERIC_ACCENT = "#334155";
+  var ORG = { name: "", confidential: "Confidential", accent: GENERIC_ACCENT, domains: [] };
   var printCss = (confidential = "Confidential") => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
 @page amx {
   size: A4;
-  margin: 14mm 16mm 18mm 16mm;
-  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  margin: 22.5mm 12.7mm 25mm 19mm; /* the template: 2.25 cm top, 1.27 cm right, 2.5 cm bottom, 1.9 cm left */
+  @bottom-left { content: ""; width: 42mm; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); width: 42mm; font: 700 12pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: right; vertical-align: top; padding-top: 1mm; white-space: nowrap; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 9pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.5pt solid ${ORG.accent}; }
 }
 .amx { page: amx; }
 .amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

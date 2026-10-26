@@ -338,7 +338,7 @@ export function knownParties({ facts, meeting, dir = [], transcript = '' }) {
   return { names, orgs: [...orgs].filter(Boolean), heard };
 }
 
-const GENERIC_RESP = /^(chairperson|the chairperson|all|all attendees|all participants)$/i;
+const GENERIC_RESP = /^(chairperson|the chairperson|all|all attendees|all participants|not applicable|n\/a)$/i;
 
 // Keeps only the parts of a Responsibility value that code can vouch for. An unknown name is dropped; if nothing
 // is left the cell becomes [RESPONSIBILITY] for the note-taker to fill in. A bare first name that fits exactly one
@@ -699,9 +699,10 @@ export function renderPrintFragment(doc) {
 export const printCss = (confidential = 'Confidential') => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
 @page amx {
   size: A4;
-  margin: 14mm 16mm 18mm 16mm;
-  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  margin: 22.5mm 12.7mm 25mm 19mm; /* the template: 2.25 cm top, 1.27 cm right, 2.5 cm bottom, 1.9 cm left */
+  @bottom-left { content: ""; width: 42mm; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); width: 42mm; font: 700 12pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: right; vertical-align: top; padding-top: 1mm; white-space: nowrap; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 9pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.5pt solid ${ORG.accent}; }
 }
 .amx { page: amx; }
 .amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -730,8 +731,8 @@ export function renderStandaloneHtml(doc) {
 // and the thead/tfoot trick, so the page furniture uses Word's own header/footer markup.
 export function renderWordHtml(doc) {
   const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p></div>`;
-  const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${ORG.accent}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(ORG.confidential)}</p></div>`;
-  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:20mm 16mm 20mm 16mm;mso-header-margin:10mm;mso-footer-margin:10mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
+  const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:12pt;font-weight:bold">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:9pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></div>`;
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:22.5mm 12.7mm 25mm 19mm;mso-header-margin:13mm;mso-footer-margin:12mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
 }
 
 // What the relay turns into the PDF attachment. Apps Script's converter ignores @page margin boxes and may ignore

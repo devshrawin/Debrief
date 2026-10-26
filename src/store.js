@@ -126,7 +126,12 @@ export async function getMeeting(id) {
 }
 
 export async function saveMeeting(m) {
-  await chrome.storage.local.set({ [key(m.id)]: m });
+  try {
+    await chrome.storage.local.set({ [key(m.id)]: m });
+  } catch (e) {
+    if (!/serialize/i.test(String(e?.message))) throw e;
+    await chrome.storage.local.set({ [key(m.id)]: plain(m) }); // a typed array slipped into the record: store it as an ordinary array
+  }
 }
 
 // Changes only the given fields of a stored meeting (the job writes small updates, not the whole record every few seconds).
@@ -212,8 +217,24 @@ export async function getVoices() {
   return voices || [];
 }
 
+// chrome.storage cannot hold typed arrays ("Cannot serialize value to JSON"). Anything that might carry one goes through
+// plain() first: typed arrays become ordinary arrays. findTyped() says where one was, for the debug note.
+export function plain(v) {
+  return JSON.parse(JSON.stringify(v, (_k, x) => (ArrayBuffer.isView(x) ? Array.from(x) : x)));
+}
+export function findTyped(v, path = '', seen = new Set()) {
+  if (ArrayBuffer.isView(v)) return path || '(root)';
+  if (!v || typeof v !== 'object' || seen.has(v)) return '';
+  seen.add(v);
+  for (const [k, x] of Object.entries(v)) {
+    const hit = findTyped(x, `${path}${path ? '.' : ''}${k}`, seen);
+    if (hit) return hit;
+  }
+  return '';
+}
+
 export async function saveVoices(list) {
-  await chrome.storage.local.set({ voices: list });
+  await chrome.storage.local.set({ voices: plain(list) });
 }
 
 // Deletes every enrolled voice, and the voice fingerprints kept inside saved meetings.

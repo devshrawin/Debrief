@@ -6,7 +6,7 @@ import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
 import { stuckJobs } from './jobstate.js';
-import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, deleteMeeting, addMeetingId, getState, setState, saveVoices, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
+import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -328,6 +328,7 @@ async function setPaused(want) {
 // Always leaves a trace on the meeting (a report, "off", or the error), so "no voices to name" can say why. Safe to run again
 // later from the minutes page: a voice already learned from this meeting is not counted twice.
 async function learnVoices(meetingId) {
+  let step = 'reading settings';
   try {
     const s = await getSettings();
     const m = await getMeeting(meetingId);
@@ -339,21 +340,28 @@ async function learnVoices(meetingId) {
       });
       return { ok: true, off: true };
     }
+    step = 'reading the blocked voices';
     const blocked = await getBlockedVoices();
+    step = 'matching the voices';
     const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
     const r2 = learnRecurring(m, r.list, { blocked });
+    step = 'saving the voices';
+    const typedAt = findTyped(r2.list); // should never happen; if it does, the note says where, and the list is cleaned on saving
     if (r.changed || r2.changed) await saveVoices(r2.list);
     // keep one short clip per unnamed voice (if switched on), and always delete the waiting audio
+    step = 'keeping the audio clips';
     await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {});
+    step = 'saving the result in the meeting';
     await updateMeeting(meetingId, (mm) => {
-      mm.voiceLearn = { ...r.report, recurring: r2.report };
+      mm.voiceLearn = plain({ ...r.report, recurring: r2.report });
+      if (typedAt) (mm.debug ||= []).push(`voice learning: a typed array was found at voices.${typedAt} and converted`);
       (mm.debug ||= []).push(`voice learning: ${r2.report.created.length} new, ${r2.report.updated.length + r.report.learned.length} updated, from ${(m.voiceSegs || []).length} pieces`);
     });
     return { ok: true, created: r2.report.created.length };
   } catch (e) {
     await updateMeeting(meetingId, (mm) => {
-      mm.voiceLearn = { error: String(e?.message || e) };
-      (mm.debug ||= []).push(`voice learning failed: ${e?.message || e}`);
+      mm.voiceLearn = { error: `${String(e?.message || e)} (while ${step})` };
+      (mm.debug ||= []).push(`voice learning failed while ${step}: ${e?.message || e}`);
     }).catch(() => {});
     return { ok: false, error: String(e?.message || e) };
   }

@@ -708,7 +708,12 @@
     return r[key(id)] || null;
   }
   async function saveMeeting(m) {
-    await chrome.storage.local.set({ [key(m.id)]: m });
+    try {
+      await chrome.storage.local.set({ [key(m.id)]: m });
+    } catch (e) {
+      if (!/serialize/i.test(String(e?.message))) throw e;
+      await chrome.storage.local.set({ [key(m.id)]: plain(m) });
+    }
   }
   async function addMeetingId(id) {
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
@@ -732,8 +737,21 @@
     const { learnedNames, voices, ...clean } = patch;
     await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
   }
+  function plain(v) {
+    return JSON.parse(JSON.stringify(v, (_k, x) => ArrayBuffer.isView(x) ? Array.from(x) : x));
+  }
+  function findTyped(v, path = "", seen = /* @__PURE__ */ new Set()) {
+    if (ArrayBuffer.isView(v)) return path || "(root)";
+    if (!v || typeof v !== "object" || seen.has(v)) return "";
+    seen.add(v);
+    for (const [k, x] of Object.entries(v)) {
+      const hit = findTyped(x, `${path}${path ? "." : ""}${k}`, seen);
+      if (hit) return hit;
+    }
+    return "";
+  }
   async function saveVoices(list) {
-    await chrome.storage.local.set({ voices: list });
+    await chrome.storage.local.set({ voices: plain(list) });
   }
   async function getBlockedVoices() {
     const { voiceBlock } = await chrome.storage.local.get("voiceBlock");
@@ -1039,6 +1057,7 @@
     return { ok: true, paused: !!st.paused };
   }
   async function learnVoices(meetingId) {
+    let step = "reading settings";
     try {
       const s = await getSettings();
       const m = await getMeeting(meetingId);
@@ -1051,21 +1070,28 @@
         });
         return { ok: true, off: true };
       }
+      step = "reading the blocked voices";
       const blocked = await getBlockedVoices();
+      step = "matching the voices";
       const r = learnFromMeeting(m, s.voices || [], { myName: s.myName, blocked });
       const r2 = learnRecurring(m, r.list, { blocked });
+      step = "saving the voices";
+      const typedAt = findTyped(r2.list);
       if (r.changed || r2.changed) await saveVoices(r2.list);
+      step = "keeping the audio clips";
       await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {
       });
+      step = "saving the result in the meeting";
       await updateMeeting(meetingId, (mm) => {
-        mm.voiceLearn = { ...r.report, recurring: r2.report };
+        mm.voiceLearn = plain({ ...r.report, recurring: r2.report });
+        if (typedAt) (mm.debug ||= []).push(`voice learning: a typed array was found at voices.${typedAt} and converted`);
         (mm.debug ||= []).push(`voice learning: ${r2.report.created.length} new, ${r2.report.updated.length + r.report.learned.length} updated, from ${(m.voiceSegs || []).length} pieces`);
       });
       return { ok: true, created: r2.report.created.length };
     } catch (e) {
       await updateMeeting(meetingId, (mm) => {
-        mm.voiceLearn = { error: String(e?.message || e) };
-        (mm.debug ||= []).push(`voice learning failed: ${e?.message || e}`);
+        mm.voiceLearn = { error: `${String(e?.message || e)} (while ${step})` };
+        (mm.debug ||= []).push(`voice learning failed while ${step}: ${e?.message || e}`);
       }).catch(() => {
       });
       return { ok: false, error: String(e?.message || e) };

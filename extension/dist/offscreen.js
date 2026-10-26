@@ -370,7 +370,12 @@
     return r[key(id)] || null;
   }
   async function saveMeeting(m) {
-    await chrome.storage.local.set({ [key(m.id)]: m });
+    try {
+      await chrome.storage.local.set({ [key(m.id)]: m });
+    } catch (e2) {
+      if (!/serialize/i.test(String(e2?.message))) throw e2;
+      await chrome.storage.local.set({ [key(m.id)]: plain(m) });
+    }
   }
   async function patchMeeting(id, fields) {
     const m = await getMeeting(id);
@@ -405,6 +410,9 @@
     const secret = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
     await chrome.storage.local.set({ settings: { ...settings || {}, emailSecret: secret } });
     return secret;
+  }
+  function plain(v) {
+    return JSON.parse(JSON.stringify(v, (_k, x2) => ArrayBuffer.isView(x2) ? Array.from(x2) : x2));
   }
   async function getEmailNames() {
     const { emailNames } = await chrome.storage.local.get("emailNames");
@@ -1071,17 +1079,17 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
   var LATIN = /[A-Za-z]/;
   function guardOwners(items, windowText) {
     const sentences2 = String(windowText).split(/(?<=[.!?।])\s+|\n+/).map((x2) => x2.trim()).filter(Boolean);
-    const plain2 = sentences2.map((x2) => wordsOf(x2).join(" "));
+    const plain3 = sentences2.map((x2) => wordsOf(x2).join(" "));
     return items.map((it2) => {
       if (!it2.owner || it2.owner === "-") return it2;
       const probe = wordsOf(it2.quote || it2.text).slice(0, 5).join(" ");
       if (probe.split(" ").length < 3) return it2;
-      const at2 = plain2.findIndex((p) => p.includes(probe));
+      const at2 = plain3.findIndex((p) => p.includes(probe));
       if (at2 < 0) return it2;
       const first2 = wordsOf(it2.owner)[0];
-      if (first2 && LATIN.test(first2) && !LATIN.test(plain2[at2])) return it2;
+      if (first2 && LATIN.test(first2) && !LATIN.test(plain3[at2])) return it2;
       const short = (x2) => x2 && x2.split(" ").length <= 5 ? x2 : "";
-      const near = [short(plain2[at2 - 1]), plain2[at2], short(plain2[at2 + 1])].filter(Boolean).join(" ");
+      const near = [short(plain3[at2 - 1]), plain3[at2], short(plain3[at2 + 1])].filter(Boolean).join(" ");
       return first2 && near.split(" ").includes(first2) ? it2 : { ...it2, owner: "-", ownerDropped: it2.owner };
     });
   }
@@ -3101,7 +3109,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var ZEBRA = "#f2f2f2";
   var e = (s) => escapeHtml(s ?? "");
   var navy = (inner, { w, center = true, colspan, mid = false } = {}) => `<th${colspan ? ` colspan="${colspan}"` : ""}${w ? ` width="${w}"` : ""} bgcolor="${ORG.accent}" style="${navyCell()};text-align:${center ? "center" : "left"};${mid ? "vertical-align:middle;" : "vertical-align:top;"}${w ? `width:${w}px;` : ""}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
-  var plain = (inner, { w, center = false, z: z2 = false, bold = false, colspan } = {}) => `<td${colspan ? ` colspan="${colspan}"` : ""}${w ? ` width="${w}"` : ""}${z2 ? ` bgcolor="${ZEBRA}"` : ""} style="${CELL};${z2 ? `background:${ZEBRA};` : ""}${center ? "text-align:center;" : ""}${w ? `width:${w}px;` : ""}">${bold ? `<b>${inner}</b>` : inner}</td>`;
+  var plain2 = (inner, { w, center = false, z: z2 = false, bold = false, colspan } = {}) => `<td${colspan ? ` colspan="${colspan}"` : ""}${w ? ` width="${w}"` : ""}${z2 ? ` bgcolor="${ZEBRA}"` : ""} style="${CELL};${z2 ? `background:${ZEBRA};` : ""}${center ? "text-align:center;" : ""}${w ? `width:${w}px;` : ""}">${bold ? `<b>${inner}</b>` : inner}</td>`;
   var tr = (cells) => `<tr style="page-break-inside:avoid">${cells}</tr>`;
   var table = (inner) => `<table class="amx-t" width="100%" cellspacing="0" cellpadding="0" border="1" style="border-collapse:collapse;width:100%;margin:0;${FONT}">${inner}</table>`;
   var gap = '<p class="amx-gap" style="margin:0;font-size:8pt;line-height:10pt">&nbsp;</p>';
@@ -3110,11 +3118,11 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const h2 = doc.header;
     const out = [];
     out.push(`<h1 class="amx-h1" style="margin:0 0 14pt;font-size:32pt;line-height:1.1;font-weight:bold;color:${titleColor()};${FONT}">Meeting<br>Minutes</h1>`);
-    out.push(table(tr(`${navy("Topic", { w: 117, mid: true })}${plain(e(h2.topic), { bold: true })}`)), gap);
-    out.push(table(tr(`${navy("Mode", { w: 117, mid: true })}${plain(e(h2.mode), { bold: true })}`) + tr(`${navy("Location", { w: 117, mid: true })}${plain(e(h2.location), { bold: true })}`)), gap);
+    out.push(table(tr(`${navy("Topic", { w: 117, mid: true })}${plain2(e(h2.topic), { bold: true })}`)), gap);
+    out.push(table(tr(`${navy("Mode", { w: 117, mid: true })}${plain2(e(h2.mode), { bold: true })}`) + tr(`${navy("Location", { w: 117, mid: true })}${plain2(e(h2.location), { bold: true })}`)), gap);
     out.push(
       table(
-        `<thead>${tr(`${navy("Date", { w: 117 })}${navy("Time", { w: 128 })}${navy("Chairperson")}`)}</thead><tbody>${tr(`${plain(e(h2.date), { center: true, bold: true })}${plain(e(h2.time), { center: true, bold: true })}${plain(e(h2.chair), { center: true, bold: true })}`)}</tbody>`
+        `<thead>${tr(`${navy("Date", { w: 117 })}${navy("Time", { w: 128 })}${navy("Chairperson")}`)}</thead><tbody>${tr(`${plain2(e(h2.date), { center: true, bold: true })}${plain2(e(h2.time), { center: true, bold: true })}${plain2(e(h2.chair), { center: true, bold: true })}`)}</tbody>`
       ),
       gap
     );
@@ -3124,30 +3132,30 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       const rows = g.rows.length ? g.rows : [{ name: "\u2014", a: "\u2014", desig: "\u2014" }];
       out.push(
         table(
-          `<thead>${tr(navy(title, { colspan: 4, center: false }))}${tr(navy(cols[0] === "SR" ? "SR No." : cols[0], { w: 56 }) + navy(cols[1]) + navy(cols[2]) + navy(cols[3]))}</thead><tbody>${rows.map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(r.name), { bold: true, z: i % 2 === 1 }) + plain(e(r.a), { z: i % 2 === 1 }) + plain(e(r.desig), { z: i % 2 === 1 }))).join("")}</tbody>`
+          `<thead>${tr(navy(title, { colspan: 4, center: false }))}${tr(navy(cols[0] === "SR" ? "SR No." : cols[0], { w: 56 }) + navy(cols[1]) + navy(cols[2]) + navy(cols[3]))}</thead><tbody>${rows.map((r, i) => tr(plain2(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain2(e(r.name), { bold: true, z: i % 2 === 1 }) + plain2(e(r.a), { z: i % 2 === 1 }) + plain2(e(r.desig), { z: i % 2 === 1 }))).join("")}</tbody>`
         ),
         gap
       );
     }
-    out.push(table(`<thead>${tr(navy("Agenda", { center: false }))}</thead><tbody>${tr(plain(doc.agenda.length ? ul(doc.agenda, 24) : "\u2014"))}</tbody>`), gap);
+    out.push(table(`<thead>${tr(navy("Agenda", { center: false }))}</thead><tbody>${tr(plain2(doc.agenda.length ? ul(doc.agenda, 24) : "\u2014"))}</tbody>`), gap);
     out.push(
       table(
         `<thead>${tr(navy("SR No.", { w: 56 }) + navy("Topic", { w: 150 }) + navy("Discussion / Decision Points") + navy("Responsibility", { w: 130 }))}</thead><tbody>${doc.discussion.length ? doc.discussion.map((d, i) => {
           const z2 = i % 2 === 1;
           const pts = d.points.length ? d.points.map((p, k2) => `<p style="margin:0 0 ${k2 === d.points.length - 1 ? 0 : 5}pt">${e(p)}</p>`).join("") : "\u2014";
-          return tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: z2 }) + plain(e(d.topic), { w: 150, bold: true, z: z2 }) + plain(pts, { z: z2 }) + plain(e(d.resp), { w: 130, bold: true, z: z2 }));
-        }).join("") : tr(plain("\u2014", { colspan: 4 }))}</tbody>`
+          return tr(plain2(String(i + 1), { w: 56, center: true, bold: true, z: z2 }) + plain2(e(d.topic), { w: 150, bold: true, z: z2 }) + plain2(pts, { z: z2 }) + plain2(e(d.resp), { w: 130, bold: true, z: z2 }));
+        }).join("") : tr(plain2("\u2014", { colspan: 4 }))}</tbody>`
       ),
       gap
     );
     out.push(
       table(
-        `<thead>${tr(navy("Sr.", { w: 56 }) + navy("Action Item") + navy("Responsibility", { w: 130 }))}</thead><tbody>${doc.actions.length ? doc.actions.map((a, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(ul([a.text]), { z: i % 2 === 1 }) + plain(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join("") : tr(plain("None recorded.", { colspan: 3 }))}</tbody>`
+        `<thead>${tr(navy("Sr.", { w: 56 }) + navy("Action Item") + navy("Responsibility", { w: 130 }))}</thead><tbody>${doc.actions.length ? doc.actions.map((a, i) => tr(plain2(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain2(ul([a.text]), { z: i % 2 === 1 }) + plain2(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join("") : tr(plain2("None recorded.", { colspan: 3 }))}</tbody>`
       ),
       gap
     );
     out.push(
-      table(`<thead>${tr(navy("Next Meeting", { colspan: 2, center: false }))}</thead><tbody>${tr(navy("Date and Time", { w: 150, mid: true }) + plain(e(doc.next.when), { bold: true }))}${tr(navy("Location", { w: 150, mid: true }) + plain(e(doc.next.where), { bold: true }))}</tbody>`)
+      table(`<thead>${tr(navy("Next Meeting", { colspan: 2, center: false }))}</thead><tbody>${tr(navy("Date and Time", { w: 150, mid: true }) + plain2(e(doc.next.when), { bold: true }))}${tr(navy("Location", { w: 150, mid: true }) + plain2(e(doc.next.where), { bold: true }))}</tbody>`)
     );
     return out.join("");
   }
@@ -3155,9 +3163,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var printCss = (confidential = "Confidential") => `/* Debrief: official minutes, A4. Linked from mom.html with media="print"; also inlined in standalone documents. */
 @page amx {
   size: A4;
-  margin: 14mm 16mm 18mm 16mm;
-  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 8.5pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 700 10pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; }
+  margin: 22.5mm 12.7mm 25mm 19mm; /* the template: 2.25 cm top, 1.27 cm right, 2.5 cm bottom, 1.9 cm left */
+  @bottom-left { content: ""; width: 42mm; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); width: 42mm; font: 700 12pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: right; vertical-align: top; padding-top: 1mm; white-space: nowrap; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 9pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.5pt solid ${ORG.accent}; }
 }
 .amx { page: amx; }
 .amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -3178,8 +3187,8 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var PRINT_CSS = printCss("Confidential");
   function renderWordHtml(doc) {
     const headerDiv = `<div style="mso-element:header" id="h1"><p style="margin:0;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p></div>`;
-    const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:10pt;font-weight:bold;border-bottom:1px solid ${ORG.accent}">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:8.5pt">${e(ORG.confidential)}</p></div>`;
-    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:20mm 16mm 20mm 16mm;mso-header-margin:10mm;mso-footer-margin:10mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
+    const footerDiv = `<div style="mso-element:footer" id="f1"><p style="margin:0;text-align:right;font-size:12pt;font-weight:bold">Page <span style="mso-field-code:' PAGE '"><span style="mso-no-proof:yes">1</span></span> of <span style="mso-field-code:' NUMPAGES '"><span style="mso-no-proof:yes">1</span></span></p><p style="margin:0;text-align:center;font-size:9pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></div>`;
+    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${e(doc.title)}</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>@page Section1{size:210mm 297mm;margin:22.5mm 12.7mm 25mm 19mm;mso-header-margin:13mm;mso-footer-margin:12mm;mso-header:h1;mso-footer:f1}div.Section1{page:Section1}body{font-family:Calibri,sans-serif;font-size:10pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="Section1">${renderDocBody(doc)}<table id="hrdftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>${headerDiv}</td><td>${footerDiv}</td></tr></table></div></body></html>`;
   }
   function renderPdfHtml(doc) {
     return `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm}body{${FONT};font-size:10pt;color:#000}</style></head><body><p style="margin:0 0 8pt;text-align:center;font-size:8.5pt;color:#595959;border-bottom:1px solid ${ORG.accent}">${e(runningTitle(doc))}</p>${renderDocBody(doc)}<p style="margin:14pt 0 0;text-align:center;font-size:8.5pt;border-top:1px solid ${ORG.accent}">${e(ORG.confidential)}</p></body></html>`;

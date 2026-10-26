@@ -193,6 +193,7 @@ const known = A.knownParties({ facts, meeting, dir: DIR });
 
 await test('responsibility: names must be known, first names resolve only when unique, the rest becomes a placeholder', () => {
   const c = (v) => A.cleanResponsibility(v, known);
+  assert.equal(c('Not Applicable'), 'Not Applicable', 'an information-only topic has no responsibility, as in the house template');
   assert.equal(c('Amnex Infotechnologies'), 'Amnex Infotechnologies');
   assert.equal(c('amnex infotechnologies'), 'Amnex Infotechnologies');
   assert.equal(c('Priya Nair'), 'Smt. Priya Nair');
