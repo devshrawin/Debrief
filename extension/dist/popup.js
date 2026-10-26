@@ -327,7 +327,7 @@
   async function listMeetings() {
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");
     const r = await chrome.storage.local.get(meetingIds.map(key));
-    return meetingIds.map((id) => r[key(id)]).filter(Boolean);
+    return meetingIds.map((id) => r[key(id)]).filter(Boolean).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
   }
   async function deleteMeeting(id) {
     const { meetingIds = [] } = await chrome.storage.local.get("meetingIds");

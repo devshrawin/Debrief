@@ -52,7 +52,7 @@
     .rows { display: flex; flex-direction: column; }
     .rows > * + * { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
     .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-    .fld > label, .fld > .flabel, .trow label, .lbl-l { margin: 0; font-weight: 600; }
+    .fld > label, .fld > .flabel, .flabel, .trow label, .lbl-l { margin: 0; font-weight: 600; }
     .fld .opt { font-weight: 400; color: var(--muted); font-size: 12.5px; }
     .fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; align-items: start; }
     .trow { display: flex; gap: 16px; align-items: flex-start; }
@@ -88,7 +88,7 @@
     /* code block with Copy */
     .code { border-radius: 10px; border: 1px solid var(--line); background: var(--sunk); overflow: hidden; }
     .code > .code-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); }
-    .code pre { margin: 0; padding: 12px; font: 12.5px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 190px; overflow: auto; }
+    .code pre { box-shadow: none; background: transparent; border-radius: 0; margin: 0; padding: 12px; font: 12.5px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 190px; overflow: auto; }
     details.guide > summary { cursor: pointer; font-weight: 600; color: var(--brand); padding: 4px 0; }
     details.guide > summary:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 2px; border-radius: 6px; }
     details.guide[open] > summary { margin-bottom: 8px; }

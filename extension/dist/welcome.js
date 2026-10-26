@@ -2351,23 +2351,23 @@ function out(o) {
         const dictLines = S2.dictionary.trim() ? S2.dictionary.trim().split("\n").length : 0;
         const nShare = parseAddresses(S2.shareList).length;
         const more = [
-          ["you", "Your name and languages", S2.myName || "Labels your lines in the transcript."],
-          ["names", "Names and terms", dictLines ? `${dictLines} ${dictLines === 1 ? "entry" : "entries"}.` : "Spell your team's names right."],
-          ["voices", "Voices", "Recognise people by their voice, on your computer."],
-          ["email", "Email the minutes to yourself", mailReady(S2) ? "Ready." : "Not set up."],
-          ["share", "Share with your team", nShare ? `${nShare} ${nShare === 1 ? "person" : "people"}.` : "No one added."],
-          ["local", "Local models", "Keep audio and text on your computer."],
-          ["usage", "Limits and usage", "See how much of the free allowance is left."]
+          ["you", "Your name and languages", S2.myName || "Labels your lines in the transcript.", !!S2.myName],
+          ["names", "Names and terms", dictLines ? `${dictLines} ${dictLines === 1 ? "entry" : "entries"}.` : "Spell your team's names right.", dictLines > 0],
+          ["voices", "Voices", "Recognise people by their voice, on your computer.", !!S2.voiceOn],
+          ["email", "Email the minutes, and who else gets a copy", mailReady(S2) ? `Ready${nShare ? `, and ${nShare} ${nShare === 1 ? "person gets" : "people get"} a copy` : ""}.` : "Not set up.", mailReady(S2)],
+          ["share", "Calendar", S2.calendarLookup ? "Shows who was invited and who came." : "Show who was invited and who came.", !!S2.calendarLookup],
+          ["local", "Local models", "Keep audio and text on your computer.", false],
+          ["usage", "Limits and usage", "See how much of the free allowance is left.", false]
         ];
         return [
           card(
             "Set up more (optional)",
             p("Each one is a short step with its own test, and can be skipped. Settings has the same things. You can come back any time from the popup (Take the tour).", "hint"),
-            h2("ul", { class: "checklist", "aria-label": "More to set up" }, ...more.map(([id, title, sub]) => h2(
+            h2("ul", { class: "checklist", "aria-label": "More to set up" }, ...more.map(([id, title, sub, done]) => h2(
               "li",
               {},
               h2("span", { class: "txt" }, h2("strong", {}, title), h2("span", { class: "sub" }, sub)),
-              h2("button", { type: "button", class: "btn", onclick: () => openMore(id) }, "Set up")
+              h2("button", { type: "button", class: "btn", onclick: () => openMore(id) }, done ? "Change" : "Set up")
             )))
           ),
           h2(

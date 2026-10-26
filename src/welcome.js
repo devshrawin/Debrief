@@ -183,21 +183,22 @@ const ALL = [
     nodes: () => {
       const dictLines = S.dictionary.trim() ? S.dictionary.trim().split('\n').length : 0;
       const nShare = parseAddresses(S.shareList).length;
+      // [step, title, what it says, is it already set?]  (a finished one offers "Change", not "Set up")
       const more = [
-        ['you', 'Your name and languages', S.myName || 'Labels your lines in the transcript.'],
-        ['names', 'Names and terms', dictLines ? `${dictLines} ${dictLines === 1 ? 'entry' : 'entries'}.` : 'Spell your team\'s names right.'],
-        ['voices', 'Voices', 'Recognise people by their voice, on your computer.'],
-        ['email', 'Email the minutes to yourself', mailReady(S) ? 'Ready.' : 'Not set up.'],
-        ['share', 'Share with your team', nShare ? `${nShare} ${nShare === 1 ? 'person' : 'people'}.` : 'No one added.'],
-        ['local', 'Local models', 'Keep audio and text on your computer.'],
-        ['usage', 'Limits and usage', 'See how much of the free allowance is left.'],
+        ['you', 'Your name and languages', S.myName || 'Labels your lines in the transcript.', !!S.myName],
+        ['names', 'Names and terms', dictLines ? `${dictLines} ${dictLines === 1 ? 'entry' : 'entries'}.` : 'Spell your team\'s names right.', dictLines > 0],
+        ['voices', 'Voices', 'Recognise people by their voice, on your computer.', !!S.voiceOn],
+        ['email', 'Email the minutes, and who else gets a copy', mailReady(S) ? `Ready${nShare ? `, and ${nShare} ${nShare === 1 ? 'person gets' : 'people get'} a copy` : ''}.` : 'Not set up.', mailReady(S)],
+        ['share', 'Calendar', S.calendarLookup ? 'Shows who was invited and who came.' : 'Show who was invited and who came.', !!S.calendarLookup],
+        ['local', 'Local models', 'Keep audio and text on your computer.', false],
+        ['usage', 'Limits and usage', 'See how much of the free allowance is left.', false],
       ];
       return [
         card('Set up more (optional)',
           p('Each one is a short step with its own test, and can be skipped. Settings has the same things. You can come back any time from the popup (Take the tour).', 'hint'),
-          h('ul', { class: 'checklist', 'aria-label': 'More to set up' }, ...more.map(([id, title, sub]) => h('li', {},
+          h('ul', { class: 'checklist', 'aria-label': 'More to set up' }, ...more.map(([id, title, sub, done]) => h('li', {},
             h('span', { class: 'txt' }, h('strong', {}, title), h('span', { class: 'sub' }, sub)),
-            h('button', { type: 'button', class: 'btn', onclick: () => openMore(id) }, 'Set up'))))),
+            h('button', { type: 'button', class: 'btn', onclick: () => openMore(id) }, done ? 'Change' : 'Set up'))))),
         h('div', { class: 'card promise' }, svg('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path>', 28),
           h('div', {}, h('strong', {}, 'Our privacy promise'),
             p('Debrief has no server of its own. Your keys stay in this browser. Audio and text go only to the services you choose, to do their job. If you turn on email, the minutes also pass through a script in your own Google account. Recognising voices happens on your computer.'))),

@@ -5132,7 +5132,12 @@ ${meeting2.mom || ""}
   function tidyTables(root) {
     for (const t of root?.querySelectorAll("table") || []) {
       const h4 = t.querySelector("th");
-      if (h4 && /^(#|sr\.?( no\.?)?|sl\.?( no\.?)?)$/i.test(h4.textContent.trim())) h4.style.width = "3.4rem";
+      if (h4 && /^(#|sr\.?( no\.?)?|sl\.?( no\.?)?)$/i.test(h4.textContent.trim())) {
+        for (const tr2 of t.rows) {
+          const c = tr2.cells[0];
+          if (c) Object.assign(c.style, { width: "1%", minWidth: "0", whiteSpace: "nowrap", paddingRight: "1.2rem" });
+        }
+      }
     }
   }
   function renderTranscript() {
@@ -5405,6 +5410,7 @@ ${meeting2.mom || ""}
   function paintPreview() {
     const md = currentMd();
     $2("mdPreview").innerHTML = renderMinutesHtml(md, renderMd);
+    tidyTables($2("mdPreview"));
     if (!isAmnexMd(md)) decorateMinutes($2("mdPreview"));
   }
   function saveEdit() {

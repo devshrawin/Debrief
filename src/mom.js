@@ -259,7 +259,12 @@ $('startNow').onclick = startWriting;
 function tidyTables(root) {
   for (const t of root?.querySelectorAll('table') || []) {
     const h = t.querySelector('th');
-    if (h && /^(#|sr\.?( no\.?)?|sl\.?( no\.?)?)$/i.test(h.textContent.trim())) h.style.width = '3.4rem';
+    if (h && /^(#|sr\.?( no\.?)?|sl\.?( no\.?)?)$/i.test(h.textContent.trim())) {
+      for (const tr of t.rows) {
+        const c = tr.cells[0];
+        if (c) Object.assign(c.style, { width: '1%', minWidth: '0', whiteSpace: 'nowrap', paddingRight: '1.2rem' });
+      }
+    }
   }
 }
 
@@ -569,6 +574,7 @@ const currentMd = () => (editTab === 'text' ? $('mdEdit').value : editor ? edito
 function paintPreview() {
   const md = currentMd();
   $('mdPreview').innerHTML = renderMinutesHtml(md, renderMd);
+  tidyTables($('mdPreview'));
   if (!isAmnexMd(md)) decorateMinutes($('mdPreview'));
 }
 function saveEdit() {

@@ -27,7 +27,7 @@ export function orbStateFor(text) {
 }
 
 /** Put a live orb in front of a status element while its text says work is in progress. */
-export function orbForStatus(statusEl, { size = 20, onChange } = {}) {
+export function orbForStatus(statusEl, { size = 26, onChange } = {}) {
   if (!statusEl) return;
   statusEl.setAttribute('aria-live', 'polite');
   let orb = null;
@@ -51,7 +51,7 @@ export function orbifySpinners(root = document.body) {
     if (sp.dataset.orbed) return;
     sp.dataset.orbed = '1';
     const text = (sp.parentElement?.textContent || '').trim();
-    const orb = makeOrb(orbStateFor(text.endsWith('…') ? text : text + '…') || 'working', 20, text || undefined);
+    const orb = makeOrb(orbStateFor(text.endsWith('…') ? text : text + '…') || 'working', 26, text || undefined);
     orb.classList.add('status-orb');
     sp.replaceWith(orb);
   };

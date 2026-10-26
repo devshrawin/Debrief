@@ -678,7 +678,13 @@ html.in-panel body { max-height: none; overflow-y: auto; scrollbar-width: none; 
 html.in-panel body::-webkit-scrollbar { display: none; width: 0; }
 
 /* ---------- 8. Polish rules from the review ---------- */
-input[type="checkbox"]:not([role="switch"]):not(.sw) { accent-color: var(--tint); width: 18px; height: 18px; min-height: 0; margin: 0 6px 0 0; vertical-align: -3px; }
+input[type="checkbox"]:not([role="switch"]):not(.sw):not(.dir-chair) { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; min-height: 0; margin: 0 8px 0 0; padding: 0; vertical-align: -5px; border-radius: 6px; background: var(--fill-2); box-shadow: inset 0 0 0 1.5px var(--line-strong); cursor: pointer; display: inline-grid; place-content: center; flex: none; }
+input[type="checkbox"]:not([role="switch"]):not(.sw):not(.dir-chair):checked { background: var(--tint); box-shadow: none; }
+input[type="checkbox"]:not([role="switch"]):not(.sw):not(.dir-chair):checked::after { content: ""; width: 5px; height: 10px; border: solid #fff; border-width: 0 2.2px 2.2px 0; transform: translateY(-1px) rotate(45deg); }
+input[type="checkbox"]:not([role="switch"]):not(.sw):not(.dir-chair):focus-visible { box-shadow: var(--focus); }
+input.dir-chair[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--tint); }
+/* chips inside a table cell sit on the text line */
+td .chip, td .badge { vertical-align: middle; position: relative; top: -1px; }
 button:disabled, .btn:disabled, .seg-ctl:has(> button:disabled) { opacity: .5; cursor: not-allowed; }
 .chip, .btn { white-space: nowrap; }
 
@@ -691,8 +697,8 @@ button:disabled, .btn:disabled, .seg-ctl:has(> button:disabled) { opacity: .5; c
 .chip:not(label):not(button):not(a) { min-height: 24px; padding: 2px 10px; box-shadow: none; background: var(--fill); font: var(--t-caption); font-weight: 600; cursor: default; }
 .chip.ok:not(label):not(button):not(a) { background: var(--green-soft); color: var(--green); }
 /* dark theme: the selected segment is a raised, lighter surface, not a hole */
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --goo-fill: #3c3c46; } }
-:root[data-theme="dark"] { --goo-fill: #3c3c46; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --goo-fill: #51516a; } }
+:root[data-theme="dark"] { --goo-fill: #51516a; }
 /* slim scrollbars that follow the theme */
 html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .chip.warn:not(label):not(button):not(a) { background: var(--orange-soft); color: var(--orange); }
