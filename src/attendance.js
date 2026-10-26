@@ -172,10 +172,13 @@ export function attendanceMarkdown({ invited, presence: presenceIn, durationSec,
   const { rows, uninvited } = matchPeople(invited, presence, { entries, myName });
   const lateAfter = 180;
   const earlyBefore = 180;
+  // "Left early" is measured against the last moment anyone was seen, not against the recording length: the recording
+  // can run past the call's last visible moment, and then everyone would look as if they left early.
+  const seenEnd = Math.max(0, ...Object.values(presence || {}).map((v) => (Array.isArray(v) ? v[1] : 0)));
   const when = (p) => {
     const notes = [];
     if (p.first > lateAfter && durationSec > 600) notes.push('joined late');
-    if (durationSec && p.last < durationSec - earlyBefore && durationSec > 600) notes.push('left early');
+    if (seenEnd && p.last < seenEnd - earlyBefore && durationSec > 600) notes.push('left early');
     return notes.join(', ');
   };
   const lines = ['## Attendance'];

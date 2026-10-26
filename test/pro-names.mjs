@@ -106,16 +106,41 @@ await test('minutes: thorough mode extracts per window, writes with the checklis
     calls.push({ system, user });
     if (/extract facts/.test(system)) return 'ACTION | Amal | Friday | [01:00] | send file | "send file"';
     if (/audit meeting minutes/.test(system)) return '[05:00] a forgotten decision | "we decided"';
+    if (/You edit meeting minutes/.test(system)) return '# Title\n\n## Decisions\n- a forgotten decision [05:00]\n\n## Action Items\n| 1 | send file |';
     onText?.('# Title\n');
     return '# Title\n\n## Action Items\n| 1 | send file |';
   };
   const r = await writeMinutes({ meeting: long, settings: { ...DEFAULTS, momLanguage: 'English' }, notes: '', gen, ctx: {} });
   assert.ok(r.stats.extractWindows >= 2, JSON.stringify(r.stats));
   assert.ok(calls.some((c) => /<checklist>/.test(c.user) && /send file/.test(c.user)), 'final write sees the checklist');
-  assert.match(r.mom, /## Added by the completeness check/);
-  assert.match(r.mom, /a forgotten decision/);
+  assert.ok(calls.some((c) => /You edit meeting minutes/.test(c.system) && /a forgotten decision/.test(c.user)), 'the missed point goes through the merge step');
+  assert.ok(!/## Added by the completeness check/.test(r.mom), 'merged into the sections, not listed at the end');
+  assert.match(r.mom, /## Decisions\n- a forgotten decision/);
+  assert.equal(r.stats.merged, true);
   assert.match(r.mom, /model calls/);
   assert.equal(r.stats.missed, 1);
+});
+
+await test('minutes: if the merge step returns something unusable, the missed points are listed at the end instead of being lost', async () => {
+  const gen = async (system) => {
+    if (/extract facts/.test(system)) return 'ACTION | Amal | Friday | [01:00] | send file | "send file"';
+    if (/audit meeting minutes/.test(system)) return '[05:00] a forgotten decision | "we decided"';
+    if (/You edit meeting minutes/.test(system)) return 'Sorry, I cannot do that.';
+    return '# Title\n\n## Action Items\n| 1 | send file |';
+  };
+  const r = await writeMinutes({ meeting: long, settings: { ...DEFAULTS, momLanguage: 'English' }, notes: '', gen, ctx: {} });
+  assert.match(r.mom, /## Added by the completeness check/);
+  assert.match(r.mom, /a forgotten decision/);
+});
+
+await test('minutes: the model is told when each person was in the call', async () => {
+  const seen = [];
+  const gen = async (system, user) => {
+    seen.push(user);
+    return system.includes('extract facts') ? 'NONE' : '# Title\n\n## Action Items\n| 1 | x |';
+  };
+  await writeMinutes({ meeting: { ...long, presence: { 'Akash Jain': [128, 619] } }, settings: { ...DEFAULTS, momLanguage: 'English', minutesMode: 'quick' }, notes: '', gen, ctx: {} });
+  assert.ok(seen.some((u) => /Akash Jain 02:08–10:19/.test(u)));
 });
 
 await test('minutes: writing again reuses the items found the first time, so the count cannot jump; re-read forces a fresh read', async () => {
@@ -206,6 +231,13 @@ await test('attendance: dictionary aliases link a misspelt display name', () => 
   const entries = D.parseDictionary('Amal Raj | Aman Raj');
   const m = A.matchPeople([{ name: 'Amal Raj', email: 'x@y.com' }], { 'Aman Raj': [0, 10, 1] }, { entries });
   assert.ok(m.rows[0].present);
+});
+
+await test('attendance: nobody is "left early" just because the recording ran past the last moment anyone was seen', () => {
+  const pres = { 'Ravi Kumar': [0, 1972], 'Priya Nair': [0, 1972], 'Amal Raj': [0, 1100] };
+  const md = A.attendanceMarkdown({ invited: [], presence: pres, durationSec: 2400, entries: [], myName: 'Me' });
+  assert.ok(!/Ravi Kumar \| 00:00 \| 32:52 \| left early/.test(md), md);
+  assert.match(md, /Amal Raj \| 00:00 \| 18:20 \| left early/);
 });
 
 await test('attendance: table lists absent people, late joiners and early leavers', () => {

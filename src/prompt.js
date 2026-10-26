@@ -32,22 +32,28 @@ Output GitHub-flavored Markdown in this structure, leaving out any section that 
 # <meeting title>
 **Date:** … · **Duration:** … · **Participants (as identified):** …
 
+## Overview
+Two or three sentences: what the meeting was for, what came out of it, and who carried the main updates.
+
 ## Summary
-3–6 bullets covering the purpose and main outcomes.
+3–6 bullets covering the main outcomes.
 
 ## Discussion
-One ### sub-heading per topic, with concise bullets for the key points, figures, and viewpoints raised.
+One ### sub-heading per workstream or topic. Put EVERYTHING said about a topic under its heading, even when it was raised at different times by different people. Start each topic with its status in a few words (done, in progress, blocked, waiting on someone), then concise bullets with the figures, dates, names and viewpoints.
 
 ## Decisions
-Bulleted list of what was agreed${evidence ? ', each ending with the time it was said in brackets, e.g. [12:40]' : ''}.
+Bulleted list of everything that was agreed, closed, put on hold, approved or made conditional ("we will do X only after Y")${evidence ? ', each ending with the time it was said in brackets, e.g. [12:40]' : ''}.
 
 ## Action Items
-${evidence ? '| # | Action | Owner | Due | Source |\n|---|--------|-------|-----|--------|\nIn Source put the timestamp and a quote of at most 12 words from the transcript, e.g. [12:40] "kal tak deploy kar denge". ' : '| # | Action | Owner | Due |\n|---|--------|-------|-----|\n'}Use "—" for an unknown owner or due date. If there are none, write "None recorded."
+${evidence ? '| # | Action | Owner | Due | Source |\n|---|--------|-------|-----|--------|\nIn Source put the timestamp and a quote of at most 12 words from the transcript, e.g. [12:40] "kal tak deploy kar denge". ' : '| # | Action | Owner | Due |\n|---|--------|-------|-----|\n'}Owner: the person who was asked ("Pratul, please check…"), who volunteered ("I will…", said by the person named on that line), or who was clearly assigned earlier in the discussion. Write "Team" only when it was for the whole group. Write "Not stated" only when the transcript truly gives no clue. Never leave the Owner cell empty or a dash. Due: the date or deadline said, otherwise "Not stated".
+
+## Risks and Blockers
+What is waiting on someone or something, what could delay the work, and what depends on outside approval.
 
 ## Open Questions / Follow-ups
 
-## Next Meeting
-Only if a date, time, or agenda for the next meeting was mentioned.
+## Next Checkpoints
+Dates, times or events mentioned for follow-up, and the next meeting if one was mentioned.
 
 Do not write an Attendance section or notes about the recording: they are added automatically. Output only the Markdown MOM, with no preamble.`;
 }
@@ -100,6 +106,7 @@ export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
   if (ctx.room) lines.push('', 'This was recorded in a room: lines marked ROOM (or named by voice) come from one microphone shared by several people. Never attribute them to the note-taker, and do not assume who spoke unless the line names them.');
   if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(', ')}`);
   if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(', ')}`);
+  if (ctx.presenceLine) lines.push(`When people were in the call (a person cannot have spoken, or taken an action in the room, outside these times): ${ctx.presenceLine}`);
   if (notes?.trim()) lines.push('', 'Context from the note-taker (attendees, agenda, spellings):', notes.trim());
   const timeline = speakerTimeline(ctx.captions, ctx);
   lines.push('', '<transcript>', formatTranscript(meeting, settings.myName, ctx), '</transcript>');
@@ -170,7 +177,8 @@ export const EXTRACT_SYSTEM = `You extract facts from one part of a meeting tran
 
 List EVERY decision, action item, commitment, deadline, open question, risk, number or date that was stated, however briefly. One per line, in exactly this format:
 TYPE | owner or - | due or - | [mm:ss] | short description | quote of at most 12 words
-TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. Use "-" when owner or due is not stated; never guess an owner. If there is nothing, output NONE. Output only the lines.`;
+TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. A DECISION is anything agreed, closed, approved, put on hold or made conditional ("only after…"). A RISK is anything blocked, waiting on someone or something, or that could delay the work.
+Owner: the person who was asked ("Pratul, please check…"), or who volunteered ("I will…", "main karunga": the person named on that line), or who was clearly assigned in the neighbouring lines. Use "-" only when there truly is no clue; do not invent an owner from a name that is not in the text. Due: the date or deadline said, else "-". If there is nothing, output NONE. Output only the lines.`;
 
 export function buildExtractPrompt(meeting, settings, windowText, ctx = {}) {
   const lines = header(meeting, settings);
@@ -185,6 +193,13 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
 
 export function buildCheckPrompt(transcriptText, mom) {
   return ['<transcript>', transcriptText, '</transcript>', '', '<minutes>', mom, '</minutes>'].join('\n');
+}
+
+// The completeness check found points the minutes missed: put each one into the right section instead of a list at the end.
+export const MERGE_SYSTEM = `You edit meeting minutes. You are given the minutes and a list of points that were said in the meeting but are missing from them. Put EVERY missing point into the right existing section (Overview and Summary only if it is a main outcome; Discussion under the right topic; Decisions; Action Items with owner and due; Risks and Blockers; Open Questions; Next Checkpoints). Create a Discussion sub-heading only if no topic fits. Do not remove, shorten or reword anything already there, do not add anything that is not in the list, keep the same table formats and keep the timestamps. Output the complete minutes in Markdown and nothing else.`;
+
+export function buildMergePrompt(mom, missing) {
+  return ['<minutes>', mom, '</minutes>', '', '<missing>', ...missing, '</missing>'].join('\n');
 }
 
 // Splits timestamped transcript lines into windows of roughly maxWords words, never mid-line.

@@ -6,6 +6,8 @@ import {
   formatTranscript,
   buildExtractPrompt,
   buildCheckPrompt,
+  MERGE_SYSTEM,
+  buildMergePrompt,
   EXTRACT_SYSTEM,
   CHECK_SYSTEM,
   splitWindows,
@@ -99,6 +101,8 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   }
 
   const presence = { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) };
+  const clock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+  ctx = { ...ctx, presenceLine: ctx.presenceLine || Object.entries(presence).filter(([n, v]) => n && Array.isArray(v)).map(([n, v]) => `${n} ${clock(v[0])}–${clock(v[1])}`).join('; ') };
   let mom = '';
   let amnex = null; // { facts, prose } when the official format was written and parsed
   let wasEmpty = false;
@@ -147,7 +151,24 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
       stats.missed = missing.length;
       if (missing.length) {
         completeness = `## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;
-        if (!amnex) mom += `\n\n${completeness}`;
+        if (!amnex) {
+          // fold the missing points into the right sections; if the model returns something that is not the full minutes, list them at the end instead
+          let merged = '';
+          try {
+            onStatus('Adding the points that were missed…');
+            stats.calls++;
+            merged = sanitizeMinutes(await gen(MERGE_SYSTEM, buildMergePrompt(mom, missing), undefined, { temperature: TEMPERATURE.check }));
+          } catch (e) {
+            if (e?.name === 'AbortError') throw e;
+          }
+          // it must be the whole document, longer than before, and carry every missed point's timestamp (so a refusal or a summary is not accepted)
+          const stamps = missing.map((m) => (m.match(/^\[?(\d{1,2}:\d{2})/) || [])[1]).filter(Boolean);
+          if (merged && /^#/.test(merged) && merged.length >= mom.length * 0.9 && merged.length > mom.length && stamps.every((t) => merged.includes(t))) {
+            mom = merged;
+            stats.merged = true;
+            completeness = '';
+          } else mom += `\n\n${completeness}`;
+        }
       }
     } catch (e) {
       if (e?.name === 'AbortError') throw e;
