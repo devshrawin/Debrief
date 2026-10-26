@@ -1533,10 +1533,11 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const { rows, uninvited } = matchPeople(invited, presence, { entries, myName });
     const lateAfter = 180;
     const earlyBefore = 180;
+    const seenEnd = Math.max(0, ...Object.values(presence || {}).map((v) => Array.isArray(v) ? v[1] : 0));
     const when2 = (p) => {
       const notes = [];
       if (p.first > lateAfter && durationSec > 600) notes.push("joined late");
-      if (durationSec && p.last < durationSec - earlyBefore && durationSec > 600) notes.push("left early");
+      if (seenEnd && p.last < seenEnd - earlyBefore && durationSec > 600) notes.push("left early");
       return notes.join(", ");
     };
     const lines = ["## Attendance"];
@@ -3630,22 +3631,28 @@ Output GitHub-flavored Markdown in this structure, leaving out any section that 
 # <meeting title>
 **Date:** \u2026 \xB7 **Duration:** \u2026 \xB7 **Participants (as identified):** \u2026
 
+## Overview
+Two or three sentences: what the meeting was for, what came out of it, and who carried the main updates.
+
 ## Summary
-3\u20136 bullets covering the purpose and main outcomes.
+3\u20136 bullets covering the main outcomes.
 
 ## Discussion
-One ### sub-heading per topic, with concise bullets for the key points, figures, and viewpoints raised.
+One ### sub-heading per workstream or topic. Put EVERYTHING said about a topic under its heading, even when it was raised at different times by different people. Start each topic with its status in a few words (done, in progress, blocked, waiting on someone), then concise bullets with the figures, dates, names and viewpoints.
 
 ## Decisions
-Bulleted list of what was agreed${evidence ? ", each ending with the time it was said in brackets, e.g. [12:40]" : ""}.
+Bulleted list of everything that was agreed, closed, put on hold, approved or made conditional ("we will do X only after Y")${evidence ? ", each ending with the time it was said in brackets, e.g. [12:40]" : ""}.
 
 ## Action Items
-${evidence ? '| # | Action | Owner | Due | Source |\n|---|--------|-------|-----|--------|\nIn Source put the timestamp and a quote of at most 12 words from the transcript, e.g. [12:40] "kal tak deploy kar denge". ' : "| # | Action | Owner | Due |\n|---|--------|-------|-----|\n"}Use "\u2014" for an unknown owner or due date. If there are none, write "None recorded."
+${evidence ? '| # | Action | Owner | Due | Source |\n|---|--------|-------|-----|--------|\nIn Source put the timestamp and a quote of at most 12 words from the transcript, e.g. [12:40] "kal tak deploy kar denge". ' : "| # | Action | Owner | Due |\n|---|--------|-------|-----|\n"}Owner: the person who was asked ("Pratul, please check\u2026"), who volunteered ("I will\u2026", said by the person named on that line), or who was clearly assigned earlier in the discussion. Write "Team" only when it was for the whole group. Write "Not stated" only when the transcript truly gives no clue. Never leave the Owner cell empty or a dash. Due: the date or deadline said, otherwise "Not stated".
+
+## Risks and Blockers
+What is waiting on someone or something, what could delay the work, and what depends on outside approval.
 
 ## Open Questions / Follow-ups
 
-## Next Meeting
-Only if a date, time, or agenda for the next meeting was mentioned.
+## Next Checkpoints
+Dates, times or events mentioned for follow-up, and the next meeting if one was mentioned.
 
 Do not write an Attendance section or notes about the recording: they are added automatically. Output only the Markdown MOM, with no preamble.`;
   }
@@ -3687,6 +3694,7 @@ Do not write an Attendance section or notes about the recording: they are added 
     if (ctx.room) lines.push("", "This was recorded in a room: lines marked ROOM (or named by voice) come from one microphone shared by several people. Never attribute them to the note-taker, and do not assume who spoke unless the line names them.");
     if (ctx.attendees?.length) lines.push(`Attendees in the meeting: ${ctx.attendees.join(", ")}`);
     if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
+    if (ctx.presenceLine) lines.push(`When people were in the call (a person cannot have spoken, or taken an action in the room, outside these times): ${ctx.presenceLine}`);
     if (notes?.trim()) lines.push("", "Context from the note-taker (attendees, agenda, spellings):", notes.trim());
     const timeline = speakerTimeline(ctx.captions, ctx);
     lines.push("", "<transcript>", formatTranscript(meeting2, settings2.myName, ctx), "</transcript>");
@@ -3747,7 +3755,8 @@ Rules for the tables: one row per topic, in the order discussed; separate the po
 
 List EVERY decision, action item, commitment, deadline, open question, risk, number or date that was stated, however briefly. One per line, in exactly this format:
 TYPE | owner or - | due or - | [mm:ss] | short description | quote of at most 12 words
-TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. Use "-" when owner or due is not stated; never guess an owner. If there is nothing, output NONE. Output only the lines.`;
+TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. A DECISION is anything agreed, closed, approved, put on hold or made conditional ("only after\u2026"). A RISK is anything blocked, waiting on someone or something, or that could delay the work.
+Owner: the person who was asked ("Pratul, please check\u2026"), or who volunteered ("I will\u2026", "main karunga": the person named on that line), or who was clearly assigned in the neighbouring lines. Use "-" only when there truly is no clue; do not invent an owner from a name that is not in the text. Due: the date or deadline said, else "-". If there is nothing, output NONE. Output only the lines.`;
   function buildExtractPrompt(meeting2, settings2, windowText, ctx = {}) {
     const lines = header(meeting2, settings2);
     const names2 = glossaryLine(ctx.entries || [], ctx.attendees || []);
@@ -3759,6 +3768,10 @@ TYPE is one of ACTION, DECISION, QUESTION, RISK, FACT. Use "-" when owner or due
 Output one line per missing item as: [mm:ss] description | quote of at most 12 words. If nothing is missing, output exactly NONE. Output only those lines.`;
   function buildCheckPrompt(transcriptText, mom) {
     return ["<transcript>", transcriptText, "</transcript>", "", "<minutes>", mom, "</minutes>"].join("\n");
+  }
+  var MERGE_SYSTEM = `You edit meeting minutes. You are given the minutes and a list of points that were said in the meeting but are missing from them. Put EVERY missing point into the right existing section (Overview and Summary only if it is a main outcome; Discussion under the right topic; Decisions; Action Items with owner and due; Risks and Blockers; Open Questions; Next Checkpoints). Create a Discussion sub-heading only if no topic fits. Do not remove, shorten or reword anything already there, do not add anything that is not in the list, keep the same table formats and keep the timestamps. Output the complete minutes in Markdown and nothing else.`;
+  function buildMergePrompt(mom, missing) {
+    return ["<minutes>", mom, "</minutes>", "", "<missing>", ...missing, "</missing>"].join("\n");
   }
   function splitWindows(lines, maxWords = 3200) {
     const windows = [];
@@ -3949,6 +3962,8 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
       if (!cached && !stats.extractFailed) extract = { key: key2, items };
     }
     const presence = { ...ctx.voicePresence || {}, ...meeting2.presence || {} };
+    const clock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+    ctx = { ...ctx, presenceLine: ctx.presenceLine || Object.entries(presence).filter(([n, v]) => n && Array.isArray(v)).map(([n, v]) => `${n} ${clock(v[0])}\u2013${clock(v[1])}`).join("; ") };
     let mom = "";
     let amnex = null;
     let wasEmpty = false;
@@ -3998,9 +4013,24 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
 _These points were in the transcript but missing from the minutes above. Please review them._
 
 ${missing.map((m) => `- ${m}`).join("\n")}`;
-          if (!amnex) mom += `
+          if (!amnex) {
+            let merged = "";
+            try {
+              onStatus("Adding the points that were missed\u2026");
+              stats.calls++;
+              merged = sanitizeMinutes(await gen(MERGE_SYSTEM, buildMergePrompt(mom, missing), void 0, { temperature: TEMPERATURE.check }));
+            } catch (e2) {
+              if (e2?.name === "AbortError") throw e2;
+            }
+            const stamps = missing.map((m) => (m.match(/^\[?(\d{1,2}:\d{2})/) || [])[1]).filter(Boolean);
+            if (merged && /^#/.test(merged) && merged.length >= mom.length * 0.9 && merged.length > mom.length && stamps.every((t) => merged.includes(t))) {
+              mom = merged;
+              stats.merged = true;
+              completeness = "";
+            } else mom += `
 
 ${completeness}`;
+          }
         }
       } catch (e2) {
         if (e2?.name === "AbortError") throw e2;
@@ -4890,6 +4920,7 @@ ${meeting2.mom || ""}
   function renderMom() {
     applyOrg();
     $2("mom").innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
+    tidyTables($2("mom"));
     if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($2("mom"));
     $2("mom").classList.remove("streaming");
     $2("gen").textContent = meeting.mom ? "Rewrite minutes" : "Write minutes";
@@ -5081,6 +5112,12 @@ ${meeting2.mom || ""}
     await runGenerate();
   }
   $2("startNow").onclick = startWriting;
+  function tidyTables(root) {
+    for (const t of root?.querySelectorAll("table") || []) {
+      const h4 = t.querySelector("th");
+      if (h4 && /^(#|sr\.?( no\.?)?|sl\.?( no\.?)?)$/i.test(h4.textContent.trim())) h4.style.width = "3.4rem";
+    }
+  }
   function renderTranscript() {
     const ctx = nameCtx();
     const shown = labeledLines(true);
@@ -5089,7 +5126,7 @@ ${meeting2.mom || ""}
     rows.sort((a, b) => a.t - b.t);
     renderNameBox().catch(() => {
     });
-    $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : "segments"}`;
+    $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : rows.length === 1 ? "segment" : "segments"}`;
     $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {
       $2("transcript").innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';

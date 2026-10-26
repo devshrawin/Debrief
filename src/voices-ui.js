@@ -166,7 +166,7 @@ function stopPlaying() {
   playingUrl = '';
 }
 function sampleButton(p) {
-  const b = el('button', { type: 'button', className: 'btn sm primary', hidden: true }, el('span', { className: 'tri' }), 'Play sample');
+  const b = el('button', { type: 'button', className: 'btn sm', hidden: true }, el('span', { className: 'tri' }), 'Play sample');
   b.setAttribute('aria-label', `Play sample of ${p.name}`);
   hasSample(p.id).then((yes) => (b.hidden = !yes)).catch(() => {});
   b.onclick = async () => {

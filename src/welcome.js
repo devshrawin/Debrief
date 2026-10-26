@@ -511,8 +511,8 @@ function render() {
   st.after?.();
   renderNav();
   $('count').textContent = `Step ${n} of ${visibleSteps().length}`;
-  const mins = Math.max(0, Math.round((visibleSteps().length - n) * 0.45));
-  $('left').textContent = mins ? `about ${mins} min left` : 'all done';
+  const stepsLeft = visibleSteps().length - n;
+  $('left').textContent = stepsLeft > 0 ? `${stepsLeft} step${stepsLeft === 1 ? '' : 's'} left` : 'last step';
   $('bar').setAttribute('aria-valuenow', String(n));
   $('bar').setAttribute('aria-valuemax', String(visibleSteps().length));
   $('barfill').style.width = `${Math.round((n / visibleSteps().length) * 100)}%`;

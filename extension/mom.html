@@ -37,6 +37,10 @@
     .startrow .lab { font-weight: 600; }
     .chk { display: flex; gap: 8px; align-items: center; margin: 0; font-weight: 500; cursor: pointer; }
     .chk.inl { font-size: 13px; white-space: nowrap; }
+    /* Delete is deliberately quiet: a small red link, away from the safe actions */
+    #del { background: none; box-shadow: none; border: 0; min-height: 32px; padding: 4px 8px; font: var(--t-footnote); font-weight: 600; color: var(--rec-ink); text-decoration: underline; margin-left: auto; }
+    #nameWhy { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--r-md); background: var(--fill); color: var(--label-2); font: var(--t-footnote); line-height: 1.5; }
+    #nameWhy.hidden { display: none; }
     .seg-ctl.small > button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
     details.box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin: 0; }
     details.box > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; padding: 0 18px; border-radius: 14px; }
@@ -168,7 +172,7 @@
 
     /* transcript */
     #transcript { padding: 8px 0; }
-    .seg { display: grid; grid-template-columns: 64px minmax(120px, 210px) 1fr; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
+    .seg { display: grid; grid-template-columns: 64px 150px 1fr; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
     .seg:first-child { border-top: 0; }
     .seg .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--brand); white-space: nowrap; }
     .seg .who { justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
@@ -269,7 +273,7 @@
         <button id="dlMd">.md</button>
         <button id="dlDoc">Word</button>
         <button id="print">Print / PDF</button>
-        <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> attach transcript to my email</label>
+        <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> Attach transcript to my email</label>
         <button id="mail" title="Send this MOM to your email">Email me</button>
       </div>
     </div>

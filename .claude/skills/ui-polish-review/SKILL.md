@@ -13,7 +13,7 @@ Whoever builds a screen is the worst judge of it: they know what it was meant to
    `node .claude/skills/ui-polish-review/capture.mjs` writes PNGs to `docs/img/` and a list to `review-shots.txt`
    (it runs `scripts/screenshots.mjs`, the same fictional-data fixtures the README uses).
    Add a shot for any surface you changed that is not covered (a new page, a state such as error, empty, recording, dark theme).
-2. **Review** with a stronger model than the one that did the work. Spawn one Agent, `model: "fable"` (fall back to `opus` if unavailable), with:
+2. **Review** with a stronger model than the one that did the work. **Ask the user before spawning any agent** (say how many and which model; the user prefers Haiku, so offer it and say plainly if a stronger model is needed for the review to be trustworthy). Spawn one Agent, `model: "fable"` (fall back to `opus` if unavailable), with:
    - the paths of the screenshots to inspect (it reads them with Read, which shows images),
    - the full text of `references/checklist.md`,
    - the output contract below,

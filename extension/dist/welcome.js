@@ -2645,8 +2645,8 @@ function out(o) {
     st2.after?.();
     renderNav();
     $2("count").textContent = `Step ${n} of ${visibleSteps().length}`;
-    const mins = Math.max(0, Math.round((visibleSteps().length - n) * 0.45));
-    $2("left").textContent = mins ? `about ${mins} min left` : "all done";
+    const stepsLeft = visibleSteps().length - n;
+    $2("left").textContent = stepsLeft > 0 ? `${stepsLeft} step${stepsLeft === 1 ? "" : "s"} left` : "last step";
     $2("bar").setAttribute("aria-valuenow", String(n));
     $2("bar").setAttribute("aria-valuemax", String(visibleSteps().length));
     $2("barfill").style.width = `${Math.round(n / visibleSteps().length * 100)}%`;

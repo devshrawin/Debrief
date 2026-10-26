@@ -35,6 +35,7 @@ function renderMom() {
   applyOrg();
   // Minutes in the official Amnex format show as the A4 document (and print as such); anything else as markdown.
   $('mom').innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
+  tidyTables($('mom'));
   if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($('mom'));
   $('mom').classList.remove('streaming');
   $('gen').textContent = meeting.mom ? 'Rewrite minutes' : 'Write minutes';
@@ -254,6 +255,14 @@ async function startWriting() {
 }
 $('startNow').onclick = startWriting;
 
+// A numbering column (#, SR, Sl. No.) is narrow, whatever the table's width, and chips in cells line up with the text.
+function tidyTables(root) {
+  for (const t of root?.querySelectorAll('table') || []) {
+    const h = t.querySelector('th');
+    if (h && /^(#|sr\.?( no\.?)?|sl\.?( no\.?)?)$/i.test(h.textContent.trim())) h.style.width = '3.4rem';
+  }
+}
+
 function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
@@ -264,7 +273,7 @@ function renderTranscript() {
   for (const p of meeting.pauses || []) rows.push({ t: p.from, src: 'note', who: 'Paused', text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}. Nothing from this stretch was transcribed or kept.`, flag: '' });
   rows.sort((a, b) => a.t - b.t);
   renderNameBox().catch(() => {});
-  $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : 'segments'}`;
+  $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : rows.length === 1 ? 'segment' : 'segments'}`;
   $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
   if (!rows.length) {
     $('transcript').innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';

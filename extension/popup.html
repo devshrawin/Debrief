@@ -35,6 +35,8 @@
     .tabs:not(.has-goo) button[aria-selected="true"] { background: var(--surface-read); box-shadow: var(--shadow-1); }
     #diagnose { background: none; box-shadow: none; color: var(--label-2); text-decoration: underline; font: var(--t-footnote); }
     .linkrow { align-items: baseline; }
+    #diagnose { color: var(--tint); }
+    #live .lv + .lv, .stat-sep { }
     #discard { background: none; box-shadow: none; min-height: 32px; font: var(--t-footnote); color: var(--label-2); text-decoration: underline; padding: 4px 8px; }
     #discard[data-sure="1"] { color: var(--rec-ink); font-weight: 600; }
     .tabs .chip { margin-left: 4px; padding: 0 6px; min-height: 0; font-size: 11px; line-height: 18px; }
@@ -47,7 +49,11 @@
     .banner.plain svg { flex: none; }
     .banner strong.blk { display: block; }
 
-    .big { min-height: 52px; font-size: 15.5px; border-radius: 12px; width: 100%; }
+    .big, #fullscreen { min-height: 52px; font-size: 15.5px; border-radius: 12px; width: 100%; }
+    #modeSeg > button { min-height: 30px; font-size: 12.5px; }
+    header.recbar { box-shadow: none; }
+    header.recbar::after, header.recbar::before { box-shadow: none; }
+    .lv { }
     .big.stopbtn { background: var(--rec); border-color: var(--rec); color: var(--on-rec); font-weight: 700; gap: 10px; }
     .big.stopbtn:hover:not(:disabled) { background: var(--rec); filter: brightness(0.93); color: var(--on-rec); }
 

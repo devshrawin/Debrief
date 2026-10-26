@@ -264,7 +264,7 @@ async function renderUsage() {
     ['Tokens in / out', 'num'],
     ['Audio', 'num'],
     ['Cost if paid', 'num'],
-    [usageDays === 1 ? 'Left today (estimate)' : '', ''],
+    [usageDays === 1 ? 'Left today' : '', ''],
   ].forEach(([h, cls]) => head.append(Object.assign(document.createElement('th'), { textContent: h, className: cls })));
   const body = table.createTBody();
   if (!rows.length) {
@@ -286,7 +286,7 @@ async function renderUsage() {
     cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '-', 'num');
     cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '-', 'num');
     const paid = paidCost(r, prices);
-    cell(paid.usd == null ? '-' : r.fail && !r.tin && !r.tout ? rupees(0, $('usdInr').value) : `${paid.assumed ? '~' : ''}${rupees(paid.usd, $('usdInr').value)}`, 'num cost');
+    cell(paid.usd == null ? '—' : r.fail && !r.tin && !r.tout ? rupees(0, $('usdInr').value) : `${paid.assumed ? '~' : ''}${rupees(paid.usd, $('usdInr').value)}`, 'num cost');
     const left = tr.insertCell();
     left.className = 'usage-left';
     const limit = limits[r.model];
@@ -308,9 +308,11 @@ async function renderUsage() {
   const audio = rows.filter((r) => r.kind === 'stt').reduce((a, r) => a + r.audioSec, 0);
   const cost = estimateCost(rows, prices);
   const paid = paidTotal(rows, prices);
+  const tn = $('tildeNote');
+  if (tn) tn.style.display = table.textContent.includes('~') ? 'flex' : 'none'; // the note explains "~", so it shows only when a value has one
   $('usageTotals').replaceChildren(
     el('strong', { textContent: `Total ${RANGE[usageDays] || ''}`.trim() }),
-    el('span', { textContent: `${reqs} requests` }),
+    el('span', { textContent: `${reqs} request${reqs === 1 ? '' : 's'}` }),
     el('span', { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
     ...(cost != null ? [el('span', { textContent: `about ${rupees(cost, $('usdInr').value)} at your prices` })] : []),
     el('span', { className: 'paid', textContent: `If this were paid: about ${rupees(paid.usd, $('usdInr').value)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
@@ -475,7 +477,7 @@ $('undo').onclick = () => {
 async function micStatus() {
   try {
     const p = await navigator.permissions.query({ name: 'microphone' });
-    $('micStatus').textContent = p.state === 'granted' ? 'Microphone allowed ✓' : `Microphone: ${p.state}`;
+    $('micStatus').textContent = p.state === 'granted' ? 'Microphone allowed ✓' : p.state === 'denied' ? 'Blocked in Chrome. Allow it in the address bar or Chrome settings.' : 'Not allowed yet';
     $('micStatus').classList.toggle('ok', p.state === 'granted');
   } catch {}
 }

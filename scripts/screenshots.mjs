@@ -63,7 +63,7 @@ const prose = A.guardProse(A.parseModelOutput(`## Agenda
 Date and Time: 20-Oct-26, 10:00 AM
 Location: Online (Google Meet)`), known);
 const officialMd = A.composeMarkdown({ facts, prose, review: ['_Written with 3 model calls._'] });
-const standardMd = `# Pilot readiness review
+const standardMd = `# Fare system weekly sync
 
 ## Summary
 - 6 of 8 depots are live on the new fare system; the last two go live before month end.
@@ -301,6 +301,55 @@ try {
   await p.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('modeOnline')?.click(); document.getElementById('modeHint').textContent = 'Online meeting: the call is recorded from this tab and your voice from your microphone.'; document.getElementById('start').disabled = false;`);
   await sleep(500);
   await p.shot('popup', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
+
+  // ---- UI audit set (AUDIT=1): every Settings page, the tour, the popup and the minutes, in light and dark, into docs/img/audit
+  if (process.env.AUDIT) {
+    mkdirSync(path.join(OUT, 'audit'), { recursive: true });
+    for (const theme of ['light', 'dark']) {
+      await opts.evaluate(theme === 'dark' ? `chrome.storage.local.set({ uiTheme: 'dark' })` : `chrome.storage.local.remove('uiTheme')`);
+      await sleep(500);
+      for (const tab of ['start', 'general', 'speech', 'minutes', 'email', 'voices', 'usage', 'appearance']) {
+        const pg = await openPage(`chrome-extension://${id}/options.html`, { width: 1280, height: 900 });
+        await pg.evaluate(`document.querySelector('#nav [data-tab="${tab}"]').click()`);
+        await sleep(800);
+        await pg.shot(`audit/${theme}-settings-${tab}`, { maxHeight: 6000 });
+      }
+      for (const step of [0, 1, 2]) {
+        const tr = await openPage(`chrome-extension://${id}/welcome.html?restart=1`, { width: 1280, height: 900 });
+        await sleep(600);
+        for (let i = 0; i < step; i++) { await tr.evaluate(`document.getElementById('next').click()`); await sleep(500); }
+        await sleep(400);
+        await tr.shot(`audit/${theme}-tour-${step + 1}`, { maxHeight: 2000 });
+      }
+      const pop = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+      await pop.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('start').disabled = false;`);
+      await sleep(600);
+      await pop.shot(`audit/${theme}-popup-home`, { full: false, clip: { x: 0, y: 0, width: 400, height: 560 } });
+      await pop.evaluate(`document.getElementById('tabMeet').click()`);
+      await sleep(600);
+      await pop.shot(`audit/${theme}-popup-meetings`, { full: false, clip: { x: 0, y: 0, width: 400, height: 640 } });
+      await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetCode: 'abc-defg-hij' }, levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
+      const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+      await sleep(1200);
+      await pr.shot(`audit/${theme}-popup-recording`, { full: false, clip: { x: 0, y: 0, width: 400, height: 640 } });
+      await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, stopping: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000 } })`);
+      const pf = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+      await sleep(1200);
+      await pf.shot(`audit/${theme}-popup-finishing`, { full: false, clip: { x: 0, y: 0, width: 400, height: 400 } });
+      await opts.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
+      for (const [name, url] of [['minutes-official', 'mom.html?id=demo1'], ['minutes-standard', 'mom.html?id=demo2'], ['ask', 'ask.html']]) {
+        const pg = await openPage(`chrome-extension://${id}/${url}`, { width: 1280, height: 900 });
+        await sleep(1200);
+        await pg.shot(`audit/${theme}-${name}`, { maxHeight: 6000 });
+      }
+      const tx = await openPage(`chrome-extension://${id}/mom.html?id=demo2`, { width: 1280, height: 900 });
+      await sleep(1000);
+      await tx.evaluate(`document.getElementById('tabTranscript')?.click() || [...document.querySelectorAll('.tabs button')].find((b) => /transcript/i.test(b.textContent))?.click()`);
+      await sleep(700);
+      await tx.shot(`audit/${theme}-minutes-transcript`, { maxHeight: 1800 });
+    }
+    await opts.evaluate(`chrome.storage.local.remove('uiTheme')`);
+  }
 } catch (e) {
   console.error('FAILED', e.stack);
   process.exitCode = 1;
