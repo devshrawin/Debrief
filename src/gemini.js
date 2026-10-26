@@ -87,14 +87,23 @@ export async function geminiFetch(url, init, settings, meta = {}) {
   return res;
 }
 
+// The main key first, then each backup key in order (the first backup, then the list), while a key is out of quota,
+// rejected, or the network failed. Any other answer is the answer.
+export const keyOrder = (settings) => [settings.geminiKey, settings.geminiKey2, ...(settings.geminiBackups || [])].filter(Boolean);
+
 async function geminiFetchInner(url, init, settings) {
+  const keys = keyOrder(settings);
   const call = (key) => fetch(url, { ...init, headers: { ...init.headers, 'x-goog-api-key': key } });
-  const res = await call(settings.geminiKey).catch((e) => {
-    if (!settings.geminiKey2 || e.name === 'AbortError') throw e;
-    return null; // network error: try the backup key
-  });
-  if (res?.ok || !settings.geminiKey2 || (res && !FALLBACK_STATUS(res.status))) return res;
-  return call(settings.geminiKey2);
+  let res = null;
+  for (let i = 0; i < keys.length; i++) {
+    const last = i === keys.length - 1;
+    res = await call(keys[i]).catch((e) => {
+      if (last || e.name === 'AbortError') throw e;
+      return null; // network error: try the next key
+    });
+    if (last || (res && (res.ok || !FALLBACK_STATUS(res.status)))) return res;
+  }
+  return res;
 }
 
 // Free-tier quotas are per model per project, so a second key in the same project does not help

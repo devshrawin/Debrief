@@ -337,7 +337,7 @@ hr { border: 0; border-top: 1px solid var(--separator); margin: var(--s4) 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* Callouts */
-.warn, .callout {
+.warn:not(.chip):not(.badge), .callout {
   display: block;
   padding: var(--s3) var(--s4);
   border-radius: var(--r-md);
@@ -695,3 +695,4 @@ button:disabled, .btn:disabled, .seg-ctl:has(> button:disabled) { opacity: .5; c
 :root[data-theme="dark"] { --goo-fill: #3c3c46; }
 /* slim scrollbars that follow the theme */
 html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
+.chip.warn:not(label):not(button):not(a) { background: var(--orange-soft); color: var(--orange); }

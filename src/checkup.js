@@ -4,6 +4,7 @@ import { getSettings, getVoices, listMeetings, getBlockedVoices } from './store.
 import { mailReady } from './mailer.js';
 import { summarize, parseLimits } from './usage.js';
 
+const backupCount = (s) => (s.geminiKey2 ? 1 : 0) + (s.geminiBackups || []).filter(Boolean).length;
 const OK = '✓';
 const WARN = '!';
 const BAD = '✗';
@@ -16,7 +17,7 @@ export async function runCheckup() {
 
   // keys and quota
   if (s.sttProvider === 'gemini' || s.llmProvider === 'gemini') {
-    add(s.geminiKey ? OK : BAD, 'Gemini key', s.geminiKey ? (s.geminiKey2 ? 'main and backup key are set' : 'a key is set (no backup key)') : 'missing: add it on the Get started page', 'start', 'Add key');
+    add(s.geminiKey ? OK : BAD, 'Gemini key', s.geminiKey ? (backupCount(s) ? `main key and ${backupCount(s)} backup key${backupCount(s) === 1 ? '' : 's'} are set` : 'a key is set (no backup key)') : 'missing: add it on the Get started page', 'start', 'Add key');
     try {
       const { usage, learnedLimits = {}, modelCooldown = {} } = await chrome.storage.local.get(['usage', 'learnedLimits', 'modelCooldown']);
       const limits = { ...learnedLimits, ...parseLimits(s.usageLimits) };
@@ -24,7 +25,7 @@ export async function runCheckup() {
       const used = (m) => today.filter((x) => x.model === m).reduce((a, x) => a + x.req, 0);
       for (const m of [s.sttGeminiModel, s.geminiModel].filter(Boolean)) {
         const lim = limits[m];
-        if (!lim) add(OK, `Quota today: ${m}`, `${used(m)} requests so far (limit not known yet)`);
+        if (!lim) add(OK, `Quota today: ${m}`, `${used(m)} request${used(m) === 1 ? "" : "s"} so far (limit not known yet)`);
         else add(used(m) >= lim ? BAD : used(m) >= lim * 0.8 ? WARN : OK, `Quota today: ${m}`, `${used(m)} of about ${lim} requests used`);
       }
       const cooling = Object.entries(modelCooldown).filter(([, u]) => u > Date.now());

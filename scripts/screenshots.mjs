@@ -324,6 +324,7 @@ try {
         const pg = await openPage(`chrome-extension://${id}/options.html`, { width: 1280, height: 900 });
         await pg.evaluate(`document.querySelector('#nav [data-tab="${tab}"]').click()`);
         await sleep(800);
+        if (tab === 'start') { await pg.evaluate(`document.getElementById('checkup').click()`); await sleep(2600); } // show the check-my-setup results too
         await pg.shot(`audit/${theme}-settings-${tab}`, { maxHeight: 6000 });
       }
       for (const step of [0, 1, 2]) {

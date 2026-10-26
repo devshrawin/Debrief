@@ -120,9 +120,15 @@
     .checks li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; }
     .checks li + li { border-top: 1px solid var(--line); }
     .checks .ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; flex: none; margin-top: 1px; }
-    .checks .ic.ok { background: var(--ok-bg); color: var(--ok); }
-    .checks .ic.warn { background: var(--amber-bg); color: var(--amber-ink); }
-    .checks .ic.bad { background: var(--rec-bg); color: var(--rec-ink); }
+    .checks .ic.lv-ok { background: var(--ok-bg); color: var(--ok); }
+    .checks .ic.lv-warn { background: var(--amber-bg); color: var(--amber-ink); }
+    .checks .ic.lv-bad { background: var(--rec-bg); color: var(--rec-ink); }
+    /* more backup keys */
+    .bk-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+    .bk-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .bk-name { flex: none; min-width: 108px; font-weight: 600; margin: 0; }
+    .bk-in, .bk-mask { flex: 1 1 220px; min-width: 0; }
+    .bk-add { align-self: flex-start; }
     .checks .ck { flex: 1; min-width: 0; }
     .checks .ck b { display: block; }
     .checks .ck .hint { overflow-wrap: anywhere; }
@@ -305,6 +311,11 @@
             <div class="secret"><input id="geminiKey2" type="password" autocomplete="new-password" placeholder="A key from a second Google project" spellcheck="false"></div>
             <p class="hint">Used automatically when the main key hits its daily limit.</p>
           </div>
+        </div>
+        <div class="fld" id="moreKeysBox">
+          <div id="moreKeys" class="bk-list"></div>
+          <button type="button" id="addKey" class="btn sm bk-add" aria-describedby="addKey-d">+ Add another backup key</button>
+          <p class="hint" id="addKey-d">As many as you like. They are tried in order when the one before runs out of quota or is rejected.</p>
         </div>
         <div class="callout"><p>Limits are counted per Google project, not per key. A backup key only helps if it comes from a different project.</p></div>
         <div class="callout warnc"><p><strong>Google's free tier may use your audio and text to improve its products</strong>, and reviewers may read them. For confidential meetings, use a paid key (billing on) or a local model in Speech to text and Minutes.</p></div>

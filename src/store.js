@@ -48,6 +48,7 @@ export const DEFAULTS = {
 
   geminiKey: '', // shared by Gemini transcription and the Gemini MOM writer
   geminiKey2: '', // optional backup key from a different Google Cloud project
+  geminiBackups: [], // any number of further backup keys, tried in order after geminiKey2
   sttProvider: 'gemini', // gemini | sarvam | deepgram | openai
   sttGeminiModel: 'gemini-3.5-transcribe',
   sarvamKey: '',

@@ -84,6 +84,8 @@
     // shared by Gemini transcription and the Gemini MOM writer
     geminiKey2: "",
     // optional backup key from a different Google Cloud project
+    geminiBackups: [],
+    // any number of further backup keys, tried in order after geminiKey2
     sttProvider: "gemini",
     // gemini | sarvam | deepgram | openai
     sttGeminiModel: "gemini-3.5-transcribe",
@@ -242,14 +244,20 @@
     note(url, res, meta);
     return res;
   }
+  var keyOrder = (settings) => [settings.geminiKey, settings.geminiKey2, ...settings.geminiBackups || []].filter(Boolean);
   async function geminiFetchInner(url, init, settings) {
+    const keys = keyOrder(settings);
     const call = (key) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key } });
-    const res = await call(settings.geminiKey).catch((e) => {
-      if (!settings.geminiKey2 || e.name === "AbortError") throw e;
-      return null;
-    });
-    if (res?.ok || !settings.geminiKey2 || res && !FALLBACK_STATUS(res.status)) return res;
-    return call(settings.geminiKey2);
+    let res = null;
+    for (let i = 0; i < keys.length; i++) {
+      const last = i === keys.length - 1;
+      res = await call(keys[i]).catch((e) => {
+        if (last || e.name === "AbortError") throw e;
+        return null;
+      });
+      if (last || res && (res.ok || !FALLBACK_STATUS(res.status))) return res;
+    }
+    return res;
   }
   var GENERAL_FALLBACKS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"];
   var MODEL_STATUS = (s) => s === 404 || s === 429 || s >= 500;

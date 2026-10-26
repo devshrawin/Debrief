@@ -166,6 +166,8 @@
     // shared by Gemini transcription and the Gemini MOM writer
     geminiKey2: "",
     // optional backup key from a different Google Cloud project
+    geminiBackups: [],
+    // any number of further backup keys, tried in order after geminiKey2
     sttProvider: "gemini",
     // gemini | sarvam | deepgram | openai
     sttGeminiModel: "gemini-3.5-transcribe",
@@ -505,14 +507,20 @@
     note(url, res, meta);
     return res;
   }
+  var keyOrder = (settings) => [settings.geminiKey, settings.geminiKey2, ...settings.geminiBackups || []].filter(Boolean);
   async function geminiFetchInner(url, init, settings) {
+    const keys = keyOrder(settings);
     const call = (key2) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key2 } });
-    const res = await call(settings.geminiKey).catch((e) => {
-      if (!settings.geminiKey2 || e.name === "AbortError") throw e;
-      return null;
-    });
-    if (res?.ok || !settings.geminiKey2 || res && !FALLBACK_STATUS(res.status)) return res;
-    return call(settings.geminiKey2);
+    let res = null;
+    for (let i = 0; i < keys.length; i++) {
+      const last = i === keys.length - 1;
+      res = await call(keys[i]).catch((e) => {
+        if (last || e.name === "AbortError") throw e;
+        return null;
+      });
+      if (last || res && (res.ok || !FALLBACK_STATUS(res.status))) return res;
+    }
+    return res;
   }
   var GENERAL_FALLBACKS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"];
   var MODEL_STATUS = (s) => s === 404 || s === 429 || s >= 500;
@@ -3399,6 +3407,7 @@ function out(o) {
   }
 
   // src/checkup.js
+  var backupCount = (s) => (s.geminiKey2 ? 1 : 0) + (s.geminiBackups || []).filter(Boolean).length;
   var OK = "\u2713";
   var WARN = "!";
   var BAD = "\u2717";
@@ -3407,7 +3416,7 @@ function out(o) {
     const add = (level, title, detail = "", go = "", fixText = "") => rows.push({ level, title, detail, go, fixText });
     const s = await getSettings();
     if (s.sttProvider === "gemini" || s.llmProvider === "gemini") {
-      add(s.geminiKey ? OK : BAD, "Gemini key", s.geminiKey ? s.geminiKey2 ? "main and backup key are set" : "a key is set (no backup key)" : "missing: add it on the Get started page", "start", "Add key");
+      add(s.geminiKey ? OK : BAD, "Gemini key", s.geminiKey ? backupCount(s) ? `main key and ${backupCount(s)} backup key${backupCount(s) === 1 ? "" : "s"} are set` : "a key is set (no backup key)" : "missing: add it on the Get started page", "start", "Add key");
       try {
         const { usage, learnedLimits = {}, modelCooldown = {} } = await chrome.storage.local.get(["usage", "learnedLimits", "modelCooldown"]);
         const limits = { ...learnedLimits, ...parseLimits(s.usageLimits) };
@@ -3415,7 +3424,7 @@ function out(o) {
         const used = (m) => today.filter((x2) => x2.model === m).reduce((a, x2) => a + x2.req, 0);
         for (const m of [s.sttGeminiModel, s.geminiModel].filter(Boolean)) {
           const lim = limits[m];
-          if (!lim) add(OK, `Quota today: ${m}`, `${used(m)} requests so far (limit not known yet)`);
+          if (!lim) add(OK, `Quota today: ${m}`, `${used(m)} request${used(m) === 1 ? "" : "s"} so far (limit not known yet)`);
           else add(used(m) >= lim ? BAD : used(m) >= lim * 0.8 ? WARN : OK, `Quota today: ${m}`, `${used(m)} of about ${lim} requests used`);
         }
         const cooling = Object.entries(modelCooldown).filter(([, u]) => u > Date.now());
@@ -3696,6 +3705,79 @@ function out(o) {
     load();
   }
 
+  // src/backupkeys.js
+  function mountBackupKeys(host, addButton) {
+    if (!host || !addButton) return { value: () => [], set() {
+    } };
+    let saved = [];
+    let removed2 = /* @__PURE__ */ new Set();
+    let fresh = [];
+    const make = (tag, props = {}, ...kids) => {
+      const e = document.createElement(tag);
+      for (const [k2, v] of Object.entries(props)) {
+        if (k2 === "class") e.className = v;
+        else if (k2.startsWith("on")) e[k2] = v;
+        else if (v != null && v !== false) e.setAttribute(k2, v === true ? "" : v);
+      }
+      e.append(...kids.filter((x2) => x2 != null));
+      return e;
+    };
+    const changed = () => host.dispatchEvent(new Event("input", { bubbles: true }));
+    function draw() {
+      host.replaceChildren();
+      let n = 2;
+      saved.forEach((_2, i) => {
+        if (removed2.has(i)) return;
+        const label = `Backup key ${n}`;
+        n++;
+        const rm = make("button", { class: "btn sm", type: "button", "aria-label": `Remove ${label}` }, "Remove");
+        rm.addEventListener("click", () => {
+          removed2.add(i);
+          draw();
+          changed();
+        });
+        host.append(make("div", { class: "bk-row" }, make("span", { class: "bk-name" }, label), make("span", { class: "secret-mask bk-mask", "aria-label": "A key is saved" }, "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"), make("span", { class: "chip ok" }, "Saved"), rm));
+      });
+      fresh.forEach((f, i) => {
+        const label = `Backup key ${n}`;
+        n++;
+        const input = make("input", { class: "bk-in", type: "password", autocomplete: "new-password", spellcheck: "false", placeholder: "A key from another Google project", "aria-label": label });
+        input.value = f.v;
+        input.addEventListener("input", () => {
+          f.v = input.value;
+        });
+        const rm = make("button", { class: "btn sm", type: "button", "aria-label": `Discard ${label}` }, "Discard");
+        rm.addEventListener("click", () => {
+          fresh.splice(i, 1);
+          draw();
+          changed();
+        });
+        host.append(make("div", { class: "bk-row" }, make("label", { class: "bk-name" }, label), input, rm));
+        if (f.focus) {
+          f.focus = false;
+          queueMicrotask(() => input.focus());
+        }
+      });
+    }
+    addButton.addEventListener("click", () => {
+      fresh.push({ v: "", focus: true });
+      draw();
+    });
+    return {
+      // the keys as they should be stored: the saved ones that were not removed, then the new ones typed in
+      value() {
+        return [...saved.filter((_2, i) => !removed2.has(i)), ...fresh.map((f) => f.v.trim()).filter(Boolean)];
+      },
+      // after loading or saving: these keys are the saved ones now
+      set(list) {
+        saved = Array.isArray(list) ? list.filter(Boolean) : [];
+        removed2 = /* @__PURE__ */ new Set();
+        fresh = [];
+        draw();
+      }
+    };
+  }
+
   // src/options.js
   var $3 = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
@@ -3793,6 +3875,7 @@ function out(o) {
     }
     renderSecret(k2);
   }
+  var backupKeys = mountBackupKeys($3("moreKeys"), $3("addKey"));
   function read() {
     const s = {};
     for (const k2 of FIELDS2) {
@@ -3800,6 +3883,7 @@ function out(o) {
       if (!f) continue;
       s[k2] = SECRETS.includes(k2) ? secretValue(k2) : f.type === "checkbox" ? f.checked : f.value.trim();
     }
+    s.geminiBackups = backupKeys.value();
     s.shareMode = $3("shareAuto").checked ? "auto" : "review";
     s.meetingLanguages = [...document.querySelectorAll("#langChips input:checked")].map((c) => c.dataset.lang);
     return s;
@@ -3816,6 +3900,7 @@ function out(o) {
     }
     $3("peopleDirectory")?.dispatchEvent(new Event("dir-refresh"));
     $3("shareList")?.dispatchEvent(new Event("rec-refresh"));
+    backupKeys.set(s.geminiBackups);
     removed.clear();
     editing.clear();
     $3("shareAuto").checked = s.shareMode === "auto";
@@ -4207,8 +4292,10 @@ function out(o) {
       const settings = await save2();
       const ping = (s) => generate({ settings: s, system: "You are a connectivity test.", user: "Reply with exactly: OK", onText: () => {
       } });
-      const runs = [["Main", { ...settings, geminiKey2: "" }]];
-      if (settings.llmProvider === "gemini" && settings.geminiKey2) runs.push(["Backup", { ...settings, geminiKey: settings.geminiKey2, geminiKey2: "" }]);
+      const runs = [["Main", { ...settings, geminiKey2: "", geminiBackups: [] }]];
+      if (settings.llmProvider === "gemini") {
+        [settings.geminiKey2, ...settings.geminiBackups || []].filter(Boolean).forEach((k2, i) => runs.push([`Backup ${i + 1}`, { ...settings, geminiKey: k2, geminiKey2: "", geminiBackups: [] }]));
+      }
       const results = [];
       for (const [label, s] of runs) {
         try {
@@ -4279,7 +4366,7 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
     $3("checkupOut").replaceChildren(
       ...rows.map((r) => {
         const [cls, sr] = LEVEL[r.level] || LEVEL["!"];
-        const ic = el2("span", { className: `ic ${cls}`, textContent: r.level });
+        const ic = el2("span", { className: `ic lv-${cls}`, textContent: r.level });
         ic.setAttribute("aria-label", sr);
         const name = el2("b", {}, r.title, el2("span", { className: "sr-only", textContent: ": " }));
         const body = el2("div", { className: "ck" }, name);

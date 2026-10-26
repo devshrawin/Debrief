@@ -265,6 +265,16 @@ await test('gemini backup key used for MOM streaming when main key is invalid', 
   assert.equal(calls[1].req.headers.get('x-goog-api-key'), 'good');
 });
 
+await test('gemini: any number of backup keys are tried in order until one answers', async () => {
+  calls = [];
+  responder = (req, n) => (n < 4 ? new Response('{"error":{"message":"quota"}}', { status: 429 }) : sse(['data: {"candidates":[{"content":{"parts":[{"text":"# MOM"}]}}]}
+
+']));
+  const text = await generate({ settings: { ...DEFAULTS, geminiKey: 'k1', geminiKey2: 'k2', geminiBackups: ['k3', 'k4', 'k5'] }, system: 'S', user: 'U', onText: () => {} });
+  assert.equal(text, '# MOM');
+  assert.deepEqual(calls.map((c) => c.req.headers.get('x-goog-api-key')), ['k1', 'k2', 'k3', 'k4']);
+});
+
 // ---- LLM ----
 const collect = () => {
   const parts = [];

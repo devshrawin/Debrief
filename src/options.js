@@ -12,6 +12,7 @@ import { summarize, parseLimits, parsePrices, estimateCost, paidCost, paidTotal,
 import { modal } from './modal.js';
 import { mountDirectoryTable } from './dirtable.js';
 import { mountRecipients } from './recipients.js';
+import { mountBackupKeys } from './backupkeys.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -120,6 +121,8 @@ function clearSecret(k) {
   renderSecret(k);
 }
 
+const backupKeys = mountBackupKeys($('moreKeys'), $('addKey'));
+
 function read() {
   const s = {};
   for (const k of FIELDS) {
@@ -127,6 +130,7 @@ function read() {
     if (!f) continue;
     s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === 'checkbox' ? f.checked : f.value.trim();
   }
+  s.geminiBackups = backupKeys.value();
   s.shareMode = $('shareAuto').checked ? 'auto' : 'review';
   s.meetingLanguages = [...document.querySelectorAll('#langChips input:checked')].map((c) => c.dataset.lang);
   return s;
@@ -145,6 +149,7 @@ function fill(s) {
   }
   $('peopleDirectory')?.dispatchEvent(new Event('dir-refresh')); // the people table shows the new text
   $('shareList')?.dispatchEvent(new Event('rec-refresh')); // and the recipients table
+  backupKeys.set(s.geminiBackups);
   removed.clear();
   editing.clear();
   $('shareAuto').checked = s.shareMode === 'auto';
@@ -571,8 +576,10 @@ $('testLlm').onclick = async () => {
     const settings = await save();
     const ping = (s) => generate({ settings: s, system: 'You are a connectivity test.', user: 'Reply with exactly: OK', onText: () => {} });
     // Test each Gemini key on its own so a dead backup key doesn't hide behind a working main key.
-    const runs = [['Main', { ...settings, geminiKey2: '' }]];
-    if (settings.llmProvider === 'gemini' && settings.geminiKey2) runs.push(['Backup', { ...settings, geminiKey: settings.geminiKey2, geminiKey2: '' }]);
+    const runs = [['Main', { ...settings, geminiKey2: '', geminiBackups: [] }]];
+    if (settings.llmProvider === 'gemini') {
+      [settings.geminiKey2, ...(settings.geminiBackups || [])].filter(Boolean).forEach((k, i) => runs.push([`Backup ${i + 1}`, { ...settings, geminiKey: k, geminiKey2: '', geminiBackups: [] }]));
+    }
     const results = [];
     for (const [label, s] of runs) {
       try {
@@ -649,7 +656,7 @@ function renderChecks(rows) {
   $('checkupOut').replaceChildren(
     ...rows.map((r) => {
       const [cls, sr] = LEVEL[r.level] || LEVEL['!'];
-      const ic = el('span', { className: `ic ${cls}`, textContent: r.level });
+      const ic = el('span', { className: `ic lv-${cls}`, textContent: r.level });
       ic.setAttribute('aria-label', sr);
       const name = el('b', {}, r.title, el('span', { className: 'sr-only', textContent: ': ' }));
       const body = el('div', { className: 'ck' }, name);

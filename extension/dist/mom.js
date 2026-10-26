@@ -1816,7 +1816,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const heard = new Set(normTokens(transcript));
     return { names: names2, orgs: [...orgs].filter(Boolean), heard };
   }
-  var GENERIC_RESP = /^(chairperson|the chairperson|all|all attendees|all participants)$/i;
+  var GENERIC_RESP = /^(chairperson|the chairperson|all|all attendees|all participants|not applicable|n\/a)$/i;
   function cleanResponsibility(value, known) {
     const parts = String(value || "").replace(/\*\*/g, "").split(/\s*(?:,|;|&|\/|\band\b|\+)\s*/i).map((p) => p.trim()).filter(Boolean);
     const kept = [];
@@ -2318,6 +2318,8 @@ ${att}
     // shared by Gemini transcription and the Gemini MOM writer
     geminiKey2: "",
     // optional backup key from a different Google Cloud project
+    geminiBackups: [],
+    // any number of further backup keys, tried in order after geminiKey2
     sttProvider: "gemini",
     // gemini | sarvam | deepgram | openai
     sttGeminiModel: "gemini-3.5-transcribe",
@@ -2553,14 +2555,20 @@ ${att}
     note(url, res, meta2);
     return res;
   }
+  var keyOrder = (settings2) => [settings2.geminiKey, settings2.geminiKey2, ...settings2.geminiBackups || []].filter(Boolean);
   async function geminiFetchInner(url, init, settings2) {
+    const keys = keyOrder(settings2);
     const call = (key2) => fetch(url, { ...init, headers: { ...init.headers, "x-goog-api-key": key2 } });
-    const res = await call(settings2.geminiKey).catch((e2) => {
-      if (!settings2.geminiKey2 || e2.name === "AbortError") throw e2;
-      return null;
-    });
-    if (res?.ok || !settings2.geminiKey2 || res && !FALLBACK_STATUS(res.status)) return res;
-    return call(settings2.geminiKey2);
+    let res = null;
+    for (let i = 0; i < keys.length; i++) {
+      const last = i === keys.length - 1;
+      res = await call(keys[i]).catch((e2) => {
+        if (last || e2.name === "AbortError") throw e2;
+        return null;
+      });
+      if (last || res && (res.ok || !FALLBACK_STATUS(res.status))) return res;
+    }
+    return res;
   }
   var GENERAL_FALLBACKS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"];
   var MODEL_STATUS = (s) => s === 404 || s === 429 || s >= 500;
@@ -3722,11 +3730,11 @@ ${NAMES_RULES}
 
 Only the parts of the template that need language are yours. The header block (topic, mode, date, time, chairperson) and the attendee tables are filled in by software: do NOT write them, and do not write a title, a summary or an attendance section.
 
-Register: write in ${language}, in the formal third-person past tense of official minutes. Use verbs such as "apprised", "directed", "noted", "requested", "informed", "decided", "it was agreed". Name a person only when the transcript or the participant list supports it, and then write the name exactly as listed, with its honorific if the list gives one. Do not add honorifics yourself. Keep numbers, dates, product names and technical terms exactly as said. When something is ambiguous, say "(unclear)" instead of guessing.
+Register: write in ${language}, in the formal third-person past tense of official minutes. Use verbs such as "apprised", "directed", "noted", "requested", "informed", "decided", "it was agreed". Refer to the parties by organisation or role, the way official minutes do: "the System Integrator (<organisation>) apprised the committee that\u2026", "<Client organisation> informed that\u2026", "the <Department or Team> clarified that\u2026", "the Chairperson directed that\u2026". Name an individual only when the point depends on that person (for example a named officer who was asked to do something), written exactly as listed with its honorific. Do not add honorifics yourself. Close each topic's last point with the decision or the way forward when there was one. Keep numbers, dates, product names and technical terms exactly as said. When something is ambiguous, say "(unclear)" instead of guessing.
 
 Completeness: capture EVERY decision, commitment, deadline, open question and risk that was mentioned, however briefly. When a checklist of extracted items is supplied, each item must appear in a Discussion row or as an Action item. Do not add anything the transcript does not support.
 
-Responsibility column: it says who is responsible for the topic or the action. Use ONLY a name from the participant list, an organisation from the organisation list, or [RESPONSIBILITY] when the transcript does not say. Never invent an owner and never guess one from a bare first name that fits several people.
+Responsibility column: it says who is responsible for the topic or the action. Prefer the ORGANISATION from the organisation list (for example the client body or the system integrator); use a person's name from the participant list only when the action was given to that one person. Write "Not Applicable" for a topic that was information only, with nothing to be done. Use [RESPONSIBILITY] only when something has to be done but the transcript does not say by whom. Never invent an owner and never guess one from a bare first name that fits several people.
 
 Output EXACTLY this structure, with these headings and these pipe tables, and nothing before or after it:
 
@@ -3741,7 +3749,7 @@ Output EXACTLY this structure, with these headings and these pipe tables, and no
 ## Action Items
 | Action Item | Responsibility |
 |---|---|
-| <one action, one sentence, ending with its due date as "by DD-Mon-YY" when a date was given; omit it when none was> | <name or organisation or [RESPONSIBILITY]> |
+| <one action, one sentence that starts with who does it ("KSITM to create\u2026", "Amnex to carry out\u2026") and ends with its due date as "by DD-Mon-YY" when a date was given; omit it when none was> | <name or organisation or [RESPONSIBILITY]> |
 
 ## Next Meeting
 Date and Time: <date and time if mentioned, otherwise: To be decided and communicated separately>
