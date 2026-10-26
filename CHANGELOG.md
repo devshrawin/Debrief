@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 — 2026-10-26
+- First public release. Glass design on every screen, in light and dark, with calm motion you can turn off (Settings → Appearance).
+- Floating panel over the page; discard a recording started by mistake; a first-recording reminder to tell participants.
+- Minutes: Overview, Decisions, Risks and Blockers, Next Checkpoints; every action has an owner; missed points are merged into the right section; attendance uses when people were actually in the call.
+- Unnamed voices get a Play clip; the on-page pill can be dragged again and no longer shows "muted in the call".
+- Polish pass on every screen (tour, Settings, popup, minutes); no links to the author's GitHub inside the extension.
+- Store pre-flight check built into packaging.
+
 ## 0.2.4 — 2026-10-26
 - The floating panel no longer shows a square scrollbar strip at its rounded edge, and grows to fit its content.
 - "Close to a daily limit" can be closed (it comes back tomorrow).
