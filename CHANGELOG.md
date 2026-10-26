@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-10-26
+- The floating panel no longer shows a square scrollbar strip at its rounded edge, and grows to fit its content.
+- "Close to a daily limit" can be closed (it comes back tomorrow).
+
 ## 0.2.3 — 2026-10-26
 - No links to the author's GitHub inside the extension (setup guides removed from Settings and the tour). Only the store's privacy policy link remains. Store pre-flight now checks this.
 

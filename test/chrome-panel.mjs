@@ -89,9 +89,9 @@ try {
     const { sessionId } = await send('Target.attachToTarget', { targetId: frame.targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);
     const ev = async (x) => (await send('Runtime.evaluate', { expression: x, awaitPromise: true, returnByValue: true }, sessionId)).result.value;
-    const st = await ev(`({ cls: document.documentElement.classList.contains('in-panel'), bg: getComputedStyle(document.body).backgroundColor, room: getComputedStyle(document.querySelector('.fx-bg')).display, h: Math.round(document.body.getBoundingClientRect().height) })`);
+    const st = await ev(`({ cls: document.documentElement.classList.contains('in-panel'), bg: getComputedStyle(document.body).backgroundColor, room: getComputedStyle(document.querySelector('.fx-bg')).display, sb: getComputedStyle(document.body).scrollbarWidth, h: Math.round(document.body.getBoundingClientRect().height) })`);
     if (process.env.DBG) console.log(JSON.stringify(await ev(`[...document.querySelectorAll('html,body,body *')].filter((e) => { const c = getComputedStyle(e); const r = e.getBoundingClientRect(); return r.width > 200 && r.height > 20 && (c.backgroundColor !== 'rgba(0, 0, 0, 0)' || c.backgroundImage !== 'none'); }).slice(0, 14).map((e) => [e.tagName, e.className, getComputedStyle(e).backgroundColor, getComputedStyle(e).backgroundImage.slice(0, 60)])`)));
-    check('inside the panel the popup is see-through (no own background, no colour room)', st.cls && /rgba\(0, 0, 0, 0\)|transparent/.test(st.bg) && st.room === 'none', JSON.stringify(st));
+    check('inside the panel the popup is see-through (no own background, no colour room, no scrollbar strip)', st.sb === 'none' && st.cls && /rgba\(0, 0, 0, 0\)|transparent/.test(st.bg) && st.room === 'none', JSON.stringify(st));
     check('the panel was sized to the popup', st.h > 200);
   }
   const box = await page.evaluate(`(() => { const h = document.getElementById('debrief-panel-host'); const r = h.getBoundingClientRect(); return { w: Math.round(r.width), top: Math.round(r.top), right: Math.round(innerWidth - r.right), h: Math.round(r.height) }; })()`);

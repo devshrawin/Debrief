@@ -60,7 +60,7 @@
     if (e.source !== frame.contentWindow || !e.data?.debriefPanel) return;
     if (e.data.type === 'ready') ready = true;
     else if (e.data.type === 'close') close();
-    else if (e.data.type === 'size' && e.data.h > 0) box.style.height = `${Math.min(e.data.h, 640)}px`;
+    else if (e.data.type === 'size' && e.data.h > 0) box.style.height = `${e.data.h}px`;
   };
   const onOutside = (e) => {
     if (!e.composedPath().includes(host)) close();

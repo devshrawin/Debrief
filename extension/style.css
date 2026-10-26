@@ -669,7 +669,8 @@ input[type=color] { width: 72px; min-height: 36px; padding: 2px 4px; cursor: poi
 /* ---------- 7. Inside the floating panel (src/panel.js): the panel supplies the blur and the tint, the page shows through ---------- */
 html.in-panel, html.in-panel body { background: transparent !important; }
 html.in-panel .fx-bg, html.in-panel body::before { display: none !important; }
-html.in-panel body { max-height: none; overflow-y: auto; }
+html.in-panel body { max-height: none; overflow-y: auto; scrollbar-width: none; } /* the panel grows to fit; if the page is too short it scrolls without a bar, so no square strip shows at the panel's rounded edge */
+html.in-panel body::-webkit-scrollbar { display: none; width: 0; }
 
 /* ---------- 8. Polish rules from the review ---------- */
 input[type="checkbox"]:not([role="switch"]):not(.sw) { accent-color: var(--tint); width: 18px; height: 18px; min-height: 0; margin: 0 6px 0 0; vertical-align: -3px; }

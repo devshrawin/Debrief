@@ -450,13 +450,19 @@
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
     const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
-    show("usageWarn", !!hits.length);
+    const today = (/* @__PURE__ */ new Date()).toDateString();
+    const closedToday = (await chrome.storage.local.get("usageWarnHiddenDay")).usageWarnHiddenDay === today;
+    show("usageWarn", !!hits.length && !closedToday);
     $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
     const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
     const hidden = (await chrome.storage.local.get("quotaWarnHidden")).quotaWarnHidden === true;
     show("quotaWarn", !!q?.short && !hidden);
     if (q?.short) $("quotaWarnText").textContent = `A one-hour meeting needs about ${q.need} requests and ${q.left} are left today (${q.used} of ${q.limit} used). ${q.longHelps ? 'Choose "About 4 minutes (fewer requests)" in Settings \u2192 Speech to text to make it fit.' : "Part of the meeting may be kept as audio to transcribe tomorrow."}`;
   }
+  $("usageWarnX").onclick = async () => {
+    await chrome.storage.local.set({ usageWarnHiddenDay: (/* @__PURE__ */ new Date()).toDateString() });
+    show("usageWarn", false);
+  };
   $("quotaWarnX").onclick = async () => {
     await chrome.storage.local.set({ quotaWarnHidden: true });
     show("quotaWarn", false);
