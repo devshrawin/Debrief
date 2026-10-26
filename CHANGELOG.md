@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 — 2026-10-26
+- Email settings: who else gets a copy is a table in the same step as the script setup, with the allow-list and the "copy script" button right under it (also in the tour).
+- Any number of Gemini backup keys: a + button adds more, tried in order.
+- People directory is a table you can add to, with paste from a spreadsheet.
+- Voices: the merge dialog is laid out properly, a taken name offers to merge, unnamed voices have a Play clip; voice learning no longer fails on stored typed arrays and says which step failed if it does.
+- Official minutes follow the house template more closely: footer and margins, organisation-level responsibility, "Not Applicable" for information-only topics.
+- Minutes: Overview, Decisions, Risks and Blockers and Next Checkpoints; owners filled in; missed points merged into the right section.
+- Pill: can be clicked and dragged again and no longer shows "muted in the call".
+- Check my setup: the warning icon is a proper circle. Many small polish fixes across Settings, the tour, the popup and the minutes.
+
 ## 1.0.0 — 2026-10-26
 - First public release. Glass design on every screen, in light and dark, with calm motion you can turn off (Settings → Appearance).
 - Floating panel over the page; discard a recording started by mistake; a first-recording reminder to tell participants.
