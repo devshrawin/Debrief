@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 — 2026-10-28
+- People and their details (title, department, designation, organisation, email, chair) now live in Settings → Voices: a table next to the voices, details fields when naming or adding a voice, a details line and Add details on each voice. They feed the attendee tables of the minutes.
+- Speech to text: the fallback model's thinking, repeated passages and made-up speaker labels are cleaned out of transcripts (also of meetings already recorded); Meet's button text no longer reaches the spelling hints; the fallback prompt keeps English in English letters.
+
+
 ## 1.1.1 — 2026-10-27
 - Pill: the mic button shows "Mic off" while you are muted in the call and "Mic on" when you unmute (it had been stuck on "Mic on"); the "Debrief is recording" line is no longer drawn on top of the pill (it is spoken to screen readers only).
 - Meet mute button is read more tolerantly if Meet rewords its labels.
