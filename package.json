@@ -1,6 +1,6 @@
 {
   "name": "debrief",
-  "version": "1.2.0",
+  "version": "1.1.2",
   "description": "Chrome extension: Google Meet -> Hindi/English transcript -> MOM",
   "scripts": {
     "build": "node build.mjs && node scripts/build-fx.mjs",

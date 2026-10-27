@@ -132,6 +132,27 @@ try {
   await sleep(1200);
   const d1 = await pg.evaluate(`(async () => { const st = await chrome.storage.local.get('settings'); return { dir: st.settings.peopleDirectory, row: [...document.querySelectorAll('#dirTable .dir-body .dir-row')].map((r) => [...r.querySelectorAll('input.dir-in')].map((i) => i.value).join('|')), profile: document.querySelector('#voiceList .vprofile')?.textContent || '' }; })()`);
   check('naming with details: the person lands in the table and in the saved directory, and the voice shows the details', /Test Person \| .*Joint Secretary \| .*Kochi Metro/.test(d1.dir) && /test@metro.org/i.test(d1.dir) && /Joint Secretary/.test(d1.profile), JSON.stringify(d1));
+
+  // ---- the minutes page: naming the last unnamed voice with a name that already has a voice joins the two
+  await pg.evaluate(`(async () => {
+    const pack = (seed) => { const b = new Int8Array(256); for (let i = 0; i < 256; i++) b[i] = Math.round(Math.sin(i * seed) * 90); let s = ''; for (const x of new Uint8Array(b.buffer)) s += String.fromCharCode(x); return btoa(s); };
+    const v = (id, name, seed, extra = {}) => ({ id, name, lang: 'free', centroid: pack(seed), windows: [pack(seed)], secs: 40, meetings: 2, created: Date.now(), auto: true, learnedFrom: ['nm2'], ...extra });
+    await chrome.storage.local.set({ schema: 2, settings: { voiceOn: true, voiceLearn: true }, voices: [v('x1', 'Unnamed voice 1', 0.4), v('x2', 'Priya Nair', 0.4001, { confirmed: true })],
+      'meeting:nm2': { id: 'nm2', title: 'M', startedAt: Date.now() - 900000, endedAt: Date.now() - 1000, segments: [{ t: 3, src: 'others', text: 'Hello there.' }], errors: [], voiceSegs: [], captions: [], decided: true, mom: '# M', job: { state: 'done', beat: 1 } }, meetingIds: ['nm2'] });
+  })()`);
+  const mp = await openPage(`chrome-extension://${id}/mom.html?id=nm2`);
+  await sleep(1500);
+  const n0 = await mp.evaluate(`document.querySelectorAll('#nameList .namerow').length`);
+  check('the minutes page offers the unnamed voice to name', n0 === 1, String(n0));
+  await mp.evaluate(`(() => { const r = document.querySelector('#nameList .namerow'); const i = r.querySelector('input'); i.value = 'Priya Nair'; r.querySelector('button.primary').click(); })()`);
+  await sleep(700);
+  const askShown = await mp.evaluate(`!!document.querySelector('dialog.dbmodal') && /already has a voice/.test(document.querySelector('dialog.dbmodal').textContent)`);
+  check('a name that already has a voice asks whether it is the same person (it used to just refuse)', askShown);
+  await mp.evaluate(`[...document.querySelectorAll('dialog.dbmodal button')].find((b) => /join with/i.test(b.textContent)).click()`);
+  await sleep(1200);
+  const joined = await mp.evaluate(`chrome.storage.local.get('voices').then((r) => r.voices.map((x) => x.name))`);
+  const left = await mp.evaluate(`document.getElementById('nameBox').classList.contains('hidden') ? 0 : document.querySelectorAll('#nameList .namerow').length`);
+  check('joining leaves one Priya Nair and nothing left to name', joined.length === 1 && joined[0] === 'Priya Nair' && left === 0, JSON.stringify({ joined, left }));
   // ---- Settings > Email: the recipients table sits in the same step as the script, and the allow-list follows it
   await pg.evaluate(`chrome.storage.local.set({ settings: { voiceOn: true, shareList: 'priya@company.com', shareGroups: 'Cadence Call | amal@company.com' } })`);
   await send('Page.reload', {}, pg.sessionId);

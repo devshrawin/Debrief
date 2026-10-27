@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.2.0 — 2026-10-28
+## 1.1.2 — 2026-10-28
+- Minutes page: naming the last unnamed voice with a name that already has a voice (a second device or headset of the same person) used to be refused, leaving it unnamed for ever. It now asks "Is this the same person?" and joins the two.
 - People and their details (title, department, designation, organisation, email, chair) now live in Settings → Voices: a table next to the voices, details fields when naming or adding a voice, a details line and Add details on each voice. They feed the attendee tables of the minutes.
 - Speech to text: the fallback model's thinking, repeated passages and made-up speaker labels are cleaned out of transcripts (also of meetings already recorded); Meet's button text no longer reaches the spelling hints; the fallback prompt keeps English in English letters.
 

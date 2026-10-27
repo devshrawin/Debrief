@@ -10,8 +10,8 @@ import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, 
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { matchPeople, setEmailNames } from './attendance.js';
-import { isAnon } from './voice/learn.js';
-import { getSample, hasSample } from './voice/samples.js';
+import { isAnon, mergePeople } from './voice/learn.js';
+import { getSample, hasSample, putSample, deleteSample } from './voice/samples.js';
 import { modelLabel } from './llm.js';
 import { listPending, deleteAllPending } from './audiostore.js';
 import { formatTranscript } from './prompt.js';
@@ -159,8 +159,22 @@ async function renderNameBox() {
         const clean = input.value.trim().replace(/\s+/g, ' ').slice(0, 60);
         const all = await getVoices();
         if (!clean) return void input.focus();
-        if (all.some((x) => x.id !== v.id && x.name.toLowerCase() === clean.toLowerCase())) {
-          $('nameNote').textContent = `There is already a voice called ${clean}. Use Settings → Voices → Merge to join two voices of the same person.`;
+        const taken = all.find((x) => x.id !== v.id && x.name.toLowerCase() === clean.toLowerCase());
+        if (taken) {
+          // the same person already has a voice (a second device, a headset): join the two instead of leaving this one unnamed for ever
+          const ask = await modal({ text: `${taken.name} already has a voice. Is this the same person? Their two voices will be joined, and ${taken.name} is recognised from both.`, buttons: [{ label: 'No, it is someone else', value: 'no' }, { label: `Yes, join with ${taken.name}`, value: 'merge', primary: true }] });
+          if (ask?.value !== 'merge') {
+            $('nameNote').textContent = `Pick a different name if this is someone else: ${taken.name} is already used by another voice.`;
+            return;
+          }
+          try {
+            await saveVoices(mergePeople(all, v.id, taken.id));
+            const mine = await getSample(v.id).catch(() => null);
+            if (mine && !(await hasSample(taken.id).catch(() => true))) await putSample(taken.id, mine).catch(() => {});
+            deleteSample(v.id).catch(() => {});
+          } catch (e) {
+            $('nameNote').textContent = e.message;
+          }
           return;
         }
         await saveVoices(all.map((x) => (x.id === v.id ? { ...x, name: clean, confirmed: true } : x)));

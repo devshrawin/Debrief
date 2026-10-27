@@ -2255,8 +2255,10 @@ ${att}
   async function deletePieces(meetingId) {
     await tx("pieces", "readwrite", (s) => s.delete(IDBKeyRange.bound(`${meetingId}|`, `${meetingId}|\uFFFF`)));
   }
+  var putSample = (personId, blob) => tx("samples", "readwrite", (s) => s.put(blob, personId));
   var getSample = (personId) => tx("samples", "readonly", (s) => s.get(personId));
   var hasSample = async (personId) => await tx("samples", "readonly", (s) => s.count(personId)) > 0;
+  var deleteSample = (personId) => tx("samples", "readwrite", (s) => s.delete(personId));
   async function deleteUnnamedClips(meetingId) {
     await tx("samples", "readwrite", (s) => {
       const r = s.openCursor();
@@ -4167,6 +4169,18 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
     n = Math.sqrt(n) || 1;
     return Float32Array.from(v, (x2) => x2 / n);
   }
+  function mean(vectors) {
+    const out = new Float32Array(vectors[0].length);
+    for (const v of vectors) for (let i = 0; i < out.length; i++) out[i] += v[i];
+    return normalize(out);
+  }
+  function pack(emb) {
+    const bytes = new Int8Array(emb.length);
+    for (let i = 0; i < emb.length; i++) bytes[i] = Math.max(-127, Math.min(127, Math.round(emb[i] * 127)));
+    let bin = "";
+    for (const b of new Uint8Array(bytes.buffer)) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
   function unpack(b642) {
     const bin = atob(b642);
     const out = new Float32Array(bin.length);
@@ -4311,7 +4325,49 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
   }
 
   // src/voice/learn.js
+  var LEARN = {
+    lead: 2,
+    // seconds a caption may lag behind the speech (the speech started this much before it showed)
+    tail: 1,
+    clear: 1.5,
+    // seconds around a piece in which no other speaker's caption may appear
+    minPieces: 6,
+    // evidence needed from one meeting before it counts
+    minSecs: 15,
+    readySecs: 45,
+    // total clean speech before a learned voice is used
+    readyMeetings: 2,
+    // and it must have been seen in this many different meetings
+    outlier: 0.35,
+    // pieces below this similarity to the person's own average are dropped
+    twin: 0.8,
+    // two names this similar are ambiguous
+    keep: 12
+    // individual fingerprints kept
+  };
+  var scale = (v, k2) => Float32Array.from(v, (x2) => x2 * k2);
   var isAnon = (p) => /^Unnamed voice \d+$/.test(p?.name || "");
+  function mergePeople(list, fromId, intoId) {
+    const from = list.find((p) => p.id === fromId);
+    const into = list.find((p) => p.id === intoId);
+    if (!from || !into || from.id === into.id) throw new Error("Pick two different voices to merge.");
+    if (!from.centroid || !into.centroid) throw new Error("One of these voices has no voice fingerprint, so it cannot be merged. Delete it and let Debrief learn it again.");
+    if (unpack(from.centroid).length !== unpack(into.centroid).length) throw new Error("These two voices were made with different speaker models and cannot be merged.");
+    const wf = Math.max(1, from.secs || 1);
+    const wi = Math.max(1, into.secs || 1);
+    const merged = {
+      ...into,
+      centroid: pack(mean([scale(unpack(into.centroid), wi), scale(unpack(from.centroid), wf)])),
+      windows: [...into.windows || [], ...from.windows || []].slice(-LEARN.keep * 2),
+      secs: (into.secs || 0) + (from.secs || 0),
+      meetings: Math.max(into.meetings || 1, from.meetings || 1),
+      langs: [.../* @__PURE__ */ new Set([...into.langs || [into.lang || "en"], ...from.langs || [from.lang || "en"]])],
+      learnedFrom: [.../* @__PURE__ */ new Set([...into.learnedFrom || [], ...from.learnedFrom || []])].slice(-50),
+      updated: Date.now()
+    };
+    if (into.auto) merged.ready = merged.secs >= LEARN.readySecs && merged.meetings >= LEARN.readyMeetings;
+    return list.filter((p) => p.id !== fromId).map((p) => p.id === intoId ? merged : p);
+  }
   var usableVoices = (people) => (people || []).filter((p) => !p.auto || p.ready || p.confirmed);
 
   // src/noise.js
@@ -5118,8 +5174,23 @@ ${meeting2.mom || ""}
           const clean = input.value.trim().replace(/\s+/g, " ").slice(0, 60);
           const all = await getVoices();
           if (!clean) return void input.focus();
-          if (all.some((x2) => x2.id !== v.id && x2.name.toLowerCase() === clean.toLowerCase())) {
-            $2("nameNote").textContent = `There is already a voice called ${clean}. Use Settings \u2192 Voices \u2192 Merge to join two voices of the same person.`;
+          const taken = all.find((x2) => x2.id !== v.id && x2.name.toLowerCase() === clean.toLowerCase());
+          if (taken) {
+            const ask = await modal({ text: `${taken.name} already has a voice. Is this the same person? Their two voices will be joined, and ${taken.name} is recognised from both.`, buttons: [{ label: "No, it is someone else", value: "no" }, { label: `Yes, join with ${taken.name}`, value: "merge", primary: true }] });
+            if (ask?.value !== "merge") {
+              $2("nameNote").textContent = `Pick a different name if this is someone else: ${taken.name} is already used by another voice.`;
+              return;
+            }
+            try {
+              await saveVoices(mergePeople(all, v.id, taken.id));
+              const mine = await getSample(v.id).catch(() => null);
+              if (mine && !await hasSample(taken.id).catch(() => true)) await putSample(taken.id, mine).catch(() => {
+              });
+              deleteSample(v.id).catch(() => {
+              });
+            } catch (e2) {
+              $2("nameNote").textContent = e2.message;
+            }
             return;
           }
           await saveVoices(all.map((x2) => x2.id === v.id ? { ...x2, name: clean, confirmed: true } : x2));
