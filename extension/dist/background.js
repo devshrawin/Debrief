@@ -8,6 +8,7 @@
     if (UI_PHRASE.test(t) || t.split(/\s+/).length > 6) return true;
     return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
   };
+  var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
 
   // src/voice/match.js
   var THRESHOLDS = {
@@ -534,6 +535,24 @@
     return meetings.filter((m) => m && isActive(m) && !m.job?.held && now - (m.job?.beat || 0) > STALE_MS).map((m) => m.id);
   }
 
+  // src/sttclean.js
+  var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
+  function cleanTerms(list) {
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const raw of list || []) {
+      const t = personOfTile(String(raw || "").trim());
+      if (!t || t.length < 2 || t.length > 60) continue;
+      if (isIconText(t) || isMenuText(t) || NOT_A_NAME.test(t)) continue;
+      if (t.split(/\s+/).length > 5) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+    }
+    return out;
+  }
+
   // src/audiostore.js
   var DB2 = "debrief";
   var STORE = "pending";
@@ -695,7 +714,7 @@
   async function getSettings() {
     await ensureMigrated();
     const { settings, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
-    const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+    const learnedNames = cleanTerms(Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n)).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames, voices: voices || [] };
   }
   function sttReady(s) {

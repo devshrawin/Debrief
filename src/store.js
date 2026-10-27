@@ -1,4 +1,5 @@
 import { clearAllAudio, deletePieces, deleteUnnamedClips } from './voice/samples.js';
+import { cleanTerms } from './sttclean.js';
 import { deleteAllPending } from './audiostore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
@@ -96,7 +97,7 @@ export async function getSettings() {
   await ensureMigrated();
   const { settings, learned, voices } = await chrome.storage.local.get(['settings', 'learned', 'voices']);
   // Names learned from past meetings (not part of what the user typed) are used as spelling hints.
-  const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+  const learnedNames = cleanTerms(Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n)).slice(-80);
   // Enrolled voice fingerprints ride along for matching but are never saved into the settings.
   return { ...DEFAULTS, ...(settings || {}), learnedNames, voices: voices || [] };
 }

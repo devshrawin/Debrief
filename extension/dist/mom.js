@@ -1394,9 +1394,74 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     return out;
   }
 
+  // src/sttclean.js
+  var LEAK_START = [
+    /(?:^|[\s"“”.!?।])(?:The user (?:wants|is asking|asked|has provided)|Rules:|Audio breakdown|Let'?s (?:double-?)?check|Let'?s (?:re-?listen|hear)|Re-?listen\b|Wait, (?:is|maybe|let|the)|Is it ["“'][^"”']{1,40}["”'] or)/i,
+    /\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*:/
+    // "0:00 - 0:05:" a breakdown by time
+  ];
+  var LEAK_END = /(?:Looks (?:very )?(?:good|solid)!?|Final (?:answer|transcript|output):?|Here(?:'s| is) the (?:final )?transcript:?)\s*/gi;
+  function stripThinking(text) {
+    const t = String(text || "");
+    let first2 = -1;
+    for (const re2 of LEAK_START) {
+      const m2 = re2.exec(t);
+      if (m2 && (first2 < 0 || m2.index < first2)) first2 = m2.index;
+    }
+    if (first2 < 0) return { text: t, leaked: false };
+    const before = t.slice(0, first2).trim().replace(/["“”]+$/, "").trim();
+    let after = "";
+    let m;
+    let endAt = -1;
+    LEAK_END.lastIndex = 0;
+    while (m = LEAK_END.exec(t)) if (m.index > first2) endAt = m.index + m[0].length;
+    if (endAt >= 0) after = t.slice(endAt).trim();
+    return { text: [before, after].filter(Boolean).join(" ").trim(), leaked: true };
+  }
+  var norm = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
+  function dropRepeats(text) {
+    const parts = String(text || "").split(/(?<=[.!?।])\s+/);
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const p of parts) {
+      const k2 = norm(p);
+      if (k2.length >= 30 && seen.has(k2)) continue;
+      seen.add(k2);
+      out.push(p);
+    }
+    return out.join(" ").trim();
+  }
+  function stripLabels(text, names2 = []) {
+    const known = [...new Set(names2.map((n) => String(n).trim()).filter((n) => n.length >= 3))].sort((a, b) => b.length - a.length);
+    if (!known.length) return String(text || "");
+    const esc2 = known.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    return String(text || "").replace(new RegExp(`(^|[\\s.!?\u0964])(?:${esc2})\\s*:\\s*`, "giu"), "$1").replace(/\s{2,}/g, " ").trim();
+  }
+  function cleanTranscript(text, names2 = []) {
+    const { text: t, leaked } = stripThinking(text);
+    const clean = stripLabels(dropRepeats(t), names2);
+    return { text: clean, leaked, changed: clean !== String(text || "").trim() };
+  }
+  var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
+  function cleanTerms(list) {
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const raw of list || []) {
+      const t = personOfTile(String(raw || "").trim());
+      if (!t || t.length < 2 || t.length > 60) continue;
+      if (isIconText(t) || isMenuText(t) || NOT_A_NAME.test(t)) continue;
+      if (t.split(/\s+/).length > 5) continue;
+      const k2 = t.toLowerCase();
+      if (seen.has(k2)) continue;
+      seen.add(k2);
+      out.push(t);
+    }
+    return out;
+  }
+
   // src/attendance.js
-  var norm = (s) => String(s || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  var tokens = (s) => norm(s).split(" ").filter(Boolean);
+  var norm2 = (s) => String(s || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  var tokens = (s) => norm2(s).split(" ").filter(Boolean);
   function lev1(a, b) {
     if (a === b) return true;
     if (Math.abs(a.length - b.length) > 1 || a.length < 4) return false;
@@ -2365,7 +2430,7 @@ ${att}
   async function getSettings() {
     await ensureMigrated();
     const { settings: settings2, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
-    const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+    const learnedNames = cleanTerms(Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n)).slice(-80);
     return { ...DEFAULTS, ...settings2 || {}, learnedNames, voices: voices || [] };
   }
   function llmReady(s) {
@@ -2745,7 +2810,7 @@ _(Output hit the length limit and was cut off.)_`;
   // src/dictionary.js
   var WORD = "\\p{L}\\p{M}\\p{N}_";
   var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  var norm2 = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
+  var norm3 = (s) => String(s || "").toLowerCase().normalize("NFKC").trim();
   function parseDictionary(text) {
     const entries = [];
     for (const raw of String(text || "").split(/\r?\n/)) {
@@ -2754,7 +2819,7 @@ _(Output hit the length limit and was cut off.)_`;
       const [name, rest = ""] = line.split("|");
       const canonical = name.trim();
       if (!canonical) continue;
-      const aliases = rest.split(",").map((a) => a.trim()).filter((a) => a && norm2(a) !== norm2(canonical));
+      const aliases = rest.split(",").map((a) => a.trim()).filter((a) => a && norm3(a) !== norm3(canonical));
       entries.push({ name: canonical, aliases });
     }
     return entries;
@@ -2767,22 +2832,22 @@ _(Output hit the length limit and was cut off.)_`;
     const lines = String(text || "").split(/\r?\n/);
     const at2 = lines.findIndex((l3) => {
       const t = l3.trim();
-      return t && !t.startsWith("#") && norm2(t.split("|")[0]) === norm2(r);
+      return t && !t.startsWith("#") && norm3(t.split("|")[0]) === norm3(r);
     });
     if (at2 < 0) {
-      const add = w && norm2(w) !== norm2(r) ? `${r} | ${w}` : r;
+      const add = w && norm3(w) !== norm3(r) ? `${r} | ${w}` : r;
       return [...lines.filter((l3, i) => !(i === lines.length - 1 && !l3.trim())), add].join("\n");
     }
     const [name, rest = ""] = lines[at2].split("|");
     const aliases = rest.split(",").map((a) => a.trim()).filter(Boolean);
-    if (w && norm2(w) !== norm2(r) && !aliases.some((a) => norm2(a) === norm2(w))) aliases.push(w);
+    if (w && norm3(w) !== norm3(r) && !aliases.some((a) => norm3(a) === norm3(w))) aliases.push(w);
     lines[at2] = aliases.length ? `${name.trim()} | ${aliases.join(", ")}` : name.trim();
     return lines.join("\n");
   }
   function attendeeKeys(attendees) {
     const keys = /* @__PURE__ */ new Set();
     for (const a of attendees || []) {
-      const full = norm2(a);
+      const full = norm3(a);
       if (!full) continue;
       keys.add(full);
       keys.add(full.split(/\s+/)[0]);
@@ -2794,7 +2859,7 @@ _(Output hit the length limit and was cut off.)_`;
     let c = compiled.get(entries);
     if (c) return c;
     const map = /* @__PURE__ */ new Map();
-    for (const e2 of entries) for (const a of e2.aliases) if (!map.has(norm2(a))) map.set(norm2(a), e2.name);
+    for (const e2 of entries) for (const a of e2.aliases) if (!map.has(norm3(a))) map.set(norm3(a), e2.name);
     const keys = [...map.keys()].sort((a, b) => b.length - a.length);
     const source = entries.flatMap((e2) => e2.aliases).sort((a, b) => b.length - a.length).map(esc);
     c = { map, re: source.length ? new RegExp(`(?<![${WORD}])(?:${source.join("|")})(?![${WORD}])`, "giu") : null, keys };
@@ -2807,7 +2872,7 @@ _(Output hit the length limit and was cut off.)_`;
     if (!re2) return text;
     const present = attendeeKeys(attendees);
     return text.replace(re2, (m) => {
-      const k2 = norm2(m);
+      const k2 = norm3(m);
       return present.has(k2) || !map.has(k2) ? m : map.get(k2);
     });
   }
@@ -2815,7 +2880,7 @@ _(Output hit the length limit and was cut off.)_`;
     const seen = /* @__PURE__ */ new Set();
     const out = [];
     for (const t of [...attendees || [], ...entries.map((e2) => e2.name)]) {
-      const k2 = norm2(t);
+      const k2 = norm3(t);
       if (k2 && !seen.has(k2)) {
         seen.add(k2);
         out.push(t.trim());
@@ -2837,21 +2902,21 @@ _(Output hit the length limit and was cut off.)_`;
   }
   var COMMON = new Set("this that then than them they there their these those when what where which while with from have has had will would could should about after again also been being both come did does done each even every just know like made make many more most much must only other over said same some such take them than very well were your into out how its our own put she her him his who why yes yet".split(" "));
   function suggestNames(text, attendees, entries = []) {
-    const first2 = [...new Set((attendees || []).map((a) => norm2(a).split(/\s+/)[0]).filter((f) => f.length >= 3))];
+    const first2 = [...new Set((attendees || []).map((a) => norm3(a).split(/\s+/)[0]).filter((f) => f.length >= 3))];
     if (!first2.length) return [];
-    const known = /* @__PURE__ */ new Set([...first2, ...entries.flatMap((e2) => [norm2(e2.name), ...e2.aliases.map(norm2)])]);
+    const known = /* @__PURE__ */ new Set([...first2, ...entries.flatMap((e2) => [norm3(e2.name), ...e2.aliases.map(norm3)])]);
     const counts = /* @__PURE__ */ new Map();
     for (const m of String(text || "").matchAll(new RegExp("(?<![\\p{L}\\p{M}\\p{N}_])\\p{Lu}[\\p{L}\\p{M}]{2,}(?![\\p{L}\\p{M}\\p{N}_])", "gu"))) {
       const w = m[0];
-      const k2 = norm2(w);
+      const k2 = norm3(w);
       if (known.has(k2) || COMMON.has(k2)) continue;
       counts.set(w, (counts.get(w) || 0) + 1);
     }
     const out = [];
     for (const [w, count] of counts) {
-      const k2 = norm2(w);
+      const k2 = norm3(w);
       const close = first2.filter((f) => Math.abs(f.length - k2.length) <= 1 && distance(k2, f) === 1);
-      if (close.length === 1) out.push({ found: w, suggest: attendees.find((a) => norm2(a).split(/\s+/)[0] === close[0]).split(/\s+/)[0], count });
+      if (close.length === 1) out.push({ found: w, suggest: attendees.find((a) => norm3(a).split(/\s+/)[0] === close[0]).split(/\s+/)[0], count });
     }
     return out.sort((a, b) => b.count - a.count);
   }
@@ -3677,9 +3742,9 @@ Do not write an Attendance section or notes about the recording: they are added 
   function formatTranscript(meeting2, myName, ctx = {}) {
     const me2 = myName ? `ME (${myName})` : "ME";
     if (ctx.labeled?.length) {
-      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" && !ctx.room ? me2 : l3.label}: ${applyDictionary(l3.text, ctx.entries, ctx.attendees)}`).join("\n");
+      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" && !ctx.room ? me2 : l3.label}: ${applyDictionary(cleanTranscript(l3.text, ctx.attendees || []).text, ctx.entries, ctx.attendees)}`).join("\n");
     }
-    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS"}: ${applyDictionary(s.text, ctx.entries, ctx.attendees)}`).join("\n");
+    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS"}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || []).text, ctx.entries, ctx.attendees)}`).join("\n");
   }
   function speakerTimeline(captions, ctx = {}) {
     if (!captions?.length) return "";
@@ -4286,7 +4351,7 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
     }
     throw new SttError(`${provider} HTTP ${res.status}: ${detail}`, res.status);
   }
-  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
+  var sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), cleanTerms(s.learnedNames || [])).slice(0, 80);
   var audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32e3);
   var lang = (s) => ({ codes: geminiCodes(chosenLanguages(s)), hint: languageHint(languagesOf(s)) });
   async function sarvam(wav, s) {
@@ -4368,15 +4433,24 @@ ${foot.join("\n\n")}`, stats, checklist, extract, format };
         j2 = await post(cfg(false));
       }
     } else {
-      j2 = await post({
+      const terms = sttTerms(s);
+      const body = (withThinking) => ({
         contents: [{
           role: "user",
-          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} ${sttTerms(s).length ? `These names and terms may be spoken, spell them exactly like this: ${sttTerms(s).join(", ")}. ` : ""}Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts]
-        }]
+          parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Write English words in English letters (never in Devanagari), Hindi in Devanagari, Malayalam in Malayalam script. ${terms.length ? `These names and terms may be spoken, spell them exactly like this: ${terms.join(", ")}. ` : ""}Output ONLY the words that were said, as plain running text. Do not explain, do not think out loud, do not list rules or timestamps, do not write speaker names or labels, do not repeat anything. If there is no intelligible speech, output nothing.` }, ...parts]
+        }],
+        generationConfig: { temperature: 0, ...withThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } } }
       });
+      try {
+        j2 = await post(body(false));
+      } catch (e2) {
+        if (!(e2.status === 400 && /thinking/i.test(e2.message))) throw e2;
+        j2 = await post(body(true));
+      }
     }
     record({ provider: "gemini", model, kind: "stt", tin: j2.usageMetadata?.promptTokenCount, tout: j2.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });
-    return (j2.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join("");
+    const text = (j2.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join("");
+    return cleanTranscript(text, sttTerms(s)).text;
   }
   async function gemini2(wav, s) {
     let first2 = "";
@@ -5144,7 +5218,7 @@ ${meeting2.mom || ""}
   function renderTranscript() {
     const ctx = nameCtx();
     const shown = labeledLines(true);
-    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: l3.text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? meeting.room ? "Room" : settings.myName || "Me" : "Others", text: s.text, flag: "" }));
+    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: cleanTranscript(l3.text, ctx.attendees || []).text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? meeting.room ? "Room" : settings.myName || "Me" : "Others", text: cleanTranscript(s.text, ctx.attendees || []).text, flag: "" }));
     for (const p of meeting.pauses || []) rows.push({ t: p.from, src: "note", who: "Paused", text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : "the end"}. Nothing from this stretch was transcribed or kept.`, flag: "" });
     rows.sort((a, b) => a.t - b.t);
     renderNameBox().catch(() => {

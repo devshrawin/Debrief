@@ -8,6 +8,7 @@ class SttError extends Error {
 }
 
 import { geminiFetch, modelChain, usable, allExhausted, isCooling } from './gemini.js';
+import { cleanTranscript, cleanTerms } from './sttclean.js';
 import { isLoopNoise } from './noise.js';
 import { errorDetail, DEFAULTS } from './store.js';
 import { record } from './usage.js';
@@ -26,7 +27,7 @@ async function check(res, provider) {
 }
 
 // Names and terms from the personal dictionary, as spelling hints for the speech models.
-const sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), s.learnedNames || []).slice(0, 80);
+const sttTerms = (s) => hintTerms(parseDictionary(s.dictionary), cleanTerms(s.learnedNames || [])).slice(0, 80);
 const audioSeconds = (wav) => Math.max(0, (wav.size - 44) / 32000);
 // `codes` go to Gemini's transcription model (none = it detects); `hint` is the prompt for general models.
 const lang = (s) => ({ codes: geminiCodes(chosenLanguages(s)), hint: languageHint(languagesOf(s)) });
@@ -118,18 +119,27 @@ async function geminiCall(wav, s, model) {
       j = await post(cfg(false));
     }
   } else {
-    j = await post({
+    const terms = sttTerms(s);
+    const body = (withThinking) => ({
       contents: [{
         role: 'user',
-        parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} ${sttTerms(s).length ? `These names and terms may be spoken, spell them exactly like this: ${sttTerms(s).join(', ')}. ` : ''}Output only the transcript text, with no commentary. If there is no intelligible speech, output nothing.` }, ...parts],
+        parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Write English words in English letters (never in Devanagari), Hindi in Devanagari, Malayalam in Malayalam script. ${terms.length ? `These names and terms may be spoken, spell them exactly like this: ${terms.join(', ')}. ` : ''}Output ONLY the words that were said, as plain running text. Do not explain, do not think out loud, do not list rules or timestamps, do not write speaker names or labels, do not repeat anything. If there is no intelligible speech, output nothing.` }, ...parts],
       }],
+      generationConfig: { temperature: 0, ...(withThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }) },
     });
+    try {
+      j = await post(body(false)); // no thinking: a transcript should not contain the model's reasoning
+    } catch (e) {
+      if (!(e.status === 400 && /thinking/i.test(e.message))) throw e;
+      j = await post(body(true)); // this model has no such switch: ask without it (the answer is cleaned below)
+    }
   }
   record({ provider: 'gemini', model, kind: 'stt', tin: j.usageMetadata?.promptTokenCount, tout: j.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });
-  return (j.candidates?.[0]?.content?.parts || [])
+  const text = (j.candidates?.[0]?.content?.parts || [])
     .filter((p) => p.text && !p.thought)
     .map((p) => p.text)
     .join('');
+  return cleanTranscript(text, sttTerms(s)).text; // thinking that leaked into the answer, repeats and made-up speaker labels are removed
 }
 
 // The dedicated transcription model returns an empty reply when it judges the audio to be

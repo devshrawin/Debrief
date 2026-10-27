@@ -54,6 +54,17 @@
   // src/meetend.js
   var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
 
+  // src/iconText.js
+  var isIconText = (s) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(String(s || "").trim());
+  var MENU = /^(?:(?:un)?pin|spotlight|remove|mute|unmute|reframe|zoom (?:in|out)|minimi[sz]e|maximi[sz]e|full screen|more actions|add (?:a )?(?:person|people)|keep|send a message)\b.*$/i;
+  var UI_PHRASE = /(?:\bcan['\u2019]?t\b|\bcannot\b|\bremotely\b|\bsomeone else\b|\bthis participant\b|^you (?:are|have|will|can)\b|^turn (?:on|off)\b|^(?:backgrounds?|effects?|captions?|activities|host controls|meeting details|participants|people|in the call|contributors|visual effects|apply visual effects|more options|raise hand|lower hand|present now|share screen|leave call|end call|chat|reactions?)(?:\s+(?:and|&)\s+\w+)?$)/i;
+  var isMenuText = (s) => {
+    const t = String(s || "").trim();
+    if (UI_PHRASE.test(t) || t.split(/\s+/).length > 6) return true;
+    return /\b(?:to|from) your main screen\b/i.test(t) || /^(?:reframe|zoom in|zoom out|keep|pin|unpin)$/i.test(t) || /^(?:un)?pin\s/i.test(t) || MENU.test(t) && /\b(?:screen|presentation|participant|tile|view)\b/i.test(t);
+  };
+  var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
+
   // src/adapters/index.js
   var OTHER_SITES = [
     { name: "Zoom (web client)", matches: ["https://app.zoom.us/*", "https://*.zoom.us/wc/*", "https://zoom.us/wc/*"] },
@@ -142,6 +153,24 @@
         c.continue();
       };
     });
+  }
+
+  // src/sttclean.js
+  var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
+  function cleanTerms(list) {
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const raw of list || []) {
+      const t = personOfTile(String(raw || "").trim());
+      if (!t || t.length < 2 || t.length > 60) continue;
+      if (isIconText(t) || isMenuText(t) || NOT_A_NAME.test(t)) continue;
+      if (t.split(/\s+/).length > 5) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+    }
+    return out;
   }
 
   // src/audiostore.js
@@ -305,7 +334,7 @@
   async function getSettings() {
     await ensureMigrated();
     const { settings, learned, voices } = await chrome.storage.local.get(["settings", "learned", "voices"]);
-    const learnedNames = Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n).slice(-80);
+    const learnedNames = cleanTerms(Object.entries(learned?.names || {}).sort((a, b) => a[1] - b[1]).map(([n]) => n)).slice(-80);
     return { ...DEFAULTS, ...settings || {}, learnedNames, voices: voices || [] };
   }
   function sttReady(s) {

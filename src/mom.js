@@ -1,4 +1,5 @@
 import { renderMd, decorateMinutes } from './md.js';
+import { cleanTranscript } from './sttclean.js';
 import { renderMinutesHtml, isAmnexMd, setOrg } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
@@ -272,8 +273,8 @@ function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
   const rows = shown
-    ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: l.text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
-    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: s.text, flag: '' }));
+    ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: cleanTranscript(l.text, ctx.attendees || []).text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: cleanTranscript(s.text, ctx.attendees || []).text, flag: '' }));
   // pauses show as notes in their place, so a gap in the transcript is explained
   for (const p of meeting.pauses || []) rows.push({ t: p.from, src: 'note', who: 'Paused', text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}. Nothing from this stretch was transcribed or kept.`, flag: '' });
   rows.sort((a, b) => a.t - b.t);
