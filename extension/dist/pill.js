@@ -58,6 +58,15 @@
     if (!labelled && withAttr.length === 2 && toggles.length >= 1) return { el: toggles[0], muted: toggles[0].getAttribute("data-is-muted") === "true" };
     const byLabel = [...doc.querySelectorAll("button[aria-label]")].find((b) => /turn (on|off) microphone/i.test(b.getAttribute("aria-label")));
     if (byLabel) return { el: byLabel, muted: /turn on/i.test(byLabel.getAttribute("aria-label")) };
+    const word = [...doc.querySelectorAll('button[aria-label], [role="button"][aria-label]')].find((b) => {
+      const l = b.getAttribute("aria-label") || "";
+      return /(mic|microphone)/i.test(l) && !/camera|video|speaker|audio output|settings|effects|more options|captions/i.test(l) && /(un)?mute|turn (on|off)|(enable|disable)/i.test(l);
+    });
+    if (word) {
+      const l = word.getAttribute("aria-label");
+      const pressed = word.getAttribute("aria-pressed");
+      return { el: word, muted: /unmute|turn on|enable/i.test(l) ? true : /mute|turn off|disable/i.test(l) ? false : pressed === "true" };
+    }
     return null;
   }
   function readParticipants(doc) {
@@ -540,10 +549,11 @@
       warnChip.textContent = alert?.kind === "key" ? "API key" : "Limit";
       const wanted = rec.micWanted ?? rec.micOn;
       const paused = wanted && !rec.micOn;
-      micBtn.className = "mic " + (!rec.mic ? "off" : wanted ? "on" : "off");
-      micBtn.innerHTML = (wanted ? MIC_ON : MIC_OFF) + (!rec.mic ? "No mic" : wanted ? "Mic on" : "Mic off");
+      const live = wanted && !paused;
+      micBtn.className = "mic " + (!rec.mic ? "off" : paused ? "muted" : wanted ? "on" : "off");
+      micBtn.innerHTML = (live ? MIC_ON : MIC_OFF) + (!rec.mic ? "No mic" : live ? "Mic on" : "Mic off");
       micBtn.disabled = !rec.mic;
-      const micTitle = !rec.mic ? "Microphone not available to Debrief" : wanted ? "Your mic is in the transcript. Click to ignore it." : "Your mic is ignored. Click to include it.";
+      const micTitle = !rec.mic ? "Microphone not available to Debrief" : paused ? "Your mic follows your mute button in the call: it is off while you are muted and comes back when you unmute. Click to ignore it for the whole meeting." : wanted ? "Your mic is in the transcript. Click to ignore it." : "Your mic is ignored. Click to include it.";
       micBtn.title = micTitle;
       micBtn.setAttribute("aria-label", "Microphone: " + micBtn.textContent.trim() + ". " + (rec.mic ? "Click to change" : "Not available"));
       pill.setAttribute("aria-expanded", String(expanded));
@@ -571,7 +581,7 @@
       else if (paused) panel.append(meter("Your mic", 1e-3, "Paused"));
       else if (!wanted) panel.append(meter("Your mic", null, "Ignored"));
       else panel.append(meter("Your mic", fresh ? lv.mic : null));
-      const line = !rec.mic ? "Debrief can't reach your microphone. The call is still recorded." : wanted ? "Your voice is going into the transcript." : "Your mic is not recorded. The call still is.";
+      const line = !rec.mic ? "Debrief can't reach your microphone. The call is still recorded." : paused ? "Only the call is being recorded. Your mic comes back when you unmute." : wanted ? "Your voice is going into the transcript." : "Your mic is not recorded. The call still is.";
       panel.append(el("p", "line", line));
       panel.append(el("p", "line", `${S.counts.segs} pieces transcribed \xB7 ${S.counts.errs} ${S.counts.errs === 1 ? "error" : "errors"}`));
       if (!fresh) {

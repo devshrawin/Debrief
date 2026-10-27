@@ -26,6 +26,16 @@ export function micButton(doc) {
   if (!labelled && withAttr.length === 2 && toggles.length >= 1) return { el: toggles[0], muted: toggles[0].getAttribute('data-is-muted') === 'true' };
   const byLabel = [...doc.querySelectorAll('button[aria-label]')].find((b) => /turn (on|off) microphone/i.test(b.getAttribute('aria-label')));
   if (byLabel) return { el: byLabel, muted: /turn on/i.test(byLabel.getAttribute('aria-label')) };
+  // Meet reworded its buttons: any button whose label is about the microphone, read by the verb ("Unmute", "Turn on" = muted now)
+  const word = [...doc.querySelectorAll('button[aria-label], [role="button"][aria-label]')].find((b) => {
+    const l = b.getAttribute('aria-label') || '';
+    return /(mic|microphone)/i.test(l) && !/camera|video|speaker|audio output|settings|effects|more options|captions/i.test(l) && /(un)?mute|turn (on|off)|(enable|disable)/i.test(l);
+  });
+  if (word) {
+    const l = word.getAttribute('aria-label');
+    const pressed = word.getAttribute('aria-pressed');
+    return { el: word, muted: /unmute|turn on|enable/i.test(l) ? true : /mute|turn off|disable/i.test(l) ? false : pressed === 'true' };
+  }
   return null;
 }
 

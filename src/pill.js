@@ -358,14 +358,17 @@ import { adapterFor } from './adapters/index.js';
 
     const wanted = rec.micWanted ?? rec.micOn;
     const paused = wanted && !rec.micOn;
-    micBtn.className = 'mic ' + (!rec.mic ? 'off' : wanted ? 'on' : 'off');
-    micBtn.innerHTML = (wanted ? MIC_ON : MIC_OFF) + (!rec.mic ? 'No mic' : wanted ? 'Mic on' : 'Mic off');
+    const live = wanted && !paused; // the mic is in the recording right now (not switched off, and not muted in the call)
+    micBtn.className = 'mic ' + (!rec.mic ? 'off' : paused ? 'muted' : wanted ? 'on' : 'off');
+    micBtn.innerHTML = (live ? MIC_ON : MIC_OFF) + (!rec.mic ? 'No mic' : live ? 'Mic on' : 'Mic off');
     micBtn.disabled = !rec.mic;
     const micTitle = !rec.mic
       ? 'Microphone not available to Debrief'
-      : wanted
-        ? 'Your mic is in the transcript. Click to ignore it.'
-        : 'Your mic is ignored. Click to include it.';
+      : paused
+        ? 'Your mic follows your mute button in the call: it is off while you are muted and comes back when you unmute. Click to ignore it for the whole meeting.'
+        : wanted
+          ? 'Your mic is in the transcript. Click to ignore it.'
+          : 'Your mic is ignored. Click to include it.';
     micBtn.title = micTitle;
     micBtn.setAttribute('aria-label', 'Microphone: ' + micBtn.textContent.trim() + '. ' + (rec.mic ? 'Click to change' : 'Not available'));
 
@@ -399,9 +402,11 @@ import { adapterFor } from './adapters/index.js';
     else panel.append(meter('Your mic', fresh ? lv.mic : null));
     const line = !rec.mic
       ? "Debrief can't reach your microphone. The call is still recorded."
-      : wanted
-        ? 'Your voice is going into the transcript.'
-        : 'Your mic is not recorded. The call still is.';
+      : paused
+        ? 'Only the call is being recorded. Your mic comes back when you unmute.'
+        : wanted
+          ? 'Your voice is going into the transcript.'
+          : 'Your mic is not recorded. The call still is.';
     panel.append(el('p', 'line', line));
     panel.append(el('p', 'line', `${S.counts.segs} pieces transcribed · ${S.counts.errs} ${S.counts.errs === 1 ? 'error' : 'errors'}`));
     if (!fresh) {
