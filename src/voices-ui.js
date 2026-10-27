@@ -7,6 +7,7 @@ import { buildPrint, upsertPerson, addRecording, speechPieces, PROMPTS, ENROL, S
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
 import { modal } from './modal.js';
+import { parseRows, findRow } from './dirtable.js';
 import { getSample, putSample, deleteSample, hasSample, makeClip, unnamedKey } from './voice/samples.js';
 
 const OKBTN = [{ label: 'OK', value: 'ok', primary: true }];
@@ -140,6 +141,7 @@ function renderList() {
       const meta = p.auto
         ? `${anon ? 'Heard in your meetings, not named yet' : 'Learned from your meetings'} · ${n} meeting${n === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech${p.ready || p.confirmed ? '' : ` · not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings, or give it a name`}${anon && !samplesOn ? ' · no audio clip (switch on “Keep a short sample” before the next meeting). Meanwhile open that meeting’s Transcript: this voice’s lines are labelled with this name, so you can name it by reading what it said.' : ''}`
         : `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
+      const prof = anon ? null : profileOf(p.name);
       const row = el('li', { className: 'voice-row' });
       const initial = anon ? '?' : (Array.from(p.name.trim())[0] || '?').toUpperCase();
       const avatar = el('span', { className: `avatar${anon ? ' anon' : ''}`, textContent: initial });
@@ -149,7 +151,8 @@ function renderList() {
       const items = [{ label: 'Export this voice', fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, '_')}.json`) }];
       if (p.auto && people.length > 1) items.push({ label: 'Merge into…', fn: () => mergeInto(p) });
       items.push({ label: 'Delete', aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
-      const acts = el('div', { className: 'vacts' }, sampleButton(p), btn(anon ? 'Name this voice' : 'Rename', () => rename(p)), ...(anon ? [] : [btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)), btn('Add recording', () => begin({ kind: 'add', id: p.id }, p))]), ...moreMenu(p, items));
+      const acts = el('div', { className: 'vacts' }, sampleButton(p), btn(anon ? 'Name this voice' : 'Rename', () => rename(p)), ...(anon ? [] : [btn(prof && profileLine(prof) ? 'Edit details' : 'Add details', () => focusDetails(p.name))]), ...(anon ? [] : [btn('Re-record', () => begin({ kind: 'rerecord', id: p.id }, p)), btn('Add recording', () => begin({ kind: 'add', id: p.id }, p))]), ...moreMenu(p, items));
+      if (prof && profileLine(prof)) who.append(el('p', { className: 'vprofile', textContent: profileLine(prof) }));
       row.append(avatar, who, acts);
       return row;
     })
@@ -192,9 +195,39 @@ function sampleButton(p) {
   return b;
 }
 
+// ---- the details of each person (title, department, designation, organisation, email) live in the people table on this page;
+// they are kept as the people directory setting, which the minutes read
+let dirRows = [];
+const profileOf = (name) => findRow(dirRows, name);
+const profileLine = (r) => [r?.desig, r?.dept, r?.org, r?.email].filter(Boolean).join(' · ');
+async function saveDirectory(detail, eventName = 'dir-upsert') {
+  const ta = $('peopleDirectory');
+  if (!ta) return;
+  ta.dispatchEvent(new CustomEvent(eventName, { detail }));
+  try {
+    await setSetting({ peopleDirectory: ta.value });
+  } catch {}
+  dirRows = parseRows(ta.value).rows;
+  renderList();
+}
+function focusDetails(name) {
+  $('peopleCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  $('peopleDirectory')?.dispatchEvent(new CustomEvent('dir-focus', { detail: { name } }));
+}
+// optional detail inputs under a name box; returns the element and a reader
+function detailInputs(idPrefix) {
+  const mk = (k, label, ph) => el('label', { className: 'dt-f' }, el('span', { textContent: label }), el('input', { id: `${idPrefix}-${k}`, placeholder: ph, autocomplete: 'off', type: k === 'email' ? 'email' : 'text', maxLength: 80 }));
+  const box = el('details', { className: 'more-details' }, el('summary', { textContent: 'Their details for the minutes (optional)' }),
+    el('div', { className: 'detail-row' }, mk('title', 'Title', 'Sri.'), mk('desig', 'Designation', 'Joint Secretary'), mk('dept', 'Department', 'Transport'), mk('org', 'Organisation', 'Kochi Metro'), mk('email', 'Email', 'name@company.com')));
+  const read = () => Object.fromEntries(['title', 'desig', 'dept', 'org', 'email'].map((k) => [k, box.querySelector(`#${idPrefix}-${k}`).value.trim()]));
+  return { box, read };
+}
+
 let samplesOn = false;
 async function refresh() {
-  samplesOn = !!(await getSettings()).voiceSamples;
+  const st = await getSettings();
+  dirRows = parseRows(st.peopleDirectory).rows;
+  samplesOn = !!st.voiceSamples;
   people = await getVoices();
   renderList();
   renderUnnamed().catch(() => {});
@@ -212,6 +245,7 @@ async function renderUnnamed() {
       const label = el('label', { className: 'sr-only', htmlFor: `unnamedName${i}`, textContent: `Name for Voice ${i + 1}` });
       const input = el('input', { id: `unnamedName${i}`, placeholder: 'Who is this?', maxLength: 60, autocomplete: 'off' });
       const save = el('button', { type: 'button', className: 'btn primary', textContent: 'Name this voice' });
+      const det = detailInputs(`un${i}`);
       const doSave = async () => {
         try {
           const typed = input.value.trim().replace(/\s+/g, ' ');
@@ -228,6 +262,7 @@ async function renderUnnamed() {
           }
           people = upsertPerson(people, { name: input.value, lang: 'free', print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
           await saveVoices(people);
+          await saveDirectory({ name: input.value, ...det.read() });
           // the named voice keeps its clip, so "Play sample" works in the list
           const named = people.find((x) => x.name.toLowerCase() === input.value.trim().replace(/\s+/g, ' ').toLowerCase());
           getSample(key).then((b) => b && named && putSample(named.id, b)).catch(() => {});
@@ -262,7 +297,8 @@ async function renderUnnamed() {
         {},
         el('div', { className: 'ut' }, el('strong', { textContent: `Voice ${i + 1}` }), el('span', { className: 'hint', textContent: `spoke ${g.seconds} s` })),
         el('p', { className: 'hint', textContent: `For example at ${g.at.map(fmtTime).join(', ')}` }),
-        el('div', { className: 'name-row' }, play, label, input, save)
+        el('div', { className: 'name-row' }, play, label, input, save),
+        det.box
       );
     })
   );
@@ -284,6 +320,8 @@ async function rename(p) {
     // naming a learned voice confirms it: it is used from now on, including for meetings already recorded
     people = people.map((x) => (x.id === p.id ? { ...x, name: clean, ...(x.auto ? { confirmed: true } : {}) } : x));
     await saveVoices(people);
+    if (!isAnon(p)) await saveDirectory({ from: p.name, to: clean }, 'dir-rename');
+    await saveDirectory({ name: clean });
     renderList();
     const st = await getSettings();
     if (!st.voiceOn) {
@@ -369,6 +407,7 @@ function blankForm() {
   mode = { kind: 'new', id: null };
   resetRecording();
   $('enrolName').value = '';
+  for (const id of ['enrolTitleW', 'enrolDesig', 'enrolDept', 'enrolOrg', 'enrolEmail']) if ($(id)) $(id).value = '';
   $('enrolName').disabled = false;
   $('enrolTitle').textContent = 'Add a person';
 }
@@ -500,6 +539,7 @@ async function save() {
       const best = speechPieces(pcm).sort((a, b) => b.t1 - b.t0 - (a.t1 - a.t0)).map((x) => x.pcm);
       clipOk = await putSample(newId, makeClip(best.length ? best : [pcm])).then(() => true, () => false);
     }
+    await saveDirectory({ name, title: $('enrolTitleW').value, desig: $('enrolDesig').value, dept: $('enrolDept').value, org: $('enrolOrg').value, email: $('enrolEmail').value });
     const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${clipOk ? 'The fingerprint and a short audio clip you can play were stored.' : 'Only the fingerprint was stored.'}${print.warn ? ` ${print.warn}` : ''}`;
     blankForm();
     setMsg(done, 'ok');

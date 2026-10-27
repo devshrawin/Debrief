@@ -119,6 +119,7 @@ export function parseDirectory(text) {
       designation: p[3] || '',
       organisation: p[4] || '',
       chair: /^(chair|chairperson|chairman|yes|y|\*)$/i.test(p[5] || ''),
+      email: /@/.test(p[6] || '') ? p[6].toLowerCase() : '',
     });
   }
   return out;

@@ -104,7 +104,7 @@ try {
   await pg.evaluate(`chrome.storage.local.set({ settings: { voiceOn: true, peopleDirectory: 'Suresh K. | Sri. | Transport | Joint Secretary | Kochi Metro | Chair\\nDana Whitfield | Ms. | Operations | Programme Director | Contoso Transit' } })`);
   await send('Page.reload', {}, pg.sessionId);
   await sleep(1500);
-  await pg.evaluate(`document.querySelector('#nav [data-tab="minutes"]').click()`);
+  await pg.evaluate(`document.querySelector('#nav [data-tab="voices"]').click()`);
   await sleep(600);
   const t0 = await pg.evaluate(`({ rows: document.querySelectorAll('#dirTable .dir-body .dir-row').length, first: document.querySelector('#dirTable .dir-in').value, chair: document.querySelector('#dirTable .dir-chair').checked, hidden: document.getElementById('peopleDirectory').hidden })`);
   check('the people directory shows as a table with both people, Chair ticked, text field hidden', t0.rows === 2 && t0.first === 'Suresh K.' && t0.chair && t0.hidden, JSON.stringify(t0));
@@ -115,6 +115,23 @@ try {
   check('editing a cell writes the text, Enter adds a person, and Settings sees unsaved changes', t1.rows === 3 && /^Suresh Kumar \| Sri\./.test(t1.text) && /dirty/.test(t1.bar), JSON.stringify(t1));
   if (process.env.SHOT2) { const r = await send('Page.captureScreenshot', { format: 'png' }, pg.sessionId); writeFileSync(process.env.SHOT2, Buffer.from(r.data, 'base64')); }
 
+
+  // ---- details travel with the voice: naming an unnamed voice with a designation and organisation creates the person in the table
+  await pg.evaluate(`(async () => {
+    const pack = (seed) => { const b = new Int8Array(256); for (let i = 0; i < 256; i++) b[i] = Math.round(Math.sin(i * seed + 0.001 * i * i) * 90); let s = ''; for (const x of new Uint8Array(b.buffer)) s += String.fromCharCode(x); return btoa(s); };
+    const segs = []; for (let k = 0; k < 40; k++) segs.push({ t0: k * 4, t1: k * 4 + 3, e: pack(k % 2 ? 0.31 + k * 1e-5 : 0.77 + k * 1e-5), s: '' });
+    await chrome.storage.local.set({ voices: [], settings: { voiceOn: true, peopleDirectory: '' }, 'meeting:nm1': { id: 'nm1', title: 'N', startedAt: Date.now() - 900000, endedAt: Date.now() - 1000, segments: [], errors: [], voiceSegs: segs, captions: [] }, meetingIds: ['nm1'] });
+  })()`);
+  await send('Page.reload', {}, pg.sessionId);
+  await sleep(1500);
+  await pg.evaluate(`document.querySelector('#nav [data-tab="voices"]').click()`);
+  await sleep(800);
+  const u0 = await pg.evaluate(`document.querySelectorAll('#unnamedList li').length`);
+  check('an unnamed voice is offered with a details box', u0 >= 1 && (await pg.evaluate(`!!document.querySelector('#unnamedList li details input#un0-desig')`)), String(u0));
+  await pg.evaluate(`(() => { const li = document.querySelector('#unnamedList li'); const set = (sel, v) => { const i = li.querySelector(sel); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }; set('input#unnamedName0', 'Test Person'); set('#un0-desig', 'Joint Secretary'); set('#un0-org', 'Kochi Metro'); set('#un0-email', 'Test@Metro.org'); li.querySelector('button.primary').click(); })()`);
+  await sleep(1200);
+  const d1 = await pg.evaluate(`(async () => { const st = await chrome.storage.local.get('settings'); return { dir: st.settings.peopleDirectory, row: [...document.querySelectorAll('#dirTable .dir-body .dir-row')].map((r) => [...r.querySelectorAll('input.dir-in')].map((i) => i.value).join('|')), profile: document.querySelector('#voiceList .vprofile')?.textContent || '' }; })()`);
+  check('naming with details: the person lands in the table and in the saved directory, and the voice shows the details', /Test Person \| .*Joint Secretary \| .*Kochi Metro/.test(d1.dir) && /test@metro.org/i.test(d1.dir) && /Joint Secretary/.test(d1.profile), JSON.stringify(d1));
   // ---- Settings > Email: the recipients table sits in the same step as the script, and the allow-list follows it
   await pg.evaluate(`chrome.storage.local.set({ settings: { voiceOn: true, shareList: 'priya@company.com', shareGroups: 'Cadence Call | amal@company.com' } })`);
   await send('Page.reload', {}, pg.sessionId);

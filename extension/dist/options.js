@@ -2829,6 +2829,169 @@ function out(o) {
     });
   }
 
+  // src/dirtable.js
+  var COLS = [
+    { key: "name", label: "Name", ph: "Suresh K.", cls: "c-name" },
+    { key: "title", label: "Title", ph: "Sri.", cls: "c-title" },
+    { key: "dept", label: "Department", ph: "Transport", cls: "c-dept" },
+    { key: "desig", label: "Designation", ph: "Joint Secretary", cls: "c-desig" },
+    { key: "org", label: "Organisation", ph: "Metro", cls: "c-org" },
+    { key: "email", label: "Email", ph: "suresh@metro.org", cls: "c-email" }
+  ];
+  function parseRows(text) {
+    const rows = [];
+    const notes = [];
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (line.startsWith("#")) {
+        notes.push(line);
+        continue;
+      }
+      const p = line.split("|").map((x2) => x2.trim());
+      rows.push({ name: p[0] || "", title: p[1] || "", dept: p[2] || "", desig: p[3] || "", org: p[4] || "", chair: /^(chair|chairperson|chairman|yes|y|\*)$/i.test(p[5] || ""), email: /@/.test(p[6] || "") ? p[6] : "" });
+    }
+    return { rows, notes };
+  }
+  function rowsToText(rows, notes = []) {
+    const lines = rows.filter((r) => r.name.trim()).map((r) => {
+      const cells = [r.name, r.title, r.dept, r.desig, r.org].map((x2) => String(x2 || "").trim().replace(/\|/g, "/")).join(" | ");
+      const mail = String(r.email || "").trim().replace(/\|/g, "");
+      return cells + (r.chair || mail ? ` | ${r.chair ? "Chair" : ""}` : "") + (mail ? ` | ${mail}` : "");
+    });
+    return [...notes, ...lines].join("\n");
+  }
+  function parsePasted(text) {
+    return String(text || "").split(/\r?\n/).map((l3) => l3.trim()).filter(Boolean).map((l3) => {
+      const p = l3.split(l3.includes("	") ? "	" : "|").map((x2) => x2.trim());
+      return { name: p[0] || "", title: p[1] || "", dept: p[2] || "", desig: p[3] || "", org: p[4] || "", chair: /^(chair|chairperson|chairman|yes|y|\*)$/i.test(p[5] || ""), email: /@/.test(p[6] || "") ? p[6] : "" };
+    });
+  }
+  var findRow = (rows, name) => rows.find((r) => r.name.trim().toLowerCase() === String(name || "").trim().toLowerCase()) || null;
+  function upsertRow(rows, d) {
+    const name = String(d.name || "").trim();
+    if (!name) return rows;
+    const row = findRow(rows, name);
+    const fields = ["title", "dept", "desig", "org", "email"];
+    if (!row) return [...rows, { name, title: "", dept: "", desig: "", org: "", chair: false, email: "", ...Object.fromEntries(fields.map((k2) => [k2, String(d[k2] || "").trim()])) }];
+    for (const k2 of fields) if (String(d[k2] || "").trim()) row[k2] = String(d[k2]).trim();
+    if (typeof d.chair === "boolean") row.chair = d.chair;
+    return rows;
+  }
+  function mountDirectoryTable(textarea, host) {
+    if (!textarea || !host) return;
+    let rows = [];
+    let notes = [];
+    const emit = () => {
+      textarea.value = rowsToText(rows, notes);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const make = (tag, props = {}, ...kids) => {
+      const e = document.createElement(tag);
+      for (const [k2, v] of Object.entries(props)) {
+        if (k2 === "class") e.className = v;
+        else if (k2.startsWith("on")) e[k2] = v;
+        else if (v != null && v !== false) e.setAttribute(k2, v === true ? "" : v);
+      }
+      e.append(...kids.filter((x2) => x2 != null));
+      return e;
+    };
+    function draw(focus) {
+      host.replaceChildren();
+      const head = make("div", { class: "dir-row dir-head", role: "row" }, ...COLS.map((c) => make("span", { class: `dir-h ${c.cls}`, role: "columnheader" }, c.label)), make("span", { class: "dir-h c-chair", role: "columnheader" }, "Chair"), make("span", { class: "c-x" }));
+      const body = make("div", { class: "dir-body", role: "rowgroup" });
+      rows.forEach((r, ri) => {
+        const cells = COLS.map((c) => {
+          const input = make("input", { class: `dir-in ${c.cls}`, type: "text", value: r[c.key], placeholder: ri === 0 ? c.ph : "", "aria-label": `${c.label}, person ${ri + 1}`, autocomplete: "off", maxlength: 80 });
+          input.addEventListener("input", () => {
+            r[c.key] = input.value;
+            emit();
+          });
+          input.addEventListener("paste", (e) => {
+            const text = e.clipboardData?.getData("text") || "";
+            if (!/[\t\n]/.test(text.trim())) return;
+            e.preventDefault();
+            const got = parsePasted(text);
+            rows.splice(ri, 1, ...got);
+            emit();
+            draw();
+          });
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              rows.splice(ri + 1, 0, blank());
+              emit();
+              draw(`${ri + 1}.${c.key}`);
+            }
+          });
+          input.dataset.key = `${ri}.${c.key}`;
+          return input;
+        });
+        const chair = make("input", { class: "dir-chair c-chair", type: "checkbox", "aria-label": `${r.name || `Person ${ri + 1}`} is the usual chairperson` });
+        chair.checked = !!r.chair;
+        chair.addEventListener("change", () => {
+          rows.forEach((x2, i) => x2.chair = i === ri ? chair.checked : x2.chair);
+          r.chair = chair.checked;
+          emit();
+        });
+        const del = make("button", { class: "dir-x c-x", type: "button", title: "Remove this person", "aria-label": `Remove ${r.name || `person ${ri + 1}`}` }, "\xD7");
+        del.addEventListener("click", () => {
+          rows.splice(ri, 1);
+          emit();
+          draw();
+        });
+        body.append(make("div", { class: "dir-row", role: "row" }, ...cells, chair, del));
+      });
+      const add = make("button", { class: "btn sm dir-add", type: "button" }, "+ Add a person");
+      add.addEventListener("click", () => {
+        rows.push(blank());
+        draw(`${rows.length - 1}.name`);
+      });
+      host.append(make("div", { class: "dir-table", role: "table", "aria-label": "People directory" }, head, body), make("div", { class: "dir-foot" }, add, make("span", { class: "hint" }, "Tip: paste rows from a spreadsheet (Name, Title, Department, Designation, Organisation, Email) into any name cell.")));
+      if (focus) host.querySelector(`[data-key="${focus}"]`)?.focus();
+    }
+    const blank = () => ({ name: "", title: "", dept: "", desig: "", org: "", chair: false, email: "" });
+    const load = () => {
+      const parsed = parseRows(textarea.value);
+      rows = parsed.rows;
+      notes = parsed.notes;
+      if (!rows.length) rows = [blank()];
+      draw();
+    };
+    textarea.hidden = true;
+    textarea.addEventListener("dir-refresh", load);
+    textarea.addEventListener("dir-upsert", (e) => {
+      rows = rows.filter((r) => r.name.trim() || r.title || r.dept || r.desig || r.org || r.email);
+      rows = upsertRow(rows, e.detail || {});
+      if (!rows.length) rows = [blank()];
+      emit();
+      draw();
+    });
+    textarea.addEventListener("dir-rename", (e) => {
+      const { from, to } = e.detail || {};
+      const row = findRow(rows, from);
+      if (row && to && !findRow(rows, to)) {
+        row.name = String(to).trim();
+        emit();
+        draw();
+      }
+    });
+    textarea.addEventListener("dir-focus", (e) => {
+      const name = e.detail?.name;
+      if (!name) return;
+      rows = rows.filter((r) => r.name.trim() || r.title || r.dept || r.desig || r.org || r.email);
+      if (!findRow(rows, name)) rows = upsertRow(rows, { name });
+      emit();
+      draw();
+      const i = rows.findIndex((r) => r.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+      const first = ["desig", "org", "dept", "title", "email"].find((k2) => !rows[i][k2]) || "desig";
+      const input = host.querySelector(`[data-key="${i}.${first}"]`);
+      input?.scrollIntoView({ block: "center", behavior: "smooth" });
+      input?.focus();
+    });
+    load();
+  }
+
   // src/voices-ui.js
   var OKBTN = [{ label: "OK", value: "ok", primary: true }];
   var tell = (text) => modal({ text, buttons: OKBTN });
@@ -2944,6 +3107,7 @@ function out(o) {
         const langs = (p.langs || [p.lang || "en"]).map((l3) => LANG_NAME[l3] || l3).join(" + ");
         const n = p.meetings || 1;
         const meta = p.auto ? `${anon ? "Heard in your meetings, not named yet" : "Learned from your meetings"} \xB7 ${n} meeting${n === 1 ? "" : "s"} \xB7 ${p.secs || 0} s of clean speech${p.ready || p.confirmed ? "" : ` \xB7 not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings, or give it a name`}${anon && !samplesOn ? " \xB7 no audio clip (switch on \u201CKeep a short sample\u201D before the next meeting). Meanwhile open that meeting\u2019s Transcript: this voice\u2019s lines are labelled with this name, so you can name it by reading what it said." : ""}` : `${langs} \xB7 ${p.secs || "?"} s of speech \xB7 added ${fmtDate(p.created)}`;
+        const prof = anon ? null : profileOf(p.name);
         const row = el("li", { className: "voice-row" });
         const initial = anon ? "?" : (Array.from(p.name.trim())[0] || "?").toUpperCase();
         const avatar = el("span", { className: `avatar${anon ? " anon" : ""}`, textContent: initial });
@@ -2953,7 +3117,8 @@ function out(o) {
         const items = [{ label: "Export this voice", fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, "_")}.json`) }];
         if (p.auto && people.length > 1) items.push({ label: "Merge into\u2026", fn: () => mergeInto(p) });
         items.push({ label: "Delete", aria: `Delete ${p.name}`, fn: () => remove(p), danger: true });
-        const acts = el("div", { className: "vacts" }, sampleButton(p), btn(anon ? "Name this voice" : "Rename", () => rename(p)), ...anon ? [] : [btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)), btn("Add recording", () => begin({ kind: "add", id: p.id }, p))], ...moreMenu(p, items));
+        const acts = el("div", { className: "vacts" }, sampleButton(p), btn(anon ? "Name this voice" : "Rename", () => rename(p)), ...anon ? [] : [btn(prof && profileLine(prof) ? "Edit details" : "Add details", () => focusDetails(p.name))], ...anon ? [] : [btn("Re-record", () => begin({ kind: "rerecord", id: p.id }, p)), btn("Add recording", () => begin({ kind: "add", id: p.id }, p))], ...moreMenu(p, items));
+        if (prof && profileLine(prof)) who.append(el("p", { className: "vprofile", textContent: profileLine(prof) }));
         row.append(avatar, who, acts);
         return row;
       })
@@ -2994,9 +3159,40 @@ function out(o) {
     };
     return b;
   }
+  var dirRows = [];
+  var profileOf = (name) => findRow(dirRows, name);
+  var profileLine = (r) => [r?.desig, r?.dept, r?.org, r?.email].filter(Boolean).join(" \xB7 ");
+  async function saveDirectory(detail, eventName = "dir-upsert") {
+    const ta = $2("peopleDirectory");
+    if (!ta) return;
+    ta.dispatchEvent(new CustomEvent(eventName, { detail }));
+    try {
+      await setSetting({ peopleDirectory: ta.value });
+    } catch {
+    }
+    dirRows = parseRows(ta.value).rows;
+    renderList();
+  }
+  function focusDetails(name) {
+    $2("peopleCard")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    $2("peopleDirectory")?.dispatchEvent(new CustomEvent("dir-focus", { detail: { name } }));
+  }
+  function detailInputs(idPrefix) {
+    const mk = (k2, label, ph) => el("label", { className: "dt-f" }, el("span", { textContent: label }), el("input", { id: `${idPrefix}-${k2}`, placeholder: ph, autocomplete: "off", type: k2 === "email" ? "email" : "text", maxLength: 80 }));
+    const box = el(
+      "details",
+      { className: "more-details" },
+      el("summary", { textContent: "Their details for the minutes (optional)" }),
+      el("div", { className: "detail-row" }, mk("title", "Title", "Sri."), mk("desig", "Designation", "Joint Secretary"), mk("dept", "Department", "Transport"), mk("org", "Organisation", "Kochi Metro"), mk("email", "Email", "name@company.com"))
+    );
+    const read2 = () => Object.fromEntries(["title", "desig", "dept", "org", "email"].map((k2) => [k2, box.querySelector(`#${idPrefix}-${k2}`).value.trim()]));
+    return { box, read: read2 };
+  }
   var samplesOn = false;
   async function refresh() {
-    samplesOn = !!(await getSettings()).voiceSamples;
+    const st2 = await getSettings();
+    dirRows = parseRows(st2.peopleDirectory).rows;
+    samplesOn = !!st2.voiceSamples;
     people = await getVoices();
     renderList();
     renderUnnamed().catch(() => {
@@ -3013,6 +3209,7 @@ function out(o) {
         const label = el("label", { className: "sr-only", htmlFor: `unnamedName${i}`, textContent: `Name for Voice ${i + 1}` });
         const input = el("input", { id: `unnamedName${i}`, placeholder: "Who is this?", maxLength: 60, autocomplete: "off" });
         const save3 = el("button", { type: "button", className: "btn primary", textContent: "Name this voice" });
+        const det = detailInputs(`un${i}`);
         const doSave = async () => {
           try {
             const typed = input.value.trim().replace(/\s+/g, " ");
@@ -3030,6 +3227,7 @@ function out(o) {
             }
             people = upsertPerson(people, { name: input.value, lang: "free", print: { centroid: g.centroid, windows: g.windows, speechSec: g.seconds } });
             await saveVoices(people);
+            await saveDirectory({ name: input.value, ...det.read() });
             const named = people.find((x2) => x2.name.toLowerCase() === input.value.trim().replace(/\s+/g, " ").toLowerCase());
             getSample(key2).then((b) => b && named && putSample(named.id, b)).catch(() => {
             });
@@ -3064,7 +3262,8 @@ function out(o) {
           {},
           el("div", { className: "ut" }, el("strong", { textContent: `Voice ${i + 1}` }), el("span", { className: "hint", textContent: `spoke ${g.seconds} s` })),
           el("p", { className: "hint", textContent: `For example at ${g.at.map(fmtTime).join(", ")}` }),
-          el("div", { className: "name-row" }, play, label, input, save3)
+          el("div", { className: "name-row" }, play, label, input, save3),
+          det.box
         );
       })
     );
@@ -3083,6 +3282,8 @@ function out(o) {
       }
       people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean, ...x2.auto ? { confirmed: true } : {} } : x2);
       await saveVoices(people);
+      if (!isAnon(p)) await saveDirectory({ from: p.name, to: clean }, "dir-rename");
+      await saveDirectory({ name: clean });
       renderList();
       const st2 = await getSettings();
       if (!st2.voiceOn) {
@@ -3164,6 +3365,7 @@ function out(o) {
     mode = { kind: "new", id: null };
     resetRecording();
     $2("enrolName").value = "";
+    for (const id of ["enrolTitleW", "enrolDesig", "enrolDept", "enrolOrg", "enrolEmail"]) if ($2(id)) $2(id).value = "";
     $2("enrolName").disabled = false;
     $2("enrolTitle").textContent = "Add a person";
   }
@@ -3286,6 +3488,7 @@ function out(o) {
         const best = speechPieces(pcm).sort((a, b) => b.t1 - b.t0 - (a.t1 - a.t0)).map((x2) => x2.pcm);
         clipOk = await putSample(newId2, makeClip(best.length ? best : [pcm])).then(() => true, () => false);
       }
+      await saveDirectory({ name, title: $2("enrolTitleW").value, desig: $2("enrolDesig").value, dept: $2("enrolDept").value, org: $2("enrolOrg").value, email: $2("enrolEmail").value });
       const done = `Saved ${name.trim()}: ${print.pieces} pieces of speech, ${print.speechSec.toFixed(0)} s. ${clipOk ? "The fingerprint and a short audio clip you can play were stored." : "Only the fingerprint was stored."}${print.warn ? ` ${print.warn}` : ""}`;
       blankForm();
       setMsg(done, "ok");
@@ -3476,124 +3679,6 @@ function out(o) {
     return rows;
   }
   var checkupText = (rows) => rows.map((r) => `${r.level} ${r.title}${r.detail ? `: ${r.detail}` : ""}`).join("\n");
-
-  // src/dirtable.js
-  var COLS = [
-    { key: "name", label: "Name", ph: "Suresh K.", cls: "c-name" },
-    { key: "title", label: "Title", ph: "Sri.", cls: "c-title" },
-    { key: "dept", label: "Department", ph: "Transport", cls: "c-dept" },
-    { key: "desig", label: "Designation", ph: "Joint Secretary", cls: "c-desig" },
-    { key: "org", label: "Organisation", ph: "Metro", cls: "c-org" }
-  ];
-  function parseRows(text) {
-    const rows = [];
-    const notes = [];
-    for (const raw of String(text || "").split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line) continue;
-      if (line.startsWith("#")) {
-        notes.push(line);
-        continue;
-      }
-      const p = line.split("|").map((x2) => x2.trim());
-      rows.push({ name: p[0] || "", title: p[1] || "", dept: p[2] || "", desig: p[3] || "", org: p[4] || "", chair: /^(chair|chairperson|chairman|yes|y|\*)$/i.test(p[5] || "") });
-    }
-    return { rows, notes };
-  }
-  function rowsToText(rows, notes = []) {
-    const lines = rows.filter((r) => r.name.trim()).map((r) => [r.name, r.title, r.dept, r.desig, r.org].map((x2) => x2.trim().replace(/\|/g, "/")).join(" | ") + (r.chair ? " | Chair" : ""));
-    return [...notes, ...lines].join("\n");
-  }
-  function parsePasted(text) {
-    return String(text || "").split(/\r?\n/).map((l3) => l3.trim()).filter(Boolean).map((l3) => {
-      const p = l3.split(l3.includes("	") ? "	" : "|").map((x2) => x2.trim());
-      return { name: p[0] || "", title: p[1] || "", dept: p[2] || "", desig: p[3] || "", org: p[4] || "", chair: /^(chair|chairperson|chairman|yes|y|\*)$/i.test(p[5] || "") };
-    });
-  }
-  function mountDirectoryTable(textarea, host) {
-    if (!textarea || !host) return;
-    let rows = [];
-    let notes = [];
-    const emit = () => {
-      textarea.value = rowsToText(rows, notes);
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    };
-    const make = (tag, props = {}, ...kids) => {
-      const e = document.createElement(tag);
-      for (const [k2, v] of Object.entries(props)) {
-        if (k2 === "class") e.className = v;
-        else if (k2.startsWith("on")) e[k2] = v;
-        else if (v != null && v !== false) e.setAttribute(k2, v === true ? "" : v);
-      }
-      e.append(...kids.filter((x2) => x2 != null));
-      return e;
-    };
-    function draw(focus) {
-      host.replaceChildren();
-      const head = make("div", { class: "dir-row dir-head", role: "row" }, ...COLS.map((c) => make("span", { class: `dir-h ${c.cls}`, role: "columnheader" }, c.label)), make("span", { class: "dir-h c-chair", role: "columnheader" }, "Chair"), make("span", { class: "c-x" }));
-      const body = make("div", { class: "dir-body", role: "rowgroup" });
-      rows.forEach((r, ri) => {
-        const cells = COLS.map((c) => {
-          const input = make("input", { class: `dir-in ${c.cls}`, type: "text", value: r[c.key], placeholder: ri === 0 ? c.ph : "", "aria-label": `${c.label}, person ${ri + 1}`, autocomplete: "off", maxlength: 80 });
-          input.addEventListener("input", () => {
-            r[c.key] = input.value;
-            emit();
-          });
-          input.addEventListener("paste", (e) => {
-            const text = e.clipboardData?.getData("text") || "";
-            if (!/[\t\n]/.test(text.trim())) return;
-            e.preventDefault();
-            const got = parsePasted(text);
-            rows.splice(ri, 1, ...got);
-            emit();
-            draw();
-          });
-          input.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              rows.splice(ri + 1, 0, blank());
-              emit();
-              draw(`${ri + 1}.${c.key}`);
-            }
-          });
-          input.dataset.key = `${ri}.${c.key}`;
-          return input;
-        });
-        const chair = make("input", { class: "dir-chair c-chair", type: "checkbox", "aria-label": `${r.name || `Person ${ri + 1}`} is the usual chairperson` });
-        chair.checked = !!r.chair;
-        chair.addEventListener("change", () => {
-          rows.forEach((x2, i) => x2.chair = i === ri ? chair.checked : x2.chair);
-          r.chair = chair.checked;
-          emit();
-        });
-        const del = make("button", { class: "dir-x c-x", type: "button", title: "Remove this person", "aria-label": `Remove ${r.name || `person ${ri + 1}`}` }, "\xD7");
-        del.addEventListener("click", () => {
-          rows.splice(ri, 1);
-          emit();
-          draw();
-        });
-        body.append(make("div", { class: "dir-row", role: "row" }, ...cells, chair, del));
-      });
-      const add = make("button", { class: "btn sm dir-add", type: "button" }, "+ Add a person");
-      add.addEventListener("click", () => {
-        rows.push(blank());
-        draw(`${rows.length - 1}.name`);
-      });
-      host.append(make("div", { class: "dir-table", role: "table", "aria-label": "People directory" }, head, body), make("div", { class: "dir-foot" }, add, make("span", { class: "hint" }, "Tip: paste rows from a spreadsheet (Name, Title, Department, Designation, Organisation) into any name cell.")));
-      if (focus) host.querySelector(`[data-key="${focus}"]`)?.focus();
-    }
-    const blank = () => ({ name: "", title: "", dept: "", desig: "", org: "", chair: false });
-    const load = () => {
-      const parsed = parseRows(textarea.value);
-      rows = parsed.rows;
-      notes = parsed.notes;
-      if (!rows.length) rows = [blank()];
-      draw();
-    };
-    textarea.hidden = true;
-    textarea.addEventListener("dir-refresh", load);
-    load();
-  }
 
   // src/recipients.js
   var EMAIL2 = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
@@ -4441,6 +4526,11 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
     initSecrets();
     initSegs();
     mountDirectoryTable($3("peopleDirectory"), $3("dirTable"));
+    $3("goPeople")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      showTab("voices");
+      $3("peopleCard")?.scrollIntoView({ block: "start" });
+    });
     mountRecipients($3("recTable"), $3("shareList"), $3("shareGroups"));
     fill(s);
     setLanguages(s);

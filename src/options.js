@@ -737,6 +737,11 @@ $('useAmnexPreset').onclick = () => {
   initSecrets();
   initSegs();
   mountDirectoryTable($('peopleDirectory'), $('dirTable'));
+  $('goPeople')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showTab('voices');
+    $('peopleCard')?.scrollIntoView({ block: 'start' });
+  });
   mountRecipients($('recTable'), $('shareList'), $('shareGroups'));
   fill(s);
   setLanguages(s);

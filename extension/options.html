@@ -203,9 +203,15 @@
     input[type="color"] { appearance: none; -webkit-appearance: none; width: 72px; height: 42px; padding: 4px; border-radius: 10px; background: var(--fill-2); border: 0; cursor: pointer; }
     input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
     input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 7px; }
+    .more-details { margin: 6px 0 10px; }
+    .more-details > summary { cursor: pointer; font-weight: 600; color: var(--tint); padding: 6px 0; }
+    .detail-grid { margin-top: 8px; }
+    .vprofile { font: var(--t-footnote); color: var(--label-2); margin: 2px 0 0; }
+    .name-row.with-details { flex-direction: column; align-items: stretch; }
+    .ulist .detail-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
     /* people directory table */
     .dir-table { display: flex; flex-direction: column; gap: 6px; }
-    .dir-row { display: grid; grid-template-columns: minmax(130px, 1.4fr) 70px minmax(110px, 1fr) minmax(130px, 1.2fr) minmax(110px, 1fr) 52px 32px; gap: 6px; align-items: center; }
+    .dir-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) 64px minmax(100px, 1fr) minmax(120px, 1.1fr) minmax(100px, 1fr) minmax(140px, 1.2fr) 48px 28px; gap: 6px; align-items: center; }
     .dir-head { font: var(--t-caption); color: var(--label-2); padding: 0 2px; }
     .dir-h { text-transform: none; font-weight: 600; }
     .dir-in { width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; }
@@ -612,10 +618,8 @@
           <p class="hint">Comma separated. People with these email domains are listed as the System Integrator; everyone else as Client Side. Leave blank to use the domain of your "Send to" address.</p>
         </div>
         <div class="fld">
-          <span class="flabel" id="dirLabel">People directory</span>
-          <div id="dirTable"></div>
-          <textarea id="peopleDirectory" hidden aria-hidden="true" tabindex="-1"></textarea>
-          <p class="hint">Who is who in your meetings. Tick Chair for the usual chairperson. Details you leave empty stay as [DESIGNATION] / [DEPARTMENT] placeholders in the minutes for you to fill in.</p>
+          <span class="flabel">People and their details</span>
+          <p class="hint">Names, titles, departments, designations, organisations and emails of the people in your meetings now live in <a href="#voices" id="goPeople">Settings → Voices → People and their details</a>, next to their voices, so you fill them in once while you are naming people. They are used in the attendee tables of the minutes.</p>
         </div>
       </section>
     </section>
@@ -724,6 +728,13 @@
         <p class="hint">The recording you make here is kept in memory while this page is open, so you can play it back, and is never uploaded. Apart from the optional short samples of voices (learned, named or recorded by you), only a fingerprint is stored, in this browser's local extension storage, and it cannot be turned back into your voice. The speaker model (WeSpeaker ResNet34, 26 MB, CC-BY-4.0) is part of the extension, so nothing is downloaded and no audio is sent to any service for this. <b>Forget all voices</b> deletes every fingerprint, including the ones kept with past meetings.</p>
       </section>
 
+      <section class="card" id="peopleCard" aria-labelledby="hPeopleDetails">
+        <h2 id="hPeopleDetails" class="lbl">People and their details</h2>
+        <p class="hint">Who is who in your meetings, with or without a voice. Whatever you enter here goes into the attendee tables of the official minutes (name, title, department or organisation, designation) and helps match invitees by email. Tick Chair for the usual chairperson. Anything left empty stays a [DESIGNATION] or [DEPARTMENT] placeholder for you to fill in.</p>
+        <div id="dirTable"></div>
+        <textarea id="peopleDirectory" hidden aria-hidden="true" tabindex="-1"></textarea>
+      </section>
+
       <section class="card" aria-labelledby="hPeople">
         <div class="btnrow" style="justify-content:space-between"><h2 id="hPeople" class="lbl">Enrolled people</h2><button type="button" class="btn sm" id="enrolJump">Add a person</button></div>
         <ul id="voiceList" class="voices"></ul>
@@ -743,6 +754,16 @@
             </div>
           </div>
         </div>
+        <details class="more-details" id="enrolDetails">
+          <summary>Their details for the minutes (optional)</summary>
+          <div class="fgrid detail-grid">
+            <div class="fld"><label for="enrolTitleW">Title</label><input id="enrolTitleW" placeholder="Sri." autocomplete="off"></div>
+            <div class="fld"><label for="enrolDesig">Designation</label><input id="enrolDesig" placeholder="Joint Secretary" autocomplete="off"></div>
+            <div class="fld"><label for="enrolDept">Department</label><input id="enrolDept" placeholder="Transport" autocomplete="off"></div>
+            <div class="fld"><label for="enrolOrg">Organisation</label><input id="enrolOrg" placeholder="Kochi Metro" autocomplete="off"></div>
+            <div class="fld"><label for="enrolEmail">Email</label><input id="enrolEmail" type="email" placeholder="name@company.com" autocomplete="off"></div>
+          </div>
+        </details>
         <div class="prompt" id="enrolPrompt" lang="en"></div>
         <p class="hint">Read in the language the person mostly uses in meetings, about 20 seconds. Voice fingerprints are meant to work across languages, but that is not guaranteed, so for someone who switches between languages (English, Hindi, Malayalam) add a recording in each one afterwards (Add recording). "Speak freely" is for any other language or a Hinglish mix.</p>
         <div class="btnrow" style="gap:14px">
