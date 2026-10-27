@@ -240,6 +240,7 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 2px 6px rgba(0,0,0,.30), 0 14px 34px -12px rgba(0,0,0,.55);
     font-size:13px; font-weight:600; line-height:1; cursor:grab; user-select:none; white-space:nowrap; touch-action:none;
     transition: box-shadow .28s ease, border-color .28s ease; }
+  .sr { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; } /* spoken to screen readers, never drawn */
   .pill:active { cursor:grabbing; }
   /* Calm breathing edge while recording (border-beam "pulse" idea, CSS only so nothing is injected into the page) */
   .pill::after { content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;

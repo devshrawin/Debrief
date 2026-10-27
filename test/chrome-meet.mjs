@@ -92,10 +92,11 @@ try {
   await ext.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'mm1', tabId: ${tabId}, startedAt: Date.now(), room: false, mic: true, micOn: true, micWanted: true, meetMuted: null } })`);
   await ext.evaluate(`chrome.storage.local.set({ 'meeting:mm1': { id: 'mm1', title: 'T', startedAt: Date.now(), segments: [], errors: [] }, meetingIds: ['mm1'] })`);
   await sleep(2500);
-const pillText = async () => (await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => { const r = document.querySelector('[data-debrief]')?.__debriefRoot; return { mic: (r?.querySelector('.mic')?.textContent || '').trim(), all: r?.textContent || '' }; } }).then((x) => x[0].result)`));
+const pillText = async () => (await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => { const r = document.querySelector('[data-debrief]')?.__debriefRoot; const sr = r?.querySelector('.sr'); const b = sr ? sr.getBoundingClientRect() : { width: 0, height: 0 }; return { mic: (r?.querySelector('.mic')?.textContent || '').trim(), all: r?.textContent || '', srSize: [Math.round(b.width), Math.round(b.height)] }; } }).then((x) => x[0].result)`));
   const pillMic = async () => (await pillText()).mic;
   const read = () => ext.evaluate(`chrome.storage.session.get('rec').then((r) => ({ meetMuted: r.rec.meetMuted, micOn: r.rec.micOn, micWanted: r.rec.micWanted }))`);
   const a = await read();
+  check('the status text ("Debrief is recording") is not drawn on the pill', (await pillText()).srSize.every((n) => n <= 1), JSON.stringify((await pillText()).srSize));
   check('unmuted in Meet: Debrief learns it (meetMuted false)', a.meetMuted === false, JSON.stringify(a));
   check('the pill says Mic on', /Mic on/.test(await pillMic()), await pillMic());
   await ev(`document.getElementById('mic').setAttribute('data-is-muted', 'true'); document.getElementById('mic').setAttribute('aria-label', 'Turn on microphone (ctrl + d)')`);

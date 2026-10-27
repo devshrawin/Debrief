@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 — 2026-10-27
+- Pill: the mic button shows "Mic off" while you are muted in the call and "Mic on" when you unmute (it had been stuck on "Mic on"); the "Debrief is recording" line is no longer drawn on top of the pill (it is spoken to screen readers only).
+- Meet mute button is read more tolerantly if Meet rewords its labels.
+- Test: a fake Meet page checks the mute following end to end.
+
 ## 1.1.0 — 2026-10-26
 - Email settings: who else gets a copy is a table in the same step as the script setup, with the allow-list and the "copy script" button right under it (also in the tour).
 - Any number of Gemini backup keys: a + button adds more, tried in order.
