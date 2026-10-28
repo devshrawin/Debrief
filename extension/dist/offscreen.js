@@ -721,6 +721,7 @@
     for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
     return btoa(bin);
   }
+  var GENERAL_STEP = /* @__PURE__ */ new Map();
   async function geminiCall(wav, s, model) {
     const parts = [{ inlineData: { mimeType: "audio/wav", data: await toBase64(wav) } }];
     const post = async (body) => {
@@ -743,18 +744,24 @@
       }
     } else {
       const terms = sttTerms(s);
-      const body = (withThinking) => ({
+      const body = (generationConfig) => ({
         contents: [{
           role: "user",
           parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Write English words in English letters (never in Devanagari), Hindi in Devanagari, Malayalam in Malayalam script. ${terms.length ? `These names and terms may be spoken, spell them exactly like this: ${terms.join(", ")}. ` : ""}Output ONLY the words that were said, as plain running text. Do not explain, do not think out loud, do not list rules or timestamps, do not write speaker names or labels, do not repeat anything. If there is no intelligible speech, output nothing.` }, ...parts]
         }],
-        generationConfig: { temperature: 0, ...withThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } } }
+        ...Object.keys(generationConfig).length ? { generationConfig } : {}
       });
-      try {
-        j2 = await post(body(false));
-      } catch (e2) {
-        if (!(e2.status === 400 && /thinking/i.test(e2.message))) throw e2;
-        j2 = await post(body(true));
+      const ladder = [{ temperature: 0, thinkingConfig: { thinkingBudget: 0 } }, { temperature: 0 }, {}];
+      let step = GENERAL_STEP.get(model) || 0;
+      for (; ; ) {
+        try {
+          j2 = await post(body(ladder[step]));
+          GENERAL_STEP.set(model, step);
+          break;
+        } catch (e2) {
+          if (e2.status !== 400 || step >= ladder.length - 1) throw e2;
+          step++;
+        }
       }
     }
     record({ provider: "gemini", model, kind: "stt", tin: j2.usageMetadata?.promptTokenCount, tout: j2.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });

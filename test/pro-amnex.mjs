@@ -82,7 +82,7 @@ await test('mode: the meeting app by host, Offline without a link', () => {
 // ---------------- directory ----------------
 await test('directory: parses lines, tidies honorifics, skips comments and blanks', () => {
   assert.equal(DIR.length, 5); // "broken" is a name with no other fields: still a person, with placeholders to follow
-  assert.deepEqual(DIR[0], { name: 'Suresh K.', honorific: 'Sri.', department: 'Transport', designation: 'Joint Secretary', organisation: 'Kochi Metro', chair: true });
+  assert.deepEqual(DIR[0], { name: 'Suresh K.', honorific: 'Sri.', department: 'Transport', designation: 'Joint Secretary', organisation: 'Kochi Metro', chair: true, email: '' });
   assert.equal(DIR[3].honorific, 'Smt.');
   assert.equal(DIR[2].department, '');
   assert.equal(A.tidyHonorific('DR'), 'Dr.');

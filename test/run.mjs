@@ -188,9 +188,38 @@ await test('stt gemini general model: prompt part, thought parts dropped', async
   responder = () => Response.json({ candidates: [{ content: { parts: [{ text: 'hmm', thought: true }, { text: 'ok ji' }] } }] });
   assert.equal(await transcribe(wav, { ...DEFAULTS, geminiKey: 'gk', sttGeminiModel: 'gemini-3.8-flash' }), 'ok ji');
   const body = JSON.parse(calls[0].init.body);
-  assert.equal(body.generationConfig, undefined);
+  assert.deepEqual(body.generationConfig, { temperature: 0, thinkingConfig: { thinkingBudget: 0 } }, 'no thinking, no randomness');
   assert.match(body.contents[0].parts[0].text, /Transcribe/);
   assert.ok(body.contents[0].parts[1].inlineData);
+});
+
+await test('stt gemini general model: a 400 "invalid argument" to an optional setting steps down to a plainer request instead of losing the audio', async () => {
+  const { _resetGeneralSteps } = await import('../src/stt.js');
+  _resetGeneralSteps();
+  calls = [];
+  // this model rejects thinkingConfig with the bare message the API really gives
+  responder = (req) => {
+    const b = JSON.parse(calls.at(-1).init.body);
+    return b.generationConfig?.thinkingConfig
+      ? new Response('{"error":{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT"}}', { status: 400 })
+      : Response.json({ candidates: [{ content: { parts: [{ text: 'sunai de raha hai' }] } }] });
+  };
+  const s = { ...DEFAULTS, geminiKey: 'gk', sttGeminiModel: 'gemini-3.8-flash' };
+  assert.equal(await transcribe(wav, s), 'sunai de raha hai');
+  assert.equal(calls.length, 2, 'one refusal, then the plainer request');
+  assert.equal(JSON.parse(calls[1].init.body).generationConfig.thinkingConfig, undefined);
+  calls = [];
+  assert.equal(await transcribe(wav, s), 'sunai de raha hai');
+  assert.equal(calls.length, 1, 'the next piece starts from the shape that worked');
+  // a model that rejects temperature too still gets through
+  _resetGeneralSteps();
+  calls = [];
+  responder = () => {
+    const b = JSON.parse(calls.at(-1).init.body);
+    return b.generationConfig ? new Response('{"error":{"message":"Request contains an invalid argument."}}', { status: 400 }) : Response.json({ candidates: [{ content: { parts: [{ text: 'theek hai' }] } }] });
+  };
+  assert.equal(await transcribe(wav, s), 'theek hai');
+  _resetGeneralSteps();
 });
 
 await test('chunker honours Gemini-sized chunks', () => {
@@ -267,9 +296,7 @@ await test('gemini backup key used for MOM streaming when main key is invalid', 
 
 await test('gemini: any number of backup keys are tried in order until one answers', async () => {
   calls = [];
-  responder = (req, n) => (n < 4 ? new Response('{"error":{"message":"quota"}}', { status: 429 }) : sse(['data: {"candidates":[{"content":{"parts":[{"text":"# MOM"}]}}]}
-
-']));
+  responder = (req, n) => (n < 4 ? new Response('{"error":{"message":"quota"}}', { status: 429 }) : sse(['data: {"candidates":[{"content":{"parts":[{"text":"# MOM"}]}}]}\n\n']));
   const text = await generate({ settings: { ...DEFAULTS, geminiKey: 'k1', geminiKey2: 'k2', geminiBackups: ['k3', 'k4', 'k5'] }, system: 'S', user: 'U', onText: () => {} });
   assert.equal(text, '# MOM');
   assert.deepEqual(calls.map((c) => c.req.headers.get('x-goog-api-key')), ['k1', 'k2', 'k3', 'k4']);

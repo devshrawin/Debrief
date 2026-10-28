@@ -97,6 +97,10 @@ async function toBase64(blob) {
 
 // Gemini generateContent with inline audio. Transcription models (gemini-3.5-transcribe) take
 // audioTranscriptionConfig; general models (e.g. gemini-3.8-flash) are told what to do in a prompt.
+// which request shape each general model accepted last time (0 = strictest)
+const GENERAL_STEP = new Map();
+export const _resetGeneralSteps = () => GENERAL_STEP.clear();
+
 async function geminiCall(wav, s, model) {
   const parts = [{ inlineData: { mimeType: 'audio/wav', data: await toBase64(wav) } }];
   const post = async (body) => {
@@ -120,18 +124,27 @@ async function geminiCall(wav, s, model) {
     }
   } else {
     const terms = sttTerms(s);
-    const body = (withThinking) => ({
+    const body = (generationConfig) => ({
       contents: [{
         role: 'user',
         parts: [{ text: `Transcribe this meeting audio exactly as spoken. ${lang(s).hint} Write English words in English letters (never in Devanagari), Hindi in Devanagari, Malayalam in Malayalam script. ${terms.length ? `These names and terms may be spoken, spell them exactly like this: ${terms.join(', ')}. ` : ''}Output ONLY the words that were said, as plain running text. Do not explain, do not think out loud, do not list rules or timestamps, do not write speaker names or labels, do not repeat anything. If there is no intelligible speech, output nothing.` }, ...parts],
       }],
-      generationConfig: { temperature: 0, ...(withThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }) },
+      ...(Object.keys(generationConfig).length ? { generationConfig } : {}),
     });
-    try {
-      j = await post(body(false)); // no thinking: a transcript should not contain the model's reasoning
-    } catch (e) {
-      if (!(e.status === 400 && /thinking/i.test(e.message))) throw e;
-      j = await post(body(true)); // this model has no such switch: ask without it (the answer is cleaned below)
+    // From the strictest request to the plainest. Models differ in which settings they accept, and the API answers a
+    // setting it does not know with a bare "400 invalid argument", so ANY 400 steps down to the next, and the step that
+    // worked is remembered for the next piece. A transcript must never be lost because of an optional setting.
+    const ladder = [{ temperature: 0, thinkingConfig: { thinkingBudget: 0 } }, { temperature: 0 }, {}];
+    let step = GENERAL_STEP.get(model) || 0;
+    for (;;) {
+      try {
+        j = await post(body(ladder[step]));
+        GENERAL_STEP.set(model, step);
+        break;
+      } catch (e) {
+        if (e.status !== 400 || step >= ladder.length - 1) throw e;
+        step++;
+      }
     }
   }
   record({ provider: 'gemini', model, kind: 'stt', tin: j.usageMetadata?.promptTokenCount, tout: j.usageMetadata?.candidatesTokenCount, audioSec: audioSeconds(wav) });
