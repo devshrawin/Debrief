@@ -6,7 +6,7 @@
     throw Error('Dynamic require of "' + x + '" is not supported');
   });
 
-  // node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs
+  // ../Debrief Pro/node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs
   var import_meta = {};
   var qt = Object.defineProperty;
   var Qa = Object.getOwnPropertyDescriptor;

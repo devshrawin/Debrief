@@ -27,11 +27,12 @@
 
   const paint = (ui) => {
     const dark = ui.uiTheme === 'dark' || (ui.uiTheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-    const solid = !!ui.uiSolid;
-    const tint = solid ? (dark ? 'rgb(28 28 36)' : 'rgb(246 246 250)') : dark ? 'rgb(24 24 34 / .5)' : 'rgb(255 255 255 / .5)';
+    // One glass sheet, solid whenever the person (or the system) asks for less transparency or more contrast
+    const solid = !!ui.uiSolid || matchMedia('(prefers-reduced-transparency: reduce)').matches || matchMedia('(prefers-contrast: more)').matches;
+    const tint = solid ? (dark ? 'rgb(28 28 36)' : 'rgb(246 246 250)') : dark ? 'rgb(24 24 34 / .82)' : 'rgb(255 255 255 / .88)';
     css.textContent = `
       .box { position: relative; width: 360px; max-width: calc(100vw - 24px); height: 460px; max-height: calc(100vh - 24px); border-radius: 18px; overflow: hidden;
-        background: ${tint}; ${solid ? '' : '-webkit-backdrop-filter: blur(32px) saturate(1.4); backdrop-filter: blur(32px) saturate(1.4);'}
+        background: ${tint}; ${solid ? '' : '-webkit-backdrop-filter: blur(28px) saturate(1.1); backdrop-filter: blur(28px) saturate(1.1);'}
         box-shadow: 0 0 0 .5px ${dark ? 'rgb(255 255 255 / .22)' : 'rgb(255 255 255 / .8)'}, inset 0 1px 0 ${dark ? 'rgb(255 255 255 / .14)' : 'rgb(255 255 255 / .9)'}, 0 18px 50px rgb(0 0 0 / ${dark ? '.55' : '.28'});
         animation: in .18s cubic-bezier(.2, .8, .2, 1); transform-origin: top right; }
       iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: ${dark ? 'dark' : 'light'}; }

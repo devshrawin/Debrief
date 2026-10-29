@@ -64,10 +64,10 @@
   --mat-thin: rgb(var(--glass-rgb) / .58);
   --mat-regular: rgb(var(--glass-rgb) / .72);
   --mat-thick: rgb(var(--glass-rgb) / .86);
-  --blur-ultrathin: blur(12px) saturate(160%);
-  --blur-thin: blur(20px) saturate(170%);
-  --blur-regular: blur(28px) saturate(180%);
-  --blur-thick: blur(36px) saturate(180%);
+  --blur-ultrathin: blur(12px) saturate(115%);
+  --blur-thin: blur(20px) saturate(115%);
+  --blur-regular: blur(28px) saturate(115%);
+  --blur-thick: blur(36px) saturate(115%);
   --edge: inset 0 1px 0 rgb(255 255 255 / .55), inset 0 0 0 1px rgb(255 255 255 / .35);
   --shadow-1: 0 1px 2px rgb(20 20 40 / .05), 0 4px 14px -6px rgb(20 20 40 / .10);
   --shadow-2: 0 2px 6px rgb(20 20 40 / .06), 0 14px 34px -14px rgb(20 20 40 / .22);
@@ -676,6 +676,18 @@ html.in-panel, html.in-panel body { background: transparent !important; }
 html.in-panel .fx-bg, html.in-panel body::before { display: none !important; }
 html.in-panel body { max-height: none; overflow-y: auto; scrollbar-width: none; } /* the panel grows to fit; if the page is too short it scrolls without a bar, so no square strip shows at the panel's rounded edge */
 html.in-panel body::-webkit-scrollbar { display: none; width: 0; }
+/* Liquid Glass rules: ONE glass sheet (the panel itself); everything inside sits on solid fills, with no nested blur,
+   and the muted text is darkened so it holds 4.5:1 over whatever page shows through. */
+html.in-panel { --mat-ultrathin: var(--surface-solid); --mat-thin: var(--surface-solid); --mat-regular: var(--surface-read); --mat-thick: var(--surface-read);
+  --blur-ultrathin: none; --blur-thin: none; --blur-regular: none; --blur-thick: none; --label-2: #46464d; }
+@media (prefers-color-scheme: dark) { :root.in-panel:not([data-theme="light"]) { --label-2: #bcbcc6; } }
+:root.in-panel[data-theme="dark"] { --label-2: #bcbcc6; }
+
+/* ---------- 10. Liquid Glass: colour with restraint ---------- */
+/* the animated rainbow edge on the main button shows only while it is pointed at or focused */
+[data-beam]::before, [data-beam]::after, [data-beam] [data-beam-bloom], [data-beam-bloom] { transition: opacity var(--d-base) ease; }
+[data-beam]:not(:hover):not(:focus-visible)::before, [data-beam]:not(:hover):not(:focus-visible)::after,
+[data-beam]:not(:hover):not(:focus-visible) [data-beam-bloom] { opacity: 0 !important; }
 
 /* ---------- 8. Polish rules from the review ---------- */
 input[type="checkbox"]:not([role="switch"]):not(.sw):not(.dir-chair) { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; min-height: 0; margin: 0 8px 0 0; padding: 0; vertical-align: -5px; border-radius: 6px; background: var(--fill-2); box-shadow: inset 0 0 0 1.5px var(--line-strong); cursor: pointer; display: inline-grid; place-content: center; flex: none; }
