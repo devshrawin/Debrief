@@ -671,14 +671,17 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 // (chrome://, the web store, the new-tab page, PDFs in the viewer) keep the ordinary popup, set per tab.
 const canPanel = (url) => /^(https?|file):/i.test(url || '') && !/^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(url);
 let panelOn = true;
+let sideOn = false; // Settings > Appearance > Chrome's side panel (uiSide, off by default)
 async function setPopupFor(tabId, url) {
   if (tabId == null) return;
-  await quiet(chrome.action.setPopup({ tabId, popup: panelOn && canPanel(url) ? '' : 'popup.html' }));
+  await quiet(chrome.action.setPopup({ tabId, popup: sideOn || (panelOn && canPanel(url)) ? '' : 'popup.html' }));
 }
 async function applyPanelMode() {
-  const r = await chrome.storage.local.get('uiPanel').catch(() => ({}));
+  const r = await chrome.storage.local.get(['uiPanel', 'uiSide']).catch(() => ({}));
   panelOn = r.uiPanel !== false;
-  await quiet(chrome.action.setPopup({ popup: panelOn ? '' : 'popup.html' }));
+  sideOn = r.uiSide === true;
+  await quiet(chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: sideOn }));
+  await quiet(chrome.action.setPopup({ popup: sideOn || panelOn ? '' : 'popup.html' }));
   const tabs = await chrome.tabs.query({}).catch(() => []);
   for (const t of tabs) await setPopupFor(t.id, t.url);
 }
@@ -686,7 +689,7 @@ applyPanelMode();
 chrome.runtime.onStartup?.addListener(applyPanelMode);
 chrome.runtime.onInstalled.addListener(applyPanelMode);
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area === 'local' && 'uiPanel' in c) applyPanelMode();
+  if (area === 'local' && ('uiPanel' in c || 'uiSide' in c)) applyPanelMode();
 });
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.url || info.status === 'loading') setPopupFor(tabId, info.url || tab.url);
@@ -698,6 +701,7 @@ async function openPlainPopup(tabId, windowId) {
   await quiet(chrome.action.openPopup({ windowId }));
 }
 chrome.action.onClicked.addListener(async (tab) => {
+  if (sideOn) return; // the browser opens the side panel itself
   if (!canPanel(tab.url)) return openPlainPopup(tab.id, tab.windowId);
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['dist/panel.js'] });

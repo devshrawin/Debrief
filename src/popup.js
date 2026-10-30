@@ -8,8 +8,10 @@ const $ = (id) => document.getElementById(id);
 // Opened inside the floating panel on a web page (src/panel.js), the popup is an iframe: it cannot close itself, so it asks
 // the panel, and it tells the panel when it is ready and how tall it is.
 const framed = window.top !== window;
+const side = new URLSearchParams(location.search).has('side'); // Chrome's side panel: stays open, fills the width
+if (side) document.documentElement.classList.add('in-side');
 const tell = (m) => { if (framed) window.parent.postMessage({ debriefPanel: true, ...m }, '*'); };
-const closePanel = () => (framed ? tell({ type: 'close' }) : window.close());
+const closePanel = () => (side ? 0 : framed ? tell({ type: 'close' }) : window.close());
 if (framed) {
   tell({ type: 'ready' });
   const size = () => tell({ type: 'size', h: Math.ceil(Math.max(document.body.scrollHeight, document.body.getBoundingClientRect().height)) });

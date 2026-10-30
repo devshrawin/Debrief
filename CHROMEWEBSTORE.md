@@ -34,6 +34,7 @@ Debrief records the audio of a meeting tab the user chooses and turns it into a 
 | `storage` | Saves settings, the user's own API keys and meeting metadata locally. |
 | `unlimitedStorage` | Transcripts, short audio pieces waiting to be retried, and voice fingerprints for long meetings can exceed the default quota. All of it stays on the device. |
 | `activeTab` | Identifies the current tab when the user clicks the toolbar button, so that tab can be recorded. |
+| `sidePanel` | Optional: shows Debrief in Chrome's side panel, beside the page, when the user turns that on in Settings. Nothing is read from the page. |
 | `scripting` | Injects the small on-page recording pill and the mute or caption detector into a meeting tab, and opens the Debrief panel over the current page when the user clicks the toolbar button. |
 | `notifications` | Tells the user when recording stops and when the minutes are ready or emailed. |
 | Host: `meet.google.com` | Reads the call's mute button, people list and captions so the transcript can name speakers and pause the user's mic while muted. |

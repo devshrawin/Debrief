@@ -17,6 +17,7 @@
     "storage",
     "unlimitedStorage",
     "activeTab",
+    "sidePanel",
     "scripting",
     "notifications"
   ],
@@ -67,6 +68,9 @@
   ],
   "background": {
     "service_worker": "dist/background.js"
+  },
+  "side_panel": {
+    "default_path": "popup.html?side=1"
   },
   "action": {
     "default_popup": "popup.html",
