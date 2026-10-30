@@ -1,6 +1,6 @@
 import { fmtTime } from './store.js';
 import { applyDictionary, glossaryLine } from './dictionary.js';
-import { cleanTranscript } from './sttclean.js';
+import { cleanTranscript, makeDeduper } from './sttclean.js';
 
 // Shared by the standard and the Amnex-format prompts.
 const TRANSCRIPT_NOTES = `About the transcript:
@@ -62,13 +62,14 @@ Do not write an Attendance section or notes about the recording: they are added 
 // ctx: { entries (parsed dictionary), attendees: [names] } used to fix names in the text itself.
 export function formatTranscript(meeting, myName, ctx = {}) {
   const me = myName ? `ME (${myName})` : 'ME';
+  const dd = makeDeduper();
   // With voice recognition the remote passages are split into labelled lines: [mm:ss] Amal Raj: ...
   if (ctx.labeled?.length) {
-    return ctx.labeled.map((l) => `[${fmtTime(l.t)}] ${l.src === 'me' && !ctx.room ? me : l.label}: ${applyDictionary(cleanTranscript(l.text, ctx.attendees || []).text, ctx.entries, ctx.attendees)}`).join('\n');
+    return ctx.labeled.map((l) => `[${fmtTime(l.t)}] ${l.src === 'me' && !ctx.room ? me : l.label}: ${applyDictionary(cleanTranscript(l.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join('\n');
   }
   return [...meeting.segments]
     .sort((a, b) => a.t - b.t)
-    .map((s) => `[${fmtTime(s.t)}] ${s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS'}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || []).text, ctx.entries, ctx.attendees)}`)
+    .map((s) => `[${fmtTime(s.t)}] ${s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS'}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`)
     .join('\n');
 }
 

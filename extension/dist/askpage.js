@@ -11,6 +11,8 @@
   var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
 
   // src/sttclean.js
+  var MATTERS = new Set("zero one two three four five six seven eight nine ten first second third fourth fifth no not never none nothing without cannot dont didnt wont isnt cant hundred lakh crore thousand million half".split(" "));
+  var LETTER = new RegExp("\\p{L}", "u");
   var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
   function cleanTerms(list) {
     const out = [];

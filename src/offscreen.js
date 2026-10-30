@@ -1,17 +1,19 @@
 // Offscreen document: captures tab audio (+ optional mic), cuts it into <30 s chunks at pauses,
 // transcribes each chunk, and sends segments to the service worker.
-import { transcribe } from './stt.js';
+import { transcribe, resetSttBudget } from './stt.js';
 import { encodeWav } from './wav.js';
 import { Chunker, SR, chunkSecs } from './chunker.js';
 import { Mixer, Meter, timelineOf, attributeMixed } from './mixer.js';
 import { createJobRunner, useStore } from './jobs.js';
 import { savePending } from './audiostore.js';
+import { transcribePiece } from './coverage.js';
 import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
 import { pack } from './voice/match.js';
 import { putPiece, pieceKey, toInt16, MAX_PIECES } from './voice/samples.js';
 
 const CONCURRENCY = 3;
+const MAX_REREADS = 8; // pieces read again in parts per recording (each costs a few requests)
 
 // Sarvam's REST API caps audio at 30 s. Gemini takes long audio, so it gets ~2 min chunks,
 // which keeps request counts well inside free-tier limits.
@@ -119,17 +121,32 @@ async function start({ streamId, settings, meetingId }) {
   if (ctx.state !== 'running') throw new Error(`Audio context is ${ctx.state}, recording would capture nothing.`);
   await ctx.audioWorklet.addModule(chrome.runtime.getURL('worklet.js'));
 
+  resetSttBudget();
   const pool = makePool(CONCURRENCY);
-  const onChunk = (src, t, pcm, metas) =>
+  const dbgNote = (note) => chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note }).catch(() => {});
+  const rereads = { left: MAX_REREADS }; // a limit on the extra requests a recording may spend on doubtful pieces
+  const onChunk = (src, t, pcm, metas, info) =>
     pool.add(async () => {
       const wav = encodeWav(pcm, SR);
       const tl = metas ? timelineOf(metas) : null;
       const t0 = Date.now();
+      const dur = Math.round((pcm.length / SR) * 10) / 10;
       try {
-        const text = await transcribe(wav, settings);
-        chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: `chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1000).toFixed(1)}s` });
+        // A long piece answered with a few sentences (or nothing) is read again as short parts (see coverage.js); if it is still thin it is reported as a gap.
+        const voicedSec = info?.voicedSec || 0;
+        const { text, gap, chars } = await transcribePiece({
+          pcm,
+          wav,
+          voicedSec,
+          transcribeFn: (w) => transcribe(w, settings),
+          encode: (x) => encodeWav(x, SR),
+          budget: rereads,
+          note: (n) => dbgNote(`chunk ${src} @${Math.round(t)}s: ${n}`),
+        });
+        dbgNote(`chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+        if (gap) chrome.runtime.sendMessage({ target: 'bg', type: 'gap', meetingId, gap: { t: Math.round(t), dur, src, voicedSec: Math.round(voicedSec), chars } }).catch(() => {});
         // one mixed stream: split the text into who-said-what; otherwise the chunk already has its speaker
-        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { ...seg, dur: Math.round((pcm.length / SR) * 10) / 10 } });
+        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { ...seg, dur, c: Math.round(t * 10) / 10 } }); // c, dur: where the piece this text came from starts and how long it is
       } catch (e) {
         // Keep the audio so the MOM page can retry it after the meeting.
         let saved = false;
@@ -143,13 +160,16 @@ async function start({ streamId, settings, meetingId }) {
     });
 
   // A silent chunk is dropped without any transcript, so say so instead of failing quietly.
-  const onSkip = (src, t, peak) =>
+  const onSkip = (src, t, peak, dur) => {
     chrome.runtime.sendMessage({
       target: 'bg',
       type: 'dbg',
       meetingId,
       note: `[${Math.round(t)}s ${src}] chunk skipped as silent (peak ${peak.toFixed(4)}, needs 0.012)`,
     });
+    // remembered so a stretch with no text is not reported as a gap when it was really silent (only when this chunker hears everything)
+    if (src === 'mix' || !micStream) chrome.runtime.sendMessage({ target: 'bg', type: 'silence', meetingId, t: Math.round(t), dur: Math.round(dur || 0) }).catch(() => {});
+  };
 
   rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
   // Gemini with the mic on: ONE mixed stream and one request per chunk (the speaker comes from the levels afterwards).

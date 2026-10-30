@@ -326,5 +326,39 @@ await test('voice learning always leaves a trace, and can be run again from the 
   delete state.mem.local.voiceBlock;
 });
 
+await test('the recorder reports stretches with too little text and silent pieces; a page script cannot forge them', async () => {
+  live();
+  assert.notEqual(await send({ type: 'gap', meetingId: 'mt', gap: { t: 1247, dur: 150, src: 'mix', voicedSec: 120, chars: 40 } }, OFFSCREEN), 'NO-HANDLER');
+  await send({ type: 'silence', meetingId: 'mt', t: 300, dur: 100 }, OFFSCREEN);
+  await send({ type: 'silence', meetingId: 'mt', t: 400, dur: 100 }, OFFSCREEN);
+  let m = state.mem.local['meeting:mt'];
+  assert.deepEqual(m.gaps, [{ t: 1247, dur: 150, src: 'mix', voicedSec: 120, chars: 40 }]);
+  assert.deepEqual(m.silences, [{ t: 300, dur: 100 }, { t: 400, dur: 100 }]);
+  for (const type of ['gap', 'silence']) assert.equal(await send({ type, meetingId: 'mt', gap: { t: 1, dur: 1 }, t: 1, dur: 1 }, page(7)), 'NO-HANDLER', `${type} from a page must be ignored`);
+  m = state.mem.local['meeting:mt'];
+  assert.equal(m.gaps.length, 1);
+  assert.equal(m.silences.length, 2);
+});
+
+await test('the list of silent pieces stops growing at 400 (a very long recording must not fill the store)', async () => {
+  live();
+  state.mem.local['meeting:mt'].silences = Array.from({ length: 400 }, (_, i) => ({ t: i, dur: 1 }));
+  await send({ type: 'silence', meetingId: 'mt', t: 999, dur: 1 }, OFFSCREEN);
+  assert.equal(state.mem.local['meeting:mt'].silences.length, 400);
+});
+
+await test('notifications carry their icon as a full extension address (a relative one fails inside the service worker)', async () => {
+  live();
+  state.notes.length = 0;
+  await send({ type: 'stt-error', meetingId: 'mt', error: '[10s me] Gemini HTTP 429: quota, limit: 20, model: gemini-3.8-flash' }, OFFSCREEN);
+  await send({ type: 'notify', id: 'debrief-mail-x', title: 'Debrief: minutes emailed', message: 'The minutes were sent.' }, OFFSCREEN);
+  assert.ok(state.notes.length >= 2, JSON.stringify(state.notes));
+  for (const n of state.notes) {
+    assert.equal(n.iconUrl, 'chrome-extension://testid/icons/icon128.png', JSON.stringify(n));
+    assert.equal(n.type, 'basic');
+    assert.ok(n.title && n.message);
+  }
+});
+
 console.log(`\n${passed} passed`);
 process.exit(process.exitCode || 0);

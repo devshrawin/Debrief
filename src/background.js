@@ -144,6 +144,14 @@ async function updateMeeting(id, fn) {
   });
 }
 
+// A notification needs its icon as a full address: written as 'icons/icon128.png' it is looked for next to the service worker
+// (in dist/), is not found, and the whole notification fails with "Unable to download all specified images".
+function notify(id, options) {
+  try {
+    chrome.notifications?.create(id, { type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'), ...options }, () => void chrome.runtime.lastError);
+  } catch {}
+}
+
 async function raiseAlert(meetingId, err) {
   const a = classifyError(err);
   if (!a) return;
@@ -156,13 +164,7 @@ async function raiseAlert(meetingId, err) {
   setAttention(true);
   if (fresh) {
     // No meeting title or addresses here: notifications can show on a shared screen.
-    chrome.notifications?.create(`debrief-${a.kind}`, {
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: `Debrief: ${a.title}`,
-      message: a.detail,
-      priority: 2,
-    });
+    notify(`debrief-${a.kind}`, { title: `Debrief: ${a.title}`, message: a.detail, priority: 2 });
   }
 }
 
@@ -437,12 +439,7 @@ async function autoStop(reason) {
   if (!st.recording || st.stopping) return;
   await updateMeeting(st.meetingId, (m) => (m.debug ||= []).push(`auto-stop: ${reason}`));
   await stop({ background: true });
-  chrome.notifications?.create('debrief-autostop', {
-    type: 'basic',
-    iconUrl: 'icons/icon128.png',
-    title: 'Debrief stopped recording',
-    message: `${reason} Writing the minutes now.`,
-  });
+  notify('debrief-autostop', { title: 'Debrief stopped recording', message: `${reason} Writing the minutes now.` });
 }
 
 // What a page script (running on a meeting site) may ask for. Everything else must come from Debrief's own pages.
@@ -499,7 +496,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return { ok: true };
     },
     notify: async () => {
-      chrome.notifications?.create(String(msg.id || 'debrief'), { type: 'basic', iconUrl: 'icons/icon128.png', title: String(msg.title || 'Debrief'), message: String(msg.message || '') });
+      notify(String(msg.id || 'debrief'), { title: String(msg.title || 'Debrief'), message: String(msg.message || '') });
       return { ok: true };
     },
     // the offscreen document has no chrome.storage, so the job runner reads and writes through here
@@ -521,6 +518,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await updateMeeting(msg.meetingId, (m) => m.errors.push(msg.error));
       await raiseAlert(msg.meetingId, msg.error);
     },
+    // a stretch the speech-to-text answered with far too little text, even after it was read again in parts (see coverage.js)
+    gap: () => updateMeeting(msg.meetingId, (m) => (m.gaps ||= []).push(msg.gap)),
+    silence: () => updateMeeting(msg.meetingId, (m) => ((m.silences ||= []).length < 400 ? m.silences.push({ t: msg.t, dur: msg.dur }) : 0)),
     usage: () =>
       serial(async () => {
         const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);

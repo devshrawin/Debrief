@@ -1,12 +1,12 @@
 import { renderMd, decorateMinutes } from './md.js';
-import { cleanTranscript } from './sttclean.js';
+import { cleanTranscript, makeDeduper } from './sttclean.js';
 import { renderMinutesHtml, isAmnexMd, setOrg } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
 import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
-import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes } from './jobs.js';
+import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, transcriptGaps } from './jobs.js';
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { matchPeople, setEmailNames } from './attendance.js';
@@ -15,6 +15,7 @@ import { getSample, hasSample, putSample, deleteSample } from './voice/samples.j
 import { modelLabel } from './llm.js';
 import { listPending, deleteAllPending } from './audiostore.js';
 import { formatTranscript } from './prompt.js';
+import { gapLabel, gapMinutes } from './coverage.js';
 import { mailReady, wordDocHtml, parseAddresses, recipientsFor, inviteeEmails } from './mailer.js';
 
 const $ = (id) => document.getElementById(id);
@@ -286,9 +287,12 @@ function tidyTables(root) {
 function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
+  const dd = makeDeduper();
   const rows = shown
-    ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: cleanTranscript(l.text, ctx.attendees || []).text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
-    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: cleanTranscript(s.text, ctx.attendees || []).text, flag: '' }));
+    ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: cleanTranscript(l.text, ctx.attendees || [], dd).text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: cleanTranscript(s.text, ctx.attendees || [], dd).text, flag: '' }));
+  // a stretch with no text at all (the speech-to-text returned nothing for it) shows as a note too, so it is never mistaken for silence
+  for (const g of transcriptGaps(meeting)) rows.push({ t: g.from, src: 'note', who: 'Gap', text: `No transcript for ${gapLabel(g)}. If people spoke here, it was not captured.`, flag: '' });
   // pauses show as notes in their place, so a gap in the transcript is explained
   for (const p of meeting.pauses || []) rows.push({ t: p.from, src: 'note', who: 'Paused', text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}. Nothing from this stretch was transcribed or kept.`, flag: '' });
   rows.sort((a, b) => a.t - b.t);
@@ -315,10 +319,12 @@ function renderTranscript() {
 
 function renderErrors() {
   const errs = meeting.errors || [];
-  $('errors').classList.toggle('hidden', !errs.length);
-  if (errs.length) {
-    $('errors').textContent = `${errs.length} problem${errs.length > 1 ? 's' : ''} during transcription (some audio may be missing). Last: ${errs[errs.length - 1]}`;
-  }
+  const gaps = transcriptGaps(meeting);
+  $('errors').classList.toggle('hidden', !errs.length && !gaps.length);
+  const said = [];
+  if (errs.length) said.push(`${errs.length} problem${errs.length > 1 ? 's' : ''} during transcription (some audio may be missing). Last: ${errs[errs.length - 1]}`);
+  if (gaps.length) said.push(`No transcript for ${gaps.slice(0, 5).map(gapLabel).join(', ')}${gaps.length > 5 ? ` and ${gaps.length - 5} more` : ''} (about ${gapMinutes(gaps)} min). If people spoke then, those parts are missing from the transcript and the minutes.`);
+  if (said.length) $('errors').textContent = said.join(' ');
 }
 
 // Saves only the fields that changed onto the stored meeting, so another tab's or the recorder's newer
@@ -340,7 +346,7 @@ function patchMeeting(fields) {
 const jobUi = { timer: null, buf: '', queued: false };
 const runner = createJobRunner({
   emit: (m) => onJobEvent(m),
-  notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: 'icons/icon128.png', title: n.title, message: n.message }),
+  notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'), title: n.title, message: n.message }, () => void chrome.runtime.lastError),
 });
 
 // Asks the background runner to start (or join) the job; if it cannot be reached, the same code runs here.
@@ -489,7 +495,7 @@ async function emailMom() {
   setEditing(false); // what is on screen is what gets sent, including unsaved edits
   $('mail').disabled = true;
   $('mailStatus').textContent = 'Sending…';
-  const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: 'icons/icon128.png', title: n.title, message: n.message }) });
+  const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'), title: n.title, message: n.message }, () => void chrome.runtime.lastError) });
   $('mailStatus').textContent = r.status;
   if (r.sent) {
     renderChips();

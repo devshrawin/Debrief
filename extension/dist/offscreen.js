@@ -190,13 +190,99 @@
     const known = [...new Set(names2.map((n) => String(n).trim()).filter((n) => n.length >= 3))].sort((a, b) => b.length - a.length);
     if (!known.length) return String(text || "");
     const esc2 = known.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-    return String(text || "").replace(new RegExp(`(^|[\\s.!?\u0964])(?:${esc2})\\s*:\\s*`, "giu"), "$1").replace(/\s{2,}/g, " ").trim();
+    return balanceQuotes(String(text || "").replace(new RegExp(`(^|[\\s.!?\u0964])(?:${esc2})\\s*:\\s*["\u201C]?`, "giu"), "$1").replace(/\s{2,}/g, " ").trim());
   }
-  function cleanTranscript(text, names2 = []) {
-    const { text: t, leaked } = stripThinking(text);
-    const clean = stripLabels(dropRepeats(t), names2);
-    return { text: clean, leaked, changed: clean !== String(text || "").trim() };
+  function balanceQuotes(text) {
+    let t = String(text || "");
+    if ((t.match(/"/g) || []).length % 2) t = t.replace(/"/g, "");
+    if ((t.match(/[“”]/g) || []).length % 2) t = t.replace(/[“”]/g, "");
+    return t;
   }
+  var NOTE_LINE = [
+    /^\s*(?:[-*•]\s+)?(?:Silent audio track|Output:|Analy[sz]e the audio|Keywords? to check|(?:Malayalam |Hindi )?transcription check|English context with|Audio (?:analysis|summary|breakdown))/i,
+    /^\s*(?:[-*•]\s+)?\d{1,2}:\d{2}(?::\d{2})?\s*[-–]\s*\d{1,2}:\d{2}/,
+    // "00:48 - 01:00: ..." a breakdown by time
+    /^\s*[-*•]\s+["“]/,
+    // a bullet that quotes speech (the same words follow as plain text)
+    /^\s*(?:[-*•]\s+)?(?:Speaker \d+|(?:Fe)?male(?: voice| speaker)?(?: \d)?)\s*(?:\([^)]*\))?\s*:\s*["“][^"”]*["”]\s*\([^)]*\)\s*$/i
+    // Female 1: "ധന്യ" (Dhanya?)  a quote with its romanised gloss
+  ];
+  var GLOSS = /([ऀ-ॿ஀-௿ഀ-ൿ][.?!"”]*)\s*\([A-Za-z][A-Za-z ,.'?!-]{2,90}\)/g;
+  var ROLE_LABEL = /^\s*(?:[-*•]\s+)?(?:Speaker \d+|(?:Fe)?male(?: voice| speaker)?(?: \d)?)\s*(?:\([^)]*\))?\s*:\s*["“]?/i;
+  var GLUED_TAIL = /(?<=[^\s"“(\[])["”')\]](?=[A-Z][a-z]+[ ,.])/g;
+  function stripNotes(text) {
+    const out = [];
+    let dropped = false;
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      if (NOTE_LINE.some((re2) => re2.test(raw))) {
+        dropped = true;
+        let at2 = -1;
+        for (const m of raw.matchAll(GLUED_TAIL)) at2 = m.index + 1;
+        if (at2 >= 0) out.push(raw.slice(at2));
+        continue;
+      }
+      out.push(balanceQuotes(raw.replace(ROLE_LABEL, "").replace(/^\s*"([^"]*)"\s*$/, "$1")));
+    }
+    const text2 = out.join(" ").replace(/\bWe have speech segments[^.]*\.\s*/gi, "").replace(/\bAnaly[sz]e the audio\s*:\s*/gi, "").replace(/\b(?:Speaker \d+|(?:Fe)?male voice)\s*(?:\([^)]*\))?\s*:\s*["“]?/gi, "").replace(GLOSS, "$1").replace(/\s{2,}/g, " ").trim();
+    return { text: balanceQuotes(text2), dropped: dropped || text2 !== out.join(" ").replace(/\s{2,}/g, " ").trim() };
+  }
+  function stripStamps(text) {
+    const t = String(text || "");
+    const glued = /(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])/g;
+    if ((t.match(glued) || []).length < 4) return t;
+    return t.replace(/(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])|^[ \t]*\d{1,2}:\d{2}(?![\d:])[ \t]*/gm, "").replace(/\s{2,}/g, " ").trim();
+  }
+  var MATTERS = new Set("zero one two three four five six seven eight nine ten first second third fourth fifth no not never none nothing without cannot dont didnt wont isnt cant hundred lakh crore thousand million half".split(" "));
+  var minor = (w) => w.length <= 4 && !/\d/.test(w) && !MATTERS.has(w);
+  var wordSet = (k2) => new Set(k2.split(" ").filter(Boolean));
+  var alike = (a, b) => {
+    let both = 0;
+    for (const w of a) if (b.has(w)) both++;
+    if (both / (a.size + b.size - both) < 0.85) return false;
+    for (const w of a) if (!b.has(w) && !minor(w)) return false;
+    for (const w of b) if (!a.has(w) && !minor(w)) return false;
+    return true;
+  };
+  function makeDeduper(keep = 60) {
+    const recent = [];
+    return (text) => {
+      const out = [];
+      for (const p of String(text || "").split(/(?<=[.!?।])\s+/)) {
+        const k2 = norm(p);
+        if (k2.length < 30) {
+          out.push(p);
+          continue;
+        }
+        const w = wordSet(k2);
+        if (recent.some((r) => r.k === k2 || w.size >= 6 && r.w.size >= 6 && alike(w, r.w))) continue;
+        recent.push({ k: k2, w });
+        if (recent.length > keep) recent.shift();
+        out.push(p);
+      }
+      return out.join(" ").trim();
+    };
+  }
+  function cleanTranscript(text, names2 = [], dedupe = null) {
+    const notes = stripNotes(text);
+    const { text: t, leaked } = stripThinking(notes.text);
+    let clean = dropRepeats(stripStamps(t));
+    if (dedupe) clean = dedupe(clean);
+    clean = stripLabels(clean, names2);
+    return { text: clean, leaked: leaked || notes.dropped, changed: clean !== String(text || "").trim() };
+  }
+  var LETTER = new RegExp("\\p{L}", "u");
+  function latinShare(text) {
+    let latin = 0;
+    let all = 0;
+    for (const ch of String(text || "")) {
+      if (!LETTER.test(ch)) continue;
+      all++;
+      if (/[A-Za-z]/.test(ch)) latin++;
+    }
+    return all ? latin / all : 0;
+  }
+  var letterCount = (text) => [...String(text || "")].filter((ch) => LETTER.test(ch)).length;
+  var looksTransliterated = (text) => letterCount(text) >= 400 && latinShare(text) < 0.03;
   var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
   function cleanTerms(list) {
     const out = [];
@@ -768,6 +854,23 @@
     const text = (j2.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join("");
     return cleanTranscript(text, sttTerms(s)).text;
   }
+  var SCRIPT_CHECKS = { left: 8 };
+  var resetSttBudget = () => {
+    SCRIPT_CHECKS.left = 8;
+  };
+  async function preferEnglishLetters(first2, wav, s) {
+    const chosen = chosenLanguages(s);
+    if (!looksTransliterated(first2) || chosen && !chosen.some((l3) => l3.code === "en") || SCRIPT_CHECKS.left <= 0) return first2;
+    SCRIPT_CHECKS.left--;
+    for (const m of await usable(modelChain(s.geminiModel))) {
+      try {
+        const alt = await geminiCall(wav, s, m);
+        return latinShare(alt) >= 0.12 && alt.length >= first2.length * 0.5 ? alt : first2;
+      } catch {
+      }
+    }
+    return first2;
+  }
   async function gemini(wav, s) {
     let first2 = "";
     let err;
@@ -778,7 +881,7 @@
     }
     if (first2.trim() || !/transcribe/.test(s.sttGeminiModel)) {
       if (err) throw err;
-      return first2;
+      return /transcribe/.test(s.sttGeminiModel) ? preferEnglishLetters(first2, wav, s) : first2;
     }
     let lastErr = err;
     for (const m of await usable(modelChain(s.geminiModel))) {
@@ -826,6 +929,7 @@
   var QUIET_RMS = 6e-3;
   var chunkSecs = (s) => s.sttProvider !== "gemini" ? { minSec: 18, maxSec: 28 } : s.sttGeminiChunk === "long" ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 };
   var SPEECH_RMS = 0.012;
+  var VOICED_RMS = 0.015;
   var rms = (a) => {
     let s = 0;
     for (let i = 0; i < a.length; i++) s += a[i] * a[i];
@@ -877,6 +981,8 @@
       }
       const start2 = this.offset / SR;
       const loud = this.loudest;
+      let voiced = 0;
+      for (const b of this.blocks) if (b.length && rms(b) >= VOICED_RMS) voiced += b.length;
       this.offset += this.len;
       const metas = this.metas;
       this.metas = [];
@@ -885,10 +991,10 @@
       this.quiet = 0;
       this.loudest = 0;
       if (pcm.length < SR || loud < SPEECH_RMS) {
-        if (pcm.length >= SR) this.onSkip?.(this.src, start2, loud);
+        if (pcm.length >= SR) this.onSkip?.(this.src, start2, loud, pcm.length / SR);
         return;
       }
-      this.onChunk(this.src, start2, pcm, metas.length ? metas : void 0);
+      this.onChunk(this.src, start2, pcm, metas.length ? metas : void 0, { voicedSec: voiced / SR });
     }
   };
 
@@ -1028,10 +1134,11 @@ Do not write an Attendance section or notes about the recording: they are added 
   }
   function formatTranscript(meeting, myName, ctx = {}) {
     const me2 = myName ? `ME (${myName})` : "ME";
+    const dd = makeDeduper();
     if (ctx.labeled?.length) {
-      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" && !ctx.room ? me2 : l3.label}: ${applyDictionary(cleanTranscript(l3.text, ctx.attendees || []).text, ctx.entries, ctx.attendees)}`).join("\n");
+      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" && !ctx.room ? me2 : l3.label}: ${applyDictionary(cleanTranscript(l3.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join("\n");
     }
-    return [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS"}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || []).text, ctx.entries, ctx.attendees)}`).join("\n");
+    return [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS"}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join("\n");
   }
   function speakerTimeline(captions, ctx = {}) {
     if (!captions?.length) return "";
@@ -3318,6 +3425,114 @@ ${att}
     }
   }
 
+  // src/coverage.js
+  var MIN_JUDGED_SEC = 20;
+  var FLOOR_CHARS_PER_SEC = 3;
+  var GAP_CHARS_PER_SEC = 1.5;
+  var MAX_FRUITLESS = 2;
+  var letters = (t) => String(t || "").replace(/\s+/g, "").length;
+  function judgePiece(text, voicedSec) {
+    const chars = letters(text);
+    if (!(voicedSec >= MIN_JUDGED_SEC)) return { ok: true, short: false, gap: false, expected: 0, chars };
+    const short = chars < voicedSec * FLOOR_CHARS_PER_SEC;
+    return { ok: !short, short, gap: chars < voicedSec * GAP_CHARS_PER_SEC, expected: Math.round(voicedSec * FLOOR_CHARS_PER_SEC), chars };
+  }
+  function splitRanges(pcm, partSec = 45, sr = SR) {
+    const n = pcm.length;
+    const parts = Math.max(1, Math.round(n / (partSec * sr)));
+    if (parts === 1) return [[0, n]];
+    const win = Math.round(0.128 * sr);
+    const cuts = [0];
+    for (let i = 1; i < parts; i++) {
+      const ideal = Math.round(n * i / parts);
+      const lo = Math.max(cuts[cuts.length - 1] + 5 * sr, ideal - 4 * sr);
+      const hi = Math.min(n - 5 * sr, ideal + 4 * sr);
+      let best = ideal;
+      let bestRms = Infinity;
+      for (let p = lo; p + win <= hi; p += win) {
+        const r = rms(pcm.subarray(p, p + win));
+        if (r < bestRms) {
+          bestRms = r;
+          best = p + (win >> 1);
+        }
+      }
+      cuts.push(best);
+    }
+    cuts.push(n);
+    return cuts.slice(0, -1).map((a, i) => [a, cuts[i + 1]]);
+  }
+  var loudest = (pcm, win = 2048) => {
+    let m = 0;
+    for (let p = 0; p < pcm.length; p += win) m = Math.max(m, rms(pcm.subarray(p, Math.min(pcm.length, p + win))));
+    return m;
+  };
+  async function readInParts({ pcm, encode, transcribeFn, partSec = 45, sr = SR }) {
+    const out = [];
+    let parts = 0;
+    for (const [a, b] of splitRanges(pcm, partSec, sr)) {
+      const sub = pcm.subarray(a, b);
+      if (sub.length < sr || loudest(sub) < 0.012) continue;
+      parts++;
+      const t = String(await transcribeFn(encode(sub)) || "").trim();
+      if (t) out.push(t);
+    }
+    return { text: out.join(" "), parts };
+  }
+  var canSplit = (pcm, partSec = 45, sr = SR) => splitRanges(pcm, partSec, sr).length > 1;
+  async function transcribePiece({ pcm, wav, voicedSec, transcribeFn, encode, budget = { left: 8 }, note: note2 = () => {
+  } }) {
+    let text = String(await transcribeFn(wav) || "");
+    let verdict = judgePiece(text, voicedSec);
+    if (verdict.short && budget.left > 0 && canSplit(pcm)) {
+      budget.left--;
+      note2(`${verdict.chars} characters for ${Math.round(voicedSec)} s of speech looks incomplete (at least ${verdict.expected} expected), reading it again in parts`);
+      const again = await readInParts({ pcm, encode, transcribeFn }).catch((e2) => (note2(`reading in parts failed (${e2.message})`), { text: "", parts: 0 }));
+      note2(`${again.parts} part(s) -> ${again.text.length} characters`);
+      if (again.text.length > text.length) text = again.text;
+      else if ((budget.fruitless = (budget.fruitless || 0) + 1) >= MAX_FRUITLESS) budget.left = 0;
+      verdict = judgePiece(text, voicedSec);
+    }
+    return { text, gap: verdict.gap, chars: verdict.chars };
+  }
+  var RATE = 9;
+  function findGaps(segments, excused = [], { minGap = 75, rate = RATE } = {}) {
+    const segs = (segments || []).filter((s) => s && Number.isFinite(s.t)).sort((a, b) => a.t - b.t);
+    const skip = (excused || []).filter((p) => p && Number.isFinite(p.from)).map((p) => ({ from: p.from, to: p.to ?? Infinity })).sort((a, b) => a.from - b.from);
+    const out = [];
+    let covered = -Infinity;
+    for (let i = 0; i < segs.length; i++) {
+      const a = segs[i];
+      covered = Math.max(covered, Number.isFinite(a.c) && Number.isFinite(a.dur) ? a.c + a.dur : a.t + Math.max(2, String(a.text || "").length / rate));
+      const next = segs[i + 1];
+      if (!next || next.t - covered < minGap) continue;
+      let from = covered;
+      const parts = [];
+      for (const p of skip) {
+        if (p.to <= from) continue;
+        if (p.from >= next.t) break;
+        if (p.from > from) parts.push([from, p.from]);
+        from = Math.max(from, p.to);
+        if (from >= next.t) break;
+      }
+      if (from < next.t) parts.push([from, next.t]);
+      for (const [x2, y2] of parts) if (y2 - x2 >= minGap) out.push({ from: Math.round(x2), to: Math.round(y2) });
+    }
+    return out;
+  }
+  function mergeGaps(recorded = [], found = []) {
+    const all = [...recorded.filter((g) => g && Number.isFinite(g.t)).map((g) => ({ from: Math.round(g.t), to: Math.round(g.t + (g.dur || 0)) })), ...found].filter((g) => g.to > g.from).sort((a, b) => a.from - b.from);
+    const out = [];
+    for (const g of all) {
+      const last = out[out.length - 1];
+      if (last && g.from <= last.to + 5) last.to = Math.max(last.to, g.to);
+      else out.push({ ...g });
+    }
+    return out;
+  }
+  var mmss2 = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  var gapLabel = (g) => `${mmss2(g.from)}\u2013${mmss2(g.to)}`;
+  var gapMinutes = (gaps) => Math.max(1, Math.round(gaps.reduce((a, g) => a + (g.to - g.from), 0) / 60));
+
   // src/minutes.js
   var wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
   function noInviteReason(meeting, settings) {
@@ -3327,10 +3542,16 @@ ${att}
     if (!meeting.invitedChecked) return "the calendar lookup has not run (email relay not set up, or the meeting has not ended)";
     return "no calendar invite was found to compare with";
   }
-  function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
+  function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0, gaps = [] }) {
+    const parts = [];
     if (pendingCount > 0) {
-      return `**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? "s" : ""}) could not be transcribed, so some points may be missing from these minutes.`;
+      parts.push(`**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? "s" : ""}) could not be transcribed, so some points may be missing from these minutes.`);
     }
+    if (gaps.length) {
+      const shown = gaps.slice(0, 6).map(gapLabel).join(", ");
+      parts.push(`${pendingCount > 0 ? "Also, no" : "**Coverage warning:** no"} transcript was produced for ${shown}${gaps.length > 6 ? ` and ${gaps.length - 6} more` : ""} (about ${gapMinutes(gaps)} min in all). If people spoke then, those points may be missing from these minutes.`);
+    }
+    if (parts.length) return parts.join(" ");
     if (errors > 0) return `Note: ${errors} transcription problem${errors > 1 ? "s" : ""} occurred during the recording; the audio was retried and recovered where possible.`;
     return "";
   }
@@ -4041,7 +4262,7 @@ ${meeting.mom || ""}
       onProgress(done, pending.length);
       try {
         const text = await transcribeFn(p.wav, settings);
-        if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true });
+        if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true, c: p.t, dur: Math.round((p.wav.size - 44) / 32e3 * 10) / 10 });
         await deletePending(p.id);
         await IO.saveMeeting(meeting);
         done++;
@@ -4116,6 +4337,7 @@ ${meeting.mom || ""}
       }
     }
   }
+  var transcriptGaps = (meeting) => mergeGaps(meeting.gaps || [], findGaps(meeting.segments || [], [...meeting.pauses || [], ...(meeting.silences || []).map((s) => ({ from: s.t, to: s.t + s.dur }))]));
   async function writeAndStore({ id, meeting, settings, reread = false, signal, ui, patch, cache, generate: generate2 }) {
     const pending = await listPending(id);
     const ctx = nameCtxFor(meeting, settings, cache);
@@ -4138,7 +4360,7 @@ ${meeting.mom || ""}
       onText: () => {
       },
       onStatus: (t) => ui.onStatus(t),
-      coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting.errors || []).length }
+      coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32e3, 0), errors: (meeting.errors || []).length, gaps: transcriptGaps(meeting) }
     });
     await patch({ mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...extract ? { extract } : {} });
     return { text, stats };
@@ -4418,6 +4640,7 @@ ${meeting.mom || ""}
 
   // src/offscreen.js
   var CONCURRENCY = 3;
+  var MAX_REREADS = 8;
   var chunkSize = (s, onSkip) => ({ ...chunkSecs(s), onSkip });
   var rec = null;
   function makePool(limit) {
@@ -4505,15 +4728,31 @@ ${meeting.mom || ""}
     await Promise.all([ctx.resume(), playCtx.resume()]);
     if (ctx.state !== "running") throw new Error(`Audio context is ${ctx.state}, recording would capture nothing.`);
     await ctx.audioWorklet.addModule(chrome.runtime.getURL("worklet.js"));
+    resetSttBudget();
     const pool = makePool(CONCURRENCY);
-    const onChunk = (src, t, pcm, metas) => pool.add(async () => {
+    const dbgNote = (note2) => chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: note2 }).catch(() => {
+    });
+    const rereads = { left: MAX_REREADS };
+    const onChunk = (src, t, pcm, metas, info) => pool.add(async () => {
       const wav = encodeWav(pcm, SR);
       const tl = metas ? timelineOf(metas) : null;
       const t0 = Date.now();
+      const dur = Math.round(pcm.length / SR * 10) / 10;
       try {
-        const text = await transcribe(wav, settings);
-        chrome.runtime.sendMessage({ target: "bg", type: "dbg", meetingId, note: `chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1e3).toFixed(1)}s` });
-        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: "bg", type: "segment", meetingId, seg: { ...seg, dur: Math.round(pcm.length / SR * 10) / 10 } });
+        const voicedSec = info?.voicedSec || 0;
+        const { text, gap: gap2, chars } = await transcribePiece({
+          pcm,
+          wav,
+          voicedSec,
+          transcribeFn: (w) => transcribe(w, settings),
+          encode: (x2) => encodeWav(x2, SR),
+          budget: rereads,
+          note: (n2) => dbgNote(`chunk ${src} @${Math.round(t)}s: ${n2}`)
+        });
+        dbgNote(`chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1e3).toFixed(1)}s`);
+        if (gap2) chrome.runtime.sendMessage({ target: "bg", type: "gap", meetingId, gap: { t: Math.round(t), dur, src, voicedSec: Math.round(voicedSec), chars } }).catch(() => {
+        });
+        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: "bg", type: "segment", meetingId, seg: { ...seg, dur, c: Math.round(t * 10) / 10 } });
       } catch (e2) {
         let saved = false;
         try {
@@ -4525,12 +4764,16 @@ ${meeting.mom || ""}
         chrome.runtime.sendMessage({ target: "bg", type: "stt-error", meetingId, error: `[${Math.round(t)}s ${src}] ${e2.message} (${note2})` });
       }
     });
-    const onSkip = (src, t, peak) => chrome.runtime.sendMessage({
-      target: "bg",
-      type: "dbg",
-      meetingId,
-      note: `[${Math.round(t)}s ${src}] chunk skipped as silent (peak ${peak.toFixed(4)}, needs 0.012)`
-    });
+    const onSkip = (src, t, peak, dur) => {
+      chrome.runtime.sendMessage({
+        target: "bg",
+        type: "dbg",
+        meetingId,
+        note: `[${Math.round(t)}s ${src}] chunk skipped as silent (peak ${peak.toFixed(4)}, needs 0.012)`
+      });
+      if (src === "mix" || !micStream) chrome.runtime.sendMessage({ target: "bg", type: "silence", meetingId, t: Math.round(t), dur: Math.round(dur || 0) }).catch(() => {
+      });
+    };
     rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
     const mixed = !!micStream && settings.sttProvider === "gemini";
     if (mixed) {
