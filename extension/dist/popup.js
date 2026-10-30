@@ -50,6 +50,17 @@
     const left = Math.max(0, limit - used);
     return { model, limit, used, left, need, minutes, short: need > left, longHelps: settings.sttGeminiChunk !== "long" && estimateRequests({ minutes, minSec: 200, maxSec: 240 }) <= left };
   }
+  function nextQuotaReset(now = Date.now()) {
+    const today = dayKey(new Date(now));
+    for (let t = now + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
+    return now + 12 * 36e5;
+  }
+  function istClock(ms, now = Date.now()) {
+    const f = (opts) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", ...opts });
+    const time = f({ hour: "numeric", minute: "2-digit", hour12: true }).format(ms).replace(/\s?([ap])m/i, (m, c) => ` ${c.toLowerCase()}m`);
+    const sameDay = f({ year: "numeric", month: "2-digit", day: "2-digit" }).format(ms) === f({ year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return `${sameDay ? "" : `${f({ weekday: "short" }).format(ms)} `}${time} IST`;
+  }
 
   // src/meetend.js
   var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
@@ -217,6 +228,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -482,11 +497,16 @@
   async function usageWarning() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
+    if (settings.quotaWarnings === false) {
+      show("usageWarn", false);
+      show("quotaWarn", false);
+      return;
+    }
     const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
     const today = (/* @__PURE__ */ new Date()).toDateString();
     const closedToday = (await chrome.storage.local.get("usageWarnHiddenDay")).usageWarnHiddenDay === today;
     show("usageWarn", !!hits.length && !closedToday);
-    $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
+    $("usageWarnText").textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(" \xB7 ") + `. The count starts again at ${istClock(nextQuotaReset())}. Debrief will fall back to other models if one runs out.`;
     const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
     const hidden = (await chrome.storage.local.get("quotaWarnHidden")).quotaWarnHidden === true;
     show("quotaWarn", !!q?.short && !hidden);

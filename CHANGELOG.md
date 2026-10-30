@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.1.3 — 2026-10-30
+- Settings: the speech and general Gemini model fields are dropdowns (with "Other…" to type a name).
+- Settings → Appearance: "While recording" card with the recording pill (moved from Recording) and a new "Hide the recording icon on the toolbar" switch.
+- Quota warnings: a per-minute 429 was saved as a daily limit and warned every morning; limits are now learned only from per-day errors (old learned limits are cleared once). The warning says when the count starts again (midnight Pacific, about 12:30 pm IST), and Settings → Usage has a switch to turn the warnings off.
 - Speech to text: a stretch of a meeting could silently come back with almost no text (or none). A piece answered with far too little for the speech in it is now read again in short parts; if it is still thin it is reported. The minutes page shows "No transcript for 20:47–24:21" in the transcript and in the warning box, and the minutes carry a coverage warning that names it. Quiet stretches and pauses are not reported.
 - Speech to text: notes a model writes about the audio ("Silent audio track…", "Analyse the audio: - 00:00 - 00:46 …", "Keywords to check…"), made-up speaker labels (Speaker 1, Female voice), romanised glosses after Malayalam, video offsets inside the words and a passage written twice (also across neighbouring pieces, also when the fillers differ) are removed from transcripts, in the transcript view and in what the minutes writer reads. Meetings already recorded are cleaned when opened.
 - English written in Malayalam or Hindi letters by the transcription model is detected in meetings that mix English in; the piece is read once by a general model and its answer is used when it has the English words in English letters.

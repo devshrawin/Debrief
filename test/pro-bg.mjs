@@ -268,6 +268,19 @@ await test('toolbar: call-on glows by swapping the icon, tooltip is the artboard
   assert.equal(state.icon[5], 'untouched', 'no timer is left running after the last glow stops');
 });
 
+await test('toolbar: "hide the recording icon" keeps the glow and the call/REC badge away, but a "!" still shows', async () => {
+  const change = (v) => (globalThis.__changed || []).forEach((fn) => fn({ settings: { newValue: { hideRecIcon: v } } }, 'local'));
+  change(true);
+  await send({ type: 'in-call', on: true, site: 'Zoom' }, page(5));
+  assert.notEqual(state.icon[5], 'icons/icon16-glow.png', 'no glow');
+  assert.ok(!state.badge[5], 'no amber dot');
+  await send({ type: 'in-call', on: false }, page(5));
+  change(false);
+  await send({ type: 'in-call', on: true, site: 'Zoom' }, page(5));
+  assert.equal(state.icon[5], 'icons/icon16-glow.png', 'back on when the setting is off');
+  await send({ type: 'in-call', on: false }, page(5));
+});
+
 await test('toolbar: recording ends the glow, shows REC with a live tooltip, ! on an alert, resets on stop', async () => {
   await send({ type: 'in-call', on: true, site: 'Meet' }, page(7));
   const r = await send({ type: 'start', streamId: 's', tabId: 7, title: 'Meet - Sync - Google Meet', url: 'https://meet.google.com/abc-defg-hij' }, OWN);

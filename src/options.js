@@ -123,6 +123,36 @@ function clearSecret(k) {
 
 const backupKeys = mountBackupKeys($('moreKeys'), $('addKey'));
 
+// A model picker: the known models are options, a name saved earlier (or typed under "Other…") is added so it still shows.
+const OTHER = '__other';
+function modelOption(sel, value, label) {
+  if ([...sel.options].some((o) => o.value === value)) return;
+  const o = new Option(label || value, value);
+  sel.insertBefore(o, sel.querySelector(`option[value="${OTHER}"]`));
+}
+for (const sel of document.querySelectorAll('select[data-models]')) {
+  for (const pair of sel.dataset.models.split(';')) {
+    const [value, label] = pair.split('|');
+    sel.add(new Option(label, value));
+  }
+  sel.add(new Option('Other… (type a model name)', OTHER));
+  let prev = sel.value;
+  sel.addEventListener('change', () => {
+    if (sel.value !== OTHER) return void (prev = sel.value);
+    const name = (prompt('Model name, for example gemini-3.5-flash') || '').trim();
+    if (name) {
+      modelOption(sel, name);
+      sel.value = name;
+    } else sel.value = prev;
+    prev = sel.value;
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+function setValue(f, v) {
+  if (f.dataset.models && v) modelOption(f, String(v));
+  f.value = v;
+}
+
 function read() {
   const s = {};
   for (const k of FIELDS) {
@@ -145,7 +175,7 @@ function fill(s) {
       stored[k] = s[k] || '';
       f.value = '';
     } else if (f.type === 'checkbox') f.checked = !!s[k];
-    else f.value = s[k] ?? '';
+    else setValue(f, s[k] ?? '');
   }
   $('peopleDirectory')?.dispatchEvent(new Event('dir-refresh')); // the people table shows the new text
   $('shareList')?.dispatchEvent(new Event('rec-refresh')); // and the recipients table
@@ -772,7 +802,7 @@ chrome.storage.onChanged.addListener(async (changes) => {
       stored[k] = fresh[k] || '';
       renderSecret(k);
     } else if (f.type === 'checkbox') f.checked = !!fresh[k];
-    else f.value = fresh[k];
+    else setValue(f, fresh[k]);
     loaded[k] = fresh[k];
   }
   $('shareAuto').checked = fresh.shareMode === 'auto';

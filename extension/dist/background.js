@@ -597,6 +597,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -814,7 +818,19 @@
   var ICON_IDLE = { 16: "icons/icon16.png", 32: "icons/icon32.png", 48: "icons/icon48.png" };
   var ICON_GLOW = { 16: "icons/icon16-glow.png", 32: "icons/icon32-glow.png", 48: "icons/icon48-glow.png" };
   var setIcon = (tabId, glow) => quiet(chrome.action.setIcon({ tabId, path: glow ? ICON_GLOW : ICON_IDLE }));
+  var hideRecIcon = false;
+  try {
+    getSettings().then((s) => hideRecIcon = !!s.hideRecIcon, () => {
+    });
+    chrome.storage.onChanged?.addListener((c, area) => {
+      if (area === "local" && c.settings) hideRecIcon = !!c.settings.newValue?.hideRecIcon;
+    });
+    chrome.storage.local.get("limitsFixed").then(({ limitsFixed }) => limitsFixed ? 0 : chrome.storage.local.remove("learnedLimits").then(() => chrome.storage.local.set({ limitsFixed: true })), () => {
+    });
+  } catch {
+  }
   var setBadge = (tabId, text, color) => {
+    if (hideRecIcon && text && text !== "!") text = "";
     const t = tabId == null ? {} : { tabId };
     if (color) quiet(chrome.action.setBadgeBackgroundColor({ ...t, color }));
     quiet(chrome.action.setBadgeText({ ...t, text }));
@@ -831,7 +847,7 @@
     glowPhase = false;
   }
   function startGlow(tabId) {
-    if (glowTabs.has(tabId)) return;
+    if (hideRecIcon || glowTabs.has(tabId)) return;
     if (!glowTimer) glowPhase = true;
     glowTabs.add(tabId);
     setIcon(tabId, glowPhase);

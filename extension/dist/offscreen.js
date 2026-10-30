@@ -79,7 +79,7 @@
     if (!res) return record(e2);
     res.clone().text().then((t) => {
       if (e2.rl && model !== "-") coolDown(model, cooldownFor(t));
-      record({ ...e2, learned: learnLimit(t) });
+      record({ ...e2, learned: /PerDay|per day|daily/i.test(t) ? learnLimit(t) : null });
     }, () => record(e2));
   }
   async function geminiFetch(url, init, settings, meta2 = {}) {
@@ -418,6 +418,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",

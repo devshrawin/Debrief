@@ -356,7 +356,7 @@
         <div class="rows">
           <div class="trow"><div class="tx"><label for="captureMic">Include my microphone</label><p class="hint" id="captureMic-d">Records your own voice as well as the other participants.</p></div><input type="checkbox" class="sw" role="switch" id="captureMic" aria-describedby="captureMic-d"></div>
           <div class="trow"><div class="tx"><label for="followMeetMute">Pause my mic while muted in Meet</label><p class="hint" id="followMeetMute-d">When you mute yourself in Google Meet, Debrief stops transcribing your side as well.</p></div><input type="checkbox" class="sw" role="switch" id="followMeetMute" aria-describedby="followMeetMute-d"></div>
-          <div class="trow"><div class="tx"><label for="pillOnPage">Show a recording pill on the Meet page</label><p class="hint" id="pillOnPage-d">A small draggable control with the timer, a mic switch and alerts. Off by default so nothing covers the call.</p></div><input type="checkbox" class="sw" role="switch" id="pillOnPage" aria-describedby="pillOnPage-d"></div>
+          <p class="hint">The recording pill and the toolbar recording icon are in Appearance.</p>
           <div class="fld">
             <span class="flabel">Browser permission</span>
             <div class="btnrow"><button type="button" id="grantMic" class="btn">Allow microphone</button><span id="micStatus" class="status" role="status"></span></div>
@@ -461,7 +461,7 @@
         <div class="stack" data-stt="gemini">
           <div class="fld">
             <label for="sttGeminiModel">Model</label>
-            <input id="sttGeminiModel" placeholder="gemini-3.5-transcribe">
+            <select id="sttGeminiModel" data-models="gemini-3.5-transcribe|Gemini 3.5 Transcribe (made for speech, default);gemini-3.8-flash|Gemini 3.8 Flash;gemini-3.7-flash|Gemini 3.7 Flash;gemini-3.6-flash|Gemini 3.6 Flash;gemini-3.5-flash|Gemini 3.5 Flash;gemini-3.5-flash-lite|Gemini 3.5 Flash Lite"></select>
             <label for="sttGeminiChunk" style="margin-top:12px">Piece length</label>
             <select id="sttGeminiChunk">
               <option value="standard">About 2 minutes</option>
@@ -562,7 +562,7 @@
         <div class="stack" data-llm="gemini">
           <div class="fld">
             <label for="geminiModel">Model</label>
-            <input id="geminiModel" placeholder="gemini-3.8-flash">
+            <select id="geminiModel" data-models="gemini-3.8-flash|Gemini 3.8 Flash (default);gemini-3.7-flash|Gemini 3.7 Flash;gemini-3.6-flash|Gemini 3.6 Flash;gemini-3.5-flash|Gemini 3.5 Flash;gemini-3.5-flash-lite|Gemini 3.5 Flash Lite"></select>
             <p class="hint">Uses the Gemini key from the Get started page. If this model's daily quota runs out, Debrief tries other Gemini models.</p>
           </div>
         </div>
@@ -819,7 +819,8 @@
         <section class="card">
           <label for="usageLimits" class="lbl" style="margin:0">Daily limits</label>
           <textarea id="usageLimits" class="mono" placeholder="gemini-3.8-flash=20" rows="5"></textarea>
-          <p class="hint">One <code>model=requests per day</code> per line. Debrief also learns limits from Google's quota errors, and warns you in the popup at 80%.</p>
+          <p class="hint">One <code>model=requests per day</code> per line. Debrief also learns limits from Google's quota errors, and warns you in the popup at 80%. Days roll over at midnight Pacific time, which is about 12:30 pm in India.</p>
+          <div class="trow"><div class="tx"><label for="quotaWarnings">Warn me when a model is near its daily limit</label><p class="hint" id="quotaWarnings-d">Turn off if your key is on a paid plan with no daily limit.</p></div><input type="checkbox" class="sw" role="switch" id="quotaWarnings" aria-describedby="quotaWarnings-d" checked></div>
         </section>
         <section class="card">
           <label for="usagePrices" class="lbl" style="margin:0">Prices for "cost if paid"</label>
@@ -863,6 +864,12 @@
         </div>
         <div class="trow"><div class="tx"><label for="uiPanel">Open Debrief as a floating glass panel</label><p class="hint" id="uiPanel-d">The toolbar button opens Debrief on top of the page, so the page shows through the glass. Off uses Chrome's own popup window, which cannot be see-through. Chrome's own pages always use that window.</p></div><input type="checkbox" class="sw" role="switch" id="uiPanel" aria-describedby="uiPanel-d" checked></div>
         <div class="trow"><div class="tx"><label for="uiEffects">Animated borders, orbs and sliding highlights</label><p class="hint" id="uiEffects-d">The glowing border on search and recording, the thinking orb while Debrief works, and the sliding highlight on tabs. Off keeps everything still and shows the same information plainly.</p></div><input type="checkbox" class="sw" role="switch" id="uiEffects" aria-describedby="uiEffects-d" checked></div>
+      </section>
+
+      <section class="card" aria-labelledby="hRec">
+        <h2 id="hRec" class="lbl">While recording</h2>
+        <div class="trow"><div class="tx"><label for="pillOnPage">Show the recording pill on the Meet page</label><p class="hint" id="pillOnPage-d">A small draggable control with the timer, a mic switch and alerts. Off keeps the call page clear; recording still works.</p></div><input type="checkbox" class="sw" role="switch" id="pillOnPage" aria-describedby="pillOnPage-d"></div>
+        <div class="trow"><div class="tx"><label for="hideRecIcon">Hide the recording icon on the toolbar</label><p class="hint" id="hideRecIcon-d">No glowing icon during a call and no REC badge while recording. Problems still show a "!" so you do not miss them.</p></div><input type="checkbox" class="sw" role="switch" id="hideRecIcon" aria-describedby="hideRecIcon-d"></div>
       </section>
     </section>
 

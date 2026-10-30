@@ -24,7 +24,18 @@ const TIP_ATTN = 'Debrief needs attention';
 const ICON_IDLE = { 16: 'icons/icon16.png', 32: 'icons/icon32.png', 48: 'icons/icon48.png' };
 const ICON_GLOW = { 16: 'icons/icon16-glow.png', 32: 'icons/icon32-glow.png', 48: 'icons/icon48-glow.png' };
 const setIcon = (tabId, glow) => quiet(chrome.action.setIcon({ tabId, path: glow ? ICON_GLOW : ICON_IDLE }));
+// "Hide the recording icon" (Settings → Appearance): no glow and no call/REC badge; the "!" badge still shows.
+let hideRecIcon = false;
+try {
+  getSettings().then((s) => (hideRecIcon = !!s.hideRecIcon), () => {});
+  chrome.storage.onChanged?.addListener((c, area) => {
+    if (area === 'local' && c.settings) hideRecIcon = !!c.settings.newValue?.hideRecIcon;
+  });
+  // limits learned before 1.1.3 may be per-minute numbers taken for daily ones; they are learned again from real daily errors
+  chrome.storage.local.get('limitsFixed').then(({ limitsFixed }) => (limitsFixed ? 0 : chrome.storage.local.remove('learnedLimits').then(() => chrome.storage.local.set({ limitsFixed: true }))), () => {});
+} catch {}
 const setBadge = (tabId, text, color) => {
+  if (hideRecIcon && text && text !== '!') text = '';
   const t = tabId == null ? {} : { tabId };
   if (color) quiet(chrome.action.setBadgeBackgroundColor({ ...t, color }));
   quiet(chrome.action.setBadgeText({ ...t, text }));
@@ -46,7 +57,7 @@ function endGlowTimer() {
   glowPhase = false;
 }
 function startGlow(tabId) {
-  if (glowTabs.has(tabId)) return;
+  if (hideRecIcon || glowTabs.has(tabId)) return;
   if (!glowTimer) glowPhase = true; // the first frame is the glow
   glowTabs.add(tabId);
   setIcon(tabId, glowPhase);

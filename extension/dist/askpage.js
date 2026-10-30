@@ -42,6 +42,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -334,7 +338,7 @@
     if (!res) return record(e);
     res.clone().text().then((t) => {
       if (e.rl && model !== "-") coolDown(model, cooldownFor(t));
-      record({ ...e, learned: learnLimit(t) });
+      record({ ...e, learned: /PerDay|per day|daily/i.test(t) ? learnLimit(t) : null });
     }, () => record(e));
   }
   async function geminiFetch(url, init, settings, meta = {}) {
