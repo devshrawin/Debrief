@@ -96,15 +96,8 @@ Older pages and generated markup still use the previous variable names (`--accen
 - **Dialog:** `dialog` and `.dbmodal` in thick glass with a dim backdrop.
 - **Progress:** `<db-orb state size>` next to the status text, which is announced politely.
 
-## Effects layer (`extension/fx/`)
-Built by `npm run build:fx` from `fx/src/` and `third_party/libraries-dev/`.
-
-| Effect | Library | Where | Behaviour |
-|---|---|---|---|
-| Orb | thinking-orbs (engine) | Every "…" status: minutes job, Ask, recovery, sharing, key and connection tests, popup "Finishing" | One state per stage (see `ORB_RULES` in `fx/src/common.js`). Pauses offscreen and on hidden tabs; static under reduced motion |
-| Beam | border-beam | Popup recording card (`pulse-inner`), Start while a call is on (`md` sunset), job card while writing (`md`), Ask box on focus or while answering (`line`), a card while its test runs (`line`) | Static and off when idle. CSS loads only the first time a beam turns on |
-| Goo thumb | liquid-gooey (spring) + vanilla goo | Home/Meetings, Minutes/Transcript, usage range, enrol language | CSS transitions only; zero idle cost |
-| Metal | metal-fx (engine) | Tour wordmark, Start ring while a call is on, "Emailed" badge | WebGL2, lazily loaded; never in lists or the pill; off without WebGL2 or when transparency is reduced |
+## Effects layer
+Removed in 1.2.0 (orbs, beams, goo thumb, liquid metal). `extension/fx/theme.js`, built by `npm run build:fx` from `fx/src/pages/theme.js`, only applies the light / dark choice. Sections below that mention orbs, the colour room or `fx/goo.js` describe the retired glass design.
 
 ## Accessibility rules
 - Text contrast ≥ 4.5:1 over every tier it is allowed on (table above). `test/smoke.mjs` runs axe on every page in light and dark and fails on any serious or critical issue.

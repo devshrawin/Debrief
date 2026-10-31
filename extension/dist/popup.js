@@ -17,7 +17,9 @@
     return Object.values(out).sort((a, b) => b.req - a.req);
   }
   function learnLimit(text) {
-    const s = String(text || "");
+    let s = String(text || "");
+    const parts = s.split(/(?=Quota exceeded for metric)/i);
+    if (parts.length > 1) s = parts.find((x2) => /PerDay|per day|daily/i.test(x2) && /limit:\s*\d+/i.test(x2)) || s;
     const limit = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
     const model = (s.match(/model:\s*([\w.-]+)/i) || [])[1];
     return limit && model ? { model, limit } : null;
@@ -69,7 +71,7 @@
   }
   function nextQuotaReset(now = Date.now()) {
     const today = dayKey(new Date(now));
-    for (let t = now + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
+    for (let t = Math.floor(now / 6e4) * 6e4 + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
     return now + 12 * 36e5;
   }
   function istClock(ms, now = Date.now()) {
@@ -2556,6 +2558,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       })
     );
   }
+  var lastRec = null;
+  var listReady = false;
   async function refresh() {
     const st2 = await getState();
     const recording = st2.recording && !st2.stopping;
@@ -2575,6 +2579,14 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     show("shortcutHint", !st2.recording && !blockedTab);
     show("stop", !!recording);
     show("foot", !st2.stopping && currentPane() !== "paneAsk");
+    if (!st2.recording) {
+      $2("stop").disabled = false;
+      $2("discard").disabled = false;
+    }
+    if (lastRec !== !!st2.recording) {
+      lastRec = !!st2.recording;
+      if (listReady) renderRecent();
+    }
     document.querySelector("#foot .footrow").classList.toggle("hidden", !recording);
     show("live", !!recording);
     show("micRow", !!(recording && st2.mic));
@@ -2898,7 +2910,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       const r = await send({ type: "start", streamId, tabId: tab.id, title: tab.title, url: tab.url, room: currentRoom() });
       if (!r?.ok) throw new Error(r?.error || "unknown error");
     } catch (e) {
-      $2("error").textContent = `Could not start: ${e.message}`;
+      const invoked = /not been invoked|activeTab/i.test(e.message);
+      $2("error").textContent = invoked ? "Chrome only lets Debrief record a tab after you click the Debrief icon on it. Click the icon on this tab, then press Start." : `Could not start: ${e.message}`;
       show("error", true);
     } finally {
       $2("start").disabled = false;
@@ -2955,15 +2968,13 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       chrome.runtime.openOptionsPage();
     };
   }
-  (async () => {
-    const s = await getSettings();
-    const ready = sttReady(s) && llmReady(s);
-    show("setup", !ready);
-    const needGemini = (s.sttProvider === "gemini" || s.llmProvider === "gemini") && !s.geminiKey;
-    $2("setupMsg").textContent = needGemini ? "Add your free Gemini key first." : !sttReady(s) ? "Add your speech-to-text key in Settings." : "Add your minutes writer key in Settings.";
+  var tabKey = "";
+  async function paintTab(s) {
+    s = s || await getSettings();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    tabKey = [tab?.id, tab?.url, tab?.title].join("|");
     const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || "");
-    show("cantRecord", blocked);
+    show("cantRecord", blocked && !(await getState()).recording);
     blockedTab = blocked;
     $2("start").disabled = !sttReady(s) || blocked;
     let host = "";
@@ -2971,6 +2982,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       host = new URL(tab?.url || "").hostname;
     } catch {
     }
+    if (tab?.url !== tabUrl) chosenRoom = null;
     tabUrl = tab?.url || "";
     paintMode();
     $2("tabTitle").textContent = tab?.title || "This tab";
@@ -2979,6 +2991,19 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const meet = !blocked && isMeetingUrl(tabUrl);
     badge.textContent = blocked ? "Can\u2019t record this page" : meet ? "Meeting found" : "Not a meeting link";
     badge.className = `badge ${blocked ? "" : meet ? "ok" : ""}`;
+    $2("platformHint").textContent = platformHint(host);
+    show("platformHint", !!platformHint(host));
+    show("callBanner", false);
+    if (isMeetingSite(host)) detectCall();
+    refresh();
+  }
+  (async () => {
+    const s = await getSettings();
+    const ready = sttReady(s) && llmReady(s);
+    show("setup", !ready);
+    const needGemini = (s.sttProvider === "gemini" || s.llmProvider === "gemini") && !s.geminiKey;
+    $2("setupMsg").textContent = needGemini ? "Add your free Gemini key first." : !sttReady(s) ? "Add your speech-to-text key in Settings." : "Add your minutes writer key in Settings.";
+    await paintTab(s);
     const paintMicPre = (on) => {
       $2("micPre").setAttribute("aria-checked", String(on));
       $2("micPreHint").textContent = on ? "Your voice goes into the transcript as well as the call." : "Only the call is recorded.";
@@ -2992,8 +3017,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     };
     const langs = (chosenLanguages(s) || []).map((l3) => l3.name);
     $2("langLine").textContent = langs.length ? `Spoken in this meeting: ${langs.join(", ")}` : "Languages: automatic";
-    $2("platformHint").textContent = platformHint(host);
-    show("platformHint", !!platformHint(host));
     const syncOnline = () => show("offline", !navigator.onLine);
     syncOnline();
     addEventListener("online", syncOnline);
@@ -3003,7 +3026,20 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     await refresh();
     usageWarning();
     await renderRecent();
-    if (isMeetingSite(host)) detectCall();
-    setInterval(refresh, 1e3);
+    listReady = true;
+    let listTimer = null;
+    chrome.storage.onChanged.addListener((c, area) => {
+      if (area !== "local" || !Object.keys(c).some((k2) => k2 === "meetingIds" || k2.startsWith("meeting:"))) return;
+      clearTimeout(listTimer);
+      listTimer = setTimeout(renderRecent, 300);
+    });
+    setInterval(async () => {
+      refresh();
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if ([tab?.id, tab?.url, tab?.title].join("|") !== tabKey) paintTab();
+      } catch {
+      }
+    }, 1e3);
   })();
 })();

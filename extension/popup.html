@@ -104,7 +104,7 @@
 
     #live { display: flex; flex-direction: column; gap: 16px; }
     .tx { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.5; }
-    .tx .ln { display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
+    .tx .ln { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; overflow-wrap: anywhere; }
     .tx .who { color: var(--tint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .psteps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -142,6 +142,9 @@
     #discard { background: transparent; min-height: 36px; font: var(--t-footnote); color: var(--label-2); text-decoration: underline; padding: 4px 8px; align-self: center; }
     #discard[data-sure="1"] { color: var(--red); font-weight: 600; }
     kbd { white-space: nowrap; }
+    /* keyboard focus ring: these controls reset box-shadow above, which would otherwise hide the global focus ring */
+    .tabs button:focus-visible, .seg-ctl > button:focus-visible, button.sw:focus-visible { outline: 2px solid var(--tint); outline-offset: -3px; box-shadow: none; }
+    button.sw:focus-visible { outline-offset: 2px; }
   </style>
 </head>
 <body class="popup">

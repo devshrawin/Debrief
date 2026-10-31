@@ -16,7 +16,7 @@ Before 1.0 the leading `0.` stays until the owner decides the product is ready f
 
 1. Decide the number (table above). Bump it in `extension/manifest.json` and `package.json`.
 2. Add a line to `CHANGELOG.md` under that version, with the date.
-3. `npm test` and the three Chrome tests (`chrome-smoke`, `chrome-glass`, `chrome-panel`) must pass.
+3. `npm test` and the three Chrome tests (`chrome-smoke`, `chrome-meet`, `chrome-sidepanel`) must pass.
 4. `npm run share` builds `release/<YYYY-MM-DD>/Debrief-v<version>.zip`. That one file is what gets sent to people.
 5. `release/` keeps one folder per date. Delete older folders when asked; never leave loose zips or staging folders in `release/`.
 6. Tag the commit `v<version>` when the owner has said the release is final.

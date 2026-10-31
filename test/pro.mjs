@@ -57,6 +57,14 @@ await test('usage: summarize spans days, old days are pruned', () => {
 await test('usage: limits are learned from quota errors, typed limits parse, 80% warning', () => {
   assert.deepEqual(U.learnLimit('Quota exceeded for metric: x, limit: 20, model: gemini-3.8-flash Please retry in 18h'), { model: 'gemini-3.8-flash', limit: 20 });
   assert.equal(U.learnLimit('some other error'), null);
+  // a reply listing both a per-minute and a per-day quota learns the per-day one
+  assert.deepEqual(U.learnLimit('* Quota exceeded for metric: a, limit: 5, model: m, quotaId: GenerateRequestsPerMinutePerProjectPerModel\n* Quota exceeded for metric: a, limit: 20, model: m, quotaId: GenerateRequestsPerDayPerProjectPerModel'), { model: 'm', limit: 20 });
+  // the reset is exactly midnight Pacific, also on DST days and from a time that is not on a whole minute
+  for (const d of ['2026-03-08T05:00:00Z', '2026-03-08T09:30:00Z', '2026-11-01T06:30:00Z', '2026-11-01T07:30:00Z', '2026-11-02T07:59:30Z']) {
+    const r = U.nextQuotaReset(Date.parse(d));
+    assert.ok(r > Date.parse(d) && r - Date.parse(d) <= 25 * 3600000);
+    assert.equal(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(r), '00:00:00');
+  }
   assert.deepEqual(U.parseLimits('gemini-3.8-flash=20\nbad line\nm2: 50'), { 'gemini-3.8-flash': 20, m2: 50 });
   const now = new Date('2026-10-13T20:00:00Z');
   const u = U.addEntry({}, { provider: 'gemini', model: 'gemini-3.8-flash', kind: 'llm', req: 17 }, now);

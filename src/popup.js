@@ -77,6 +77,8 @@ function paintLive(m) {
   );
 }
 
+let lastRec = null;
+let listReady = false;
 async function refresh() {
   const st = await getState();
   const recording = st.recording && !st.stopping;
@@ -96,6 +98,16 @@ async function refresh() {
   show('shortcutHint', !st.recording && !blockedTab);
   show('stop', !!recording);
   show('foot', !st.stopping && currentPane() !== 'paneAsk');
+  if (!st.recording) {
+    // ready for the next recording: Stop and Discard were disabled by the last tap
+    $('stop').disabled = false;
+    $('discard').disabled = false;
+  }
+  // the meeting list marks the live meeting (no delete button), so redraw it when recording starts or ends
+  if (lastRec !== !!st.recording) {
+    lastRec = !!st.recording;
+    if (listReady) renderRecent();
+  }
   document.querySelector('#foot .footrow').classList.toggle('hidden', !recording);
   show('live', !!recording);
   show('micRow', !!(recording && st.mic));
@@ -443,7 +455,8 @@ $('start').onclick = async () => {
     const r = await send({ type: 'start', streamId, tabId: tab.id, title: tab.title, url: tab.url, room: currentRoom() });
     if (!r?.ok) throw new Error(r?.error || 'unknown error');
   } catch (e) {
-    $('error').textContent = `Could not start: ${e.message}`;
+    const invoked = /not been invoked|activeTab/i.test(e.message);
+    $('error').textContent = invoked ? 'Chrome only lets Debrief record a tab after you click the Debrief icon on it. Click the icon on this tab, then press Start.' : `Could not start: ${e.message}`;
     show('error', true);
   } finally {
     $('start').disabled = false;
@@ -509,21 +522,21 @@ for (const id of ['openSettings', 'openSettings1']) {
   };
 }
 
-(async () => {
-  const s = await getSettings();
-  const ready = sttReady(s) && llmReady(s);
-  show('setup', !ready);
-  const needGemini = (s.sttProvider === 'gemini' || s.llmProvider === 'gemini') && !s.geminiKey;
-  $('setupMsg').textContent = needGemini ? 'Add your free Gemini key first.' : !sttReady(s) ? 'Add your speech-to-text key in Settings.' : 'Add your minutes writer key in Settings.';
+// The tab Debrief would record. The panel stays open while the person switches tabs, so this is repainted when the active tab changes.
+let tabKey = '';
+async function paintTab(s) {
+  s = s || (await getSettings());
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  tabKey = [tab?.id, tab?.url, tab?.title].join('|');
   const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || '');
-  show('cantRecord', blocked);
+  show('cantRecord', blocked && !(await getState()).recording);
   blockedTab = blocked;
   $('start').disabled = !sttReady(s) || blocked;
   let host = '';
   try {
     host = new URL(tab?.url || '').hostname;
   } catch {}
+  if (tab?.url !== tabUrl) chosenRoom = null;
   tabUrl = tab?.url || '';
   paintMode();
   $('tabTitle').textContent = tab?.title || 'This tab';
@@ -532,6 +545,20 @@ for (const id of ['openSettings', 'openSettings1']) {
   const meet = !blocked && isMeetingUrl(tabUrl);
   badge.textContent = blocked ? 'Can’t record this page' : meet ? 'Meeting found' : 'Not a meeting link';
   badge.className = `badge ${blocked ? '' : meet ? 'ok' : ''}`;
+  $('platformHint').textContent = platformHint(host);
+  show('platformHint', !!platformHint(host));
+  show('callBanner', false);
+  if (isMeetingSite(host)) detectCall();
+  refresh();
+}
+
+(async () => {
+  const s = await getSettings();
+  const ready = sttReady(s) && llmReady(s);
+  show('setup', !ready);
+  const needGemini = (s.sttProvider === 'gemini' || s.llmProvider === 'gemini') && !s.geminiKey;
+  $('setupMsg').textContent = needGemini ? 'Add your free Gemini key first.' : !sttReady(s) ? 'Add your speech-to-text key in Settings.' : 'Add your minutes writer key in Settings.';
+  await paintTab(s);
   const paintMicPre = (on) => {
     $('micPre').setAttribute('aria-checked', String(on));
     $('micPreHint').textContent = on ? 'Your voice goes into the transcript as well as the call.' : 'Only the call is recorded.';
@@ -544,8 +571,6 @@ for (const id of ['openSettings', 'openSettings1']) {
   };
   const langs = (chosenLanguages(s) || []).map((l) => l.name);
   $('langLine').textContent = langs.length ? `Spoken in this meeting: ${langs.join(', ')}` : 'Languages: automatic';
-  $('platformHint').textContent = platformHint(host);
-  show('platformHint', !!platformHint(host));
   const syncOnline = () => show('offline', !navigator.onLine);
   syncOnline();
   addEventListener('online', syncOnline);
@@ -557,6 +582,18 @@ for (const id of ['openSettings', 'openSettings1']) {
   await refresh();
   usageWarning();
   await renderRecent();
-  if (isMeetingSite(host)) detectCall();
-  setInterval(refresh, 1000);
+  listReady = true;
+  let listTimer = null;
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area !== 'local' || !Object.keys(c).some((k) => k === 'meetingIds' || k.startsWith('meeting:'))) return;
+    clearTimeout(listTimer);
+    listTimer = setTimeout(renderRecent, 300);
+  });
+  setInterval(async () => {
+    refresh();
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if ([tab?.id, tab?.url, tab?.title].join('|') !== tabKey) paintTab();
+    } catch {}
+  }, 1000);
 })();

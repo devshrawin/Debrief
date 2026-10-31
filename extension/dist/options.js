@@ -400,7 +400,9 @@
     return Object.values(out).sort((a, b) => b.req - a.req);
   }
   function learnLimit(text) {
-    const s = String(text || "");
+    let s = String(text || "");
+    const parts = s.split(/(?=Quota exceeded for metric)/i);
+    if (parts.length > 1) s = parts.find((x2) => /PerDay|per day|daily/i.test(x2) && /limit:\s*\d+/i.test(x2)) || s;
     const limit = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
     const model = (s.match(/model:\s*([\w.-]+)/i) || [])[1];
     return limit && model ? { model, limit } : null;
@@ -473,7 +475,7 @@
   }
   function nextQuotaReset(now = Date.now()) {
     const today = dayKey(new Date(now));
-    for (let t = now + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
+    for (let t = Math.floor(now / 6e4) * 6e4 + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
     return now + 12 * 36e5;
   }
   function istClock(ms, now = Date.now()) {
