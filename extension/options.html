@@ -50,7 +50,7 @@
     /* ---- rows and fields ---- */
     .stack { display: flex; flex-direction: column; gap: 16px; }
     .rows { display: flex; flex-direction: column; }
-    .rows > * + *, .card .rows > * + * { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+    .rows > * + * { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
     .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
     .fld > label, .fld > .flabel, .flabel, .trow label, .lbl-l { margin: 0; font-weight: 600; }
     .fld .opt { font-weight: 400; color: var(--muted); font-size: 12.5px; }
@@ -227,7 +227,6 @@
     .rec-table { display: flex; flex-direction: column; gap: 6px; }
     .rec-row { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(160px, 1fr) 32px; gap: 8px; align-items: center; }
     .rec-row.one { grid-template-columns: 1fr 32px; }
-    @media (max-width: 520px) { .rec-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 32px; } .rec-row.one { grid-template-columns: minmax(0, 1fr) 32px; } }
     .rec-head { font: var(--t-caption); font-weight: 600; color: var(--label-2); padding: 0 2px; }
     .rec-in { width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; }
     .rec-in[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--rec); }
@@ -257,8 +256,8 @@
     .savebar.bad #msg { color: var(--rec-ink); }
 
     @media (max-width: 760px) {
-      .shell { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
-      .side { position: static; flex: none; width: auto; height: auto; overflow: visible; padding: 14px 16px 6px; }
+      .shell { flex-direction: column; align-items: stretch; }
+      .side { position: static; flex: none; width: 100%; height: auto; overflow: visible; padding: 14px 16px 6px; }
       .nav { flex-direction: row; flex-wrap: wrap; }
       .nav button { width: auto; }
       .side .foot { flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
@@ -836,7 +835,7 @@
     </section>
 
     <section class="page" id="page-appearance">
-      <header><h1>Appearance</h1><p class="lede">How Debrief looks. It applies at once, on every Debrief page, and is kept on this computer.</p></header>
+      <header><h1>Appearance</h1><p class="lede">How Debrief looks and moves. These apply at once, on every Debrief page, and are kept on this computer.</p></header>
 
       <section class="card" aria-labelledby="hTheme">
         <h2 id="hTheme" class="lbl">Colour</h2>
@@ -851,8 +850,24 @@
         </div>
       </section>
 
-      <section class="card" aria-labelledby="hRecLook">
-        <h2 id="hRecLook" class="lbl">While recording</h2>
+      <section class="card" aria-labelledby="hGlass">
+        <h2 id="hGlass" class="lbl">Glass and motion</h2>
+        <div class="trow"><div class="tx"><label for="uiSolid">Reduce transparency</label><p class="hint" id="uiSolid-d">Solid surfaces instead of frosted glass and the colour field behind. Easier to read on a busy background and lighter on an older computer.</p></div><input type="checkbox" class="sw" role="switch" id="uiSolid" aria-describedby="uiSolid-d"></div>
+        <div class="fld">
+          <span class="lab" id="uiMotionLab">Moving background</span>
+          <div class="seg-ctl" id="uiMotion" role="radiogroup" aria-labelledby="uiMotionLab">
+            <button type="button" role="radio" data-v="off" aria-checked="false">Off</button>
+            <button type="button" role="radio" data-v="calm" aria-checked="false">Calm</button>
+            <button type="button" role="radio" data-v="lively" aria-checked="true">Lively</button>
+          </div>
+          <p class="hint">The colours behind everything drift: slowly in Calm, clearly in Lively. Off holds still. Your computer's "reduce motion" setting always wins.</p>
+        </div>
+        <div class="trow"><div class="tx"><label for="uiPanel">Open Debrief as a floating glass panel</label><p class="hint" id="uiPanel-d">The toolbar button opens Debrief on top of the page, so the page shows through the glass. Off uses Chrome's own popup window, which cannot be see-through. Chrome's own pages always use that window.</p></div><input type="checkbox" class="sw" role="switch" id="uiPanel" aria-describedby="uiPanel-d" checked></div>
+        <div class="trow"><div class="tx"><label for="uiEffects">Animated borders, orbs and sliding highlights</label><p class="hint" id="uiEffects-d">The glowing border on search and recording, the thinking orb while Debrief works, and the sliding highlight on tabs. Off keeps everything still and shows the same information plainly.</p></div><input type="checkbox" class="sw" role="switch" id="uiEffects" aria-describedby="uiEffects-d" checked></div>
+      </section>
+
+      <section class="card" aria-labelledby="hRec">
+        <h2 id="hRec" class="lbl">While recording</h2>
         <div class="trow"><div class="tx"><label for="pillOnPage">Show the recording pill on the Meet page</label><p class="hint" id="pillOnPage-d">A small draggable control with the timer, a mic switch and alerts. Off keeps the call page clear; recording still works.</p></div><input type="checkbox" class="sw" role="switch" id="pillOnPage" aria-describedby="pillOnPage-d"></div>
         <div class="trow"><div class="tx"><label for="hideRecIcon">Hide the recording icon on the toolbar</label><p class="hint" id="hideRecIcon-d">No glowing icon during a call and no REC badge while recording. Problems still show a "!" so you do not miss them.</p></div><input type="checkbox" class="sw" role="switch" id="hideRecIcon" aria-describedby="hideRecIcon-d"></div>
       </section>

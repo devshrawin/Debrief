@@ -1,6 +1,6 @@
 {
   "name": "debrief",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Chrome extension: Google Meet -> Hindi/English transcript -> MOM",
   "scripts": {
     "build": "node build.mjs && node scripts/build-fx.mjs",
@@ -9,7 +9,7 @@
     "share": "node scripts/zip.mjs share",
     "pack": "node scripts/zip.mjs pack",
     "src-zip": "node scripts/zip.mjs src",
-    "test": "node test/run.mjs && node test/pro-contrast.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice-clips.mjs && node test/pro-room.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs && node test/pro-relay.mjs && node test/pro-mix.mjs && node test/pro-jobs.mjs && node test/pro-mdedit.mjs && node test/pro-dirtable.mjs && node test/pro-recipients.mjs && node test/pro-plain.mjs && node test/pro-sttclean.mjs && node test/pro-coverage.mjs && node test/pro-offscreen.mjs && node test/pro-stt-script.mjs",
+    "test": "node test/run.mjs && node test/pro.mjs && node test/pro-names.mjs && node test/pro-share.mjs && node test/pro-meet.mjs && node test/qa.mjs && node test/pro-bg.mjs && node test/pro-ask.mjs && node test/pro-voice-logic.mjs && node test/pro-voice-learn.mjs && node test/pro-voice-clips.mjs && node test/pro-room.mjs && node test/pro-voice.mjs && node test/pro-amnex.mjs && node test/pro-relay.mjs && node test/pro-mix.mjs && node test/pro-jobs.mjs && node test/pro-mdedit.mjs && node test/pro-dirtable.mjs && node test/pro-recipients.mjs && node test/pro-plain.mjs && node test/pro-sttclean.mjs && node test/pro-coverage.mjs && node test/pro-offscreen.mjs && node test/pro-stt-script.mjs",
     "build:fx": "node scripts/build-fx.mjs",
     "build:app": "node build.mjs"
   },

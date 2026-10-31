@@ -8,6 +8,6 @@ Debrief: install (3 minutes)
    Started a recording by mistake? Use "Discard this recording" in the same panel: nothing is transcribed or kept.
 
 Good to know
-- The Debrief button opens Chrome's side panel, on every page. It stays open while you click the page or switch tabs.
-- Settings > Appearance has the theme (match my computer / light / dark), the on-page recording pill and the toolbar recording icon.
+- The Debrief button opens a floating glass panel over the page. If you prefer Chrome's own popup, turn it off in Settings > Appearance.
+- Settings > Appearance also has theme (light / dark), reduce transparency and moving-background speed.
 - Needs Chrome 116 or newer. Tell people on the call that you are recording.

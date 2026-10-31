@@ -2,15 +2,21 @@ import { nearLimit, parseLimits, quotaCheck, nextQuotaReset, istClock } from './
 import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { getSettings, setSetting, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
-import { chosenLanguages } from './languages.js';
-import { mountAsk } from './askui.js';
-import { parseDictionary } from './dictionary.js';
 
 const $ = (id) => document.getElementById(id);
 
-// Debrief lives in Chrome's side panel: it stays open while you click the page, switch tabs or record, so nothing here closes it.
-const closePanel = () => {};
-document.documentElement.classList.add('in-side');
+// Opened inside the floating panel on a web page (src/panel.js), the popup is an iframe: it cannot close itself, so it asks
+// the panel, and it tells the panel when it is ready and how tall it is.
+const framed = window.top !== window;
+const tell = (m) => { if (framed) window.parent.postMessage({ debriefPanel: true, ...m }, '*'); };
+const closePanel = () => (framed ? tell({ type: 'close' }) : window.close());
+if (framed) {
+  tell({ type: 'ready' });
+  const size = () => tell({ type: 'size', h: Math.ceil(Math.max(document.body.scrollHeight, document.body.getBoundingClientRect().height)) });
+  new ResizeObserver(size).observe(document.body);
+  for (const ms of [150, 600, 1500]) setTimeout(size, ms); // content that arrives after the first paint
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') tell({ type: 'close' }); });
+}
 const send = (msg) => chrome.runtime.sendMessage({ target: 'bg', ...msg });
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
@@ -34,81 +40,22 @@ function whenOf(m) {
 }
 const openMinutes = (id) => chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${id}`) });
 
-const currentPane = () => document.querySelector('#tabs [role=tab][aria-selected=true]')?.dataset.pane || 'paneRec';
-
-// The line under "Debrief": what it is doing right now.
-async function paintContext(st) {
-  const el = $('ctx');
-  const s = await getSettings();
-  const langs = (chosenLanguages(s) || []).map((l) => l.name);
-  const provider = s.sttProvider === 'gemini' ? 'Gemini' : s.sttProvider || '';
-  let text = 'Ready';
-  let cls = 'ctx';
-  if (st.stopping) text = 'Writing minutes';
-  else if (st.recording) {
-    text = st.paused ? 'Paused' : 'Recording';
-    cls = 'ctx rec';
-  } else if (!navigator.onLine) text = 'Offline';
-  else if (!sttReady(s) || !llmReady(s)) {
-    text = 'No key yet';
-    cls = 'ctx warn';
-  } else text = ['Ready', provider, langs.slice(0, 3).join(', ')].filter(Boolean).join(' · ');
-  el.textContent = text;
-  el.className = cls;
-}
-
-// The last three lines of the live transcript.
-function paintLive(m) {
-  const box = $('txLines');
-  const segs = (m?.segments || []).slice(-3);
-  if (!segs.length) return;
-  box.replaceChildren(
-    ...segs.map((g) => {
-      const ln = document.createElement('div');
-      ln.className = 'ln';
-      const who = document.createElement('span');
-      who.className = 'who';
-      who.textContent = g.speaker || (g.src === 'mic' ? 'You' : 'Call');
-      const t = document.createElement('span');
-      t.textContent = g.text;
-      ln.append(who, t);
-      return ln;
-    })
-  );
-}
-
-let lastRec = null;
-let listReady = false;
 async function refresh() {
   const st = await getState();
   const recording = st.recording && !st.stopping;
   show('idleView', !st.recording);
   show('recView', !!recording);
   show('finView', !!st.stopping);
-  paintContext(st);
-  show('cantRecord', blockedTab && !st.recording);
   $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.paused ? 'Paused' : st.room ? 'Recording the room' : 'Recording') : 'Idle';
   show('pause', !!recording);
   show('fullscreen', !!recording);
-  $('pause').textContent = st.paused ? 'Resume' : 'Pause';
+  $('pause').textContent = st.paused ? 'Resume recording' : 'Pause recording';
   $('pause').setAttribute('aria-pressed', String(!!st.paused));
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
   show('start', !st.recording);
   show('modeBox', !st.recording && !blockedTab);
   show('shortcutHint', !st.recording && !blockedTab);
   show('stop', !!recording);
-  show('foot', !st.stopping && currentPane() !== 'paneAsk');
-  if (!st.recording) {
-    // ready for the next recording: Stop and Discard were disabled by the last tap
-    $('stop').disabled = false;
-    $('discard').disabled = false;
-  }
-  // the meeting list marks the live meeting (no delete button), so redraw it when recording starts or ends
-  if (lastRec !== !!st.recording) {
-    lastRec = !!st.recording;
-    if (listReady) renderRecent();
-  }
-  document.querySelector('#foot .footrow').classList.toggle('hidden', !recording);
   show('live', !!recording);
   show('micRow', !!(recording && st.mic));
   const wanted = !!(st.micWanted ?? st.micOn);
@@ -142,12 +89,11 @@ async function refresh() {
     const n = m?.segments.length || 0;
     const errs = m?.errors.length || 0;
     const info = $('segInfo');
-    const gaps = (m?.gaps || []).length;
-    const spans = [`${n} piece${n === 1 ? '' : 's'}`, errs || gaps ? `${errs + gaps} problem${errs + gaps === 1 ? '' : 's'}` : 'no gaps'];
+    const spans = [pieces(n), `${errs} error${errs === 1 ? '' : 's'}`];
+    if (!n) spans.push('First one lands after about 2 to 3 min.');
     info.replaceChildren(...spans.map((t) => Object.assign(document.createElement('span'), { textContent: t })));
-    paintLive(m);
     info.title = errs ? 'Failed chunks are kept and can be retried from the minutes page.' : '';
-    if (st.stopping) $('finInfo').textContent = `${pieces(n)} so far. The minutes take about 30 s. You can keep working: nothing is lost if you close this panel.`;
+    if (st.stopping) $('finInfo').textContent = `${pieces(n)} so far. Then the minutes are written, about 30 s. You can close this popup.`;
     $('finOpen').onclick = (e) => {
       e.preventDefault();
       openMinutes(st.meetingId);
@@ -300,21 +246,6 @@ function selectTab(b) {
     x.tabIndex = x === b ? 0 : -1;
   });
   document.querySelectorAll('[role=tabpanel]').forEach((p) => (p.hidden = p.id !== b.dataset.pane));
-  if (b.dataset.pane === 'paneAsk') mountAskOnce();
-  refresh();
-}
-let askMounted = false;
-async function mountAskOnce() {
-  if (askMounted) return;
-  askMounted = true;
-  const settings = await getSettings();
-  mountAsk($('askBox'), {
-    getMeetings: () => listMeetings(),
-    getCtx: () => ({ entries: parseDictionary(settings.dictionary), attendees: [], learned: (settings.learnedNames || []).slice(-40), myName: settings.myName }),
-    openLink: true,
-    placeholder: 'e.g. "What did we decide about the budget?"',
-    suggestions: ['What action items are still open?', 'What did we decide about the budget?', 'Which risks came up recently?'],
-  });
 }
 document.querySelectorAll('#tabs [role=tab]').forEach((b) => {
   b.onclick = () => selectTab(b);
@@ -402,10 +333,7 @@ $('askAll').onclick = (e) => {
   e.preventDefault();
   chrome.tabs.create({ url: chrome.runtime.getURL('ask.html') });
 };
-$('langChange').onclick = (e) => {
-  e.preventDefault();
-  chrome.runtime.openOptionsPage();
-};
+$('askHome').onclick = $('askAll').onclick;
 
 $('alertX').onclick = () => send({ type: 'dismiss-alert' }).then(refresh);
 $('alertAction').onclick = (e) => {
@@ -455,8 +383,7 @@ $('start').onclick = async () => {
     const r = await send({ type: 'start', streamId, tabId: tab.id, title: tab.title, url: tab.url, room: currentRoom() });
     if (!r?.ok) throw new Error(r?.error || 'unknown error');
   } catch (e) {
-    const invoked = /not been invoked|activeTab/i.test(e.message);
-    $('error').textContent = invoked ? 'Chrome only lets Debrief record a tab after you click the Debrief icon on it. Click the icon on this tab, then press Start.' : `Could not start: ${e.message}`;
+    $('error').textContent = `Could not start: ${e.message}`;
     show('error', true);
   } finally {
     $('start').disabled = false;
@@ -522,55 +449,25 @@ for (const id of ['openSettings', 'openSettings1']) {
   };
 }
 
-// The tab Debrief would record. The panel stays open while the person switches tabs, so this is repainted when the active tab changes.
-let tabKey = '';
-async function paintTab(s) {
-  s = s || (await getSettings());
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  tabKey = [tab?.id, tab?.url, tab?.title].join('|');
-  const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || '');
-  show('cantRecord', blocked && !(await getState()).recording);
-  blockedTab = blocked;
-  $('start').disabled = !sttReady(s) || blocked;
-  let host = '';
-  try {
-    host = new URL(tab?.url || '').hostname;
-  } catch {}
-  if (tab?.url !== tabUrl) chosenRoom = null;
-  tabUrl = tab?.url || '';
-  paintMode();
-  $('tabTitle').textContent = tab?.title || 'This tab';
-  $('tabHost').textContent = host || (blocked ? 'A Chrome page' : '');
-  const badge = $('tabBadge');
-  const meet = !blocked && isMeetingUrl(tabUrl);
-  badge.textContent = blocked ? 'Can’t record this page' : meet ? 'Meeting found' : 'Not a meeting link';
-  badge.className = `badge ${blocked ? '' : meet ? 'ok' : ''}`;
-  $('platformHint').textContent = platformHint(host);
-  show('platformHint', !!platformHint(host));
-  show('callBanner', false);
-  if (isMeetingSite(host)) detectCall();
-  refresh();
-}
-
 (async () => {
   const s = await getSettings();
   const ready = sttReady(s) && llmReady(s);
   show('setup', !ready);
   const needGemini = (s.sttProvider === 'gemini' || s.llmProvider === 'gemini') && !s.geminiKey;
   $('setupMsg').textContent = needGemini ? 'Add your free Gemini key first.' : !sttReady(s) ? 'Add your speech-to-text key in Settings.' : 'Add your minutes writer key in Settings.';
-  await paintTab(s);
-  const paintMicPre = (on) => {
-    $('micPre').setAttribute('aria-checked', String(on));
-    $('micPreHint').textContent = on ? 'Your voice goes into the transcript as well as the call.' : 'Only the call is recorded.';
-  };
-  paintMicPre(s.captureMic !== false);
-  $('micPre').onclick = () => {
-    const on = $('micPre').getAttribute('aria-checked') !== 'true';
-    paintMicPre(on);
-    setSetting({ captureMic: on }).catch(() => {});
-  };
-  const langs = (chosenLanguages(s) || []).map((l) => l.name);
-  $('langLine').textContent = langs.length ? `Spoken in this meeting: ${langs.join(', ')}` : 'Languages: automatic';
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const blocked = /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(tab?.url || '');
+  show('cantRecord', blocked);
+  blockedTab = blocked;
+  $('start').disabled = !sttReady(s) || blocked;
+  let host = '';
+  try {
+    host = new URL(tab?.url || '').hostname;
+  } catch {}
+  tabUrl = tab?.url || '';
+  paintMode();
+  $('platformHint').textContent = platformHint(host);
+  show('platformHint', !!platformHint(host));
   const syncOnline = () => show('offline', !navigator.onLine);
   syncOnline();
   addEventListener('online', syncOnline);
@@ -582,18 +479,6 @@ async function paintTab(s) {
   await refresh();
   usageWarning();
   await renderRecent();
-  listReady = true;
-  let listTimer = null;
-  chrome.storage.onChanged.addListener((c, area) => {
-    if (area !== 'local' || !Object.keys(c).some((k) => k === 'meetingIds' || k.startsWith('meeting:'))) return;
-    clearTimeout(listTimer);
-    listTimer = setTimeout(renderRecent, 300);
-  });
-  setInterval(async () => {
-    refresh();
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if ([tab?.id, tab?.url, tab?.title].join('|') !== tabKey) paintTab();
-    } catch {}
-  }, 1000);
+  if (isMeetingSite(host)) detectCall();
+  setInterval(refresh, 1000);
 })();

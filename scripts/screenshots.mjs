@@ -296,10 +296,10 @@ try {
   await store('store-4-ask', `chrome-extension://${id}/ask.html`, `document.querySelector('#askBox input')?.focus()`);
 
   // ---- the popup, as it looks outside a meeting
-  const p = await openPage(`chrome-extension://${id}/popup.html?side=1`, { width: 400, height: 760, scale: 2 });
-  // a side panel opened as a page would see itself as the active tab: pretend the active tab is the meeting
-  await p.evaluate(`chrome.tabs.query = async () => [{ id: 7, title: 'Fare system weekly sync', url: 'https://meet.google.com/abc-defg-hij', active: true }]`);
-  await sleep(1600);
+  const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+  // a popup opened as a page cannot record its own tab: show the idle popup as it looks on a meeting tab
+  await p.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('modeOnline')?.click(); document.getElementById('modeHint').textContent = 'Online meeting: the call is recorded from this tab and your voice from your microphone.'; document.getElementById('start').disabled = false;`);
+  await sleep(500);
   await p.shot('popup', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
 
   // ---- PDF=<dir>: the official and the standard minutes as the print preview makes them (page footer and header included)

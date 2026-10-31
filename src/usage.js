@@ -47,10 +47,7 @@ export function summarize(usage, days = 1, now = new Date()) {
 
 // "limit: 20, model: gemini-3.8-flash" appears in Gemini quota errors.
 export function learnLimit(text) {
-  let s = String(text || '');
-  // a reply can list several exceeded quotas (per minute and per day): learn from the per-day one only
-  const parts = s.split(/(?=Quota exceeded for metric)/i);
-  if (parts.length > 1) s = parts.find((x) => /PerDay|per day|daily/i.test(x) && /limit:\s*\d+/i.test(x)) || s;
+  const s = String(text || '');
   const limit = Number((s.match(/limit:\s*(\d+)/i) || [])[1]);
   const model = (s.match(/model:\s*([\w.-]+)/i) || [])[1];
   return limit && model ? { model, limit } : null;
@@ -175,7 +172,7 @@ export function rupees(usd, usdInr = DEFAULT_USD_INR) {
 // When the daily quota resets: midnight Pacific. Returns the moment as milliseconds.
 export function nextQuotaReset(now = Date.now()) {
   const today = dayKey(new Date(now));
-  for (let t = Math.floor(now / 60000) * 60000 + 60000; t < now + 26 * 3600000; t += 60000) if (dayKey(new Date(t)) !== today) return t;
+  for (let t = now + 60000; t < now + 26 * 3600000; t += 60000) if (dayKey(new Date(t)) !== today) return t;
   return now + 12 * 3600000;
 }
 

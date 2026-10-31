@@ -14,13 +14,13 @@ import { adapterFor } from './adapters/index.js';
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, "Nirmala UI", sans-serif; }
   /* Dark glass that reads over any video: a scrim plus blur, hairline edge, layered shadow */
   .wrap { --ink:#f5f5f7; --dim:#c7c7d1; --line:rgba(255,255,255,.14); --ok:#30d158; --warn:#ffb340; --bad:#ff6961; --tint:#a9a6ff;
-    --glass: rgba(24,24,30,.82); --glass-thick: rgba(24,24,30,.92);
+    --glass: rgba(24,24,30,.72); --glass-thick: rgba(24,24,30,.86);
     display:flex; flex-direction:column; align-items:flex-end; gap:8px; color:var(--ink); -webkit-font-smoothing:antialiased;
     pointer-events:none; } /* the host and wrapper let clicks through to the page; only the pill and panel catch them */
   .wrap > * { pointer-events:auto; }
 
   .pill { position:relative; display:flex; align-items:center; gap:10px; min-height:40px; padding:4px 4px 4px 14px; border-radius:999px;
-    background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(115%); backdrop-filter:blur(20px) saturate(115%);
+    background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(170%); backdrop-filter:blur(20px) saturate(170%);
     border:1px solid var(--line);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 2px 6px rgba(0,0,0,.30), 0 14px 34px -12px rgba(0,0,0,.55);
     font-size:13px; font-weight:600; line-height:1; cursor:grab; user-select:none; white-space:nowrap; touch-action:none;
@@ -59,7 +59,7 @@ import { adapterFor } from './adapters/index.js';
   .mic.paused { background:#ffb340; color:#241500; }
 
   .panel { width:288px; padding:14px 16px 16px; border-radius:20px; color:var(--ink);
-    background:var(--glass-thick); -webkit-backdrop-filter:blur(28px) saturate(115%); backdrop-filter:blur(28px) saturate(115%);
+    background:var(--glass-thick); -webkit-backdrop-filter:blur(36px) saturate(180%); backdrop-filter:blur(36px) saturate(180%);
     border:1px solid var(--line); box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 8px 24px rgba(0,0,0,.4), 0 30px 70px -20px rgba(0,0,0,.7); font-size:12.5px;
     transform-origin: bottom right; animation: pop .28s cubic-bezier(.2,.9,.3,1.1); }
   @keyframes pop { from { opacity:0; transform:scale(.94) translateY(6px); } }
@@ -96,7 +96,7 @@ import { adapterFor } from './adapters/index.js';
   .hint { color:var(--dim); font-size:11.5px; margin-top:8px; line-height:1.45; }
   .hidden { display:none !important; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
-  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .pill, .panel { -webkit-backdrop-filter:none; backdrop-filter:none; background:#1c1c22; } }
+  @media (prefers-reduced-transparency: reduce) { .pill, .panel { -webkit-backdrop-filter:none; backdrop-filter:none; background:#1c1c22; } }
   `;
   const MIC_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
   const MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg>';

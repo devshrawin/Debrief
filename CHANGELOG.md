@@ -1,12 +1,6 @@
 # Changelog
 
-## 1.2.0 — 2026-10-31 (side panel)
-- Debrief now opens in Chrome's side panel from the toolbar button, on every page (also chrome:// and the new-tab page). It stays open while you click the page, switch tabs or record. The floating glass panel and Chrome's square popup are gone.
-- New solid look: opaque surfaces, one accent, light and dark, no blur or animated background; text pairs checked at 4.5:1. The effects layer (orbs, beams, goo, metal) and the Reduce transparency and Glass and motion settings are removed.
-- Panel layout: header that says what Debrief is doing, Home / Meetings / Ask tabs, cards, and a sticky foot (Start, or Pause + Stop and write minutes). Recording shows a live transcript of the last three lines; finishing shows its steps; Ask answers inside the panel.
-- Tests: test/chrome-sidepanel.mjs renders every state at 320, 420 and 600 px in both themes.
-
-## 1.1.3 — 2026-10-30
+## 1.2.2 — 2026-10-31 (the 1.1.3 fixes, renumbered because the store already holds 1.2.1)
 - Settings: the speech and general Gemini model fields are dropdowns (with "Other…" to type a name).
 - Settings → Appearance: "While recording" card with the recording pill (moved from Recording) and a new "Hide the recording icon on the toolbar" switch.
 - Quota warnings: a per-minute 429 was saved as a daily limit and warned every morning; limits are now learned only from per-day errors (old learned limits are cleared once). The warning says when the count starts again (midnight Pacific, about 12:30 pm IST), and Settings → Usage has a switch to turn the warnings off.

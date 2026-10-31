@@ -676,14 +676,46 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   if (st.recording && st.tabId === tabId) stop();
 });
 
-// ---- Chrome's side panel is Debrief's home ----
-// The toolbar button opens the side panel (src/popup.js with ?side=1), on every page including chrome:// and the new-tab page.
-// It stays open while you click the page, switch tabs or record. No popup is set, so nothing else can open instead.
-async function setupSidePanel() {
-  await quiet(chrome.action.setPopup({ popup: '' }));
-  await quiet(chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }));
+// ---- Floating glass panel (src/panel.js) instead of Chrome's popup window, on pages that allow it ----
+// Setting uiPanel (Settings > Appearance, on by default). With no popup set, a click on the toolbar button fires
+// action.onClicked and the panel is injected into the page (activeTab covers it). Pages that cannot be scripted
+// (chrome://, the web store, the new-tab page, PDFs in the viewer) keep the ordinary popup, set per tab.
+const canPanel = (url) => /^(https?|file):/i.test(url || '') && !/^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(url);
+let panelOn = true;
+async function setPopupFor(tabId, url) {
+  if (tabId == null) return;
+  await quiet(chrome.action.setPopup({ tabId, popup: panelOn && canPanel(url) ? '' : 'popup.html' }));
 }
-setupSidePanel();
-chrome.runtime.onStartup?.addListener(setupSidePanel);
-chrome.runtime.onInstalled.addListener(setupSidePanel);
+async function applyPanelMode() {
+  const r = await chrome.storage.local.get('uiPanel').catch(() => ({}));
+  panelOn = r.uiPanel !== false;
+  await quiet(chrome.action.setPopup({ popup: panelOn ? '' : 'popup.html' }));
+  const tabs = await chrome.tabs.query({}).catch(() => []);
+  for (const t of tabs) await setPopupFor(t.id, t.url);
+}
+applyPanelMode();
+chrome.runtime.onStartup?.addListener(applyPanelMode);
+chrome.runtime.onInstalled.addListener(applyPanelMode);
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === 'local' && 'uiPanel' in c) applyPanelMode();
+});
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  if (info.url || info.status === 'loading') setPopupFor(tabId, info.url || tab.url);
+});
+chrome.tabs.onActivated.addListener(({ tabId }) => chrome.tabs.get(tabId).then((t) => setPopupFor(tabId, t.url)).catch(() => {}));
 
+async function openPlainPopup(tabId, windowId) {
+  await quiet(chrome.action.setPopup({ tabId, popup: 'popup.html' }));
+  await quiet(chrome.action.openPopup({ windowId }));
+}
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!canPanel(tab.url)) return openPlainPopup(tab.id, tab.windowId);
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['dist/panel.js'] });
+  } catch {
+    await openPlainPopup(tab.id, tab.windowId);
+  }
+});
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg?.target === 'bg' && msg.type === 'panel-failed' && sender.tab) openPlainPopup(sender.tab.id, sender.tab.windowId);
+});

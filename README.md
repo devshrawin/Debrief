@@ -68,8 +68,8 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 <td width="50%" valign="top"><img src="docs/img/usage.png" alt="Usage page"><br><sub><b>Usage.</b> Requests, tokens and audio per model, and an honest estimate of the free quota left.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/appearance.png" alt="Settings, Appearance: theme and recording icons"><br><sub><b>Appearance.</b> Light, dark or follow the computer; the on-page pill; the toolbar recording icon.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/minutes-dark.png" alt="The minutes page in the dark theme"><br><sub><b>Dark.</b> The same solid surfaces in the dark theme.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/appearance.png" alt="Settings, Appearance: theme, transparency, moving background and effects"><br><sub><b>Appearance.</b> Light, dark or follow the computer; reduce transparency; moving background Off / Calm / Lively; switch the animated effects off.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/minutes-dark.png" alt="The minutes page in the dark theme"><br><sub><b>Dark.</b> The same glass over a darker, moving field of colour.</sub></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><img src="docs/img/tour-key.png" alt="First-run tour"><br><sub><b>Two-step first run.</b> Paste a free Gemini key (tested live), allow the microphone, record.</sub></td>
@@ -81,7 +81,7 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 
 ### The look
 
-Solid, calm and readable: opaque surfaces, one accent colour, light and dark, no blur and no animated background. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md)) follows Apple's Human Interface Guidelines: system type scale, 44 px hit targets, 4.5:1 text contrast. Debrief lives in Chrome's side panel. **Settings → Appearance** sets the theme (light, dark or follow your computer), the on-page recording pill and the toolbar recording icon. Your computer's high-contrast setting is always respected.
+Glass over a slowly moving field of colour. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md)) follows Apple's Human Interface Guidelines: content on opaque reading surfaces, glass only for the frame, system type scale, 44 px hit targets, light and dark. Effects come from [Libraries.dev](https://github.com/Jakubantalik/Libraries.dev) by Jakub Antalik (MIT), ported to plain JavaScript: **thinking orbs** for every wait, the **border beam** on search and question fields and on the recording bar, **liquid** segmented controls, and a **liquid-metal** ring on the Start button during a call. **Settings → Appearance** sets the theme (light, dark or follow your computer), reduces transparency, chooses the moving background (Off, Calm or Lively) and switches the animated effects off. Your computer's reduced-motion, reduced-transparency and high-contrast settings always win.
 
 ---
 
@@ -277,13 +277,13 @@ Model IDs follow each provider's naming; `gemini-3.5-transcribe` and `nova-3` ar
 ## Develop
 
 ```bash
-npm run build        # bundle src/ into extension/dist/ (and the theme script into extension/fx/)
+npm run build        # bundle src/ into extension/dist/ and the glass effects into extension/fx/
 npm run watch        # rebuild on change
 npm test             # 17 suites (243 checks): chunker, mixer, providers on a mocked fetch,
                      # minutes pipeline, jobs, relay script, voices, org template, migration
 node test/chrome-smoke.mjs   # real headless Chrome drives every page
 node test/chrome-job.mjs     # real Chrome: minutes written with no tab, resumed after a restart
-node test/chrome-sidepanel.mjs   # real Chrome: every side-panel state at 320, 420 and 600 px, light and dark
+node test/chrome-glass.mjs   # real Chrome: the colour room, orbs, beams and liquid controls on every page
 npm run pack         # release/Debrief-Pro-v<version>.zip for the Web Store (no dev key)
 npm run src-zip      # source zip without node_modules, release, .git, dist
 node scripts/screenshots.mjs # regenerate the screenshots in docs/img
@@ -297,7 +297,7 @@ src/
   mixer.js            mic + tab mixing, me / others from levels
   chunker.js          pause-aware chunking
   stt.js, gemini.js   speech-to-text clients and model fallback
-  ../fx/src           the one-line theme script (light / dark), built into extension/fx/theme.js
+  ../fx/src           the glass effects layer (orbs, border beam, liquid controls, metal), built into extension/fx/
   jobs.js             the minutes job: pipeline, runner, email and share (shared by the page and the background)
   jobstate.js         job states and resume rules
   minutes.js          the multi-pass minutes pipeline
