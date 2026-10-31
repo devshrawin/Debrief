@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — 2026-10-31 (Debrief Glass, side panel)
+## 1.2.0 — 2026-10-31 (side panel)
 - Debrief now opens in Chrome's side panel from the toolbar button, on every page (also chrome:// and the new-tab page). It stays open while you click the page, switch tabs or record. The floating glass panel and Chrome's square popup are gone.
 - New solid look: opaque surfaces, one accent, light and dark, no blur or animated background; text pairs checked at 4.5:1. The effects layer (orbs, beams, goo, metal) and the Reduce transparency and Glass and motion settings are removed.
 - Panel layout: header that says what Debrief is doing, Home / Meetings / Ask tabs, cards, and a sticky foot (Start, or Pause + Stop and write minutes). Recording shows a live transcript of the last three lines; finishing shows its steps; Ask answers inside the panel.
