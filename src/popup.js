@@ -1,4 +1,4 @@
-import { nearLimit, parseLimits, quotaCheck } from './usage.js';
+import { nearLimit, parseLimits, quotaCheck, nextQuotaReset, istClock } from './usage.js';
 import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { getSettings, setSetting, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
@@ -146,11 +146,16 @@ async function refresh() {
 async function usageWarning() {
   const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);
   const settings = await getSettings();
+  if (settings.quotaWarnings === false) {
+    show('usageWarn', false);
+    show('quotaWarn', false);
+    return;
+  }
   const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
   const today = new Date().toDateString();
   const closedToday = (await chrome.storage.local.get('usageWarnHiddenDay')).usageWarnHiddenDay === today; // closed by the person; it is back tomorrow
   show('usageWarn', !!hits.length && !closedToday);
-  $('usageWarnText').textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(' · ') + '. Debrief will fall back to other models if one runs out.';
+  $('usageWarnText').textContent = hits.map((h) => `${h.model}: ${h.used} of ${h.limit} requests used today`).join(' · ') + `. The count starts again at ${istClock(nextQuotaReset())}. Debrief will fall back to other models if one runs out.`;
   // before recording: would a one-hour meeting fit in what is left of today's Gemini allowance?
   const q = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
   const hidden = (await chrome.storage.local.get('quotaWarnHidden')).quotaWarnHidden === true; // the person closed it

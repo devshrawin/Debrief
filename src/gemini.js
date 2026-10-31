@@ -71,7 +71,7 @@ function note(url, res, meta) {
   if (!res) return record(e);
   res.clone().text().then((t) => {
     if (e.rl && model !== '-') coolDown(model, cooldownFor(t));
-    record({ ...e, learned: learnLimit(t) });
+    record({ ...e, learned: /PerDay|per day|daily/i.test(t) ? learnLimit(t) : null }); // a per-minute limit is not a daily one
   }, () => record(e));
 }
 

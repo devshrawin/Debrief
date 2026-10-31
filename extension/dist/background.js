@@ -536,6 +536,8 @@
   }
 
   // src/sttclean.js
+  var MATTERS = new Set("zero one two three four five six seven eight nine ten first second third fourth fifth no not never none nothing without cannot dont didnt wont isnt cant hundred lakh crore thousand million half".split(" "));
+  var LETTER = new RegExp("\\p{L}", "u");
   var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
   function cleanTerms(list) {
     const out = [];
@@ -595,6 +597,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -812,7 +818,19 @@
   var ICON_IDLE = { 16: "icons/icon16.png", 32: "icons/icon32.png", 48: "icons/icon48.png" };
   var ICON_GLOW = { 16: "icons/icon16-glow.png", 32: "icons/icon32-glow.png", 48: "icons/icon48-glow.png" };
   var setIcon = (tabId, glow) => quiet(chrome.action.setIcon({ tabId, path: glow ? ICON_GLOW : ICON_IDLE }));
+  var hideRecIcon = false;
+  try {
+    getSettings().then((s) => hideRecIcon = !!s.hideRecIcon, () => {
+    });
+    chrome.storage.onChanged?.addListener((c, area) => {
+      if (area === "local" && c.settings) hideRecIcon = !!c.settings.newValue?.hideRecIcon;
+    });
+    chrome.storage.local.get("limitsFixed").then(({ limitsFixed }) => limitsFixed ? 0 : chrome.storage.local.remove("learnedLimits").then(() => chrome.storage.local.set({ limitsFixed: true })), () => {
+    });
+  } catch {
+  }
   var setBadge = (tabId, text, color) => {
+    if (hideRecIcon && text && text !== "!") text = "";
     const t = tabId == null ? {} : { tabId };
     if (color) quiet(chrome.action.setBadgeBackgroundColor({ ...t, color }));
     quiet(chrome.action.setBadgeText({ ...t, text }));
@@ -829,7 +847,7 @@
     glowPhase = false;
   }
   function startGlow(tabId) {
-    if (glowTabs.has(tabId)) return;
+    if (hideRecIcon || glowTabs.has(tabId)) return;
     if (!glowTimer) glowPhase = true;
     glowTabs.add(tabId);
     setIcon(tabId, glowPhase);
@@ -919,6 +937,12 @@
       await saveMeeting(m);
     });
   }
+  function notify(id, options) {
+    try {
+      chrome.notifications?.create(id, { type: "basic", iconUrl: chrome.runtime.getURL("icons/icon128.png"), ...options }, () => void chrome.runtime.lastError);
+    } catch {
+    }
+  }
   async function raiseAlert(meetingId, err) {
     const a = classifyError(err);
     if (!a) return;
@@ -930,13 +954,7 @@
     });
     setAttention(true);
     if (fresh) {
-      chrome.notifications?.create(`debrief-${a.kind}`, {
-        type: "basic",
-        iconUrl: "icons/icon128.png",
-        title: `Debrief: ${a.title}`,
-        message: a.detail,
-        priority: 2
-      });
+      notify(`debrief-${a.kind}`, { title: `Debrief: ${a.title}`, message: a.detail, priority: 2 });
     }
   }
   async function clearAlert() {
@@ -1184,12 +1202,7 @@
     if (!st.recording || st.stopping) return;
     await updateMeeting(st.meetingId, (m) => (m.debug ||= []).push(`auto-stop: ${reason}`));
     await stop({ background: true });
-    chrome.notifications?.create("debrief-autostop", {
-      type: "basic",
-      iconUrl: "icons/icon128.png",
-      title: "Debrief stopped recording",
-      message: `${reason} Writing the minutes now.`
-    });
+    notify("debrief-autostop", { title: "Debrief stopped recording", message: `${reason} Writing the minutes now.` });
   }
   var PAGE_MAY = /* @__PURE__ */ new Set(["window-fullscreen", "whoami", "meet-mute", "meet-ended", "meet-snap", "in-call", "pill-state", "mic", "stop", "discard", "set-follow", "dismiss-alert"]);
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -1242,7 +1255,7 @@
         return { ok: true };
       },
       notify: async () => {
-        chrome.notifications?.create(String(msg.id || "debrief"), { type: "basic", iconUrl: "icons/icon128.png", title: String(msg.title || "Debrief"), message: String(msg.message || "") });
+        notify(String(msg.id || "debrief"), { title: String(msg.title || "Debrief"), message: String(msg.message || "") });
         return { ok: true };
       },
       // the offscreen document has no chrome.storage, so the job runner reads and writes through here
@@ -1264,6 +1277,9 @@
         await updateMeeting(msg.meetingId, (m) => m.errors.push(msg.error));
         await raiseAlert(msg.meetingId, msg.error);
       },
+      // a stretch the speech-to-text answered with far too little text, even after it was read again in parts (see coverage.js)
+      gap: () => updateMeeting(msg.meetingId, (m) => (m.gaps ||= []).push(msg.gap)),
+      silence: () => updateMeeting(msg.meetingId, (m) => (m.silences ||= []).length < 400 ? m.silences.push({ t: msg.t, dur: msg.dur }) : 0),
       usage: () => serial(async () => {
         const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
         const next = { usage: addEntry(usage, msg.entry) };

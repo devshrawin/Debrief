@@ -22,6 +22,7 @@ import { buildFacts, parseDirectory, parseModelOutput, guardProse, knownParties,
 import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
 import { languagesOf, joinNames } from './languages.js';
+import { gapLabel, gapMinutes } from './coverage.js';
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -34,10 +35,16 @@ export function noInviteReason(meeting, settings) {
   return 'no calendar invite was found to compare with';
 }
 
-export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0 }) {
+export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0, gaps = [] }) {
+  const parts = [];
   if (pendingCount > 0) {
-    return `**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? 's' : ''}) could not be transcribed, so some points may be missing from these minutes.`;
+    parts.push(`**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? 's' : ''}) could not be transcribed, so some points may be missing from these minutes.`);
   }
+  if (gaps.length) {
+    const shown = gaps.slice(0, 6).map(gapLabel).join(', ');
+    parts.push(`${pendingCount > 0 ? 'Also, no' : '**Coverage warning:** no'} transcript was produced for ${shown}${gaps.length > 6 ? ` and ${gaps.length - 6} more` : ''} (about ${gapMinutes(gaps)} min in all). If people spoke then, those points may be missing from these minutes.`);
+  }
+  if (parts.length) return parts.join(' ');
   if (errors > 0) return `Note: ${errors} transcription problem${errors > 1 ? 's' : ''} occurred during the recording; the audio was retried and recovered where possible.`;
   return '';
 }

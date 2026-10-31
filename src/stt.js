@@ -8,7 +8,7 @@ class SttError extends Error {
 }
 
 import { geminiFetch, modelChain, usable, allExhausted, isCooling } from './gemini.js';
-import { cleanTranscript, cleanTerms } from './sttclean.js';
+import { cleanTranscript, cleanTerms, latinShare, looksTransliterated } from './sttclean.js';
 import { isLoopNoise } from './noise.js';
 import { errorDetail, DEFAULTS } from './store.js';
 import { record } from './usage.js';
@@ -155,6 +155,26 @@ async function geminiCall(wav, s, model) {
   return cleanTranscript(text, sttTerms(s)).text; // thinking that leaked into the answer, repeats and made-up speaker labels are removed
 }
 
+// A passage of the dedicated model that is all Malayalam/Hindi letters, in a meeting that mixes English in, is read once by a
+// general model (whose prompt says English words go in English letters); that answer is used when it clearly has them. A
+// recording may spend only a few of these extra requests.
+const SCRIPT_CHECKS = { left: 8 };
+export const resetSttBudget = () => {
+  SCRIPT_CHECKS.left = 8;
+};
+async function preferEnglishLetters(first, wav, s) {
+  const chosen = chosenLanguages(s);
+  if (!looksTransliterated(first) || (chosen && !chosen.some((l) => l.code === 'en')) || SCRIPT_CHECKS.left <= 0) return first;
+  SCRIPT_CHECKS.left--;
+  for (const m of await usable(modelChain(s.geminiModel))) {
+    try {
+      const alt = await geminiCall(wav, s, m);
+      return latinShare(alt) >= 0.12 && alt.length >= first.length * 0.5 ? alt : first;
+    } catch {}
+  }
+  return first;
+}
+
 // The dedicated transcription model returns an empty reply when it judges the audio to be
 // non-speech; give a general model one go before treating the chunk as empty.
 async function gemini(wav, s) {
@@ -168,7 +188,7 @@ async function gemini(wav, s) {
   }
   if (first.trim() || !/transcribe/.test(s.sttGeminiModel)) {
     if (err) throw err;
-    return first;
+    return /transcribe/.test(s.sttGeminiModel) ? preferEnglishLetters(first, wav, s) : first;
   }
   // Empty reply, or the transcribe model is out of quota: try general models, which also have
   // separate quotas.

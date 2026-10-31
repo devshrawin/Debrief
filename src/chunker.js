@@ -7,6 +7,7 @@ const QUIET_RMS = 0.006;
 // about 240 s when "fewer requests" is chosen. Other providers cut at 18-28 s.
 export const chunkSecs = (s) => (s.sttProvider !== 'gemini' ? { minSec: 18, maxSec: 28 } : s.sttGeminiChunk === 'long' ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 });
 const SPEECH_RMS = 0.012; // chunk is skipped unless some 128 ms block is louder than this
+export const VOICED_RMS = 0.015; // a block this loud counts as someone speaking (for judging whether the transcript is complete)
 
 export const rms = (a) => {
   let s = 0;
@@ -63,6 +64,8 @@ export class Chunker {
     }
     const start = this.offset / SR;
     const loud = this.loudest;
+    let voiced = 0;
+    for (const b of this.blocks) if (b.length && rms(b) >= VOICED_RMS) voiced += b.length;
     this.offset += this.len;
     const metas = this.metas;
     this.metas = [];
@@ -72,10 +75,10 @@ export class Chunker {
     this.loudest = 0;
     if (pcm.length < SR || loud < SPEECH_RMS) {
       // too short or silent
-      if (pcm.length >= SR) this.onSkip?.(this.src, start, loud);
+      if (pcm.length >= SR) this.onSkip?.(this.src, start, loud, pcm.length / SR);
       return;
     }
-    this.onChunk(this.src, start, pcm, metas.length ? metas : undefined);
+    this.onChunk(this.src, start, pcm, metas.length ? metas : undefined, { voicedSec: voiced / SR });
   }
 }
 

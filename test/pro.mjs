@@ -90,7 +90,7 @@ await test('usage: Gemini transcription records the request, tokens and audio mi
 await test('usage: a 429 is recorded as a limit hit and teaches the limit', async () => {
   captured.length = 0;
   calls = [];
-  responder = () => new Response(JSON.stringify({ error: { message: 'You exceeded your current quota. Quota exceeded for metric: generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash' } }), { status: 429 });
+  responder = () => new Response(JSON.stringify({ error: { message: 'You exceeded your current quota. Quota exceeded for metric: generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier' } }), { status: 429 });
   const { geminiFetch } = await import('../src/gemini.js');
   const res = await geminiFetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', { method: 'POST', headers: {} }, { geminiKey: 'k' }, { kind: 'llm' });
   assert.equal(res.status, 429);
@@ -99,6 +99,18 @@ await test('usage: a 429 is recorded as a limit hit and teaches the limit', asyn
   assert.equal(e.kind, 'llm');
   assert.equal(e.model, 'gemini-3.8-flash');
   assert.deepEqual(e.learned, { model: 'gemini-3.8-flash', limit: 20 });
+});
+
+await test('usage: a per-minute 429 is not taken for the daily limit', async () => {
+  captured.length = 0;
+  calls = [];
+  responder = () => new Response(JSON.stringify({ error: { message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 5, model: gemini-3.8-flash, quotaId: GenerateRequestsPerMinutePerProjectPerModel-FreeTier. Please retry in 12s' } }), { status: 429 });
+  const { geminiFetch } = await import('../src/gemini.js');
+  await geminiFetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent', { method: 'POST', headers: {} }, { geminiKey: 'k' }, { kind: 'llm' });
+  await new Promise((r) => setTimeout(r, 20));
+  const e = captured.find((x) => x.rl);
+  assert.ok(e, 'the request is still counted as a limit hit');
+  assert.equal(e.learned, null);
 });
 
 await test('usage: other STT providers record requests and audio minutes', async () => {

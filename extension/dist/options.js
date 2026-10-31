@@ -93,6 +93,8 @@
   var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
 
   // src/sttclean.js
+  var MATTERS = new Set("zero one two three four five six seven eight nine ten first second third fourth fifth no not never none nothing without cannot dont didnt wont isnt cant hundred lakh crore thousand million half".split(" "));
+  var LETTER = new RegExp("\\p{L}", "u");
   var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
   function cleanTerms(list) {
     const out = [];
@@ -122,6 +124,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -522,7 +528,7 @@
     if (!res) return record(e);
     res.clone().text().then((t) => {
       if (e.rl && model !== "-") coolDown(model, cooldownFor(t));
-      record({ ...e, learned: learnLimit(t) });
+      record({ ...e, learned: /PerDay|per day|daily/i.test(t) ? learnLimit(t) : null });
     }, () => record(e));
   }
   async function geminiFetch(url, init, settings, meta = {}) {
@@ -3990,6 +3996,34 @@ function out(o) {
     renderSecret(k2);
   }
   var backupKeys = mountBackupKeys($3("moreKeys"), $3("addKey"));
+  var OTHER = "__other";
+  function modelOption(sel, value, label) {
+    if ([...sel.options].some((o2) => o2.value === value)) return;
+    const o = new Option(label || value, value);
+    sel.insertBefore(o, sel.querySelector(`option[value="${OTHER}"]`));
+  }
+  for (const sel of document.querySelectorAll("select[data-models]")) {
+    for (const pair of sel.dataset.models.split(";")) {
+      const [value, label] = pair.split("|");
+      sel.add(new Option(label, value));
+    }
+    sel.add(new Option("Other\u2026 (type a model name)", OTHER));
+    let prev = sel.value;
+    sel.addEventListener("change", () => {
+      if (sel.value !== OTHER) return void (prev = sel.value);
+      const name = (prompt("Model name, for example gemini-3.5-flash") || "").trim();
+      if (name) {
+        modelOption(sel, name);
+        sel.value = name;
+      } else sel.value = prev;
+      prev = sel.value;
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  function setValue(f, v) {
+    if (f.dataset.models && v) modelOption(f, String(v));
+    f.value = v;
+  }
   function read() {
     const s = {};
     for (const k2 of FIELDS2) {
@@ -4010,7 +4044,7 @@ function out(o) {
         stored[k2] = s[k2] || "";
         f.value = "";
       } else if (f.type === "checkbox") f.checked = !!s[k2];
-      else f.value = s[k2] ?? "";
+      else setValue(f, s[k2] ?? "");
     }
     $3("peopleDirectory")?.dispatchEvent(new Event("dir-refresh"));
     $3("shareList")?.dispatchEvent(new Event("rec-refresh"));
@@ -4587,7 +4621,7 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
         stored[k2] = fresh[k2] || "";
         renderSecret(k2);
       } else if (f.type === "checkbox") f.checked = !!fresh[k2];
-      else f.value = fresh[k2];
+      else setValue(f, fresh[k2]);
       loaded[k2] = fresh[k2];
     }
     $3("shareAuto").checked = fresh.shareMode === "auto";

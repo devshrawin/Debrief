@@ -72,6 +72,12 @@
     for (let t = now + 6e4; t < now + 26 * 36e5; t += 6e4) if (dayKey(new Date(t)) !== today) return t;
     return now + 12 * 36e5;
   }
+  function istClock(ms, now = Date.now()) {
+    const f = (opts) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", ...opts });
+    const time = f({ hour: "numeric", minute: "2-digit", hour12: true }).format(ms).replace(/\s?([ap])m/i, (m, c) => ` ${c.toLowerCase()}m`);
+    const sameDay = f({ year: "numeric", month: "2-digit", day: "2-digit" }).format(ms) === f({ year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return `${sameDay ? "" : `${f({ weekday: "short" }).format(ms)} `}${time} IST`;
+  }
 
   // src/meetend.js
   var MEET_CODE = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
@@ -178,6 +184,8 @@
   }
 
   // src/sttclean.js
+  var MATTERS = new Set("zero one two three four five six seven eight nine ten first second third fourth fifth no not never none nothing without cannot dont didnt wont isnt cant hundred lakh crore thousand million half".split(" "));
+  var LETTER = new RegExp("\\p{L}", "u");
   var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
   function cleanTerms(list) {
     const out = [];
@@ -237,6 +245,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -492,7 +504,7 @@
     if (!res) return record(e);
     res.clone().text().then((t) => {
       if (e.rl && model !== "-") coolDown(model, cooldownFor(t));
-      record({ ...e, learned: learnLimit(t) });
+      record({ ...e, learned: /PerDay|per day|daily/i.test(t) ? learnLimit(t) : null });
     }, () => record(e));
   }
   async function geminiFetch(url, init, settings, meta = {}) {
@@ -2609,11 +2621,16 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   async function usageWarning() {
     const { usage, learnedLimits = {} } = await chrome.storage.local.get(["usage", "learnedLimits"]);
     const settings = await getSettings();
+    if (settings.quotaWarnings === false) {
+      show("usageWarn", false);
+      show("quotaWarn", false);
+      return;
+    }
     const hits = nearLimit(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) });
     const today = (/* @__PURE__ */ new Date()).toDateString();
     const closedToday = (await chrome.storage.local.get("usageWarnHiddenDay")).usageWarnHiddenDay === today;
     show("usageWarn", !!hits.length && !closedToday);
-    $2("usageWarnText").textContent = hits.map((h3) => `${h3.model}: ${h3.used} of ${h3.limit} requests used today`).join(" \xB7 ") + ". Debrief will fall back to other models if one runs out.";
+    $2("usageWarnText").textContent = hits.map((h3) => `${h3.model}: ${h3.used} of ${h3.limit} requests used today`).join(" \xB7 ") + `. The count starts again at ${istClock(nextQuotaReset())}. Debrief will fall back to other models if one runs out.`;
     const q2 = quotaCheck(usage, { ...learnedLimits, ...parseLimits(settings.usageLimits) }, settings);
     const hidden = (await chrome.storage.local.get("quotaWarnHidden")).quotaWarnHidden === true;
     show("quotaWarn", !!q2?.short && !hidden);

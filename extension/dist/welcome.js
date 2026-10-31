@@ -11,6 +11,8 @@
   var personOfTile = (s) => String(s || "").replace(/[’']s presentation\s*$/i, "").replace(/^more options for\s+/i, "").trim();
 
   // src/sttclean.js
+  var MATTERS = new Set("zero one two three four five six seven eight nine ten first second third fourth fifth no not never none nothing without cannot dont didnt wont isnt cant hundred lakh crore thousand million half".split(" "));
+  var LETTER = new RegExp("\\p{L}", "u");
   var NOT_A_NAME = /^(?:open in new window|backgrounds? and effects|captions?|present now|chat with everyone|raise hand|leave call|turn (?:on|off) .*|more options.*|you can.*|pin|unpin|mute|unmute)$/i;
   function cleanTerms(list) {
     const out = [];
@@ -40,6 +42,10 @@
     // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
     pillOnPage: false,
     // also show the pill inside the Meet page
+    hideRecIcon: false,
+    // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
+    quotaWarnings: true,
+    // warn in the popup when a model is near its daily limit (off for a paid key)
     emailSecret: "",
     // made up by Debrief, never typed; the relay script locks itself to it on first use
     emailWebhook: "",
@@ -259,7 +265,7 @@
     if (!res) return record(e);
     res.clone().text().then((t) => {
       if (e.rl && model !== "-") coolDown(model, cooldownFor(t));
-      record({ ...e, learned: learnLimit(t) });
+      record({ ...e, learned: /PerDay|per day|daily/i.test(t) ? learnLimit(t) : null });
     }, () => record(e));
   }
   async function geminiFetch(url, init, settings, meta = {}) {

@@ -20,6 +20,7 @@ import { formatTranscript } from './prompt.js';
 import { renderMd } from './md.js';
 import { attributeMixed } from './mixer.js';
 import { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs } from './jobstate.js';
+import { findGaps, mergeGaps } from './coverage.js';
 
 export { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs };
 
@@ -106,7 +107,7 @@ export async function retryPendingAudio({ id, meeting, settings, onProgress = ()
     onProgress(done, pending.length);
     try {
       const text = await transcribeFn(p.wav, settings);
-      if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true });
+      if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true, c: p.t, dur: Math.round(((p.wav.size - 44) / 32000) * 10) / 10 });
       await deletePending(p.id);
       await IO.saveMeeting(meeting);
       done++;
@@ -189,6 +190,9 @@ export async function generateWithRetry({ generate = realGenerate, settings, sys
   }
 }
 
+// Stretches with no transcript: the ones found while recording plus the ones the finished transcript shows.
+export const transcriptGaps = (meeting) => mergeGaps(meeting.gaps || [], findGaps(meeting.segments || [], [...(meeting.pauses || []), ...(meeting.silences || []).map((s) => ({ from: s.t, to: s.t + s.dur }))]));
+
 // The whole write: the model calls, saving the minutes, the pending-audio count for the coverage note.
 // `ui` has onStatus(text) and onText(delta). Returns { text, stats }.
 export async function writeAndStore({ id, meeting, settings, reread = false, signal, ui, patch, cache, generate }) {
@@ -207,7 +211,7 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
       }),
     onText: () => {},
     onStatus: (t) => ui.onStatus(t),
-    coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length },
+    coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length, gaps: transcriptGaps(meeting) },
   });
   await patch({ mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
   return { text, stats };

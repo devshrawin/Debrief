@@ -6,6 +6,16 @@
 - Panel layout: header that says what Debrief is doing, Home / Meetings / Ask tabs, cards, and a sticky foot (Start, or Pause + Stop and write minutes). Recording shows a live transcript of the last three lines; finishing shows its steps; Ask answers inside the panel.
 - Tests: test/chrome-sidepanel.mjs renders every state at 320, 420 and 600 px in both themes.
 
+## 1.1.3 — 2026-10-30
+- Settings: the speech and general Gemini model fields are dropdowns (with "Other…" to type a name).
+- Settings → Appearance: "While recording" card with the recording pill (moved from Recording) and a new "Hide the recording icon on the toolbar" switch.
+- Quota warnings: a per-minute 429 was saved as a daily limit and warned every morning; limits are now learned only from per-day errors (old learned limits are cleared once). The warning says when the count starts again (midnight Pacific, about 12:30 pm IST), and Settings → Usage has a switch to turn the warnings off.
+- Speech to text: a stretch of a meeting could silently come back with almost no text (or none). A piece answered with far too little for the speech in it is now read again in short parts; if it is still thin it is reported. The minutes page shows "No transcript for 20:47–24:21" in the transcript and in the warning box, and the minutes carry a coverage warning that names it. Quiet stretches and pauses are not reported.
+- Speech to text: notes a model writes about the audio ("Silent audio track…", "Analyse the audio: - 00:00 - 00:46 …", "Keywords to check…"), made-up speaker labels (Speaker 1, Female voice), romanised glosses after Malayalam, video offsets inside the words and a passage written twice (also across neighbouring pieces, also when the fillers differ) are removed from transcripts, in the transcript view and in what the minutes writer reads. Meetings already recorded are cleaned when opened.
+- English written in Malayalam or Hindi letters by the transcription model is detected in meetings that mix English in; the piece is read once by a general model and its answer is used when it has the English words in English letters.
+- Notifications from the background (quota or microphone alerts, "stopped recording", "minutes emailed") never appeared: the icon path was relative and resolved next to the service worker, so Chrome reported "Unable to download all specified images" (Errors page: extensions::notifications). The icon now has a full address.
+- Tests: the recorder is run in Node with a fake browser and fake speech-to-text; real Chrome checks the gap display and that notifications are created.
+
 ## 1.1.2 — 2026-10-28
 - Minutes page: naming the last unnamed voice with a name that already has a voice (a second device or headset of the same person) used to be refused, leaving it unnamed for ever. It now asks "Is this the same person?" and joins the two.
 - People and their details (title, department, designation, organisation, email, chair) now live in Settings → Voices: a table next to the voices, details fields when naming or adding a voice, a details line and Add details on each voice. They feed the attendee tables of the minutes.
