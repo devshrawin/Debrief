@@ -786,3 +786,15 @@ chrome.storage.onChanged.addListener(async (changes) => {
   updateDirty();
   updateGuide();
 });
+
+// Appearance: the theme choice (Match my computer / Light / Dark) is applied by fx/theme.js on every page.
+(() => {
+  const seg = document.getElementById('uiTheme');
+  if (!seg) return;
+  const paint = (v) => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === v)));
+  chrome.storage.local.get('uiTheme').then((r) => paint(r.uiTheme || 'auto'));
+  seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    paint(b.dataset.v);
+    chrome.storage.local.set({ uiTheme: b.dataset.v });
+  }));
+})();

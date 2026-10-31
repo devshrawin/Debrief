@@ -1,6 +1,5 @@
-// Real Chrome: a (fake) Google Meet page: Debrief follows the call's mute button, and the panel reads the link as an online meeting. A copy of the extension that may script localhost is loaded; the panel is injected
-// into a plain web page the way the toolbar button does it, and we check that the popup shows inside it, can be seen
-// through (the page is visible behind it), reports its size, and closes. Usage: node test/chrome-panel.mjs
+// Real Chrome: a (fake) Google Meet page: Debrief follows the call's mute button and the pill shows it. A copy of the extension that may script localhost is loaded.
+// Usage: node test/chrome-meet.mjs
 import { spawn } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -111,21 +110,6 @@ const pillText = async () => (await ext.evaluate(`chrome.scripting.executeScript
   const dbg = await ext.evaluate(`chrome.storage.local.get('meeting:mm1').then((r) => r['meeting:mm1'].debug || [])`);
   check('the meeting records each mute change', dbg.some((x) => /Meet mic: muted/.test(x)) && dbg.some((x) => /Meet mic: unmuted/.test(x)), JSON.stringify(dbg));
 
-  // the panel on this page: an online meeting, not a room
-  await ext.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
-  await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, files: ['dist/panel.js'] })`);
-  await sleep(2500);
-  const { targetInfos } = await send('Target.getTargets');
-  const frame = targetInfos.find((t) => t.type === 'iframe' && /popup\.html/.test(t.url));
-  if (!frame) check('the panel frame opened on the Meet page', false, JSON.stringify(targetInfos.map((t) => [t.type, t.url.slice(0, 60)])));
-  else {
-    const att = await send('Target.attachToTarget', { targetId: frame.targetId, flatten: true });
-    await send('Runtime.enable', {}, att.sessionId);
-    const fe = async (x) => (await send('Runtime.evaluate', { expression: x, awaitPromise: true, returnByValue: true }, att.sessionId)).result.value;
-    await sleep(800);
-    const mode = await fe(`({ online: document.getElementById('modeOnline').getAttribute('aria-checked'), room: document.getElementById('modeRoom').getAttribute('aria-checked'), label: document.getElementById('startLabel').textContent })`);
-    check('in the panel on a Meet link, Online meeting is chosen (not In a room)', mode.online === 'true' && mode.room === 'false', JSON.stringify(mode));
-  }
 } catch (e) {
   console.log('FAIL', e.stack || e);
   failed = true;

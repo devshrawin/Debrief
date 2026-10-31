@@ -34,14 +34,13 @@ Debrief records the audio of a meeting tab the user chooses and turns it into a 
 | `storage` | Saves settings, the user's own API keys and meeting metadata locally. |
 | `unlimitedStorage` | Transcripts, short audio pieces waiting to be retried, and voice fingerprints for long meetings can exceed the default quota. All of it stays on the device. |
 | `activeTab` | Identifies the current tab when the user clicks the toolbar button, so that tab can be recorded. |
-| `sidePanel` | Optional: shows Debrief in Chrome's side panel, beside the page, when the user turns that on in Settings. Nothing is read from the page. |
-| `scripting` | Injects the small on-page recording pill and the mute or caption detector into a meeting tab, and opens the Debrief panel over the current page when the user clicks the toolbar button. |
+| `sidePanel` | Shows Debrief in Chrome's side panel so its recording controls stay visible while a meeting is recorded and work on every page, including pages that block embedded frames. The panel shows only Debrief's own interface; it reads no page content. |
+| `scripting` | Injects the small on-page recording pill and the mute or caption detector into a meeting tab. |
 | `notifications` | Tells the user when recording stops and when the minutes are ready or emailed. |
 | Host: `meet.google.com` | Reads the call's mute button, people list and captions so the transcript can name speakers and pause the user's mic while muted. |
 | Hosts: `api.sarvam.ai`, `api.deepgram.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.openai.com`, `api.groq.com` | Sends audio or text **only** to the speech-to-text or minutes provider the user selected, using the user's own key. |
 | Hosts: `script.google.com`, `script.googleusercontent.com` | Delivers the minutes by email through an Apps Script web app the user deploys in their own Google account. |
 | Optional hosts: `https://*/*`, `http://localhost/*`, `http://127.0.0.1/*` | Asked for at run time only, when the user adds another meeting site, a custom OpenAI-compatible endpoint, or a local model (Whisper or Ollama on this computer). |
-| `web_accessible_resources`: `popup.html` on `<all_urls>` | The Debrief panel is the popup page shown in a frame on top of the current page, so the page shows through its glass background. Only the user's own click on the toolbar button opens it. |
 | Content scripts on Zoom, Teams, Webex, Whereby, Jitsi, 8x8, GoTo, BlueJeans, Chime, Zoho Meeting, Skype | Shows the recording pill and detects when a call starts or ends, so recording can stop automatically. No page content is sent anywhere. |
 
 ## Remote code

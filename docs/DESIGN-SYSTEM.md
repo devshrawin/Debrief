@@ -1,6 +1,10 @@
-# Debrief design system: clear glass over a quiet room
+# Debrief design system: solid, calm, side panel first
 
-Every extension page loads one stylesheet, `extension/style.css`. Pages only lay things out; colours, type, materials and controls come from tokens. The effects layer in `extension/fx/` adds motion on top. If it fails to load, every page still works and looks finished.
+Debrief lives in Chrome's side panel (`popup.html?side=1`, opened by the toolbar button on every page). Every extension page loads one stylesheet, `extension/style.css`; the "Solid system" block at its end is the source of truth (opaque surfaces, one soft shadow, no blur, no colour room). The glass materials above it are legacy names that now resolve to solid surfaces. `fx/theme.js` only applies the light / dark choice.
+
+Layout of the panel: fixed header (logo, what Debrief is doing, Settings) → tabs (Home, Meetings, Ask) → scrolling body of cards → sticky foot with the one action that matters (Start / Pause + Stop). Works from 320 to 600 px wide; below 360 the Pause and Stop buttons stack. `test/chrome-sidepanel.mjs` renders every state at 320 / 420 / 600, light and dark; `test/pro-contrast.mjs` checks every text pair at 4.5:1. Screenshots: `docs/img/side-*.png`.
+
+Older text follows (kept for the tokens that still exist):
 
 Principles (Apple HIG): **clarity, deference, depth.**
 - Content sits on opaque reading surfaces. Glass only frames it.

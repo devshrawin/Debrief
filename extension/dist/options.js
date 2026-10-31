@@ -4601,4 +4601,14 @@ const ALLOWED_DOMAINS = ${l3.domains};`;
     updateDirty();
     updateGuide();
   });
+  (() => {
+    const seg = document.getElementById("uiTheme");
+    if (!seg) return;
+    const paint = (v) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.v === v)));
+    chrome.storage.local.get("uiTheme").then((r) => paint(r.uiTheme || "auto"));
+    seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      paint(b.dataset.v);
+      chrome.storage.local.set({ uiTheme: b.dataset.v });
+    }));
+  })();
 })();

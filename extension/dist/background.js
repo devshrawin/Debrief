@@ -1397,47 +1397,11 @@
     const st = await getState();
     if (st.recording && st.tabId === tabId) stop();
   });
-  var canPanel = (url) => /^(https?|file):/i.test(url || "") && !/^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i.test(url);
-  var panelOn = true;
-  var sideOn = false;
-  async function setPopupFor(tabId, url) {
-    if (tabId == null) return;
-    await quiet(chrome.action.setPopup({ tabId, popup: sideOn || panelOn && canPanel(url) ? "" : "popup.html" }));
+  async function setupSidePanel() {
+    await quiet(chrome.action.setPopup({ popup: "" }));
+    await quiet(chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }));
   }
-  async function applyPanelMode() {
-    const r = await chrome.storage.local.get(["uiPanel", "uiSide"]).catch(() => ({}));
-    panelOn = r.uiPanel !== false;
-    sideOn = r.uiSide === true;
-    await quiet(chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: sideOn }));
-    await quiet(chrome.action.setPopup({ popup: sideOn || panelOn ? "" : "popup.html" }));
-    const tabs = await chrome.tabs.query({}).catch(() => []);
-    for (const t of tabs) await setPopupFor(t.id, t.url);
-  }
-  applyPanelMode();
-  chrome.runtime.onStartup?.addListener(applyPanelMode);
-  chrome.runtime.onInstalled.addListener(applyPanelMode);
-  chrome.storage.onChanged.addListener((c, area) => {
-    if (area === "local" && ("uiPanel" in c || "uiSide" in c)) applyPanelMode();
-  });
-  chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-    if (info.url || info.status === "loading") setPopupFor(tabId, info.url || tab.url);
-  });
-  chrome.tabs.onActivated.addListener(({ tabId }) => chrome.tabs.get(tabId).then((t) => setPopupFor(tabId, t.url)).catch(() => {
-  }));
-  async function openPlainPopup(tabId, windowId) {
-    await quiet(chrome.action.setPopup({ tabId, popup: "popup.html" }));
-    await quiet(chrome.action.openPopup({ windowId }));
-  }
-  chrome.action.onClicked.addListener(async (tab) => {
-    if (sideOn) return;
-    if (!canPanel(tab.url)) return openPlainPopup(tab.id, tab.windowId);
-    try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["dist/panel.js"] });
-    } catch {
-      await openPlainPopup(tab.id, tab.windowId);
-    }
-  });
-  chrome.runtime.onMessage.addListener((msg, sender) => {
-    if (msg?.target === "bg" && msg.type === "panel-failed" && sender.tab) openPlainPopup(sender.tab.id, sender.tab.windowId);
-  });
+  setupSidePanel();
+  chrome.runtime.onStartup?.addListener(setupSidePanel);
+  chrome.runtime.onInstalled.addListener(setupSidePanel);
 })();

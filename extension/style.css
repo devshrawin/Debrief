@@ -715,3 +715,50 @@ button:disabled, .btn:disabled, .seg-ctl:has(> button:disabled) { opacity: .5; c
 /* slim scrollbars that follow the theme */
 html { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
 .chip.warn:not(label):not(button):not(a) { background: var(--orange-soft); color: var(--orange); }
+
+/* ==========================================================================
+   Solid system (side-panel redesign). Loaded last, so it replaces the glass
+   values above: opaque surfaces, one soft shadow, no blur, no colour room.
+   Every text pair is measured in test/pro-contrast.mjs.
+   ========================================================================== */
+:root {
+  --label: #1d1d1f; --label-2: #55555c; --label-3: #6b6b73;
+  --separator: #e3e3e8; --separator-strong: #d2d2d8;
+  --fill: #efeff2; --fill-2: #f3f3f6; --fill-3: #f7f7f9;
+  --surface-read: #ffffff; --surface-solid: #ffffff; --amb-base: #f5f5f7;
+  --tint: #3634a3; --tint-hover: #2c2a8c; --on-tint: #ffffff; --tint-soft: #efedfd; --tint-soft-strong: #e1defa;
+  --red: #b0000e; --red-fill: #c8102e; --on-red: #ffffff; --red-soft: #fdecec;
+  --orange: #8a4b00; --orange-soft: #fff4e0; --green: #146c2e; --green-soft: #e8f5ec;
+  --mat-ultrathin: var(--surface-read); --mat-thin: var(--surface-read); --mat-regular: var(--surface-read); --mat-thick: var(--surface-read);
+  --blur-ultrathin: none; --blur-thin: none; --blur-regular: none; --blur-thick: none;
+  --edge: 0 0 0 1px var(--separator);
+  --shadow-1: 0 1px 2px rgb(20 20 30 / .06), 0 2px 8px rgb(20 20 30 / .04);
+  --shadow-2: 0 1px 2px rgb(20 20 30 / .08), 0 4px 14px rgb(20 20 30 / .06);
+  --shadow-3: 0 2px 6px rgb(20 20 30 / .10), 0 12px 32px rgb(20 20 30 / .12);
+  --focus: 0 0 0 2px var(--surface-read), 0 0 0 4px var(--tint);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --label: #f2f2f5; --label-2: #b4b4be; --label-3: #9a9aa4;
+    --separator: #34343b; --separator-strong: #45454d;
+    --fill: #2a2a30; --fill-2: #26262b; --fill-3: #222226;
+    --surface-read: #1f1f23; --surface-solid: #1f1f23; --amb-base: #161618;
+    --tint: #a9a6ff; --tint-hover: #bdbaff; --on-tint: #14123a; --tint-soft: #2b2950; --tint-soft-strong: #38356a;
+    --red: #ff8a82; --red-fill: #ff6b62; --on-red: #2a0705; --red-soft: #3a1c1c;
+    --orange: #ffc061; --orange-soft: #3a2c12; --green: #5fd884; --green-soft: #163222;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / .45); --shadow-2: 0 1px 2px rgb(0 0 0 / .5), 0 4px 14px rgb(0 0 0 / .35); --shadow-3: 0 2px 6px rgb(0 0 0 / .5), 0 12px 32px rgb(0 0 0 / .45);
+  }
+}
+:root[data-theme="dark"] {
+  --label: #f2f2f5; --label-2: #b4b4be; --label-3: #9a9aa4;
+  --separator: #34343b; --separator-strong: #45454d;
+  --fill: #2a2a30; --fill-2: #26262b; --fill-3: #222226;
+  --surface-read: #1f1f23; --surface-solid: #1f1f23; --amb-base: #161618;
+  --tint: #a9a6ff; --tint-hover: #bdbaff; --on-tint: #14123a; --tint-soft: #2b2950; --tint-soft-strong: #38356a;
+  --red: #ff8a82; --red-fill: #ff6b62; --on-red: #2a0705; --red-soft: #3a1c1c;
+  --orange: #ffc061; --orange-soft: #3a2c12; --green: #5fd884; --green-soft: #163222;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .45); --shadow-2: 0 1px 2px rgb(0 0 0 / .5), 0 4px 14px rgb(0 0 0 / .35); --shadow-3: 0 2px 6px rgb(0 0 0 / .5), 0 12px 32px rgb(0 0 0 / .45);
+}
+html body { background: var(--amb-base); }
+body::before, .fx-bg { display: none !important; }
+* { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
