@@ -27,7 +27,7 @@
 
   const paint = (ui) => {
     const dark = ui.uiTheme === 'dark' || (ui.uiTheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-    const solid = !!ui.uiSolid;
+    const solid = true; // the panel is a solid sheet
     const tint = solid ? (dark ? 'rgb(28 28 36)' : 'rgb(246 246 250)') : dark ? 'rgb(24 24 34 / .66)' : 'rgb(255 255 255 / .8)';
     css.textContent = `
       .box { position: relative; width: 360px; max-width: calc(100vw - 24px); height: 460px; max-height: calc(100vh - 24px); border-radius: 18px; overflow: hidden;

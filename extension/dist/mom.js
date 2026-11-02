@@ -5617,18 +5617,23 @@ ${meeting2.mom || ""}
     if (regenerate && meeting.mom && !jobBusy) {
       $2("genStatus").textContent = `Switching to the ${FORMATS[v]}\u2026`;
       runGenerate();
-    }
+    } else if (meeting.mom) $2("genStatus").textContent = `Layout set to the ${FORMATS[v]}. Press Rewrite minutes to apply it.`;
   }
-  for (const b of $2("fmtSwitch").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, true);
+  for (const b of $2("fmtSwitch").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, false);
   $2("typeSel").onchange = async (e2) => {
     const v = e2.target.value;
     await patchMeeting2({ typeId: v === "auto" ? null : v === "none" ? "" : v });
     paintType();
-    if (meeting.mom && !jobBusy) {
-      $2("genStatus").textContent = "Rewriting the minutes for this meeting type\u2026";
-      runGenerate();
-    }
+    if (meeting.mom) $2("genStatus").textContent = "Meeting type changed. Press Rewrite minutes to apply it.";
   };
+  document.querySelectorAll("details.menu .pop button").forEach((b) => b.addEventListener("click", () => {
+    b.closest("details").open = false;
+  }));
+  document.addEventListener("click", (e2) => {
+    document.querySelectorAll("details.menu[open]").forEach((d) => {
+      if (!d.contains(e2.target)) d.open = false;
+    });
+  });
   $2("fmtChange").onclick = (e2) => {
     e2.preventDefault();
     ($2("fmtSwitch").querySelector('[aria-checked="true"]') || $2("fmtSwitch").querySelector("button")).focus();

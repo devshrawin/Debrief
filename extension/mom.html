@@ -77,6 +77,22 @@
     .toolbar .grow { flex: 1; }
     .toolbar #typeSel { width: auto; max-width: min(100%, 340px); }
     .toolbar .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+    .layoutbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 8px 0 0; }
+    .layoutbar .lab { font-weight: 600; color: var(--label-2); font-size: 13px; }
+    .layoutbar .hint { flex: 1 1 260px; margin: 0; }
+    details.menu { position: relative; }
+    details.menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--separator-strong); background: var(--surface-read); color: var(--label); font-weight: 600; font-size: 13.5px; }
+    details.menu > summary::-webkit-details-marker { display: none; }
+    details.menu > summary::marker { content: ""; }
+    details.menu > summary::before { content: none; }
+    .layoutbar #typeSel { width: auto; max-width: min(100%, 340px); min-height: 34px; padding: 4px 32px 4px 10px; }
+    details.menu > summary::after { content: "\25BE"; font-size: 11px; color: var(--label-2); }
+    details.menu > summary:hover { background: var(--fill); }
+    details.menu[open] > summary { background: var(--fill); }
+    details.menu .pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; border: 1px solid var(--separator-strong); background: var(--surface-read); box-shadow: var(--shadow-3); }
+    details.menu .pop button { text-align: left; justify-content: flex-start; border: 0; background: transparent; box-shadow: none; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; width: 100%; }
+    details.menu .pop button:hover:not(:disabled) { background: var(--tint-soft); color: var(--tint); }
+    details.menu .pop .chk { padding: 6px 10px; font-size: 13px; }
     .toolbar .stat { display: inline-flex; gap: 8px; align-items: center; min-width: 0; overflow-wrap: anywhere; margin: 0; }
     .toolbar .stat:empty { display: none; }
     .toolbar .stat.busy::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--brand); border-right-color: transparent; animation: sp 0.8s linear infinite; flex: none; }
@@ -275,8 +291,6 @@
 
     <div class="toolbar no-print">
       <button id="gen" class="primary">Write minutes</button>
-      <div class="seg-ctl small" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="amnex">Amnex</button><button type="button" role="radio" data-v="standard">Standard</button></div>
-      <select id="typeSel" class="hidden" aria-label="Meeting type" title="A meeting type adds its own sections to the minutes (for example a table of updates by person). Press Rewrite minutes after changing it."></select>
       <button id="edit" title="Fix the minutes by hand: remove what is wrong, add what was missed. Then email or share the corrected version.">Edit minutes</button>
       <button id="reread" class="hidden" title="Read the transcript again from scratch instead of reusing the items found last time">Re-read transcript</button>
       <button id="abort" class="hidden">Stop</button>
@@ -284,13 +298,29 @@
       <span id="mailStatus" class="hint stat" role="status"></span>
       <span class="grow"></span>
       <div class="acts">
-        <button id="copy">Copy</button>
-        <button id="dlMd">.md</button>
-        <button id="dlDoc">Word</button>
-        <button id="print">Print / PDF</button>
-        <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> Attach transcript to my email</label>
-        <button id="mail" title="Send this MOM to your email">Email me</button>
+        <details class="menu" id="exportMenu">
+          <summary>Export</summary>
+          <div class="pop">
+            <button id="copy">Copy</button>
+            <button id="dlMd">Markdown (.md)</button>
+            <button id="dlDoc">Word</button>
+            <button id="print">Print / PDF</button>
+          </div>
+        </details>
+        <details class="menu" id="emailMenu">
+          <summary>Email</summary>
+          <div class="pop">
+            <button id="mail" title="Send this MOM to your email">Email me</button>
+            <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> Attach transcript</label>
+          </div>
+        </details>
       </div>
+    </div>
+    <div class="layoutbar no-print" role="group" aria-label="How the minutes are written">
+      <span class="lab">Layout</span>
+      <div class="seg-ctl small" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="amnex">Amnex</button><button type="button" role="radio" data-v="standard">Standard</button></div>
+      <select id="typeSel" class="hidden" aria-label="Meeting type" title="A meeting type adds its own sections to the minutes (for example a table of updates by person)."></select>
+      <span class="hint" id="layoutHint">Changing these does not rewrite anything by itself: press Rewrite minutes to apply.</span>
     </div>
     <section id="editor" class="editor no-print hidden" aria-label="Edit the minutes">
       <div class="ed-bar">

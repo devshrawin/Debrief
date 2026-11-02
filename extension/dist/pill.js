@@ -268,6 +268,9 @@
   .mic:hover { filter:brightness(1.08); } .mic:active { transform:scale(.95); }
   .mic:focus-visible, .stop:focus-visible, .alertbox button:focus-visible, .switch:focus-within .track { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
   .mic:disabled { opacity:.5; cursor:default; }
+  .pillx { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; margin-left:-2px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--dim); font:inherit; font-size:17px; line-height:1; cursor:pointer; }
+  .pillx:hover { background:rgba(255,255,255,.14); color:#fff; }
+  .pillx:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
   .mic svg { width:14px; height:14px; flex:none; }
   .mic.on { background:#30d158; color:#05210f; }
   .mic.off { background:rgba(255,255,255,.10); border-color:var(--line); color:var(--dim); }
@@ -364,6 +367,8 @@
     let timeEl;
     let micBtn;
     let warnChip;
+    let closeBtn;
+    let hiddenFor = null;
     let panel;
     let status;
     let expanded = false;
@@ -430,10 +435,21 @@
       warnChip = el("span", "warn-chip");
       micBtn = el("button", "mic");
       micBtn.type = "button";
-      pill.append(dot, eq, silentMsg, timeEl, warnChip, micBtn);
+      closeBtn = el("button", "pillx", "\xD7");
+      closeBtn.type = "button";
+      closeBtn.setAttribute("aria-label", "Hide this pill");
+      closeBtn.title = "Hide this pill. The recording keeps going; stop it from the Debrief button on the toolbar.";
+      pill.append(dot, eq, silentMsg, timeEl, warnChip, micBtn, closeBtn);
       wrap.append(status, panel, pill);
       root.append(style, wrap);
       document.documentElement.appendChild(host);
+      closeBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+      closeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        hiddenFor = S.rec.startedAt;
+        expanded = false;
+        render();
+      });
       micBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
       micBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -533,8 +549,9 @@
       if (!host) return;
       const rec = S.rec;
       const mine = rec.recording && !rec.stopping && rec.tabId === myTab;
-      host.style.display = mine && S.showPill ? "" : "none";
-      if (!mine || !S.showPill) return;
+      const shown = mine && S.showPill && hiddenFor !== rec.startedAt;
+      host.style.display = shown ? "" : "none";
+      if (!shown) return;
       timeEl.textContent = fmt((Date.now() - rec.startedAt) / 1e3);
       const lv = S.levels;
       const fresh = lv && Date.now() - lv.at < 4e3;

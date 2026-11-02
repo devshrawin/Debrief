@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 — 2026-11-02
+- New look, end to end. Solid, quiet surfaces on every page; no blur or moving background. Contrast of every text pair is tested.
+- Popup redesigned: no tabs. One card shows what will be recorded, one Start button, the latest three meetings, and a More menu. Recording view has Pause and Stop side by side.
+- Minutes page: Export and Email are menus; format and meeting type sit on a Layout row. Changing either no longer rewrites the minutes until you press Rewrite minutes.
+- Removed the glass and animation effects layer (smaller extension). Settings > Appearance now only sets the theme and the floating panel.
+
 ## 1.3.0 — 2026-11-02
 - New: Meeting types (Settings > Minutes). A recurring meeting such as a daily cadence call gets an "Updates by person" table in its minutes: one row for everyone who was there, with columns you choose (default Yesterday, Today, Blockers), plus optional extra instructions for the writer. A type applies by itself when the meeting title contains your words (or the Meet code matches). On the minutes page a chooser lets you pick another type, or none, and rewrites the minutes. Works in the standard layout and in the organisation template (print, Word and email too).
 - New: name a speaker by hand, for one meeting. On the minutes page, click the label on any transcript line ("Unknown speaker", "Others" or a wrong guess) and pick who it was, or type a name. Only that line changes, and only in this meeting: voice profiles and other meetings are not touched. The name shows in the transcript, in Download .txt and in the text the minutes are written from, so Rewrite minutes uses it for owners, actions and the updates table. A small reset puts the original label back.

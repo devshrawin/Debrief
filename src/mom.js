@@ -238,18 +238,18 @@ async function chooseFormat(v, regenerate) {
   if (regenerate && meeting.mom && !jobBusy) {
     $('genStatus').textContent = `Switching to the ${FORMATS[v]}…`;
     runGenerate();
-  }
+  } else if (meeting.mom) $('genStatus').textContent = `Layout set to the ${FORMATS[v]}. Press Rewrite minutes to apply it.`;
 }
-for (const b of $('fmtSwitch').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, true);
+for (const b of $('fmtSwitch').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, false);
 $('typeSel').onchange = async (e) => {
   const v = e.target.value;
   await patchMeeting({ typeId: v === 'auto' ? null : v === 'none' ? '' : v });
   paintType();
-  if (meeting.mom && !jobBusy) {
-    $('genStatus').textContent = 'Rewriting the minutes for this meeting type…';
-    runGenerate();
-  }
+  if (meeting.mom) $('genStatus').textContent = 'Meeting type changed. Press Rewrite minutes to apply it.';
 };
+// a menu closes after a choice, and when the page is clicked elsewhere
+document.querySelectorAll('details.menu .pop button').forEach((b) => b.addEventListener('click', () => { b.closest('details').open = false; }));
+document.addEventListener('click', (e) => { document.querySelectorAll('details.menu[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; }); });
 // the start card shows the chosen format as text; "change" goes to the one switch
 $('fmtChange').onclick = (e) => {
   e.preventDefault();

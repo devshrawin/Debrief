@@ -28,7 +28,7 @@ function setMeter(barId, textId, v) {
   $(textId).textContent = levelWord(v);
 }
 
-const pieces = (n) => `${n} transcript piece${n === 1 ? '' : 's'}`;
+const pieces = (n) => `${n} part${n === 1 ? '' : 's'} transcribed`;
 function whenOf(m) {
   const d = new Date(m.startedAt);
   const day0 = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -49,7 +49,7 @@ async function refresh() {
   $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.paused ? 'Paused' : st.room ? 'Recording the room' : 'Recording') : 'Idle';
   show('pause', !!recording);
   show('fullscreen', !!recording);
-  $('pause').textContent = st.paused ? 'Resume recording' : 'Pause recording';
+  $('pause').textContent = st.paused ? 'Resume' : 'Pause';
   $('pause').setAttribute('aria-pressed', String(!!st.paused));
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
   show('start', !st.recording);
@@ -61,7 +61,8 @@ async function refresh() {
   const wanted = !!(st.micWanted ?? st.micOn);
   $('micToggle').setAttribute('aria-checked', String(wanted));
   // Following the call's own mute button: say what Debrief sees, so a button it cannot find is not a mystery.
-  $('micStateT').textContent = wanted && !st.micOn ? 'Paused: you are muted in the call' : wanted ? (st.meetMuted === false ? 'Your voice goes into the transcript (unmuted in the call)' : st.meetMuted == null ? 'Your voice goes into the transcript (the mute button in the call was not found, so your mic is always on)' : 'Your voice goes into the transcript') : 'Your voice is ignored';
+  $('micStateT').textContent = wanted && !st.micOn ? 'Paused: you are muted in the call' : wanted ? (st.meetMuted === false ? 'On, and unmuted in the call' : st.meetMuted == null ? 'On (call mute button not found)' : 'On') : 'Off: only the others are recorded';
+  $('micState').title = wanted && st.micOn && st.meetMuted == null ? 'Debrief could not find the mute button in the call, so your mic stays on the whole time. Use the switch to turn it off.' : '';
   $('micState').className = `hint ${!wanted ? 'off' : !st.micOn ? 'paused' : st.meetMuted == null ? 'unknown' : ''}`;
   show('micWarn', !!(recording && st.micError));
   $('micWarn').textContent = st.micError ? `Only other participants are being recorded. ${st.micError}` : '';
@@ -89,8 +90,9 @@ async function refresh() {
     const n = m?.segments.length || 0;
     const errs = m?.errors.length || 0;
     const info = $('segInfo');
-    const spans = [pieces(n), `${errs} error${errs === 1 ? '' : 's'}`];
-    if (!n) spans.push('First one lands after about 2 to 3 min.');
+    const spans = [pieces(n)];
+    if (errs) spans.push(`${errs} problem${errs === 1 ? '' : 's'}, retried from the minutes page`);
+    if (!n) spans.push('The first part lands after about 2 to 3 min.');
     info.replaceChildren(...spans.map((t) => Object.assign(document.createElement('span'), { textContent: t })));
     info.title = errs ? 'Failed chunks are kept and can be retried from the minutes page.' : '';
     if (st.stopping) $('finInfo').textContent = `${pieces(n)} so far. Then the minutes are written, about 30 s. You can close this popup.`;
@@ -152,19 +154,66 @@ async function renderRecent() {
   allMeetings = await listMeetings();
   show('clearAll', !!allMeetings.length);
   $('meetCount').textContent = allMeetings.length;
-  const last = allMeetings[0];
-  show('lastBox', !!last);
-  if (last) {
-    $('lastTitle').textContent = last.title;
-    $('lastTitle').title = last.title;
-    $('lastWhen').textContent = whenOf(last);
-    show('lastMail', !!last.emailedAt);
-    $('lastOpen').onclick = (e) => {
-      e.preventDefault();
-      openMinutes(last.id);
-    };
-  }
+  const st = await getState();
+  const home = allMeetings.slice(0, 3);
+  $('recentHome').replaceChildren(...(home.length ? home.map((m) => makeRow(m, st, false)) : [emptyState('No meetings yet', 'Recorded meetings and their minutes appear here.')]));
   await drawList();
+}
+
+function makeRow(m, st, withDelete) {
+  const row = document.createElement('div');
+  row.className = `item${armed === m.id ? ' armed' : ''}`;
+  const a = document.createElement('a');
+  a.className = 'open';
+  a.href = '#';
+  const t = document.createElement('div');
+  t.className = 't trunc';
+  t.textContent = m.title;
+  t.title = m.title;
+  const meta = document.createElement('div');
+  meta.className = 'm';
+  meta.append(Object.assign(document.createElement('span'), { textContent: whenOf(m) }));
+  if (m.emailedAt) meta.append(Object.assign(document.createElement('span'), { className: 'chip brand', textContent: 'Emailed' }));
+  a.append(t, meta);
+  a.onclick = (e) => {
+    e.preventDefault();
+    openMinutes(m.id);
+  };
+  row.append(a);
+  const live = st.recording && st.meetingId === m.id;
+  if (!live && withDelete) {
+    const del = document.createElement('button');
+    if (armed === m.id) {
+      del.className = 'confirm';
+      del.textContent = 'Delete?';
+      del.setAttribute('aria-label', `Confirm: delete ${m.title}`);
+    } else {
+      del.className = 'del';
+      del.innerHTML = TRASH;
+      del.title = 'Delete this meeting';
+      del.setAttribute('aria-label', `Delete ${m.title}`);
+    }
+    del.onclick = async () => {
+      if (armed !== m.id) {
+        armed = m.id;
+        await drawList();
+        $('recent').querySelector('.confirm')?.focus();
+        setTimeout(() => {
+          if (armed === m.id) {
+            armed = null;
+            drawList();
+          }
+        }, 3000);
+        return;
+      }
+      armed = null;
+      await deleteMeeting(m.id);
+      await renderRecent();
+      $('q').focus();
+    };
+    row.append(del);
+  }
+  return row;
 }
 
 async function drawList() {
@@ -179,84 +228,28 @@ async function drawList() {
     return;
   }
   const st = await getState();
-  $('recent').replaceChildren(
-    ...items.map((m) => {
-      const row = document.createElement('div');
-      row.className = `item${armed === m.id ? ' armed' : ''}`;
-      const a = document.createElement('a');
-      a.className = 'open';
-      a.href = '#';
-      const t = document.createElement('div');
-      t.className = 't trunc';
-      t.textContent = m.title;
-      t.title = m.title;
-      const meta = document.createElement('div');
-      meta.className = 'm';
-      meta.append(Object.assign(document.createElement('span'), { textContent: whenOf(m) }));
-      if (m.emailedAt) meta.append(Object.assign(document.createElement('span'), { className: 'chip brand', textContent: 'Emailed' }));
-      a.append(t, meta);
-      a.onclick = (e) => {
-        e.preventDefault();
-        openMinutes(m.id);
-      };
-      row.append(a);
-      const live = st.recording && st.meetingId === m.id;
-      if (!live) {
-        const del = document.createElement('button');
-        if (armed === m.id) {
-          del.className = 'confirm';
-          del.textContent = 'Delete?';
-          del.setAttribute('aria-label', `Confirm: delete ${m.title}`);
-        } else {
-          del.className = 'del';
-          del.innerHTML = TRASH;
-          del.title = 'Delete this meeting';
-          del.setAttribute('aria-label', `Delete ${m.title}`);
-        }
-        del.onclick = async () => {
-          if (armed !== m.id) {
-            armed = m.id;
-            await drawList();
-            $('recent').querySelector('.confirm')?.focus();
-            setTimeout(() => {
-              if (armed === m.id) {
-                armed = null;
-                drawList();
-              }
-            }, 3000);
-            return;
-          }
-          armed = null;
-          await deleteMeeting(m.id);
-          await renderRecent();
-          $('q').focus();
-        };
-        row.append(del);
-      }
-      return row;
-    })
-  );
+  $('recent').replaceChildren(...items.map((m) => makeRow(m, st, true)));
 }
 
 $('q').oninput = drawList;
 
-function selectTab(b) {
-  document.querySelectorAll('#tabs [role=tab]').forEach((x) => {
-    x.setAttribute('aria-selected', String(x === b));
-    x.tabIndex = x === b ? 0 : -1;
-  });
-  document.querySelectorAll('[role=tabpanel]').forEach((p) => (p.hidden = p.id !== b.dataset.pane));
+function showView(name) {
+  const meet = name === 'meet';
+  $('paneRec').hidden = meet;
+  $('paneMeet').hidden = !meet;
+  if (meet) $('q').focus();
+  else $('allMeet').focus();
 }
-document.querySelectorAll('#tabs [role=tab]').forEach((b) => {
-  b.onclick = () => selectTab(b);
-  b.onkeydown = (e) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+$('allMeet').onclick = (e) => {
+  e.preventDefault();
+  showView('meet');
+};
+$('backHome').onclick = () => showView('home');
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('paneMeet').hidden) {
     e.preventDefault();
-    const tabs = [...document.querySelectorAll('#tabs [role=tab]')];
-    const i = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (tabs.indexOf(b) + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-    selectTab(tabs[i]);
-    tabs[i].focus();
-  };
+    showView('home');
+  }
 });
 
 $('clearAll').onclick = async () => {
@@ -326,7 +319,8 @@ async function detectCall() {
   const r = await readPage();
   const inCall = /^yes/i.test(String(r?.diag?.inCall || ''));
   show('callBanner', inCall);
-  if (inCall) $('callSite').textContent = `${r.site || 'Meeting'} · this tab`;
+  show('tabKind', !inCall);
+  if (inCall) $('callSite').textContent = r.site || 'this tab';
 }
 
 $('askAll').onclick = (e) => {
@@ -465,6 +459,9 @@ for (const id of ['openSettings', 'openSettings1']) {
     host = new URL(tab?.url || '').hostname;
   } catch {}
   tabUrl = tab?.url || '';
+  $('tabTitle').textContent = tab?.title || host || 'This tab';
+  $('tabTitle').title = tab?.title || '';
+  $('tabHost').textContent = host;
   paintMode();
   $('platformHint').textContent = platformHint(host);
   show('platformHint', !!platformHint(host));
@@ -473,9 +470,10 @@ for (const id of ['openSettings', 'openSettings1']) {
   addEventListener('online', syncOnline);
   addEventListener('offline', syncOnline);
   const cmd = (await chrome.commands.getAll()).find((c) => c.name === 'toggle-recording');
-  $('shortcutHint').innerHTML = cmd?.shortcut
-    ? `Tell people you are recording. <kbd>${cmd.shortcut.split('+').join('</kbd>+<kbd>')}</kbd> also starts and stops, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mutes your mic.`
-    : 'Tell people you are recording. Set a start/stop shortcut at chrome://extensions/shortcuts.';
+  $('shortcutHint').textContent = 'Tell people you are recording.';
+  $('shortcuts').innerHTML = cmd?.shortcut
+    ? `Shortcuts: <kbd>${cmd.shortcut.split('+').join('</kbd>+<kbd>')}</kbd> starts and stops, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> mutes your mic.`
+    : 'Set a start/stop shortcut at chrome://extensions/shortcuts.';
   await refresh();
   usageWarning();
   await renderRecent();

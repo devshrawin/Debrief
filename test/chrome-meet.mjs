@@ -111,6 +111,14 @@ const pillText = async () => (await ext.evaluate(`chrome.scripting.executeScript
   const dbg = await ext.evaluate(`chrome.storage.local.get('meeting:mm1').then((r) => r['meeting:mm1'].debug || [])`);
   check('the meeting records each mute change', dbg.some((x) => /Meet mic: muted/.test(x)) && dbg.some((x) => /Meet mic: unmuted/.test(x)), JSON.stringify(dbg));
 
+  // the cross on the pill hides it for this recording; the recording itself carries on
+  const pillShown = () => ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => document.querySelector('[data-debrief]')?.style.display !== 'none' }).then((x) => x[0].result)`);
+  const before = await pillShown();
+  await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => document.querySelector('[data-debrief]').__debriefRoot.querySelector('.pillx').click() })`);
+  await sleep(600);
+  const recNow = await ext.evaluate(`chrome.storage.session.get('rec').then((r) => !!r.rec?.recording)`);
+  check('the cross hides the pill and the recording keeps going', before === true && (await pillShown()) === false && recNow === true, JSON.stringify({ before, after: await pillShown(), recNow }));
+
   // the panel on this page: an online meeting, not a room
   await ext.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
   await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, files: ['dist/panel.js'] })`);
