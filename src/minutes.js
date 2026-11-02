@@ -23,6 +23,7 @@ import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
 import { languagesOf, joinNames } from './languages.js';
 import { gapLabel, gapMinutes } from './coverage.js';
+import { updatesSystem, updatesUser, parseUpdates, fillRoster, updatesMarkdown, insertUpdates, rosterOf } from './meetingtypes.js';
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -182,17 +183,38 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     }
   }
 
+  // Meeting type with an "Updates by person" table: one extra, focused call over the whole transcript.
+  let updates = null;
+  let updatesNote = '';
+  const mt = ctx.meetingType;
+  if (mt?.updates) {
+    try {
+      onStatus('Writing the updates by person…');
+      stats.calls++;
+      const roster = rosterOf({ presence, attendees: ctx.attendees || [] });
+      const raw = await gen(updatesSystem(mt.columns, settings.momLanguage), updatesUser({ meeting, roster, transcript }), undefined, { temperature: TEMPERATURE.check });
+      const rows = fillRoster(parseUpdates(raw, mt.columns), roster, mt.columns);
+      if (rows.length) updates = { columns: mt.columns, rows };
+      else updatesNote = 'The updates by person could not be read from the model reply. Press Rewrite minutes to try again.';
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      updatesNote = 'The updates by person could not be written. Press Rewrite minutes to try again.';
+    }
+  }
+
   const cov = coverageMarkdown(coverage);
   const written = `_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})` : 'a single pass'}._`;
   if (amnex) {
     // The attendee tables replace the Attendance section; warnings and the check go to a section that is hidden in print and mail.
-    return { mom: composeMarkdown({ ...amnex, review: [cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format };
+    return { mom: composeMarkdown({ ...amnex, updates, review: [updatesNote, cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format };
   }
+  if (updates) mom = insertUpdates(mom, updatesMarkdown(updates.rows, updates.columns));
   const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
   const attendance = attendanceMarkdown({ invited: meeting.invited, presence, durationSec, entries: ctx.entries, myName: settings.myName, whyNoInvite: noInviteReason(meeting, settings) });
   const foot = [];
   if (attendance) foot.push(attendance);
   if (cov) foot.push(cov);
+  if (updatesNote) foot.push(`**${updatesNote}**`);
   foot.push(written);
   return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist, extract, format };
 }

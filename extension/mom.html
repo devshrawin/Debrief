@@ -75,6 +75,7 @@
     /* toolbar */
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
     .toolbar .grow { flex: 1; }
+    .toolbar #typeSel { width: auto; max-width: min(100%, 340px); }
     .toolbar .acts { display: flex; flex-wrap: wrap; gap: 6px; }
     .toolbar .stat { display: inline-flex; gap: 8px; align-items: center; min-width: 0; overflow-wrap: anywhere; margin: 0; }
     .toolbar .stat:empty { display: none; }
@@ -177,6 +178,19 @@
     .seg .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--brand); white-space: nowrap; }
     .seg .who { justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
     .seg .who.named { background: var(--tint-soft); color: var(--tint); border-color: transparent; }
+    .seg .who.pick { cursor: pointer; }
+    .seg .who.pick:hover { box-shadow: 0 0 0 2px var(--tint-soft); }
+    .seg .who.pick:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+    .seg .who.own::after { content: "\270E"; margin-left: 6px; font-weight: 400; opacity: .75; }
+    .namemenu { position: fixed; z-index: 60; width: min(300px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface-read, var(--bg, #fff)); color: var(--text); box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
+    .namemenu .nm-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .namemenu .nm-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+    .namemenu .nm-list button { display: block; width: 100%; text-align: left; justify-content: flex-start; padding: 6px 8px; box-shadow: none; border-radius: 8px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+    .namemenu .nm-list button:hover, .namemenu .nm-list button:focus-visible { background: var(--tint-soft); color: var(--tint); }
+    .namemenu .nm-list button.cur { font-weight: 700; }
+    .namemenu .nm-form { display: flex; gap: 6px; }
+    .namemenu .nm-form input { flex: 1; min-width: 0; }
+    .namemenu .nm-reset { align-self: flex-start; border: 0; background: transparent; color: var(--tint); text-decoration: underline; cursor: pointer; font: inherit; padding: 2px 0; }
     .seg .who.me { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
     .seg .who.unknown { background: transparent; color: var(--muted); border: 1px dashed var(--line-strong); }
     .seg .who.conflict { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
@@ -262,6 +276,7 @@
     <div class="toolbar no-print">
       <button id="gen" class="primary">Write minutes</button>
       <div class="seg-ctl small" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="amnex">Amnex</button><button type="button" role="radio" data-v="standard">Standard</button></div>
+      <select id="typeSel" class="hidden" aria-label="Meeting type" title="A meeting type adds its own sections to the minutes (for example a table of updates by person). Press Rewrite minutes after changing it."></select>
       <button id="edit" title="Fix the minutes by hand: remove what is wrong, add what was missed. Then email or share the corrected version.">Edit minutes</button>
       <button id="reread" class="hidden" title="Read the transcript again from scratch instead of reusing the items found last time">Re-read transcript</button>
       <button id="abort" class="hidden">Stop</button>

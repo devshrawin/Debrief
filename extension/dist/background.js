@@ -647,6 +647,8 @@
     // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
     shareList: "",
     // default people to share the minutes with
+    meetingTypes: [],
+    // kinds of recurring meeting with extra minutes sections: [{ id, name, match, code, updates, columns, extra }] (src/meetingtypes.js)
     shareGroups: "",
     // per recurring meeting: "title words | a@x.com, b@y.com"
     shareMode: "review",

@@ -1449,6 +1449,8 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     // "00:48 - 01:00: ..." a breakdown by time
     /^\s*[-*•]\s+["“]/,
     // a bullet that quotes speech (the same words follow as plain text)
+    /^\s*(?:[-*•]\s+)?(?:Part of speech context|Ensure correct spelling)/i,
+    // the model reading its own instructions back: "Part of speech context indicates:", "Ensure correct spelling and mixed-language separation as spoken:"
     /^\s*(?:[-*•]\s+)?(?:Speaker \d+|(?:Fe)?male(?: voice| speaker)?(?: \d)?)\s*(?:\([^)]*\))?\s*:\s*["“][^"”]*["”]\s*\([^)]*\)\s*$/i
     // Female 1: "ധന്യ" (Dhanya?)  a quote with its romanised gloss
   ];
@@ -1472,7 +1474,9 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     return { text: balanceQuotes(text2), dropped: dropped || text2 !== out.join(" ").replace(/\s{2,}/g, " ").trim() };
   }
   function stripStamps(text) {
-    const t = String(text || "");
+    let t = String(text || "");
+    const bullet = /(?:^|\s)[-–•*]\s+\d{1,2}:\d{2}(?::\d{2})?:\s+/g;
+    if ((t.match(bullet) || []).length >= 2) t = t.replace(bullet, " ").replace(/\s{2,}/g, " ").trim();
     const glued = /(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])/g;
     if ((t.match(glued) || []).length < 4) return t;
     return t.replace(/(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])|^[ \t]*\d{1,2}:\d{2}(?![\d:])[ \t]*/gm, "").replace(/\s{2,}/g, " ").trim();
@@ -1510,10 +1514,10 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   function cleanTranscript(text, names2 = [], dedupe = null) {
     const notes = stripNotes(text);
     const { text: t, leaked } = stripThinking(notes.text);
-    let clean = dropRepeats(stripStamps(t));
-    if (dedupe) clean = dedupe(clean);
-    clean = stripLabels(clean, names2);
-    return { text: clean, leaked: leaked || notes.dropped, changed: clean !== String(text || "").trim() };
+    let clean3 = dropRepeats(stripStamps(t));
+    if (dedupe) clean3 = dedupe(clean3);
+    clean3 = stripLabels(clean3, names2);
+    return { text: clean3, leaked: leaked || notes.dropped, changed: clean3 !== String(text || "").trim() };
   }
   var LETTER = new RegExp("\\p{L}", "u");
   function latinShare(text) {
@@ -1606,6 +1610,11 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     if (ta.length === 1 !== (tb.length === 1)) {
       const [one, many] = ta.length === 1 ? [ta[0], tb] : [tb[0], ta];
       if (one.length >= 6 && one === many.join("")) return 0.9;
+      if (many.length >= 2 && one.length >= 5) {
+        const [first2, last] = [many[0], many[many.length - 1]];
+        if (one.startsWith(first2) && one.length > first2.length && last.startsWith(one.slice(first2.length))) return 0.8;
+        if (one === first2[0] + last) return 0.8;
+      }
     }
     if (!sameFirst && !closeFirst) return 0;
     if (ta.length === 1 || tb.length === 1) return sameFirst ? 0.7 : 0;
@@ -1618,7 +1627,22 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const presence = cleanPresence(presenceIn);
     const owner = (invited || []).find((p) => p.status === "owner");
     const selfName = myName || owner?.name || owner?.email || "";
-    const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
+    const hereAll = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
+    const here = [];
+    for (const h4 of hereAll) {
+      const t = tokens(h4.name);
+      const twin = here.find((o) => {
+        const u = tokens(o.name);
+        return t.length >= 2 && u.length === t.length && t[0] === u[0] && t[t.length - 1] !== u[u.length - 1] && lev1(t[t.length - 1], u[u.length - 1]) && t.slice(1, -1).join(" ") === u.slice(1, -1).join(" ");
+      });
+      if (!twin) here.push({ ...h4 });
+      else {
+        if (h4.samples > twin.samples) twin.name = h4.name;
+        twin.first = Math.min(twin.first, h4.first);
+        twin.last = Math.max(twin.last, h4.last);
+        twin.samples += h4.samples;
+      }
+    }
     const rows = (invited || []).map((p) => ({ ...p, ids: identities(p, entries), match: null }));
     const pairs = [];
     rows.forEach((r, ri) => here.forEach((h4, hi) => {
@@ -1665,12 +1689,12 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     for (const r of rows || []) {
       const seen = String(r.present?.name || "");
       if (!r.email || !seen || /@/.test(seen) || ROLE_LOCAL.test(String(r.email).split("@")[0].split(/[._-]/)[0])) continue;
-      const clean = seen.replace(/\s*[(\[].*?[)\]]\s*/g, " ").replace(/\s+/g, " ").trim();
-      const words = clean.split(" ");
-      if (words.length < 2 || NOT_A_PERSON.test(clean) || /[()[\]|]/.test(clean) || /^(dr|mr|mrs|ms)\.?\s/i.test(clean)) continue;
+      const clean3 = seen.replace(/\s*[(\[].*?[)\]]\s*/g, " ").replace(/\s+/g, " ").trim();
+      const words = clean3.split(" ");
+      if (words.length < 2 || NOT_A_PERSON.test(clean3) || /[()[\]|]/.test(clean3) || /^(dr|mr|mrs|ms)\.?\s/i.test(clean3)) continue;
       if (words.some((w) => /^[A-Za-zÀ-ɏ]\.?$/.test(w))) continue;
-      if (clean.toLowerCase() === String(r.email).toLowerCase()) continue;
-      out[emailKey(r.email)] = clean;
+      if (clean3.toLowerCase() === String(r.email).toLowerCase()) continue;
+      out[emailKey(r.email)] = clean3;
     }
     return out;
   }
@@ -2027,6 +2051,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     [/^attendees?\b/i, "attendees"],
     [/^agenda\b/i, "agenda"],
     [/^discussion\b/i, "discussion"],
+    [/^updates?\b/i, "updates"],
     [/^action/i, "actions"],
     [/^next\s+meeting\b/i, "next"],
     [/^(added by the completeness check|notes for the note-taker|for review)/i, "review"]
@@ -2140,7 +2165,7 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
   var row = (cells) => `| ${cells.map(cellMd).join(" | ")} |`;
   var groupHeading = (g) => g.kind === "client" ? `Attendees \u2013 Client Side (${g.org || PH.client})` : g.kind === "si" ? `Attendees \u2013 System Integrator (${g.org})` : "Attendees";
   var groupCols = (g) => ["SR", "Name", g.kind === "client" ? "Department" : "Organisation", "Designation"];
-  function composeMarkdown({ facts, prose, review = [] }) {
+  function composeMarkdown({ facts, prose, review = [], updates = null }) {
     const h4 = facts.header;
     const L2 = [MARKER, `# ${facts.title}`, "", "## Meeting details", "| Field | Value |", "|---|---|"];
     for (const [k2, v] of [["Topic", h4.topic], ["Mode", h4.mode], ["Location", h4.location], ["Date", h4.date], ["Time", h4.time], ["Chairperson", h4.chair]]) L2.push(row([k2, v]));
@@ -2153,6 +2178,11 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     (prose.agenda.length ? prose.agenda : ["\u2014"]).forEach((a) => L2.push(`- ${a}`));
     L2.push("", "## Discussion", row(["SR", "Topic", "Discussion / Decision Points", "Responsibility"]), "|---|---|---|---|");
     prose.discussion.forEach((d, i) => L2.push(row([i + 1, d.topic, d.points.join("<br>"), d.resp])));
+    if (updates?.rows?.length) {
+      const cols = ["SR", "Name", ...updates.columns];
+      L2.push("", "## Updates by person", row(cols), `|${cols.map(() => "---").join("|")}|`);
+      updates.rows.forEach((r, i) => L2.push(row([i + 1, r.name, ...r.cells])));
+    }
     L2.push("", "## Action Items", row(["SR", "Action Item", "Responsibility"]), "|---|---|---|");
     if (prose.actions.length) prose.actions.forEach((a, i) => L2.push(row([i + 1, a.text, a.resp])));
     else L2.push(row(["\u2014", "None recorded.", "\u2014"]));
@@ -2177,12 +2207,19 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     const get = (k2) => secs.find((s) => s.key === k2);
     const review = secs.filter((s) => s.key === "review").map((s) => s.lines.join("\n").trim()).filter(Boolean);
     const next = get("next") ? parseNext(get("next").lines) : { when: "", where: "" };
+    const upLines = get("updates")?.lines || [];
+    const upHead = upLines.find((l3) => l3.trim().startsWith("|") && !isSep(l3));
+    const upHeadCells = upHead ? splitRow(upHead).map(stripMd) : [];
+    if (/^sr\b/i.test(upHeadCells[0] || "")) upHeadCells.shift();
+    const upCols = upHeadCells.slice(1);
+    const upRows = upCols.length ? tableRows(upLines).map((r) => numericLead(r.map(stripMd))).filter((c) => c.length >= 2).map((c) => ({ name: c[0], cells: upCols.map((_2, i) => c[i + 1] || "\u2014") })) : [];
     return {
       title,
       header: header2,
       groups,
       agenda: get("agenda") ? parseAgenda(get("agenda").lines) : [],
       discussion: get("discussion") ? parseDiscussion(get("discussion").lines) : [],
+      updates: { columns: upCols, rows: upRows },
       actions: get("actions") ? parseActions(get("actions").lines) : [],
       next: { when: next.when || TBD, where: next.where || TBD },
       review
@@ -2233,6 +2270,15 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
       ),
       gap
     );
+    if (doc.updates?.rows?.length) {
+      const cols = doc.updates.columns;
+      out.push(
+        table(
+          `<thead>${tr(navy("SR No.", { w: 56 }) + navy("Name", { w: 120 }) + cols.map((c) => navy(c)).join(""))}</thead><tbody>${doc.updates.rows.map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(r.name), { w: 120, bold: true, z: i % 2 === 1 }) + r.cells.map((c) => plain(e(c), { z: i % 2 === 1 })).join(""))).join("")}</tbody>`
+        ),
+        gap
+      );
+    }
     out.push(
       table(
         `<thead>${tr(navy("Sr.", { w: 56 }) + navy("Action Item") + navy("Responsibility", { w: 130 }))}</thead><tbody>${doc.actions.length ? doc.actions.map((a, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(ul([a.text]), { z: i % 2 === 1 }) + plain(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join("") : tr(plain("None recorded.", { colspan: 3 }))}</tbody>`
@@ -2449,6 +2495,8 @@ ${att}
     // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
     shareList: "",
     // default people to share the minutes with
+    meetingTypes: [],
+    // kinds of recurring meeting with extra minutes sections: [{ id, name, match, code, updates, columns, extra }] (src/meetingtypes.js)
     shareGroups: "",
     // per recurring meeting: "title words | a@x.com, b@y.com"
     shareMode: "review",
@@ -2576,8 +2624,8 @@ ${att}
   }
   async function setSetting(patch) {
     const { settings: settings2 } = await chrome.storage.local.get("settings");
-    const { learnedNames, voices, ...clean } = patch;
-    await chrome.storage.local.set({ settings: { ...settings2 || {}, ...clean } });
+    const { learnedNames, voices, ...clean3 } = patch;
+    await chrome.storage.local.set({ settings: { ...settings2 || {}, ...clean3 } });
   }
   async function ensureEmailSecret() {
     await ensureMigrated();
@@ -3776,6 +3824,29 @@ Rules:
     });
   }
 
+  // src/linenames.js
+  var lineKey = (l3) => `${l3?.src === "me" ? "me" : "others"}@${Math.round((Number(l3?.t) || 0) * 10)}`;
+  var clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+  function cleanLineNames(map) {
+    const out = {};
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      for (const [k2, v] of Object.entries(map)) {
+        const name = clean(v);
+        if (/^(me|others)@-?\d+$/.test(k2) && name) out[k2] = name;
+      }
+    }
+    return out;
+  }
+  var lineNameOf = (map, l3) => map && Object.prototype.hasOwnProperty.call(map, lineKey(l3)) ? clean(map[lineKey(l3)]) : "";
+  function setLineName(map, l3, name) {
+    const next = { ...cleanLineNames(map) };
+    const n = clean(name);
+    if (n) next[lineKey(l3)] = n;
+    else delete next[lineKey(l3)];
+    return next;
+  }
+  var usedNames = (map) => [...new Set(Object.values(cleanLineNames(map)))];
+
   // src/prompt.js
   var TRANSCRIPT_NOTES = `About the transcript:
 - It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Indian or other non-English languages written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
@@ -3835,9 +3906,9 @@ Do not write an Attendance section or notes about the recording: they are added 
     const me2 = myName ? `ME (${myName})` : "ME";
     const dd = makeDeduper();
     if (ctx.labeled?.length) {
-      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${l3.src === "me" && !ctx.room ? me2 : l3.label}: ${applyDictionary(cleanTranscript(l3.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join("\n");
+      return ctx.labeled.map((l3) => `[${fmtTime(l3.t)}] ${lineNameOf(ctx.lineNames, l3) || (l3.src === "me" && !ctx.room ? me2 : l3.label)}: ${applyDictionary(cleanTranscript(l3.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join("\n");
     }
-    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS"}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join("\n");
+    return [...meeting2.segments].sort((a, b) => a.t - b.t).map((s) => `[${fmtTime(s.t)}] ${lineNameOf(ctx.lineNames, s) || (s.src === "me" ? ctx.room ? "ROOM" : me2 : "OTHERS")}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join("\n");
   }
   function speakerTimeline(captions, ctx = {}) {
     if (!captions?.length) return "";
@@ -3872,6 +3943,7 @@ Do not write an Attendance section or notes about the recording: they are added 
     if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(", ")}`);
     if (ctx.presenceLine) lines.push(`When people were in the call (a person cannot have spoken, or taken an action in the room, outside these times): ${ctx.presenceLine}`);
     if (notes?.trim()) lines.push("", "Context from the note-taker (attendees, agenda, spellings):", notes.trim());
+    if (ctx.extraInstructions?.trim()) lines.push("", "Extra instructions for this kind of meeting, from the note-taker (follow them, unless they conflict with the rules above):", ctx.extraInstructions.trim());
     const timeline = speakerTimeline(ctx.captions, ctx);
     lines.push("", "<transcript>", formatTranscript(meeting2, settings2.myName, ctx), "</transcript>");
     if (timeline) lines.push("", "Speaker timeline from Meet live captions (who was talking when; the caption wording may be wrong, so use it only to attribute speakers):", "<speakers>", timeline, "</speakers>");
@@ -4113,6 +4185,127 @@ Output one line per missing item as: [mm:ss] description | quote of at most 12 w
   var gapLabel = (g) => `${mmss2(g.from)}\u2013${mmss2(g.to)}`;
   var gapMinutes = (gaps) => Math.max(1, Math.round(gaps.reduce((a, g) => a + (g.to - g.from), 0) / 60));
 
+  // src/meetingtypes.js
+  var DEFAULT_COLUMNS = ["Yesterday", "Today", "Blockers"];
+  var UPDATES_TITLE = "Updates by person";
+  var NO_UPDATE = "No update stated";
+  var MAX_COLUMNS = 5;
+  var clean2 = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+  var slug = (s) => clean2(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  function cleanColumns(cols) {
+    const list = (Array.isArray(cols) ? cols : String(cols || "").split(/[|,\n]/)).map(clean2).filter(Boolean);
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const c of list) {
+      const k2 = c.toLowerCase();
+      if (seen.has(k2)) continue;
+      seen.add(k2);
+      out.push(c.slice(0, 30));
+    }
+    return (out.length ? out : DEFAULT_COLUMNS).slice(0, MAX_COLUMNS);
+  }
+  function normalizeTypes(list) {
+    const used = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const t of Array.isArray(list) ? list : []) {
+      if (!t || typeof t !== "object") continue;
+      const name = clean2(t.name);
+      const match = String(t.match || "").split(",").map(clean2).filter(Boolean).join(", ");
+      const code = clean2(t.code).toLowerCase().replace(/[^a-z-]/g, "");
+      if (!name && !match && !code) continue;
+      let id2 = clean2(t.id) || slug(name) || "type";
+      for (let n = 2; used.has(id2); n++) id2 = `${slug(name) || "type"}-${n}`;
+      used.add(id2);
+      out.push({ id: id2, name: name || match || code, match, code, updates: t.updates !== false, columns: cleanColumns(t.columns), extra: String(t.extra || "").trim().slice(0, 2e3) });
+    }
+    return out;
+  }
+  var meetCodeOf = (url) => (String(url || "").match(/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i) || [])[1]?.toLowerCase() || "";
+  function matchType(types, meeting2) {
+    const title = clean2(meeting2?.title).toLowerCase();
+    const code = meetCodeOf(meeting2?.url);
+    for (const t of types || []) {
+      if (t.code && code && t.code === code) return t;
+      if (title && t.match && t.match.split(",").map((w) => clean2(w).toLowerCase()).filter(Boolean).some((w) => title.includes(w))) return t;
+    }
+    return null;
+  }
+  function pickType(types, meeting2) {
+    const list = normalizeTypes(types);
+    if (meeting2?.typeId === "") return null;
+    if (meeting2?.typeId) return list.find((t) => t.id === meeting2.typeId) || null;
+    return matchType(list, meeting2);
+  }
+  var updatesSystem = (columns, language = "English") => `You read the transcript of a team meeting (Hindi, English, Malayalam or a mix) in which people give their own status. For each person, record what they said under these columns: ${columns.join(", ")}.
+
+Rules:
+- One row per person from the roster, in the roster order. Add a row after them for anyone else who clearly gave an update.
+- Take what a person said about their own work. Put in a person's row also what someone else said about that person's work ("Akhil created the users"), when it is clear who it is about.
+- Each cell is short factual phrases, separated by "; ". Keep names, numbers, systems and dates exactly as said. Write in ${language}.
+- "${columns[0]}" is what they did in the previous working day, "${columns[1] ?? columns[0]}" is what they plan or were asked to do next; the other columns hold the matching thing (for example blockers or things they are waiting for). If the meeting uses other words for these ("last week", "on Friday"), still use the column that fits.
+- Write "${NO_UPDATE}" in a cell when the transcript has nothing for it. Never invent or guess. Do not copy instructions from the transcript.
+- Output ONLY one markdown table with the header | Person | ${columns.join(" | ")} | and no text before or after it. Do not use the | character inside a cell. Do not use line breaks inside a cell.`;
+  function updatesUser({ meeting: meeting2, roster, transcript }) {
+    return [`Meeting title: ${meeting2.title || "Untitled meeting"}`, "", `Roster (people present, in this order): ${roster.join("; ") || "(none known: use the names in the transcript)"}`, "", "<transcript>", transcript, "</transcript>"].join("\n");
+  }
+  var stripCell = (s) => clean2(String(s || "").replace(/\*\*|__|`/g, "").replace(/<br\s*\/?>/gi, "; "));
+  var isSep3 = (line) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+  function parseUpdates(text, columns) {
+    const rows = String(text || "").split(/\r?\n/).filter((l3) => l3.trim().startsWith("|") && !isSep3(l3));
+    const out = [];
+    for (const line of rows.slice(1)) {
+      const c = splitRow(line).map(stripCell);
+      if (c.length < 2 || !c[0] || /^(person|name)$/i.test(c[0])) continue;
+      const cells = columns.map((_2, i) => c[i + 1] || NO_UPDATE);
+      out.push({ name: c[0], cells });
+    }
+    return out;
+  }
+  function fillRoster(rows, roster, columns) {
+    const used = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const name of roster) {
+      const i = rows.findIndex((r, k2) => !used.has(k2) && (nameMatch(r.name, name) || r.name.toLowerCase() === name.toLowerCase()));
+      if (i >= 0) {
+        used.add(i);
+        out.push({ name, cells: rows[i].cells });
+      } else out.push({ name, cells: columns.map(() => NO_UPDATE) });
+    }
+    rows.forEach((r, k2) => {
+      if (!used.has(k2) && !out.some((o) => nameMatch(o.name, r.name))) out.push(r);
+    });
+    return out;
+  }
+  function updatesMarkdown(rows, columns) {
+    const cell2 = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+    const L2 = [`## ${UPDATES_TITLE}`, `| Person | ${columns.map(cell2).join(" | ")} |`, `|---|${columns.map(() => "---").join("|")}|`];
+    for (const r of rows) L2.push(`| ${cell2(r.name)} | ${r.cells.map(cell2).join(" | ")} |`);
+    return L2.join("\n");
+  }
+  function insertUpdates(mom, block) {
+    const m = /^##\s+Action Items\b/im.exec(mom);
+    if (m) return `${mom.slice(0, m.index)}${block}
+
+${mom.slice(m.index)}`;
+    const r = /^##\s+Risks\b/im.exec(mom);
+    if (r) return `${mom.slice(0, r.index)}${block}
+
+${mom.slice(r.index)}`;
+    return `${mom}
+
+${block}`;
+  }
+  function rosterOf({ presence = {}, attendees = [], myName = "" }) {
+    const out = [];
+    for (const n of [...Object.keys(presence), ...attendees]) {
+      const name = clean2(n);
+      if (!name || /^unknown/i.test(name) || /^(me|room)$/i.test(name)) continue;
+      if (out.some((o) => nameMatch(o, name) || o.toLowerCase() === name.toLowerCase())) continue;
+      out.push(name);
+    }
+    return out;
+  }
+
   // src/minutes.js
   var wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
   function noInviteReason(meeting2, settings2) {
@@ -4258,16 +4451,35 @@ ${completeness}`;
         if (e2?.name === "AbortError") throw e2;
       }
     }
+    let updates = null;
+    let updatesNote = "";
+    const mt2 = ctx.meetingType;
+    if (mt2?.updates) {
+      try {
+        onStatus("Writing the updates by person\u2026");
+        stats.calls++;
+        const roster = rosterOf({ presence, attendees: ctx.attendees || [] });
+        const raw = await gen(updatesSystem(mt2.columns, settings2.momLanguage), updatesUser({ meeting: meeting2, roster, transcript }), void 0, { temperature: TEMPERATURE.check });
+        const rows = fillRoster(parseUpdates(raw, mt2.columns), roster, mt2.columns);
+        if (rows.length) updates = { columns: mt2.columns, rows };
+        else updatesNote = "The updates by person could not be read from the model reply. Press Rewrite minutes to try again.";
+      } catch (e2) {
+        if (e2?.name === "AbortError") throw e2;
+        updatesNote = "The updates by person could not be written. Press Rewrite minutes to try again.";
+      }
+    }
     const cov = coverageMarkdown(coverage);
     const written = `_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ""})` : "a single pass"}._`;
     if (amnex) {
-      return { mom: composeMarkdown({ ...amnex, review: [cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format };
+      return { mom: composeMarkdown({ ...amnex, updates, review: [updatesNote, cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format };
     }
+    if (updates) mom = insertUpdates(mom, updatesMarkdown(updates.rows, updates.columns));
     const durationSec = meeting2.endedAt ? (meeting2.endedAt - meeting2.startedAt) / 1e3 : 0;
     const attendance = attendanceMarkdown({ invited: meeting2.invited, presence, durationSec, entries: ctx.entries, myName: settings2.myName, whyNoInvite: noInviteReason(meeting2, settings2) });
     const foot = [];
     if (attendance) foot.push(attendance);
     if (cov) foot.push(cov);
+    if (updatesNote) foot.push(`**${updatesNote}**`);
     foot.push(written);
     return { mom: `${mom}
 
@@ -4901,7 +5113,9 @@ ${meeting2.mom || ""}
     const labeled = labeledLinesFor(meeting2, settings2, false, cache);
     return {
       entries: parseDictionary(settings2.dictionary),
-      attendees: (meeting2?.attendees || []).filter(Boolean),
+      // the names the user put on single lines count as people in the meeting (so they can own actions and get a row in updates)
+      attendees: [.../* @__PURE__ */ new Set([...(meeting2?.attendees || []).filter(Boolean), ...usedNames(meeting2?.lineNames)])],
+      lineNames: cleanLineNames(meeting2?.lineNames),
       learned: (settings2.learnedNames || []).slice(-40),
       labeled,
       room: !!meeting2.room,
@@ -5031,11 +5245,12 @@ ${meeting2.mom || ""}
     const pending = await listPending(id2);
     const ctx = nameCtxFor(meeting2, settings2, cache);
     const absent = matchPeople(meeting2.invited, { ...ctx.voicePresence || {}, ...meeting2.presence || {} }, { entries: ctx.entries, myName: settings2.myName }).rows.filter((r) => !r.present).map((r) => r.name);
+    const meetingType = pickType(settings2.meetingTypes, meeting2);
     const { mom: text, stats, extract } = await writeMinutes({
       meeting: meeting2,
       settings: { ...settings2, minutesFormat: meeting2.format || settings2.minutesFormat },
       notes: meeting2.notes,
-      ctx: { ...ctx, absent, captions: meeting2.captions, reread },
+      ctx: { ...ctx, absent, captions: meeting2.captions, reread, meetingType, extraInstructions: meetingType?.extra || "" },
       gen: (system, user, onText, opts) => generateWithRetry({
         generate: generate2,
         settings: settings2,
@@ -5330,10 +5545,10 @@ ${meeting2.mom || ""}
         };
         const save = Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: "Save name" });
         save.onclick = async () => {
-          const clean = input.value.trim().replace(/\s+/g, " ").slice(0, 60);
+          const clean3 = input.value.trim().replace(/\s+/g, " ").slice(0, 60);
           const all = await getVoices();
-          if (!clean) return void input.focus();
-          const taken = all.find((x2) => x2.id !== v.id && x2.name.toLowerCase() === clean.toLowerCase());
+          if (!clean3) return void input.focus();
+          const taken = all.find((x2) => x2.id !== v.id && x2.name.toLowerCase() === clean3.toLowerCase());
           if (taken) {
             const ask = await modal({ text: `${taken.name} already has a voice. Is this the same person? Their two voices will be joined, and ${taken.name} is recognised from both.`, buttons: [{ label: "No, it is someone else", value: "no" }, { label: `Yes, join with ${taken.name}`, value: "merge", primary: true }] });
             if (ask?.value !== "merge") {
@@ -5352,7 +5567,7 @@ ${meeting2.mom || ""}
             }
             return;
           }
-          await saveVoices(all.map((x2) => x2.id === v.id ? { ...x2, name: clean, confirmed: true } : x2));
+          await saveVoices(all.map((x2) => x2.id === v.id ? { ...x2, name: clean3, confirmed: true } : x2));
         };
         input.addEventListener("keydown", (e2) => e2.key === "Enter" && save.click());
         const said = lines.filter((l3) => l3.name === v.name).slice(0, 2);
@@ -5377,7 +5592,18 @@ ${meeting2.mom || ""}
     st2.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || "#3b2fa8"}; } @bottom-left { border-top-color: ${settings.orgAccent || "#3b2fa8"}; } @bottom-right { border-top-color: ${settings.orgAccent || "#3b2fa8"}; } }` : "";
   }
   var currentFormat = () => meeting.format || settings.minutesFormat || "amnex";
+  function paintType() {
+    const types = normalizeTypes(settings.meetingTypes);
+    const sel = $2("typeSel");
+    sel.classList.toggle("hidden", !types.length);
+    if (!types.length) return;
+    const auto = pickType(types, { ...meeting, typeId: null });
+    sel.replaceChildren(new Option(`Meeting type: automatic (${auto ? auto.name : "none matches"})`, "auto"), new Option("Meeting type: none", "none"), ...types.map((t) => new Option(`Meeting type: ${t.name}`, t.id)));
+    sel.value = meeting.typeId == null ? "auto" : meeting.typeId === "" ? "none" : meeting.typeId;
+    if (sel.value !== (meeting.typeId == null ? "auto" : meeting.typeId === "" ? "none" : meeting.typeId)) sel.value = "auto";
+  }
   function paintFormat() {
+    paintType();
     const f = currentFormat();
     for (const b of $2("fmtSwitch").querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.v === f));
     $2("fmtText").textContent = FORMATS[f];
@@ -5394,6 +5620,15 @@ ${meeting2.mom || ""}
     }
   }
   for (const b of $2("fmtSwitch").querySelectorAll("button")) b.onclick = () => chooseFormat(b.dataset.v, true);
+  $2("typeSel").onchange = async (e2) => {
+    const v = e2.target.value;
+    await patchMeeting2({ typeId: v === "auto" ? null : v === "none" ? "" : v });
+    paintType();
+    if (meeting.mom && !jobBusy) {
+      $2("genStatus").textContent = "Rewriting the minutes for this meeting type\u2026";
+      runGenerate();
+    }
+  };
   $2("fmtChange").onclick = (e2) => {
     e2.preventDefault();
     ($2("fmtSwitch").querySelector('[aria-checked="true"]') || $2("fmtSwitch").querySelector("button")).focus();
@@ -5449,13 +5684,18 @@ ${meeting2.mom || ""}
     const ctx = nameCtx();
     const shown = labeledLines(true);
     const dd = makeDeduper();
-    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, who: l3.label, text: cleanTranscript(l3.text, ctx.attendees || [], dd).text, flag: l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown" })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === "me" ? meeting.room ? "Room" : settings.myName || "Me" : "Others", text: cleanTranscript(s.text, ctx.attendees || [], dd).text, flag: "" }));
+    const named = (line, orig, flag) => {
+      const own = lineNameOf(meeting.lineNames, line);
+      return { line, orig, own, who: own || orig, flag: own ? "" : flag };
+    };
+    const rows = shown ? shown.map((l3) => ({ t: l3.t, src: l3.src, ...named(l3, l3.label, l3.source === "conflict" ? "conflict" : l3.name ? "" : "unknown"), text: cleanTranscript(l3.text, ctx.attendees || [], dd).text })) : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, ...named(s, s.src === "me" ? meeting.room ? "Room" : settings.myName || "Me" : "Others", ""), text: cleanTranscript(s.text, ctx.attendees || [], dd).text }));
     for (const g of transcriptGaps(meeting)) rows.push({ t: g.from, src: "note", who: "Gap", text: `No transcript for ${gapLabel(g)}. If people spoke here, it was not captured.`, flag: "" });
     for (const p of meeting.pauses || []) rows.push({ t: p.from, src: "note", who: "Paused", text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : "the end"}. Nothing from this stretch was transcribed or kept.`, flag: "" });
     rows.sort((a, b) => a.t - b.t);
     renderNameBox().catch(() => {
     });
-    $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : rows.length === 1 ? "segment" : "segments"}`;
+    const mine = rows.filter((r) => r.own).length;
+    $2("trInfo").textContent = `${rows.length} ${shown ? "lines, speakers named by voice recognition (a best guess)" : rows.length === 1 ? "segment" : "segments"}${mine ? `, ${mine} named by you` : ""}. Click a label to say who it was.`;
     $2("trCount").textContent = rows.length ? `${rows.length} line${rows.length === 1 ? "" : "s"}` : "";
     if (!rows.length) {
       $2("transcript").innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
@@ -5468,11 +5708,132 @@ ${meeting2.mom || ""}
         row2.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
         row2.children[0].textContent = fmtTime(r.t);
         row2.children[1].textContent = r.who;
-        row2.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown ? " named" : ""}`;
+        row2.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown || r.own ? " named" : ""}${r.own ? " own" : ""}`;
+        if (r.line && (r.src !== "me" || meeting.room)) {
+          const chip = row2.children[1];
+          chip.classList.add("pick");
+          chip.setAttribute("role", "button");
+          chip.tabIndex = 0;
+          chip.setAttribute("aria-haspopup", "dialog");
+          chip.setAttribute("aria-label", `${r.who}, at ${fmtTime(r.t)}. Press to say who this was.`);
+          chip.title = r.own ? `Named by you (was "${r.orig}"). Click to change.` : "Click to say who this was (for this meeting only).";
+          const open3 = () => openNameMenu(chip, r);
+          chip.onclick = open3;
+          chip.onkeydown = (e2) => {
+            if (e2.key === "Enter" || e2.key === " ") {
+              e2.preventDefault();
+              open3();
+            }
+          };
+        }
         row2.children[2].textContent = r.src === "me" && !shown ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
         return row2;
       })
     );
+  }
+  function pickableNames() {
+    const out = [];
+    const add = (n) => {
+      const name = String(n || "").replace(/\s+/g, " ").trim();
+      if (!name || /^(unknown|unnamed|you$|me$|others$|room$|gap$|paused$)/i.test(name) || /@/.test(name)) return;
+      if (!out.some((o) => o.toLowerCase() === name.toLowerCase())) out.push(name);
+    };
+    usedNames(meeting.lineNames).reverse().forEach(add);
+    attendeeList().forEach(add);
+    Object.keys(meeting.presence || {}).forEach(add);
+    (meeting.invited || []).forEach((p) => add(personLabel(p)));
+    parseDirectory(settings.peopleDirectory).forEach((p) => add(p.name));
+    (settings.voices || []).filter((v) => !isAnon(v)).forEach((v) => add(v.name));
+    add(settings.myName);
+    return out.slice(0, 60);
+  }
+  async function nameLine(line, name) {
+    await patchMeeting2({ lineNames: setLineName(meeting.lineNames, line, name) });
+    renderTranscript();
+    if (meeting.mom && !jobBusy) $2("genStatus").textContent = "Names changed. Press Rewrite minutes to use them.";
+  }
+  var nameMenu = null;
+  function closeNameMenu(refocus = true) {
+    if (!nameMenu) return;
+    const { el, chip, off } = nameMenu;
+    nameMenu = null;
+    off();
+    el.remove();
+    if (refocus && document.contains(chip)) chip.focus();
+  }
+  function openNameMenu(chip, r) {
+    closeNameMenu(false);
+    const el = document.createElement("div");
+    el.className = "namemenu";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", "Who said this?");
+    const title = document.createElement("div");
+    title.className = "nm-title";
+    title.textContent = `Who said this? ${fmtTime(r.t)}`;
+    const list = document.createElement("div");
+    list.className = "nm-list";
+    for (const n of pickableNames()) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = n;
+      if (n === r.own) b.className = "cur";
+      b.onclick = () => {
+        closeNameMenu(false);
+        nameLine(r.line, n);
+      };
+      list.append(b);
+    }
+    const form = document.createElement("form");
+    form.className = "nm-form";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 60;
+    input.placeholder = "Someone else: type a name";
+    input.setAttribute("aria-label", "Type a name");
+    const ok = document.createElement("button");
+    ok.type = "submit";
+    ok.textContent = "Use";
+    form.append(input, ok);
+    form.onsubmit = (e2) => {
+      e2.preventDefault();
+      if (!input.value.trim()) return;
+      closeNameMenu(false);
+      nameLine(r.line, input.value);
+    };
+    el.append(title, list, form);
+    if (r.own) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "nm-reset";
+      reset.textContent = `Back to "${r.orig}"`;
+      reset.onclick = () => {
+        closeNameMenu(false);
+        nameLine(r.line, "");
+      };
+      el.append(reset);
+    }
+    document.body.append(el);
+    const box = chip.getBoundingClientRect();
+    const w = el.offsetWidth;
+    el.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - w - 8))}px`;
+    const below = box.bottom + 6;
+    el.style.top = `${below + el.offsetHeight > window.innerHeight - 8 ? Math.max(8, box.top - el.offsetHeight - 6) : below}px`;
+    const onKey = (e2) => {
+      if (e2.key === "Escape") {
+        e2.preventDefault();
+        closeNameMenu();
+      }
+    };
+    const onDown = (e2) => {
+      if (!el.contains(e2.target) && e2.target !== chip) closeNameMenu(false);
+    };
+    document.addEventListener("keydown", onKey, true);
+    setTimeout(() => document.addEventListener("mousedown", onDown, true));
+    nameMenu = { el, chip, off: () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("mousedown", onDown, true);
+    } };
+    input.focus();
   }
   function renderErrors() {
     const errs = meeting.errors || [];

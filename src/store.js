@@ -36,6 +36,7 @@ export const DEFAULTS = {
   myOrgDomains: '', // email domains of the System Integrator side (comma separated); empty = the domain of "Send to", else one list
   peopleDirectory: '', // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
   shareList: '', // default people to share the minutes with
+  meetingTypes: [], // kinds of recurring meeting with extra minutes sections: [{ id, name, match, code, updates, columns, extra }] (src/meetingtypes.js)
   shareGroups: '', // per recurring meeting: "title words | a@x.com, b@y.com"
   shareMode: 'review', // review = only I get it until I press Share; auto = send to them too
   shareHow: 'to', // to | cc | bcc

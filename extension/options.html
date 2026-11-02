@@ -124,6 +124,10 @@
     .checks .ic.lv-warn { background: var(--amber-bg); color: var(--amber-ink); }
     .checks .ic.lv-bad { background: var(--rec-bg); color: var(--rec-ink); }
     /* more backup keys */
+    .mt-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; margin-bottom: 12px; border: 1px solid var(--separator); border-radius: var(--r-md, 12px); background: var(--fill, transparent); }
+    .mt-card textarea { width: 100%; resize: vertical; }
+    .row-sw { display: flex; align-items: center; gap: 10px; }
+    .row-sw label { margin: 0; }
     .bk-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
     .bk-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .bk-name { flex: none; min-width: 108px; font-weight: 600; margin: 0; }
@@ -621,6 +625,13 @@
           <span class="flabel">People and their details</span>
           <p class="hint">Names, titles, departments, designations, organisations and emails of the people in your meetings now live in <a href="#voices" id="goPeople">Settings → Voices → People and their details</a>, next to their voices, so you fill them in once while you are naming people. They are used in the attendee tables of the minutes.</p>
         </div>
+      </section>
+
+      <section class="card" id="meetingTypesCard" aria-labelledby="hTypes">
+        <h2 id="hTypes" class="lbl">Meeting types</h2>
+        <p class="hint">A recurring meeting can get its own extra sections. The main one is a table of what each person did and plans to do. A type applies by itself when the meeting title (or Meet code) matches; you can also pick one on the minutes page and press Rewrite minutes.</p>
+        <div id="meetingTypesList" class="mt-list"></div>
+        <button type="button" id="addType" class="btn sm">+ Add meeting type</button>
       </section>
     </section>
 

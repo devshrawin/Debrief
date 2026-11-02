@@ -79,6 +79,12 @@ function score(a, b) {
   if ((ta.length === 1) !== (tb.length === 1)) {
     const [one, many] = ta.length === 1 ? [ta[0], tb] : [tb[0], ta];
     if (one.length >= 6 && one === many.join('')) return 0.9;
+    // "nileshg" is Nilesh + the start of Gaurda, "rkatare" is R + Katare: an address built from a first name and an initial, or an initial and a surname
+    if (many.length >= 2 && one.length >= 5) {
+      const [first, last] = [many[0], many[many.length - 1]];
+      if (one.startsWith(first) && one.length > first.length && last.startsWith(one.slice(first.length))) return 0.8;
+      if (one === first[0] + last) return 0.8;
+    }
   }
   if (!sameFirst && !closeFirst) return 0;
   if (ta.length === 1 || tb.length === 1) return sameFirst ? 0.7 : 0; // first name only: handled with an ambiguity check
@@ -94,7 +100,24 @@ export function matchPeople(invited, presenceIn, { entries = [], myName = '' } =
   // "You" is the person running Debrief: their name if known, else the organiser of the invite.
   const owner = (invited || []).find((p) => p.status === 'owner');
   const selfName = myName || owner?.name || owner?.email || '';
-  const here = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
+  const hereAll = Object.entries(presence || {}).map(([name, v]) => ({ name: /^you$/i.test(name.trim()) && selfName ? selfName : name, first: v[0], last: v[1], samples: v[2] || 1 }));
+  // One person shown under two spellings ("Nilesh Gaurda" and "Nilesh Gauda"): the same first name and a surname one letter apart
+  // is one person in the call, counted once, with the time span of both.
+  const here = [];
+  for (const h of hereAll) {
+    const t = tokens(h.name);
+    const twin = here.find((o) => {
+      const u = tokens(o.name);
+      return t.length >= 2 && u.length === t.length && t[0] === u[0] && t[t.length - 1] !== u[u.length - 1] && lev1(t[t.length - 1], u[u.length - 1]) && t.slice(1, -1).join(' ') === u.slice(1, -1).join(' ');
+    });
+    if (!twin) here.push({ ...h });
+    else {
+      if (h.samples > twin.samples) twin.name = h.name;
+      twin.first = Math.min(twin.first, h.first);
+      twin.last = Math.max(twin.last, h.last);
+      twin.samples += h.samples;
+    }
+  }
   const rows = (invited || []).map((p) => ({ ...p, ids: identities(p, entries), match: null }));
   const pairs = [];
   rows.forEach((r, ri) => here.forEach((h, hi) => {

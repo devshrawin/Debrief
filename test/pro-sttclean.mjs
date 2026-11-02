@@ -156,4 +156,15 @@ await test('the same sentence with other fillers, articles and capitals is a rep
   }
 });
 
+await test('the model reading its own instructions back, and bulleted time markers, are removed (Cadence Call 2 Nov)', () => {
+  const leak = 'Part of speech context indicates:\n- "दीप यू एंड अखिल": "Deep, you and Akhil"\n- "अंकुर": Ankur Ensure correct spelling and mixed-language separation as spoken:\n- 00:00: नहीं फ्राइडे को आए थे। - 00:05: हां अगर कुछ रहेगा तो involve कर सकते हो।';
+  const r = cleanTranscript(leak);
+  assert.equal(r.leaked, true);
+  assert.equal(r.text, 'नहीं फ्राइडे को आए थे। हां अगर कुछ रहेगा तो involve कर सकते हो।');
+  assert.equal(cleanTranscript('- 00:50: Okay, fine. - 00:52: Okay. Ankur, how is testing progressing?').text, 'Okay, fine. Okay. Ankur, how is testing progressing?');
+  // one bullet with a time, or a time in speech, stays
+  assert.equal(cleanTranscript('The call is at 4:30: sharp. Please join.').text, 'The call is at 4:30: sharp. Please join.');
+  assert.equal(cleanTranscript('- 10:00: standup').text, '- 10:00: standup');
+});
+
 console.log(`\n${passed} passed`);

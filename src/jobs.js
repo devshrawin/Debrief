@@ -9,6 +9,8 @@
 import { getMeeting, saveMeeting, patchMeeting, getSettings, llmReady, mergeEmailNames } from './store.js';
 import { parseDictionary } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
+import { pickType } from './meetingtypes.js';
+import { cleanLineNames, usedNames } from './linenames.js';
 import { matchPeople, setEmailNames, learnEmailNames, personLabel } from './attendance.js';
 import { labelTranscript, voicePresence } from './voice/match.js';
 import { usableVoices } from './voice/learn.js';
@@ -50,7 +52,9 @@ export function nameCtxFor(meeting, settings, cache) {
   const labeled = labeledLinesFor(meeting, settings, false, cache);
   return {
     entries: parseDictionary(settings.dictionary),
-    attendees: (meeting?.attendees || []).filter(Boolean),
+    // the names the user put on single lines count as people in the meeting (so they can own actions and get a row in updates)
+    attendees: [...new Set([...(meeting?.attendees || []).filter(Boolean), ...usedNames(meeting?.lineNames)])],
+    lineNames: cleanLineNames(meeting?.lineNames),
     learned: (settings.learnedNames || []).slice(-40),
     labeled,
     room: !!meeting.room,
@@ -199,11 +203,12 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
   const pending = await listPending(id);
   const ctx = nameCtxFor(meeting, settings, cache);
   const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name); // names only: no addresses go to the model
+  const meetingType = pickType(settings.meetingTypes, meeting);
   const { mom: text, stats, extract } = await writeMinutes({
     meeting,
     settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
     notes: meeting.notes,
-    ctx: { ...ctx, absent, captions: meeting.captions, reread },
+    ctx: { ...ctx, absent, captions: meeting.captions, reread, meetingType, extraInstructions: meetingType?.extra || '' },
     gen: (system, user, onText, opts) =>
       generateWithRetry({
         generate, settings, system, user, signal, onText: onText && ui.onText, temperature: opts?.temperature,

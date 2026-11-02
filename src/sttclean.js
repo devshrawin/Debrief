@@ -72,6 +72,7 @@ const NOTE_LINE = [
   /^\s*(?:[-*•]\s+)?(?:Silent audio track|Output:|Analy[sz]e the audio|Keywords? to check|(?:Malayalam |Hindi )?transcription check|English context with|Audio (?:analysis|summary|breakdown))/i,
   /^\s*(?:[-*•]\s+)?\d{1,2}:\d{2}(?::\d{2})?\s*[-–]\s*\d{1,2}:\d{2}/, // "00:48 - 01:00: ..." a breakdown by time
   /^\s*[-*•]\s+["“]/, // a bullet that quotes speech (the same words follow as plain text)
+  /^\s*(?:[-*•]\s+)?(?:Part of speech context|Ensure correct spelling)/i, // the model reading its own instructions back: "Part of speech context indicates:", "Ensure correct spelling and mixed-language separation as spoken:"
   /^\s*(?:[-*•]\s+)?(?:Speaker \d+|(?:Fe)?male(?: voice| speaker)?(?: \d)?)\s*(?:\([^)]*\))?\s*:\s*["“][^"”]*["”]\s*\([^)]*\)\s*$/i, // Female 1: "ധന്യ" (Dhanya?)  a quote with its romanised gloss
 ];
 // a romanised gloss the model adds after Malayalam, Hindi or Tamil text: ഇത് ഇങ്ങനെ? (Ith inganeyokke?)
@@ -107,8 +108,12 @@ export function stripNotes(text) {
 // audio was cut from) is removed. A time in speech is followed by a space or a punctuation mark ("at 4:50 sir", "9:00, 10:00,
 // 11:00, 12:00" read out from an agenda), so those stay, and so does anything with fewer than four such offsets.
 export function stripStamps(text) {
-  const t = String(text || '');
-  const glued = /(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])/g;
+  let t = String(text || '');
+  // "- 00:05: words - 00:12: more words": a bulleted time in front of each stretch. Two or more in one piece are the model's
+  // own list markers, not speech ("at 4:30: the agenda" has no bullet before it).
+  const bullet = /(?:^|\s)[-–•*]\s+\d{1,2}:\d{2}(?::\d{2})?:\s+/g;
+  if ((t.match(bullet) || []).length >= 2) t = t.replace(bullet, ' ').replace(/\s{2,}/g, ' ').trim();
+  const glued =/(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])/g;
   if ((t.match(glued) || []).length < 4) return t;
   return t.replace(/(?<![\d:])\d{1,2}:\d{2}(?=[^\s\d:.,;!?)\]\-–/])|^[ \t]*\d{1,2}:\d{2}(?![\d:])[ \t]*/gm, '').replace(/\s{2,}/g, ' ').trim();
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-11-02
+- New: Meeting types (Settings > Minutes). A recurring meeting such as a daily cadence call gets an "Updates by person" table in its minutes: one row for everyone who was there, with columns you choose (default Yesterday, Today, Blockers), plus optional extra instructions for the writer. A type applies by itself when the meeting title contains your words (or the Meet code matches). On the minutes page a chooser lets you pick another type, or none, and rewrites the minutes. Works in the standard layout and in the organisation template (print, Word and email too).
+- New: name a speaker by hand, for one meeting. On the minutes page, click the label on any transcript line ("Unknown speaker", "Others" or a wrong guess) and pick who it was, or type a name. Only that line changes, and only in this meeting: voice profiles and other meetings are not touched. The name shows in the transcript, in Download .txt and in the text the minutes are written from, so Rewrite minutes uses it for owners, actions and the updates table. A small reset puts the original label back.
+- Fix: attendance matched `nileshg@` and `rkatare@` to nobody, so they were listed as absent although they were in the call; a person shown under two spellings (Nilesh Gaurda / Nilesh Gauda) is now counted once.
+- Fix: the speech model sometimes wrote its own instructions into the transcript ("Part of speech context indicates…", "Ensure correct spelling…") and put "- 00:05:" time markers in front of each stretch. Both are removed.
+
 ## 1.2.2 — 2026-10-31 (the 1.1.3 fixes, renumbered because the store already holds 1.2.1)
 - Settings: the speech and general Gemini model fields are dropdowns (with "Other…" to type a name).
 - Settings → Appearance: "While recording" card with the recording pill (moved from Recording) and a new "Hide the recording icon on the toolbar" switch.

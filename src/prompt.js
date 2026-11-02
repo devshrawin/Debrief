@@ -1,6 +1,7 @@
 import { fmtTime } from './store.js';
 import { applyDictionary, glossaryLine } from './dictionary.js';
 import { cleanTranscript, makeDeduper } from './sttclean.js';
+import { lineNameOf } from './linenames.js';
 
 // Shared by the standard and the Amnex-format prompts.
 const TRANSCRIPT_NOTES = `About the transcript:
@@ -65,11 +66,11 @@ export function formatTranscript(meeting, myName, ctx = {}) {
   const dd = makeDeduper();
   // With voice recognition the remote passages are split into labelled lines: [mm:ss] Amal Raj: ...
   if (ctx.labeled?.length) {
-    return ctx.labeled.map((l) => `[${fmtTime(l.t)}] ${l.src === 'me' && !ctx.room ? me : l.label}: ${applyDictionary(cleanTranscript(l.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join('\n');
+    return ctx.labeled.map((l) => `[${fmtTime(l.t)}] ${lineNameOf(ctx.lineNames, l) || (l.src === 'me' && !ctx.room ? me : l.label)}: ${applyDictionary(cleanTranscript(l.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`).join('\n');
   }
   return [...meeting.segments]
     .sort((a, b) => a.t - b.t)
-    .map((s) => `[${fmtTime(s.t)}] ${s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS'}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`)
+    .map((s) => `[${fmtTime(s.t)}] ${lineNameOf(ctx.lineNames, s) || (s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS')}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}`)
     .join('\n');
 }
 
@@ -110,6 +111,7 @@ export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
   if (ctx.absent?.length) lines.push(`Invited but NOT seen in the meeting: ${ctx.absent.join(', ')}`);
   if (ctx.presenceLine) lines.push(`When people were in the call (a person cannot have spoken, or taken an action in the room, outside these times): ${ctx.presenceLine}`);
   if (notes?.trim()) lines.push('', 'Context from the note-taker (attendees, agenda, spellings):', notes.trim());
+  if (ctx.extraInstructions?.trim()) lines.push('', 'Extra instructions for this kind of meeting, from the note-taker (follow them, unless they conflict with the rules above):', ctx.extraInstructions.trim());
   const timeline = speakerTimeline(ctx.captions, ctx);
   lines.push('', '<transcript>', formatTranscript(meeting, settings.myName, ctx), '</transcript>');
   if (timeline) lines.push('', 'Speaker timeline from Meet live captions (who was talking when; the caption wording may be wrong, so use it only to attribute speakers):', '<speakers>', timeline, '</speakers>');

@@ -416,6 +416,7 @@ const SECTION_KEYS = [
   [/^attendees?\b/i, 'attendees'],
   [/^agenda\b/i, 'agenda'],
   [/^discussion\b/i, 'discussion'],
+  [/^updates?\b/i, 'updates'],
   [/^action/i, 'actions'],
   [/^next\s+meeting\b/i, 'next'],
   [/^(added by the completeness check|notes for the note-taker|for review)/i, 'review'],
@@ -550,7 +551,7 @@ const groupHeading = (g) => (g.kind === 'client' ? `Attendees – Client Side ($
 const groupCols = (g) => ['SR', 'Name', g.kind === 'client' ? 'Department' : 'Organisation', 'Designation'];
 
 // facts + guarded prose (+ review notes) -> the markdown that is saved as the minutes.
-export function composeMarkdown({ facts, prose, review = [] }) {
+export function composeMarkdown({ facts, prose, review = [], updates = null }) {
   const h = facts.header;
   const L = [MARKER, `# ${facts.title}`, '', '## Meeting details', '| Field | Value |', '|---|---|'];
   for (const [k, v] of [['Topic', h.topic], ['Mode', h.mode], ['Location', h.location], ['Date', h.date], ['Time', h.time], ['Chairperson', h.chair]]) L.push(row([k, v]));
@@ -563,6 +564,11 @@ export function composeMarkdown({ facts, prose, review = [] }) {
   (prose.agenda.length ? prose.agenda : ['—']).forEach((a) => L.push(`- ${a}`));
   L.push('', '## Discussion', row(['SR', 'Topic', 'Discussion / Decision Points', 'Responsibility']), '|---|---|---|---|');
   prose.discussion.forEach((d, i) => L.push(row([i + 1, d.topic, d.points.join('<br>'), d.resp])));
+  if (updates?.rows?.length) {
+    const cols = ['SR', 'Name', ...updates.columns];
+    L.push('', '## Updates by person', row(cols), `|${cols.map(() => '---').join('|')}|`);
+    updates.rows.forEach((r, i) => L.push(row([i + 1, r.name, ...r.cells])));
+  }
   L.push('', '## Action Items', row(['SR', 'Action Item', 'Responsibility']), '|---|---|---|');
   if (prose.actions.length) prose.actions.forEach((a, i) => L.push(row([i + 1, a.text, a.resp])));
   else L.push(row(['—', 'None recorded.', '—']));
@@ -595,12 +601,19 @@ export function parseAmnexMarkdown(md) {
   const get = (k) => secs.find((s) => s.key === k);
   const review = secs.filter((s) => s.key === 'review').map((s) => s.lines.join('\n').trim()).filter(Boolean);
   const next = get('next') ? parseNext(get('next').lines) : { when: '', where: '' };
+  const upLines = get('updates')?.lines || [];
+  const upHead = upLines.find((l) => l.trim().startsWith('|') && !isSep(l));
+  const upHeadCells = upHead ? splitRow(upHead).map(stripMd) : [];
+  if (/^sr\b/i.test(upHeadCells[0] || '')) upHeadCells.shift(); // the SR column
+  const upCols = upHeadCells.slice(1); // then the Name column
+  const upRows = upCols.length ? tableRows(upLines).map((r) => numericLead(r.map(stripMd))).filter((c) => c.length >= 2).map((c) => ({ name: c[0], cells: upCols.map((_, i) => c[i + 1] || '—') })) : [];
   return {
     title,
     header,
     groups,
     agenda: get('agenda') ? parseAgenda(get('agenda').lines) : [],
     discussion: get('discussion') ? parseDiscussion(get('discussion').lines) : [],
+    updates: { columns: upCols, rows: upRows },
     actions: get('actions') ? parseActions(get('actions').lines) : [],
     next: { when: next.when || TBD, where: next.where || TBD },
     review,
@@ -667,6 +680,17 @@ export function renderDocBody(doc) {
     ),
     gap
   );
+  if (doc.updates?.rows?.length) {
+    const cols = doc.updates.columns;
+    out.push(
+      table(
+        `<thead>${tr(navy('SR No.', { w: 56 }) + navy('Name', { w: 120 }) + cols.map((c) => navy(c)).join(''))}</thead><tbody>${doc.updates.rows
+          .map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(r.name), { w: 120, bold: true, z: i % 2 === 1 }) + r.cells.map((c) => plain(e(c), { z: i % 2 === 1 })).join('')))
+          .join('')}</tbody>`
+      ),
+      gap
+    );
+  }
   out.push(
     table(
       `<thead>${tr(navy('Sr.', { w: 56 }) + navy('Action Item') + navy('Responsibility', { w: 130 }))}</thead><tbody>${

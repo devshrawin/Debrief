@@ -174,6 +174,8 @@
     // one per line: Name | Honorific | Department | Designation | Organisation [| Chair]
     shareList: "",
     // default people to share the minutes with
+    meetingTypes: [],
+    // kinds of recurring meeting with extra minutes sections: [{ id, name, match, code, updates, columns, extra }] (src/meetingtypes.js)
     shareGroups: "",
     // per recurring meeting: "title words | a@x.com, b@y.com"
     shareMode: "review",
@@ -280,8 +282,8 @@
   }
   async function setSetting(patch) {
     const { settings } = await chrome.storage.local.get("settings");
-    const { learnedNames, voices, ...clean } = patch;
-    await chrome.storage.local.set({ settings: { ...settings || {}, ...clean } });
+    const { learnedNames, voices, ...clean2 } = patch;
+    await chrome.storage.local.set({ settings: { ...settings || {}, ...clean2 } });
   }
   async function ensureEmailSecret() {
     await ensureMigrated();
@@ -2723,11 +2725,11 @@ function out(o) {
     return `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   }
   function upsertPerson(list, { id, name, lang: lang2, print }) {
-    const clean = String(name || "").trim().replace(/\s+/g, " ").slice(0, 60);
-    if (!clean) throw new Error("Give the person a name first.");
-    const taken = list.find((p) => p.id !== id && p.name.toLowerCase() === clean.toLowerCase());
+    const clean2 = String(name || "").trim().replace(/\s+/g, " ").slice(0, 60);
+    if (!clean2) throw new Error("Give the person a name first.");
+    const taken = list.find((p) => p.id !== id && p.name.toLowerCase() === clean2.toLowerCase());
     if (taken) throw new Error(`There is already a voice called ${taken.name}.`);
-    const rec2 = { id: id || newId(), name: clean, lang: lang2 || "en", centroid: print.centroid, windows: print.windows, secs: Math.round(print.speechSec), created: Date.now() };
+    const rec2 = { id: id || newId(), name: clean2, lang: lang2 || "en", centroid: print.centroid, windows: print.windows, secs: Math.round(print.speechSec), created: Date.now() };
     const i = list.findIndex((p) => p.id === rec2.id);
     if (i < 0) return [...list, rec2];
     const next = [...list];
@@ -3307,22 +3309,22 @@ function out(o) {
     const r = await modal({ text: `New name for ${p.name}`, input: { value: isAnon(p) ? "" : p.name, placeholder: "Their name", maxLength: 60 }, buttons: [{ label: "Cancel", value: "no" }, { label: "Rename", value: "ok", primary: true }] });
     if (!r || r.value !== "ok") return;
     try {
-      const clean = r.input.trim().replace(/\s+/g, " ").slice(0, 60);
-      if (!clean) throw new Error("A name cannot be empty.");
-      const taken = people.find((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean.toLowerCase());
+      const clean2 = r.input.trim().replace(/\s+/g, " ").slice(0, 60);
+      if (!clean2) throw new Error("A name cannot be empty.");
+      const taken = people.find((x2) => x2.id !== p.id && x2.name.toLowerCase() === clean2.toLowerCase());
       if (taken) {
         const ask = await modal({ text: `${taken.name} already has a voice. Is this the same person? Merging joins the two, and the result is called ${taken.name}.`, buttons: [{ label: "No, keep both", value: "no" }, { label: `Merge into ${taken.name}`, value: "merge", primary: true }] });
         if (ask?.value === "merge") await mergeVoices(p, taken.id);
         return;
       }
-      people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean, ...x2.auto ? { confirmed: true } : {} } : x2);
+      people = people.map((x2) => x2.id === p.id ? { ...x2, name: clean2, ...x2.auto ? { confirmed: true } : {} } : x2);
       await saveVoices(people);
-      if (!isAnon(p)) await saveDirectory({ from: p.name, to: clean }, "dir-rename");
-      await saveDirectory({ name: clean });
+      if (!isAnon(p)) await saveDirectory({ from: p.name, to: clean2 }, "dir-rename");
+      await saveDirectory({ name: clean2 });
       renderList();
       const st2 = await getSettings();
       if (!st2.voiceOn) {
-        const on = await modal({ text: `${clean} is saved. Naming speakers by voice is switched off, so transcripts and minutes will not use the name yet. Turn it on?`, buttons: [{ label: "Not now", value: "no" }, { label: "Turn on", value: "yes", primary: true }] });
+        const on = await modal({ text: `${clean2} is saved. Naming speakers by voice is switched off, so transcripts and minutes will not use the name yet. Turn it on?`, buttons: [{ label: "Not now", value: "no" }, { label: "Turn on", value: "yes", primary: true }] });
         if (on?.value === "yes") await setSetting({ voiceOn: true });
       }
     } catch (e) {
@@ -3898,6 +3900,115 @@ function out(o) {
     };
   }
 
+  // src/meetingtypes.js
+  var DEFAULT_COLUMNS = ["Yesterday", "Today", "Blockers"];
+  var MAX_COLUMNS = 5;
+  var clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+  var slug = (s) => clean(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  function cleanColumns(cols) {
+    const list = (Array.isArray(cols) ? cols : String(cols || "").split(/[|,\n]/)).map(clean).filter(Boolean);
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const c of list) {
+      const k2 = c.toLowerCase();
+      if (seen.has(k2)) continue;
+      seen.add(k2);
+      out.push(c.slice(0, 30));
+    }
+    return (out.length ? out : DEFAULT_COLUMNS).slice(0, MAX_COLUMNS);
+  }
+  function normalizeTypes(list) {
+    const used = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const t of Array.isArray(list) ? list : []) {
+      if (!t || typeof t !== "object") continue;
+      const name = clean(t.name);
+      const match = String(t.match || "").split(",").map(clean).filter(Boolean).join(", ");
+      const code = clean(t.code).toLowerCase().replace(/[^a-z-]/g, "");
+      if (!name && !match && !code) continue;
+      let id = clean(t.id) || slug(name) || "type";
+      for (let n = 2; used.has(id); n++) id = `${slug(name) || "type"}-${n}`;
+      used.add(id);
+      out.push({ id, name: name || match || code, match, code, updates: t.updates !== false, columns: cleanColumns(t.columns), extra: String(t.extra || "").trim().slice(0, 2e3) });
+    }
+    return out;
+  }
+
+  // src/typesui.js
+  function mountMeetingTypes(host, addButton) {
+    if (!host || !addButton) return { value: () => [], set() {
+    } };
+    let list = [];
+    const make = (tag, props = {}, ...kids) => {
+      const e = document.createElement(tag);
+      for (const [k2, v] of Object.entries(props)) {
+        if (k2 === "class") e.className = v;
+        else if (v != null && v !== false) e.setAttribute(k2, v === true ? "" : v);
+      }
+      e.append(...kids.filter((x2) => x2 != null));
+      return e;
+    };
+    const changed = () => host.dispatchEvent(new Event("input", { bubbles: true }));
+    let seq = 0;
+    function field(t, key2, label, { hint, area, ph } = {}) {
+      const id = `mt-${t.uid}-${key2}`;
+      const input = make(area ? "textarea" : "input", { id, type: area ? null : "text", rows: area ? 3 : null, spellcheck: "false", placeholder: ph || "" });
+      input.value = key2 === "columns" ? Array.isArray(t.columns) ? t.columns.join(", ") : t.columns || "" : t[key2] || "";
+      input.addEventListener("input", () => {
+        t[key2] = input.value;
+      });
+      return make("div", { class: "fld" }, make("label", { for: id }, label), input, hint ? make("p", { class: "hint" }, hint) : null);
+    }
+    function draw() {
+      host.replaceChildren();
+      if (!list.length) host.append(make("p", { class: "hint mt-empty" }, "No meeting types yet. Add one to give a recurring meeting its own sections."));
+      list.forEach((t, i) => {
+        const sw = make("input", { id: `mt-${t.uid}-updates`, type: "checkbox" });
+        sw.checked = t.updates !== false;
+        sw.addEventListener("change", () => {
+          t.updates = sw.checked;
+          cols.hidden = !sw.checked;
+          changed();
+        });
+        const cols = field(t, "columns", "Columns of the table", { hint: "Up to five, comma separated. Each person gets one row, one cell per column.", ph: DEFAULT_COLUMNS.join(", ") });
+        cols.hidden = !sw.checked;
+        const rm = make("button", { class: "btn sm", type: "button", "aria-label": `Remove meeting type ${t.name || i + 1}` }, "Remove");
+        rm.addEventListener("click", () => {
+          list.splice(i, 1);
+          draw();
+          changed();
+        });
+        host.append(
+          make(
+            "div",
+            { class: "mt-card", role: "group", "aria-label": t.name || `Meeting type ${i + 1}` },
+            field(t, "name", "Name", { ph: "Daily cadence call" }),
+            make("div", { class: "fgrid" }, field(t, "match", "Applies when the title contains", { hint: "Words, comma separated. Any one is enough; capitals do not matter.", ph: "cadence call, stand-up" }), field(t, "code", "Or when the Meet code is", { hint: "Like abc-defg-hij. Optional.", ph: "abc-defg-hij" })),
+            make("div", { class: "row-sw" }, sw, make("label", { for: `mt-${t.uid}-updates` }, 'Add an "Updates by person" table (who did what, who plans what)')),
+            cols,
+            field(t, "extra", "Extra instructions for the writer (optional)", { area: true, hint: 'For example: "Write names in English", or "Always note who is on leave".', ph: "" }),
+            make("div", { class: "btnrow" }, rm)
+          )
+        );
+      });
+    }
+    addButton.addEventListener("click", () => {
+      list.push({ uid: ++seq, id: "", name: "", match: "", code: "", updates: true, columns: [...DEFAULT_COLUMNS], extra: "" });
+      draw();
+      host.querySelector(".mt-card:last-child input")?.focus();
+      changed();
+    });
+    return {
+      value() {
+        return normalizeTypes(list);
+      },
+      set(next) {
+        list = normalizeTypes(next).map((t) => ({ ...t, uid: ++seq }));
+        draw();
+      }
+    };
+  }
+
   // src/options.js
   var $3 = (id) => document.getElementById(id);
   var FIELDS2 = Object.keys(DEFAULTS);
@@ -3996,6 +4107,7 @@ function out(o) {
     renderSecret(k2);
   }
   var backupKeys = mountBackupKeys($3("moreKeys"), $3("addKey"));
+  var meetingTypes = mountMeetingTypes($3("meetingTypesList"), $3("addType"));
   var OTHER = "__other";
   function modelOption(sel, value, label) {
     if ([...sel.options].some((o2) => o2.value === value)) return;
@@ -4032,6 +4144,7 @@ function out(o) {
       s[k2] = SECRETS.includes(k2) ? secretValue(k2) : f.type === "checkbox" ? f.checked : f.value.trim();
     }
     s.geminiBackups = backupKeys.value();
+    s.meetingTypes = meetingTypes.value();
     s.shareMode = $3("shareAuto").checked ? "auto" : "review";
     s.meetingLanguages = [...document.querySelectorAll("#langChips input:checked")].map((c) => c.dataset.lang);
     return s;
@@ -4049,6 +4162,7 @@ function out(o) {
     $3("peopleDirectory")?.dispatchEvent(new Event("dir-refresh"));
     $3("shareList")?.dispatchEvent(new Event("rec-refresh"));
     backupKeys.set(s.geminiBackups);
+    meetingTypes.set(s.meetingTypes);
     removed.clear();
     editing.clear();
     $3("shareAuto").checked = s.shareMode === "auto";

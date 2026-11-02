@@ -1,6 +1,6 @@
 import { renderMd, decorateMinutes } from './md.js';
 import { cleanTranscript, makeDeduper } from './sttclean.js';
-import { renderMinutesHtml, isAmnexMd, setOrg } from './amnex.js';
+import { renderMinutesHtml, isAmnexMd, setOrg, parseDirectory } from './amnex.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
@@ -9,12 +9,14 @@ import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames
 import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, transcriptGaps } from './jobs.js';
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
-import { matchPeople, setEmailNames } from './attendance.js';
+import { matchPeople, setEmailNames, personLabel } from './attendance.js';
+import { lineNameOf, usedNames, setLineName } from './linenames.js';
 import { isAnon, mergePeople } from './voice/learn.js';
 import { getSample, hasSample, putSample, deleteSample } from './voice/samples.js';
 import { modelLabel } from './llm.js';
 import { listPending, deleteAllPending } from './audiostore.js';
 import { formatTranscript } from './prompt.js';
+import { normalizeTypes, pickType } from './meetingtypes.js';
 import { gapLabel, gapMinutes } from './coverage.js';
 import { mailReady, wordDocHtml, parseAddresses, recipientsFor, inviteeEmails } from './mailer.js';
 
@@ -210,7 +212,19 @@ function applyOrg() {
   st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-left { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-right { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } }` : '';
 }
 const currentFormat = () => meeting.format || settings.minutesFormat || 'amnex';
+// The meeting type chooser: hidden until Settings has a type. 'Automatic' follows the title rules; 'None' turns types off for this meeting.
+function paintType() {
+  const types = normalizeTypes(settings.meetingTypes);
+  const sel = $('typeSel');
+  sel.classList.toggle('hidden', !types.length);
+  if (!types.length) return;
+  const auto = pickType(types, { ...meeting, typeId: null });
+  sel.replaceChildren(new Option(`Meeting type: automatic (${auto ? auto.name : 'none matches'})`, 'auto'), new Option('Meeting type: none', 'none'), ...types.map((t) => new Option(`Meeting type: ${t.name}`, t.id)));
+  sel.value = meeting.typeId == null ? 'auto' : meeting.typeId === '' ? 'none' : meeting.typeId;
+  if (sel.value !== (meeting.typeId == null ? 'auto' : meeting.typeId === '' ? 'none' : meeting.typeId)) sel.value = 'auto';
+}
 function paintFormat() {
+  paintType();
   const f = currentFormat();
   for (const b of $('fmtSwitch').querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === f));
   $('fmtText').textContent = FORMATS[f];
@@ -227,6 +241,15 @@ async function chooseFormat(v, regenerate) {
   }
 }
 for (const b of $('fmtSwitch').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, true);
+$('typeSel').onchange = async (e) => {
+  const v = e.target.value;
+  await patchMeeting({ typeId: v === 'auto' ? null : v === 'none' ? '' : v });
+  paintType();
+  if (meeting.mom && !jobBusy) {
+    $('genStatus').textContent = 'Rewriting the minutes for this meeting type…';
+    runGenerate();
+  }
+};
 // the start card shows the chosen format as text; "change" goes to the one switch
 $('fmtChange').onclick = (e) => {
   e.preventDefault();
@@ -288,16 +311,22 @@ function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
   const dd = makeDeduper();
+  // Names the user put on single lines (this meeting only) replace the label; `line` says which line it is, `orig` what it was.
+  const named = (line, orig, flag) => {
+    const own = lineNameOf(meeting.lineNames, line);
+    return { line, orig, own, who: own || orig, flag: own ? '' : flag };
+  };
   const rows = shown
-    ? shown.map((l) => ({ t: l.t, src: l.src, who: l.label, text: cleanTranscript(l.text, ctx.attendees || [], dd).text, flag: l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown' }))
-    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, who: s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', text: cleanTranscript(s.text, ctx.attendees || [], dd).text, flag: '' }));
+    ? shown.map((l) => ({ t: l.t, src: l.src, ...named(l, l.label, l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown'), text: cleanTranscript(l.text, ctx.attendees || [], dd).text }))
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, ...named(s, s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', ''), text: cleanTranscript(s.text, ctx.attendees || [], dd).text }));
   // a stretch with no text at all (the speech-to-text returned nothing for it) shows as a note too, so it is never mistaken for silence
   for (const g of transcriptGaps(meeting)) rows.push({ t: g.from, src: 'note', who: 'Gap', text: `No transcript for ${gapLabel(g)}. If people spoke here, it was not captured.`, flag: '' });
   // pauses show as notes in their place, so a gap in the transcript is explained
   for (const p of meeting.pauses || []) rows.push({ t: p.from, src: 'note', who: 'Paused', text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}. Nothing from this stretch was transcribed or kept.`, flag: '' });
   rows.sort((a, b) => a.t - b.t);
   renderNameBox().catch(() => {});
-  $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : rows.length === 1 ? 'segment' : 'segments'}`;
+  const mine = rows.filter((r) => r.own).length;
+  $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : rows.length === 1 ? 'segment' : 'segments'}${mine ? `, ${mine} named by you` : ''}. Click a label to say who it was.`;
   $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
   if (!rows.length) {
     $('transcript').innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
@@ -310,11 +339,136 @@ function renderTranscript() {
       row.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
       row.children[0].textContent = fmtTime(r.t);
       row.children[1].textContent = r.who;
-      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown ? ' named' : ''}`;
+      row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown || r.own ? ' named' : ''}${r.own ? ' own' : ''}`;
+      // a line of the other people (or of the room) can be named by hand: click the label
+      if (r.line && (r.src !== 'me' || meeting.room)) {
+        const chip = row.children[1];
+        chip.classList.add('pick');
+        chip.setAttribute('role', 'button');
+        chip.tabIndex = 0;
+        chip.setAttribute('aria-haspopup', 'dialog');
+        chip.setAttribute('aria-label', `${r.who}, at ${fmtTime(r.t)}. Press to say who this was.`);
+        chip.title = r.own ? `Named by you (was "${r.orig}"). Click to change.` : 'Click to say who this was (for this meeting only).';
+        const open = () => openNameMenu(chip, r);
+        chip.onclick = open;
+        chip.onkeydown = (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
+        };
+      }
       row.children[2].textContent = r.src === 'me' && !shown ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
       return row;
     })
   );
+}
+
+// ---- naming one line by hand (this meeting only) ----
+// People the user can pick: names already used on lines of this meeting first, then who was there, who was invited, the people
+// directory and the named voices. Nothing here is saved anywhere but on this meeting.
+function pickableNames() {
+  const out = [];
+  const add = (n) => {
+    const name = String(n || '').replace(/\s+/g, ' ').trim();
+    if (!name || /^(unknown|unnamed|you$|me$|others$|room$|gap$|paused$)/i.test(name) || /@/.test(name)) return;
+    if (!out.some((o) => o.toLowerCase() === name.toLowerCase())) out.push(name);
+  };
+  usedNames(meeting.lineNames).reverse().forEach(add);
+  attendeeList().forEach(add);
+  Object.keys(meeting.presence || {}).forEach(add);
+  (meeting.invited || []).forEach((p) => add(personLabel(p)));
+  parseDirectory(settings.peopleDirectory).forEach((p) => add(p.name));
+  (settings.voices || []).filter((v) => !isAnon(v)).forEach((v) => add(v.name));
+  add(settings.myName);
+  return out.slice(0, 60);
+}
+
+async function nameLine(line, name) {
+  await patchMeeting({ lineNames: setLineName(meeting.lineNames, line, name) });
+  renderTranscript();
+  if (meeting.mom && !jobBusy) $('genStatus').textContent = 'Names changed. Press Rewrite minutes to use them.';
+}
+
+let nameMenu = null;
+function closeNameMenu(refocus = true) {
+  if (!nameMenu) return;
+  const { el, chip, off } = nameMenu;
+  nameMenu = null;
+  off();
+  el.remove();
+  if (refocus && document.contains(chip)) chip.focus();
+}
+function openNameMenu(chip, r) {
+  closeNameMenu(false);
+  const el = document.createElement('div');
+  el.className = 'namemenu';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', 'Who said this?');
+  const title = document.createElement('div');
+  title.className = 'nm-title';
+  title.textContent = `Who said this? ${fmtTime(r.t)}`;
+  const list = document.createElement('div');
+  list.className = 'nm-list';
+  for (const n of pickableNames()) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = n;
+    if (n === r.own) b.className = 'cur';
+    b.onclick = () => {
+      closeNameMenu(false);
+      nameLine(r.line, n);
+    };
+    list.append(b);
+  }
+  const form = document.createElement('form');
+  form.className = 'nm-form';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 60;
+  input.placeholder = 'Someone else: type a name';
+  input.setAttribute('aria-label', 'Type a name');
+  const ok = document.createElement('button');
+  ok.type = 'submit';
+  ok.textContent = 'Use';
+  form.append(input, ok);
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    if (!input.value.trim()) return;
+    closeNameMenu(false);
+    nameLine(r.line, input.value);
+  };
+  el.append(title, list, form);
+  if (r.own) {
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'nm-reset';
+    reset.textContent = `Back to "${r.orig}"`;
+    reset.onclick = () => {
+      closeNameMenu(false);
+      nameLine(r.line, '');
+    };
+    el.append(reset);
+  }
+  document.body.append(el);
+  const box = chip.getBoundingClientRect();
+  const w = el.offsetWidth;
+  el.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - w - 8))}px`;
+  const below = box.bottom + 6;
+  el.style.top = `${below + el.offsetHeight > window.innerHeight - 8 ? Math.max(8, box.top - el.offsetHeight - 6) : below}px`;
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeNameMenu();
+    }
+  };
+  const onDown = (e) => {
+    if (!el.contains(e.target) && e.target !== chip) closeNameMenu(false);
+  };
+  document.addEventListener('keydown', onKey, true);
+  setTimeout(() => document.addEventListener('mousedown', onDown, true));
+  nameMenu = { el, chip, off: () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('mousedown', onDown, true); } };
+  input.focus();
 }
 
 function renderErrors() {

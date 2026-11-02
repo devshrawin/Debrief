@@ -13,6 +13,7 @@ import { modal } from './modal.js';
 import { mountDirectoryTable } from './dirtable.js';
 import { mountRecipients } from './recipients.js';
 import { mountBackupKeys } from './backupkeys.js';
+import { mountMeetingTypes } from './typesui.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -122,6 +123,7 @@ function clearSecret(k) {
 }
 
 const backupKeys = mountBackupKeys($('moreKeys'), $('addKey'));
+const meetingTypes = mountMeetingTypes($('meetingTypesList'), $('addType'));
 
 // A model picker: the known models are options, a name saved earlier (or typed under "Other…") is added so it still shows.
 const OTHER = '__other';
@@ -161,6 +163,7 @@ function read() {
     s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === 'checkbox' ? f.checked : f.value.trim();
   }
   s.geminiBackups = backupKeys.value();
+  s.meetingTypes = meetingTypes.value();
   s.shareMode = $('shareAuto').checked ? 'auto' : 'review';
   s.meetingLanguages = [...document.querySelectorAll('#langChips input:checked')].map((c) => c.dataset.lang);
   return s;
@@ -180,6 +183,7 @@ function fill(s) {
   $('peopleDirectory')?.dispatchEvent(new Event('dir-refresh')); // the people table shows the new text
   $('shareList')?.dispatchEvent(new Event('rec-refresh')); // and the recipients table
   backupKeys.set(s.geminiBackups);
+  meetingTypes.set(s.meetingTypes);
   removed.clear();
   editing.clear();
   $('shareAuto').checked = s.shareMode === 'auto';
