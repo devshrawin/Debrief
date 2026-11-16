@@ -6,6 +6,20 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ext = path.join(root, 'extension');
+// A zip's central directory lists its file names, so a package can be checked without unpacking it.
+const zipNames = (f) => {
+  const b = fs.readFileSync(f);
+  const names = [];
+  let at = b.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const n = b.readUInt16LE(at + 10);
+  at = b.readUInt32LE(at + 16);
+  for (let i = 0; i < n; i++) {
+    const len = b.readUInt16LE(at + 28);
+    names.push(b.toString('utf8', at + 46, at + 46 + len));
+    at += 46 + len + b.readUInt16LE(at + 30) + b.readUInt16LE(at + 32);
+  }
+  return names;
+};
 const manifest = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
 let bad = 0;
 const check = (name, ok, detail = '') => {
@@ -63,6 +77,16 @@ const dev = files.filter((f) => /\.(map|md|log)$|[\/]test[\/]|\.env/.test(f));
 check('no source maps, notes or tests in the package', !dev.length, dev.slice(0, 3).map((f) => path.relative(root, f)).join(', '));
 const bytes = files.reduce((n, f) => n + fs.statSync(f).size, 0);
 check('package well under the 2 GB limit', bytes < 2e9, `${(bytes / 1048576).toFixed(0)} MB`);
+
+// 6. built packages (only when they exist): the lite zip must have no .onnx, the full one must have it
+const rel = path.join(root, 'release');
+const zips = fs.existsSync(rel) ? fs.readdirSync(rel, { withFileTypes: true }).filter((d) => d.isDirectory()).flatMap((d) => fs.readdirSync(path.join(rel, d.name)).filter((f) => /^Debrief-store(-lite)?-v.*\.zip$/.test(f)).map((f) => path.join(rel, d.name, f))) : [];
+const newest = (re) => zips.filter((f) => re.test(path.basename(f))).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+const liteZip = newest(/^Debrief-store-lite-/);
+const fullZip = newest(/^Debrief-store-v/);
+if (liteZip) check('lite package has no .onnx model', !zipNames(liteZip).some((n) => n.endsWith('.onnx')));
+if (liteZip) check('lite package still bundles the WebAssembly runtime', zipNames(liteZip).some((n) => /^vendor\/ort\/.*\.wasm$/.test(n)));
+if (fullZip) check('full package has the .onnx model', zipNames(fullZip).some((n) => n.endsWith('.onnx')));
 
 console.log(bad ? `\n${bad} problem(s): fix before uploading.` : '\nStore pre-flight passed.');
 process.exit(bad ? 1 : 0);

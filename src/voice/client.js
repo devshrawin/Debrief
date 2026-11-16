@@ -1,5 +1,8 @@
 // Talks to the voice worker. Keeps a short queue: on a slow computer old pieces are dropped, never the recorder.
-export function createVoiceClient({ workerUrl, modelUrl, wasmPaths, maxQueue = 24 }) {
+import { resolveModel, NOT_INSTALLED } from './modelstore.js';
+
+// With no modelDownloadUrl this reads modelUrl exactly as before. With one, the model may come from the bundle, the cache or a download.
+export function createVoiceClient({ workerUrl, modelUrl, wasmPaths, modelDownloadUrl, modelSha256, onModelProgress, maxQueue = 24 }) {
   const worker = new Worker(workerUrl);
   const pending = new Map();
   let nextId = 1;
@@ -20,7 +23,15 @@ export function createVoiceClient({ workerUrl, modelUrl, wasmPaths, maxQueue = 2
   worker.onerror = (e) => readyFail(new Error(e.message || 'voice worker failed'));
   (async () => {
     try {
-      const bytes = new Uint8Array(await (await fetch(modelUrl)).arrayBuffer());
+      let bytes;
+      if (modelDownloadUrl) {
+        const r = await resolveModel({ bundledUrl: modelUrl, downloadUrl: modelDownloadUrl, expectedSha256: modelSha256, onProgress: onModelProgress });
+        bytes = r.bytes || new Uint8Array(await (await fetch(r.url)).arrayBuffer());
+      } else {
+        const res = await fetch(modelUrl);
+        if (res.ok === false) throw new Error(NOT_INSTALLED); // lite build with no address set
+        bytes = new Uint8Array(await res.arrayBuffer());
+      }
       worker.postMessage({ type: 'init', model: bytes, wasmPaths }, [bytes.buffer]);
     } catch (e) {
       readyFail(e);

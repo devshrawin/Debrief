@@ -1,4 +1,5 @@
 // Everything goes to release/<YYYY-MM-DD>/ (today's date), one folder per day. See docs/VERSIONING.md.
+// node scripts/zip.mjs pack-lite -> release/<date>/Debrief-store-lite-v<version>.zip   (same, without extension/models/*.onnx; prints both sizes)
 // npm run share    -> release/<date>/Debrief-v<version>.zip   (the file to hand to someone: extension + INSTALL.txt, nothing else)
 // npm run pack     -> release/<date>/Debrief-store-v<version>.zip   (the extension folder, built first, manifest at the root,
 //                     with the dev-only "key" field removed: the Web Store assigns the extension its own ID)
@@ -63,20 +64,29 @@ function zip(out, cwd, excludes = []) {
   fs.writeFileSync(out, Buffer.concat([...chunks, cenBuf, end]));
 }
 
-if (mode === 'pack' || mode === 'share') {
+if (mode === 'pack' || mode === 'share' || mode === 'pack-lite') {
   execFileSync(process.execPath, [path.join(root, 'build.mjs')], { cwd: root, stdio: 'inherit' });
   execFileSync(process.execPath, [path.join(root, 'scripts', 'store-check.mjs')], { cwd: root, stdio: 'inherit' }); // stops here if anything would get the package flagged
 }
-if (mode === 'pack') {
-  const out = path.join(outDir, `Debrief-store-v${version}.zip`);
+if (mode === 'pack' || mode === 'pack-lite') {
+  const lite = mode === 'pack-lite' || process.argv.includes('--lite');
+  const out = path.join(outDir, `Debrief-store${lite ? '-lite' : ''}-v${version}.zip`);
   const stage = path.join(root, 'release', '.stage-store');
   fs.rmSync(stage, { recursive: true, force: true });
   fs.cpSync(path.join(root, 'extension'), stage, { recursive: true });
+  // The speaker model is data and can come from elsewhere; the WebAssembly runtime (vendor/ort) is code and always stays.
+  if (lite) for (const f of fs.readdirSync(path.join(stage, 'models'))) if (f.endsWith('.onnx')) fs.rmSync(path.join(stage, 'models', f));
   const { key, ...manifest } = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8'));
   fs.writeFileSync(path.join(stage, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   zip(out, stage);
   fs.rmSync(stage, { recursive: true, force: true });
   console.log(`wrote ${out} (${(fs.statSync(out).size / 1048576).toFixed(1)} MB)`);
+  if (lite) {
+    const full = path.join(outDir, `Debrief-store-v${version}.zip`);
+    if (fs.existsSync(full)) console.log(`full ${(fs.statSync(full).size / 1048576).toFixed(1)} MB, lite ${(fs.statSync(out).size / 1048576).toFixed(1)} MB`);
+    else console.log(`lite ${(fs.statSync(out).size / 1048576).toFixed(1)} MB (run "pack" too to compare with the full build)`);
+  }
+  execFileSync(process.execPath, [path.join(root, 'scripts', 'store-check.mjs')], { cwd: root, stdio: 'inherit' }); // now also checks the zips just written
 } else if (mode === 'share') {
   const out = path.join(outDir, `Debrief-v${version}.zip`);
   const stage = path.join(root, 'release', '.stage-share');
@@ -93,6 +103,6 @@ if (mode === 'pack') {
   zip(out, root, ['node_modules', 'release', '.git', 'extension/dist']);
   console.log(`wrote ${out} (${(fs.statSync(out).size / 1048576).toFixed(1)} MB)`);
 } else {
-  console.error('usage: node scripts/zip.mjs share|pack|src');
+  console.error('usage: node scripts/zip.mjs share|pack|pack-lite|src');
   process.exit(1);
 }
