@@ -12,6 +12,10 @@ import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
 import { pack } from './voice/match.js';
 import { putPiece, pieceKey, toInt16, MAX_PIECES } from './voice/samples.js';
+import { startKeeping, purgeOld } from './audiokeep.js';
+import { ScreenWatcher } from './screen.js';
+import { describeScreen, resetVision, visionUnavailable } from './vision.js';
+import { allExhausted, modelChain } from './gemini.js';
 
 const CONCURRENCY = 3;
 const MAX_REREADS = 8; // pieces read again in parts per recording (each costs a few requests)
@@ -91,13 +95,95 @@ async function startVoice(meetingId, keepAudio = false, room = false) {
   return { client, tracker, trackerMic, flush, timer };
 }
 
+// Kept recording: a second, separate graph on the playback context (the 16 kHz transcription path is not touched) mixes the tab
+// and the microphone for a MediaRecorder. Gains follow what the transcript hears: the mic only while it is on, nothing while paused.
+const TAB_GAIN = 0.9;
+const MIC_GAIN = 0.9;
+function applyKeepGains(r) {
+  if (!r?.keep) return;
+  r.keep.tabGain.gain.value = r.paused ? 0 : TAB_GAIN;
+  if (r.keep.micGain) r.keep.micGain.gain.value = !r.paused && r.micOn ? MIC_GAIN : 0;
+}
+
+async function setupKeep({ playCtx, tabStream, micStream, meetingId, dbgNote }) {
+  if (typeof MediaRecorder === 'undefined') throw new Error('MediaRecorder is not available');
+  const dest = playCtx.createMediaStreamDestination();
+  const tabGain = playCtx.createGain();
+  playCtx.createMediaStreamSource(tabStream).connect(tabGain);
+  tabGain.connect(dest);
+  let micGain = null;
+  if (micStream) {
+    micGain = playCtx.createGain();
+    playCtx.createMediaStreamSource(micStream).connect(micGain);
+    micGain.connect(dest);
+  }
+  // A failed write (quota) stops keeping and says so once; transcription never depends on this.
+  const keeper = await startKeeping({
+    stream: dest.stream,
+    meetingId,
+    onError: (e) => dbgNote(`kept recording stopped: ${e?.message || e} (transcription continues)`),
+  });
+  return { keeper, tabGain, micGain };
+}
+
+// Screen notes: a hidden <video> shows the tab's picture, a ScreenWatcher samples it, vision.js describes changed frames.
+function setupScreen({ videoStream, settings, meetingId, getRec, dbgNote }) {
+  resetVision();
+  const video = document.createElement('video');
+  video.muted = true;
+  video.srcObject = videoStream;
+  Promise.resolve(video.play?.()).catch(() => {});
+  let prev = '';
+  const watcher = new ScreenWatcher({
+    video,
+    everySec: settings.screenNotesEverySec,
+    // nothing is asked while every general Gemini model is over its limit, or once the model has shown it cannot see pictures
+    budgetOk: async () => !visionUnavailable() && (settings.llmProvider !== 'gemini' || !(await allExhausted(modelChain(settings.geminiModel)))),
+    onFrame: async (blob, t) => {
+      const text = await describeScreen(blob, settings, { prev, onNote: dbgNote });
+      if (text) {
+        prev = text;
+        chrome.runtime.sendMessage({ target: 'bg', type: 'screen-note', meetingId, note: { t, text, presenter: getRec()?.presenter || null } }).catch(() => {});
+      }
+      return text;
+    },
+  });
+  watcher.start();
+  return { watcher, video };
+}
+
 async function start({ streamId, settings, meetingId }) {
   if (rec) throw new Error('Already recording');
+  const dbgNote = (note) => chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note }).catch(() => {});
+  purgeOld(settings.keepAudioDays).catch(() => {}); // cheap: drops kept audio older than the setting
 
   const tabStream = await navigator.mediaDevices.getUserMedia({
     audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
     video: false,
   });
+
+  // The picture is wanted only for screen notes. The audio above is already safe, so nothing here can cost it.
+  let videoStream = null;
+  if (settings.screenNotes) {
+    const tabSource = { chromeMediaSource: 'tab', chromeMediaSourceId: streamId };
+    const video = { mandatory: { ...tabSource, maxWidth: 1280, maxHeight: 720, maxFrameRate: 1 } };
+    try {
+      videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    } catch {
+      // some Chrome versions allow one consumer per stream id: ask for both in one call, keep its picture, drop its second audio
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({ audio: { mandatory: tabSource }, video });
+        videoStream.getAudioTracks().forEach((t) => t.stop());
+      } catch {
+        videoStream = null;
+      }
+    }
+    if (!videoStream?.getVideoTracks().length) {
+      videoStream?.getTracks().forEach((t) => t.stop());
+      videoStream = null;
+      dbgNote('screen notes: could not capture the tab picture');
+    }
+  }
 
   // Capturing a tab mutes it for the user, so play it back at full quality.
   const playCtx = new AudioContext();
@@ -124,7 +210,6 @@ async function start({ streamId, settings, meetingId }) {
 
   resetSttBudget();
   const pool = makePool(CONCURRENCY);
-  const dbgNote = (note) => chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note }).catch(() => {});
   const rereads = { left: MAX_REREADS }; // a limit on the extra requests a recording may spend on doubtful pieces
   const onChunk = (src, t, pcm, metas, info) =>
     pool.add(async () => {
@@ -174,13 +259,15 @@ async function start({ streamId, settings, meetingId }) {
     if (src === 'mix' || !micStream) chrome.runtime.sendMessage({ target: 'bg', type: 'silence', meetingId, t: Math.round(t), dur: Math.round(dur || 0) }).catch(() => {});
   };
 
-  rec = { tabStream, micStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
+  rec = { tabStream, micStream, videoStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
   // Gemini with the mic on: ONE mixed stream and one request per chunk (the speaker comes from the levels afterwards).
   // Other providers have no tight daily limit and keep two streams.
   const mixed = !!micStream && settings.sttProvider === 'gemini';
   if (mixed) {
-    rec.chunkers.mix = new Chunker('mix', onChunk, chunkSize(settings, onSkip));
-    rec.mixer = new Mixer((blk, meta) => rec.chunkers.mix.push(blk, meta));
+    const mixChunker = new Chunker('mix', onChunk, chunkSize(settings, onSkip));
+    rec.chunkers.mix = mixChunker;
+    // not rec.chunkers: stop() has already cleared rec when the mixer drains its last blocks
+    rec.mixer = new Mixer((blk, meta) => mixChunker.push(blk, meta));
   }
   rec.chunkers.others = mixed ? new Meter() : new Chunker('others', onChunk, chunkSize(settings, onSkip));
   await tap(ctx, tabStream, (b) => {
@@ -205,6 +292,25 @@ async function start({ streamId, settings, meetingId }) {
       rec?.mixer?.pushMic(blk);
       rec?.voice?.trackerMic?.push(blk);
     });
+  }
+
+  // Keep the recording (optional, off by default): stays on this computer, see audiokeep.js.
+  if (settings.keepAudio) {
+    try {
+      rec.keep = await setupKeep({ playCtx, tabStream, micStream, meetingId, dbgNote });
+      applyKeepGains(rec);
+    } catch (e) {
+      dbgNote(`keep recording: could not start (${e.message}); transcription continues`);
+    }
+  }
+
+  if (videoStream) {
+    try {
+      rec.screen = setupScreen({ videoStream, settings, meetingId, getRec: () => rec, dbgNote });
+      if (rec.presentingOn != null) rec.screen.watcher.setPresenting(rec.presentingOn); // told before the watcher existed
+    } catch (e) {
+      dbgNote(`screen notes: could not start (${e.message})`);
+    }
   }
 
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
@@ -259,7 +365,10 @@ async function stop() {
   clearInterval(r.dbgTimer);
   r.mixer?.drain();
   Object.values(r.chunkers).forEach((c) => c.flush());
-  [r.tabStream, r.micStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
+  r.screen?.watcher.stop();
+  if (r.screen) r.screen.video.srcObject = null;
+  await r.keep?.keeper.stop().catch(() => {}); // the last piece is written before the audio contexts close
+  [r.tabStream, r.micStream, r.videoStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
   await Promise.allSettled([r.ctx.close(), r.playCtx.close()]);
   await r.pool.drain();
   if (r.voice) {
@@ -284,6 +393,8 @@ useStore({
   saveMeeting: (meeting) => viaBg({ op: 'saveMeeting', meeting }),
   patchMeeting: (id, fields) => viaBg({ op: 'patchMeeting', id, fields }),
   mergeEmailNames: (found) => viaBg({ op: 'mergeEmailNames', found }),
+  listMeetingMetas: (opts) => viaBg({ op: 'listMeetingMetas', opts }),
+  getMeetingMeta: (id, opts) => viaBg({ op: 'getMeetingMeta', id, opts }),
 });
 const jobs = createJobRunner({
   emit: (m) => chrome.runtime.sendMessage(m).catch(() => {}),
@@ -310,12 +421,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'pause') {
-    if (rec) rec.paused = !!msg.on;
+    if (rec) {
+      rec.paused = !!msg.on;
+      applyKeepGains(rec);
+      rec.keep?.keeper.setPaused(rec.paused);
+      rec.screen?.watcher.setPaused(rec.paused);
+    }
     sendResponse({ ok: true, paused: !!rec?.paused });
     return;
   }
   if (msg.type === 'mic') {
     if (rec) rec.micOn = !!msg.on && !!rec.micStream;
+    applyKeepGains(rec);
     sendResponse({ ok: true, micOn: rec?.micOn ?? false });
+    return;
+  }
+  // From the meeting page via the service worker: who is presenting (Google Meet only; never sent elsewhere = unknown).
+  if (msg.type === 'presenting') {
+    if (rec) {
+      if (msg.on && msg.name) rec.presenter = String(msg.name).slice(0, 80);
+      rec.presentingOn = !!msg.on;
+      rec.screen?.watcher.setPresenting(!!msg.on);
+    }
+    sendResponse({ ok: true });
   }
 });

@@ -190,5 +190,25 @@ await test('utterances in a second piece are placed after the first piece, each 
   assert.ok(segs[1].c > 25 && segs.every((s) => s.u === 1));
 });
 
+await test('features off (the defaults): the tab is asked for audio exactly once, with the same constraints as always, and nothing else is started', async () => {
+  settings = gemini;
+  const calls = [];
+  const real = navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia = async (c) => (calls.push(c), real(c));
+  try {
+    await record('m9', (n) => feed(n, 3, 0.1));
+  } finally {
+    navigator.mediaDevices.getUserMedia = real;
+  }
+  assert.deepEqual(calls, [{ audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 's' } }, video: false }]);
+});
+
+await test('one mixed stream (Gemini with the microphone): stopping while the mixer still holds audio does not throw', async () => {
+  settings = { ...gemini, captureMic: true };
+  answer = () => words(100);
+  const r = await record('m10', (n) => feed(n, 3, 0.1));
+  assert.equal(r.errors.length, 0);
+});
+
 settings = gemini;
 console.log(`\n${passed} passed`);

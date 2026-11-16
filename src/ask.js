@@ -85,11 +85,14 @@ const when = (m) => new Date(m.startedAt).toLocaleDateString('en-IN', { day: 'nu
 // Who said it. With voice recognition, each remote line already names its speaker.
 function speechLines(meeting, ctx = {}) {
   const source = ctx.labeled?.length ? ctx.labeled : [...(meeting.segments || [])].sort((a, b) => a.t - b.t);
-  return source.map((s) => ({
+  const lines = source.map((s) => ({
     t: s.t,
     speaker: s.label || (s.src === 'me' ? (ctx.room ? 'Room' : ctx.myName || 'Me') : 'Others'),
     text: applyDictionary(s.text || '', ctx.entries, ctx.attendees),
   }));
+  // What was shown on a shared screen (see screen.js) is a line from "Screen", so a question about a slide can find it.
+  const shown = (meeting.screens || []).filter((n) => n?.text).map((n) => ({ t: n.t, speaker: 'Screen', text: applyDictionary(n.text, ctx.entries, ctx.attendees) }));
+  return shown.length ? [...lines, ...shown].sort((a, b) => a.t - b.t) : lines;
 }
 
 // "mm:ss", "h:mm:ss" or seconds -> seconds; null when unknown.

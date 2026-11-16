@@ -1,6 +1,7 @@
 import { clearAllAudio, deletePieces, deleteUnnamedClips } from './voice/samples.js';
 import { cleanTerms } from './sttclean.js';
 import { deleteAllPending } from './audiostore.js';
+import { deleteAudio } from './audiokeep.js';
 import { plain, removeMeetingRecords, stripVoicesFromAll } from './meetingstore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
@@ -173,7 +174,7 @@ export async function deleteMeeting(id) {
   await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
   await removeMeetingRecords(id);
   // the audio that belonged to it too: waiting voice pieces and chunks that failed to transcribe
-  await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id)]);
+  await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id), deleteAudio(id)]); // and the kept recording, if any
 }
 
 export async function getState() {
