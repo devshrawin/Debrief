@@ -19,6 +19,9 @@ import { formatTranscript } from './prompt.js';
 import { normalizeTypes, pickType } from './meetingtypes.js';
 import { gapLabel, gapMinutes } from './coverage.js';
 import { mailReady, wordDocHtml, parseAddresses, recipientsFor, inviteeEmails } from './mailer.js';
+import { shareWarning } from './jobs.js';
+import { initExtras, afterMinutes, decorateRow, transcriptRendered, paintScreenRow, paintKeepHint, transcriptShown, paintCarried, extraWarnings, transcriptFile, exportJson } from './momextras.js';
+import { withScreenRows } from './actionslogic.js';
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get('id');
@@ -41,6 +44,7 @@ function renderMom() {
   $('mom').innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
   tidyTables($('mom'));
   if (meeting.mom && !isTemplateMd(meeting.mom)) decorateMinutes($('mom'));
+  if (meeting.mom) afterMinutes($('mom')); // play buttons on [mm:ss], tick boxes on the action table (screen only)
   $('mom').classList.remove('streaming');
   $('gen').textContent = meeting.mom ? 'Rewrite minutes' : 'Write minutes';
   syncState();
@@ -72,6 +76,7 @@ function renderMeta() {
   renderChips();
   $('title').value = meeting.title;
   document.title = `${meeting.title} · Debrief`;
+  paintCarried(meeting);
 }
 
 // Status chips under the title: emailed, the model that wrote the minutes, speech-to-text, completeness check.
@@ -308,6 +313,12 @@ function tidyTables(root) {
   }
 }
 
+// Where the piece of audio a labelled line came from starts and how long it is (for "Read this part again").
+const pieceOf = (l) => {
+  const s = meeting.segments.find((x) => Number.isFinite(x.c) && Number.isFinite(x.dur) && l.t >= x.c - 0.15 && l.t < x.c + x.dur && (x.src === 'me') === (l.src === 'me'));
+  return s ? { c: s.c, dur: s.dur } : {};
+};
+
 function renderTranscript() {
   const ctx = nameCtx();
   const shown = labeledLines(true);
@@ -318,19 +329,24 @@ function renderTranscript() {
     return { line, orig, own, who: own || orig, flag: own ? '' : flag };
   };
   const rows = shown
-    ? shown.map((l) => ({ t: l.t, src: l.src, ...named(l, l.label, l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown'), text: cleanTranscript(l.text, ctx.attendees || [], dd).text }))
-    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, src: s.src, ...named(s, s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', ''), text: cleanTranscript(s.text, ctx.attendees || [], dd).text }));
+    ? shown.map((l) => ({ t: l.t, ...pieceOf(l), src: l.src, ...named(l, l.label, l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown'), text: cleanTranscript(l.text, ctx.attendees || [], dd).text }))
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, c: s.c, dur: s.dur, src: s.src, ...named(s, s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', ''), text: cleanTranscript(s.text, ctx.attendees || [], dd).text }));
   // a stretch with no text at all (the speech-to-text returned nothing for it) shows as a note too, so it is never mistaken for silence
-  for (const g of transcriptGaps(meeting)) rows.push({ t: g.from, src: 'note', who: 'Gap', text: `No transcript for ${gapLabel(g)}. If people spoke here, it was not captured.`, flag: '' });
+  for (const g of transcriptGaps(meeting)) rows.push({ t: g.from, src: 'note', who: 'Gap', gap: g, text: `No transcript for ${gapLabel(g)}. If people spoke here, it was not captured.`, flag: '' });
   // pauses show as notes in their place, so a gap in the transcript is explained
   for (const p of meeting.pauses || []) rows.push({ t: p.from, src: 'note', who: 'Paused', text: `Recording was paused from ${fmtTime(p.from)} to ${p.to != null ? fmtTime(p.to) : 'the end'}. Nothing from this stretch was transcribed or kept.`, flag: '' });
   rows.sort((a, b) => a.t - b.t);
   renderNameBox().catch(() => {});
   const mine = rows.filter((r) => r.own).length;
-  $('trInfo').textContent = `${rows.length} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : rows.length === 1 ? 'segment' : 'segments'}${mine ? `, ${mine} named by you` : ''}. Click a label to say who it was.`;
-  $('trCount').textContent = rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : '';
+  const spoken = rows.length;
+  const notes = (meeting.screens || []).length ? withScreenRows([], meeting.screens).length : 0; // notes about the shared screen sit in their place, apart from speech
+  rows.splice(0, rows.length, ...withScreenRows(rows, meeting.screens));
+  $('trInfo').textContent = `${spoken} ${shown ? 'lines, speakers named by voice recognition (a best guess)' : spoken === 1 ? 'segment' : 'segments'}${mine ? `, ${mine} named by you` : ''}${notes ? `, ${notes} note${notes === 1 ? '' : 's'} about the shared screen` : ''}. Click a label to say who it was.`;
+  $('trCount').textContent = spoken ? `${spoken} line${spoken === 1 ? '' : 's'}` : '';
+  paintKeepHint(settings);
   if (!rows.length) {
     $('transcript').innerHTML = '<p class="tr-empty">No speech was transcribed.</p>';
+    transcriptRendered();
     return;
   }
   $('transcript').replaceChildren(
@@ -341,6 +357,10 @@ function renderTranscript() {
       row.children[0].textContent = fmtTime(r.t);
       row.children[1].textContent = r.who;
       row.children[1].className = `who ${r.src}${r.flag ? ` ${r.flag}` : shown || r.own ? ' named' : ''}${r.own ? ' own' : ''}`;
+      if (r.src === 'screen') {
+        paintScreenRow(row, r);
+        return row;
+      }
       // a line of the other people (or of the room) can be named by hand: click the label
       if (r.line && (r.src !== 'me' || meeting.room)) {
         const chip = row.children[1];
@@ -360,9 +380,11 @@ function renderTranscript() {
         };
       }
       row.children[2].textContent = r.src === 'me' && !shown ? applyDictionary(r.text, ctx.entries, ctx.attendees) : applyDictionary(r.text, ctx.entries, ctx.attendees);
+      decorateRow(row, r); // with a kept recording: the time plays the line, a gap can be read again
       return row;
     })
   );
+  transcriptRendered();
 }
 
 // ---- naming one line by hand (this meeting only) ----
@@ -475,11 +497,14 @@ function openNameMenu(chip, r) {
 function renderErrors() {
   const errs = meeting.errors || [];
   const gaps = transcriptGaps(meeting);
-  $('errors').classList.toggle('hidden', !errs.length && !gaps.length);
+  const more = extraWarnings(meeting);
+  $('errors').classList.toggle('hidden', !errs.length && !gaps.length && !more.length);
   const said = [];
   if (errs.length) said.push(`${errs.length} problem${errs.length > 1 ? 's' : ''} during transcription (some audio may be missing). Last: ${errs[errs.length - 1]}`);
   if (gaps.length) said.push(`No transcript for ${gaps.slice(0, 5).map(gapLabel).join(', ')}${gaps.length > 5 ? ` and ${gaps.length - 5} more` : ''} (about ${gapMinutes(gaps)} min). If people spoke then, those parts are missing from the transcript and the minutes.`);
-  if (said.length) $('errors').textContent = said.join(' ');
+  said.push(...more);
+  // one line each: what went wrong with the transcript, then the other tool, then the recording notice
+  if (said.length) $('errors').replaceChildren(...said.map((t) => Object.assign(document.createElement('p'), { textContent: t })));
 }
 
 // Saves only the fields that changed onto the stored meeting, so another tab's or the recorder's newer
@@ -523,6 +548,7 @@ function setBusy(on) {
 }
 
 function paintStream() {
+  if (!jobUi.buf.trim()) return; // nothing to show yet (the structured read streams no text): the writing skeleton stays until the minutes arrive
   $('mom').innerHTML = renderMd(jobUi.buf);
   decorateMinutes($('mom'));
   $('mom').classList.add('streaming');
@@ -599,7 +625,7 @@ async function finishJob() {
   if (job.state === 'failed') $('genStatus').textContent = job.aborted ? 'Stopped.' : `Failed: ${job.error}`;
   else if (job.state === 'done') {
     const stats = job.stats || {};
-    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack ? ' · the reply did not fit the organisation template, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
+    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack === 'classic' ? ' · the structured read was not usable, so the minutes were written the classic way' : stats.fellBack ? ' · the reply did not fit the organisation template, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
   }
   if (emailProblem) $('mailStatus').textContent = job.error;
   else if (meeting.emailedAt) {
@@ -686,7 +712,25 @@ function initShare() {
   $('shareInvited').classList.toggle('hidden', !hasInv);
   $('shareAbsent').classList.toggle('hidden', !hasInv || !meeting.presence);
   if (meeting.sharedAt) $('shareStatus').textContent = `Shared with ${(meeting.sharedTo || []).join(', ')} ✓`;
+  paintHeld(true);
 }
+
+// Addresses outside the organisation that the automatic share held back: say so, and offer to send to them now.
+function paintHeld(open) {
+  const held = (meeting.shareHeld || []).filter(Boolean);
+  $('shareHeldNow').classList.toggle('hidden', !held.length);
+  if (!held.length) return;
+  if (open) $('shareBox').open = true;
+  $('shareStatus').textContent = meeting.shareStatus || `Not sent automatically to people outside your organisation: ${held.join(', ')}.`;
+}
+$('shareHeldNow').onclick = () => {
+  const held = (meeting.shareHeld || []).filter(Boolean);
+  $('shareBox').open = true;
+  $('shareTo').value = parseAddresses(held.join(',')).join(', ');
+  $('shareHowSel').value = 'to';
+  $('shareStatus').textContent = 'Check the addresses, then press Share.';
+  $('shareSend').focus();
+};
 
 async function shareMom() {
   setEditing(false);
@@ -695,11 +739,21 @@ async function shareMom() {
     $('shareStatus').textContent = 'Add at least one email address.';
     return;
   }
+  // people outside the organisation: ask once more before anything leaves (the automatic share never sends to them)
+  const warn = shareWarning(list, settings);
+  if (warn) {
+    const ok = await modal({ text: `${warn} Send anyway?${wantTranscript(true) ? ' The transcript will be attached.' : ''}`, buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Send', value: 'yes', primary: true }] });
+    if (ok?.value !== 'yes') {
+      $('shareStatus').textContent = 'Not sent.';
+      return;
+    }
+  }
   $('shareSend').disabled = true;
   $('shareStatus').textContent = `Sending to ${list.length} ${list.length === 1 ? 'person' : 'people'}…`;
   try {
     const r = await shareMinutes({ meeting, settings, list, how: $('shareHowSel').value, patch: patchMeeting, ctxFor: nameCtx });
     $('shareStatus').textContent = r.status;
+    paintHeld(false);
   } catch (e) {
     $('shareStatus').textContent = `Share failed: ${e.message}`;
   } finally {
@@ -871,7 +925,18 @@ $('copy').onclick = async () => {
   $('copy').textContent = 'Copied ✓';
   setTimeout(() => ($('copy').textContent = 'Copy'), 1500);
 };
-$('dlTxt').onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, 'text/plain', formatTranscript(meeting, settings.myName, nameCtx()));
+// the notes about the shared screen are added by transcriptFile, as "[mm:ss] ON SCREEN (name): …"
+$('dlTxt').onclick = () => download(`Transcript ${fileBase().slice(4)}.txt`, 'text/plain', transcriptFile(formatTranscript(meeting, settings.myName, { ...nameCtx(), screens: [] }).split('\n'), meeting));
+$('dlJson').onclick = async () => {
+  setEditing(false);
+  await patchChain; // what was just changed is stored first
+  try {
+    const f = await exportJson(meeting);
+    download(f.name, 'application/json', f.text);
+  } catch (e) {
+    $('trInfo').textContent = `Could not export: ${e.message}`;
+  }
+};
 $('del').onclick = async () => {
   const ok = await modal({ title: 'Delete this meeting?', text: 'Its transcript and minutes are removed from this computer. This cannot be undone.', buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Delete meeting', value: 'yes', danger: true }] });
   if (ok?.value !== 'yes') return;
@@ -960,6 +1025,7 @@ const showTab = (b, focus) => {
   });
   $('momTab').classList.toggle('hidden', b.dataset.tab !== 'momTab');
   $('trTab').classList.toggle('hidden', b.dataset.tab !== 'trTab');
+  if (b.dataset.tab === 'trTab') transcriptShown();
   if (focus) b.focus();
 };
 tabBtns.forEach((b, i) => {
@@ -980,6 +1046,17 @@ tabBtns.forEach((b, i) => {
     document.querySelector('main').innerHTML = '<p>Meeting not found.</p>';
     return;
   }
+  await initExtras({
+    id,
+    getMeeting: () => meeting,
+    getSettings: () => settings,
+    onTranscriptChanged: () => {
+      labelCache.clear();
+      renderTranscript();
+      renderErrors();
+    },
+    say: (t) => ($('genStatus').textContent = t),
+  });
   await ensureInvited();
   await rememberEmailNames();
   ensureAttendees();

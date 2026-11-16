@@ -3,7 +3,7 @@ import fs from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 const opts = {
-  entryPoints: ['background', 'popup', 'offscreen', 'options', 'mom', 'pill', 'panel', 'welcome', 'askpage', 'live'].map((n) => `src/${n}.js`).concat(['src/voice/worker.js']),
+  entryPoints: ['background', 'popup', 'offscreen', 'options', 'mom', 'pill', 'panel', 'welcome', 'askpage', 'live', 'actionspage'].map((n) => `src/${n}.js`).concat(['src/voice/worker.js']),
   outdir: 'extension/dist',
   entryNames: '[name]',
   bundle: true,

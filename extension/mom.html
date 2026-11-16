@@ -173,7 +173,7 @@
 
     /* transcript */
     #transcript { padding: 8px 0; }
-    .seg { display: grid; grid-template-columns: 64px 150px 1fr; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
+    .seg { display: grid; grid-template-columns: 80px 150px 1fr; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
     .seg:first-child { border-top: 0; }
     .seg .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--brand); white-space: nowrap; }
     .seg .who { justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
@@ -201,7 +201,7 @@
       main { padding: 20px 16px 48px; }
       #title { font-size: 24px; }
       #mom { padding: 4px 16px 24px; }
-      .seg { grid-template-columns: 56px 1fr; padding: 10px 14px; }
+      .seg { grid-template-columns: 76px 1fr; padding: 10px 14px; }
       .seg .text { grid-column: 1 / -1; }
       .tabs button { padding: 0 12px; }
       #shareStatus { text-align: left; flex-basis: 100%; }
@@ -222,6 +222,7 @@
     <div class="crumb no-print"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint">/ Minutes</span></div>
     <input id="title" aria-label="Meeting title">
     <div class="meta" id="meta"></div>
+    <p class="carried hint no-print hidden" id="carried"></p>
     <div class="chips no-print" id="chips"></div>
   </header>
   <div id="errors" class="warn hidden no-print" role="alert"></div>
@@ -317,6 +318,7 @@
           <button id="shareInvited" class="hidden">Add everyone invited</button>
           <button id="shareAbsent" class="hidden">Add people who were absent</button>
           <span id="shareStatus" class="hint" role="status"></span>
+          <button id="shareHeldNow" class="hidden">Send to them now</button>
           <button id="shareSend" class="primary">Share</button>
         </div>
       </div>
@@ -331,8 +333,10 @@
     <div class="toolbar no-print">
       <span id="trInfo" class="hint" style="flex:1 1 300px"></span>
       <button id="dlTxt">Download .txt</button>
+      <button id="dlJson" title="The whole meeting as a file you can keep or move to another computer. It has no audio and no voice fingerprints.">Download .json</button>
       <button id="del" class="danger">Delete meeting</button>
     </div>
+    <p class="keephint hint no-print hidden" id="keepHint"><span>Turn on Keep the recording in Settings to play lines back.</span><button type="button" class="plain" id="keepHintX" aria-label="Dismiss this tip">Dismiss</button></p>
     <div class="transcript card" id="transcript"></div>
     <p class="hint no-print">Speaker styles: <strong>you</strong> in indigo, a <strong>named person</strong> on the tint, <strong>others</strong> grey, <strong>Unknown speaker</strong> dashed, and a <strong>caption dispute</strong> in saffron.</p>
   </div>

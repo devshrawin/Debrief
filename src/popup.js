@@ -1,6 +1,7 @@
 import { nearLimit, parseLimits, quotaCheck, nextQuotaReset, istClock } from './usage.js';
 import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
+import { allOpenActions } from './actions.js';
 import { getSettings, setSetting, sttReady, llmReady, getState, getMeetingMeta, listMeetingMetas, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -335,6 +336,19 @@ $('askAll').onclick = (e) => {
   chrome.tabs.create({ url: chrome.runtime.getURL('ask.html') });
 };
 $('askHome').onclick = $('askAll').onclick;
+$('openActions').onclick = (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: chrome.runtime.getURL('actions.html') });
+};
+// The count of open actions, after the popup has painted: it reads only the small meeting records.
+async function paintActionCount() {
+  try {
+    const n = allOpenActions(await listMeetingMetas({ counts: [] })).length;
+    $('actionsN').textContent = String(n);
+    $('openActions').setAttribute('aria-label', `Open actions, ${n} open`);
+    show('openActions', n > 0);
+  } catch {}
+}
 
 $('alertX').onclick = () => send({ type: 'dismiss-alert' }).then(refresh);
 $('alertAction').onclick = (e) => {
@@ -487,4 +501,5 @@ for (const id of ['openSettings', 'openSettings1']) {
   await renderRecent();
   if (isMeetingSite(host)) detectCall();
   setInterval(refresh, 1000);
+  setTimeout(paintActionCount, 0);
 })();

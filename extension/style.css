@@ -798,6 +798,7 @@ ul.hint[hidden] { display: none; }
 /* the time of a transcript line is its play control; the column keeps its width with or without it */
 .seg-play { display: inline-flex; align-items: center; gap: 5px; min-height: var(--hit-compact); margin: -8px 0 -8px -6px; padding: 0 6px; border-radius: var(--r-xs); background: transparent; color: var(--tint); font: 12.5px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .seg-play::before { content: ""; flex: none; width: 0; height: 0; border-left: 7px solid currentColor; border-block: 4.5px solid transparent; opacity: .7; }
+.seg .t.t-flat { padding-inline-start: 12px; }
 .seg-play:hover:not(:disabled) { background: var(--tint-soft); color: var(--tint); }
 #transcript .seg { background: transparent; border-radius: 0; } /* a transcript row is not a segmented control, whatever the shared .seg class says */
 #transcript .seg[aria-current="true"] { background: var(--tint-soft); box-shadow: inset 3px 0 0 var(--tint); }
@@ -843,7 +844,7 @@ body.has-playbar main { padding-bottom: 128px; }
 .rr-text { max-height: min(44vh, 340px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-read); box-shadow: inset 0 0 0 1px var(--separator); font: var(--t-callout); }
 .rr-text:focus-visible { border-radius: var(--r-sm); }
 .rr-err { margin: var(--s3) 0 0; padding: 10px 14px; border-radius: var(--r-sm); background: var(--red-soft); box-shadow: inset 0 0 0 1px var(--rec-line); font: var(--t-subheadline); color: var(--label); }
-.rr-btns { align-items: center; }
+.rr-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s2); margin-top: var(--s4); }
 @media (max-width: 600px) {
   .rr-cols { grid-template-columns: minmax(0, 1fr); }
   .rr-btns { flex-direction: column-reverse; align-items: stretch; }
