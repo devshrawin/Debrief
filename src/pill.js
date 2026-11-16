@@ -1,6 +1,7 @@
 // On-page recording pill for Google Meet: shows recording status and lets you switch your mic
 // in or out of the transcript. Lives in a shadow root so Meet's CSS can't touch it.
 import { adapterFor } from './adapters/index.js';
+import { noticeController, nudgeController, presentingReporter } from './adapters/pillrules.js';
 
 (() => {
   if (window.__debriefPill) return;
@@ -161,6 +162,14 @@ import { adapterFor } from './adapters/index.js';
   let lastSentMute;
   let panelSig = '';
   let lastStatus = '';
+  let card; // the small card for the record reminder and for a recording notice that could not be posted
+  let cardSig = '';
+  let cardOn = false;
+  let noticeAlert = null; // { text, until }
+  const noticeCtl = noticeController();
+  const nudgeCtl = nudgeController();
+  const presentingRep = presentingReporter();
+  const notified = new Set();
 
   async function load() {
     const r = await send({ type: 'pill-state' });
@@ -207,6 +216,8 @@ import { adapterFor } from './adapters/index.js';
     const style = el('style');
     style.textContent = CSS;
     wrap = el('div', 'wrap');
+    card = el('div', 'alertbox key hidden');
+    card.style.cssText = 'width:288px;margin:0';
     panel = el('div', 'panel hidden');
     panel.id = 'dbPanel';
     panel.setAttribute('role', 'dialog');
@@ -230,7 +241,7 @@ import { adapterFor } from './adapters/index.js';
     micBtn = el('button', 'mic');
     micBtn.type = 'button';
     pill.append(dot, eq, silentMsg, timeEl, warnChip, micBtn);
-    wrap.append(status, panel, pill);
+    wrap.append(status, card, panel, pill);
     root.append(style, wrap);
     document.documentElement.appendChild(host);
 
@@ -336,12 +347,72 @@ import { adapterFor } from './adapters/index.js';
 
   const STOP_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect width="12" height="12" rx="2.5" fill="currentColor"></rect></svg>';
 
+  // The card: a question with two ways out (nudge), or one line that the notice could not be posted. Rebuilt only when it changes.
+  function renderCard() {
+    const mine = S.rec.recording && !S.rec.stopping && S.rec.tabId === myTab;
+    if (noticeAlert && Date.now() > noticeAlert.until) noticeAlert = null;
+    const want = noticeAlert ? { kind: 'notice', text: noticeAlert.text } : cardNudge && !S.rec.recording && !mine ? { kind: 'nudge', key: cardNudge.key, text: cardNudge.text } : null;
+    cardOn = !!want;
+    card.classList.toggle('hidden', !want);
+    const sig = JSON.stringify(want);
+    if (sig === cardSig) return;
+    cardSig = sig;
+    card.replaceChildren();
+    if (!want) return;
+    const btn = (label, css, onclick) => {
+      const b = el('button', null, label);
+      b.type = 'button';
+      b.style.cssText = css;
+      b.addEventListener('click', onclick);
+      return b;
+    };
+    const pillBtn = 'all:unset;cursor:pointer;font:inherit;font-size:12px;font-weight:650;color:var(--ink);padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.10)';
+    const link = 'all:unset;cursor:pointer;font:inherit;font-size:11.5px;color:var(--dim);text-decoration:underline;padding:6px 4px';
+    const row = el('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:10px';
+    if (want.kind === 'nudge') {
+      card.setAttribute('role', 'status');
+      card.append(el('strong', null, 'Record this meeting?'), el('p', null, want.text));
+      row.append(
+        btn('Not now', pillBtn, () => {
+          nudgeCtl.dismiss(want.key);
+          cardNudge = null;
+          send({ type: 'nudge-dismiss', key: want.key });
+          render();
+        }),
+        btn("Don't remind me", link, () => {
+          nudgeCtl.dismiss(want.key);
+          cardNudge = null;
+          send({ type: 'set-nudge', on: false });
+          render();
+        })
+      );
+    } else {
+      card.setAttribute('role', 'alert');
+      card.append(el('strong', null, 'Recording notice not posted'), el('p', null, want.text));
+      row.append(
+        btn('OK', pillBtn, () => {
+          noticeAlert = null;
+          render();
+        })
+      );
+    }
+    card.append(row);
+  }
+
   function render() {
     if (!host) return;
     const rec = S.rec;
     const mine = rec.recording && !rec.stopping && rec.tabId === myTab;
-    host.style.display = mine && S.showPill ? '' : 'none';
-    if (!mine || !S.showPill) return;
+    const pillOn = mine && S.showPill;
+    renderCard();
+    // The reminder is its own setting: its card shows even when the pill is switched off.
+    host.style.display = pillOn || cardOn ? '' : 'none';
+    pill.classList.toggle('hidden', !pillOn);
+    if (!pillOn) {
+      panel.classList.add('hidden');
+      return;
+    }
 
     timeEl.textContent = fmt((Date.now() - rec.startedAt) / 1000);
     const lv = S.levels;
@@ -541,6 +612,56 @@ import { adapterFor } from './adapters/index.js';
     if (payload.names || payload.captions) send({ type: 'meet-snap', t, ...payload });
   }
 
+  // The recording notice in the meeting chat (Google Meet only, if switched on). The rules are in adapters/pillrules.js.
+  async function maybeNotice() {
+    const rec = S.rec;
+    const mine = rec.recording && !rec.stopping && rec.tabId === myTab;
+    const go = noticeCtl.begin({ now: Date.now(), recKey: mine ? rec.meetingId : null, adapterId: app.id, room: !!rec.room, paused: !!rec.paused, inCall: !!app.inCall(document), notice: S.notice });
+    if (!go) return;
+    let r;
+    try {
+      r = await app.postNotice(document, S.notice.text);
+    } catch (e) {
+      r = { ok: false, why: `chat error: ${e?.message || e}` };
+    }
+    const out = noticeCtl.finish(r, Date.now());
+    if (out.report) await send({ type: 'notice-result', ...out.report });
+    if (out.alert) {
+      noticeAlert = { text: out.alert, until: Date.now() + 30000 };
+      render();
+    }
+  }
+
+  // Tells the recorder when someone starts or stops presenting (so it can describe the shared screen).
+  function reportPresenting() {
+    const mine = S.rec.recording && !S.rec.stopping && S.rec.tabId === myTab;
+    const out = presentingRep.step(mine ? S.rec.meetingId : null, mine && app.presenting ? app.presenting(document) : null);
+    if (out) send({ type: 'presenting', ...out });
+  }
+
+  // "Record this meeting?": asked when a call matches one of the user's meeting types. It only asks: Chrome allows a tab
+  // recording to start only from the extension button or its shortcut.
+  let cardNudge = null;
+  function maybeNudge() {
+    const n = nudgeCtl.step({
+      now: Date.now(),
+      recording: !!S.rec.recording,
+      inCall: !!app.inCall(document),
+      cfg: S.nudge,
+      title: document.title,
+      url: location.href,
+      participants: app.hasPeople ? app.readParticipants(document) : [],
+      shortcut: S.shortcut,
+    });
+    cardNudge = n;
+    // a tab nobody is looking at also gets one system notification per call (the background keeps count)
+    if (n && document.hidden && !notified.has(n.key)) {
+      notified.add(n.key);
+      send({ type: 'nudge-dismiss', key: n.key, notified: true });
+    }
+    render();
+  }
+
   chrome.runtime.onMessage.addListener((msg, _s, reply) => {
     if (msg?.target === 'page' && msg.type === 'diagnose') {
       try {
@@ -571,6 +692,9 @@ import { adapterFor } from './adapters/index.js';
     checkEnded();
     sampleMeeting();
     reportCall();
+    maybeNotice();
+    reportPresenting();
+    maybeNudge();
   }
 
   async function init() {

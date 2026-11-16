@@ -5,6 +5,7 @@ import { saveSamples } from './voice/sampling.js';
 import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
+import { cleanTitle } from './adapters/pillrules.js';
 import { stuckJobs } from './jobstate.js';
 import { SCHEMA, getSettings, setSetting, sttReady, getMeeting, getMeetingMeta, listMeetingMetas, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, CAPS, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
@@ -149,9 +150,31 @@ const mutateState = (fn) =>
 // line, a debug note or a caption only rewrites the last chunk of its list, never the whole meeting.
 const note = (id, text) => appendMeeting(id, 'debug', [text]);
 
+// The live transcript page (if one is open) follows the recording through these. Nobody listening is normal.
+function broadcast(meetingId, kind, item) {
+  try {
+    Promise.resolve(chrome.runtime.sendMessage({ target: 'live', type: 'live', meetingId, kind, item })).catch(() => {});
+  } catch {}
+}
+const liveState = (st) => ({ recording: !!st.recording, paused: !!st.paused, startedAt: st.startedAt ?? null });
+
+// The keyboard shortcut for "record", as the browser has it now (the user may have changed it); asked at most once a minute.
+let shortcutCache = { at: 0, text: 'Alt+Shift+M' };
+async function shortcutText() {
+  if (Date.now() - shortcutCache.at < 60000) return shortcutCache.text;
+  let text = 'Alt+Shift+M';
+  try {
+    const c = (await chrome.commands.getAll()).find((x) => x.name === 'toggle-recording');
+    if (c?.shortcut) text = c.shortcut;
+  } catch {}
+  shortcutCache = { at: Date.now(), text };
+  return text;
+}
+
 // Who was seen when ({ name: [first seen, last seen, sightings] }) changes with every snapshot of the meeting page, about
 // once a second. It is kept here and written to the meeting at most every 15 s and when the recording stops. After a
 // service-worker restart it is read back from the meeting, so at most the last 15 s of sightings can be lost.
+const SCREEN_NOTES_MAX = 400; // screen notes kept per meeting
 const PRESENCE_EVERY_MS = 15000;
 let pres = null; // { id, map, dirty, at, timer, ready }
 async function presenceFor(id) {
@@ -269,8 +292,6 @@ async function resumeJobs() {
 resumeJobs().catch(() => {});
 chrome.runtime.onStartup?.addListener(() => resumeJobs().catch(() => {}));
 
-const cleanTitle = (t = '') => t.replace(/^Meet\s*[-–]\s*/i, '').replace(/\s*[-–]\s*Google Meet$/i, '').trim() || 'Meeting';
-
 let starting = false;
 async function start(msg) {
   // The popup button and the keyboard shortcut can both fire while the microphone prompt is open.
@@ -319,6 +340,7 @@ async function startInner(msg) {
   chrome.scripting.executeScript({ target: { tabId: msg.tabId }, files: ['dist/pill.js'] }).catch(() => {});
   // A tab-specific badge (the Meet reminder) would hide the global one on that tab, so showRec sets both.
   showRec(msg.tabId, Date.now());
+  broadcast(id, 'state', liveState({ recording: true, startedAt: rec.startedAt }));
   return { ok: true };
 }
 
@@ -368,6 +390,7 @@ async function setPaused(want) {
   if (!rec) showRec(st.tabId, st.startedAt, !!st.alert); // the worker restarted while recording
   rec.paused = !!st.paused;
   paintRec();
+  broadcast(st.meetingId, 'state', liveState(st));
   // a quiet stretch while paused must not trip the silence safety stop
   await chrome.storage.session.set({ quietSince: now });
   return { ok: true, paused: !!st.paused };
@@ -434,6 +457,7 @@ function stop(opts = {}) {
       await deleteMeeting(st.meetingId).catch(() => {});
       await mutateState(() => ({ recording: false }));
       hideRec(st.tabId);
+      broadcast(st.meetingId, 'state', liveState({ startedAt: st.startedAt }));
       return { ok: true, discarded: true };
     }
     await endPresence(st.meetingId).catch(() => {});
@@ -447,6 +471,7 @@ function stop(opts = {}) {
     await startJob(st.meetingId).catch(() => {});
     await mutateState(() => ({ recording: false }));
     hideRec(st.tabId);
+    broadcast(st.meetingId, 'state', liveState({ startedAt: st.startedAt }));
     // After an automatic stop, open the minutes in the background so it doesn't pull you out of what you're doing.
     await chrome.tabs.create({ url: chrome.runtime.getURL(`mom.html?id=${st.meetingId}`), active: !opts.background });
     return { ok: true };
@@ -491,7 +516,7 @@ async function autoStop(reason) {
 }
 
 // What a page script (running on a meeting site) may ask for. Everything else must come from Debrief's own pages.
-const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'discard', 'set-follow', 'dismiss-alert']);
+const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'notice-result', 'presenting', 'nudge-dismiss', 'set-nudge']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.target !== 'bg') return;
@@ -551,7 +576,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     store: async () => {
       if (msg.op === 'settings') return { ok: true, value: await getSettings() };
       if (msg.op === 'getMeeting') return { ok: true, value: await getMeeting(msg.id) };
-      if (msg.op === 'getMeetingMeta') return { ok: true, value: await getMeetingMeta(msg.id, msg.counts ? { counts: msg.counts } : undefined) };
+      if (msg.op === 'listMeetingMetas') return { ok: true, value: await listMeetingMetas(msg.opts || {}) };
+      if (msg.op === 'getMeetingMeta') return { ok: true, value: await getMeetingMeta(msg.id, msg.opts || (msg.counts ? { counts: msg.counts } : undefined)) };
       // a copy sent from there carries what it held when read as `__loaded` (jobs.js useStore), so only its changes are written
       if (msg.op === 'saveMeeting') return (await saveMeeting(msg.meeting), { ok: true });
       if (msg.op === 'patchMeeting') return { ok: true, value: await patchMeeting(msg.id, msg.fields || {}) };
@@ -563,7 +589,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     dbg: async () => void (await note(msg.meetingId, msg.note)),
     segment: async () => {
       await appendMeeting(msg.meetingId, 'segments', [msg.seg]);
+      broadcast(msg.meetingId, 'segment', msg.seg);
       await clearAlert();
+    },
+    // A note about the shared screen, written by the recorder. A page script never sends this (not in PAGE_MAY).
+    'screen-note': async () => {
+      const n = msg.note;
+      const okNote = n && typeof n === 'object' && Number.isFinite(n.t) && n.t >= 0 && typeof n.text === 'string' && n.text.trim().length >= 1 && n.text.length <= 600 && (n.presenter === null || n.presenter === undefined || (typeof n.presenter === 'string' && n.presenter.length <= 60));
+      if (!okNote || typeof msg.meetingId !== 'string') return { ok: false };
+      const item = { t: n.t, text: n.text, presenter: n.presenter ?? null };
+      const m = await getMeetingMeta(msg.meetingId, { counts: ['screens'] });
+      if (!m || m.counts.screens >= SCREEN_NOTES_MAX) return { ok: false };
+      await appendMeeting(msg.meetingId, 'screens', [item], { limit: SCREEN_NOTES_MAX });
+      broadcast(msg.meetingId, 'screen', item);
+      return { ok: true };
+    },
+    // the live transcript page asks which meeting is being recorded
+    'live-state': async () => {
+      const st = await getState();
+      return { ok: true, rec: st, meetingId: st.recording ? st.meetingId : null };
+    },
+    // The pill tried to post the recording notice in the meeting chat. The first result is kept (a reload must not post twice).
+    'notice-result': async () => {
+      const st = await getState();
+      if (!st.recording || st.stopping || sender.tab?.id !== st.tabId) return { ok: false };
+      if (typeof msg.ok !== 'boolean' || (msg.posted != null && typeof msg.posted !== 'boolean') || (msg.why != null && typeof msg.why !== 'string')) return { ok: false };
+      const out = { ok: msg.ok, posted: !!msg.posted, why: String(msg.why || '').slice(0, 120), at: Date.now() };
+      let first = false;
+      await updateMeetingMeta(st.meetingId, (m) => {
+        if (!m.notice) {
+          m.notice = out;
+          first = true;
+        }
+      });
+      if (first) await note(st.meetingId, `chat notice: ${out.posted ? 'posted' : out.ok ? 'not needed' : 'failed'}${out.why ? ` (${out.why})` : ''}`);
+      return { ok: true, first };
+    },
+    // Someone is presenting (or stopped): the recorder describes the shared screen only while that is so.
+    presenting: async () => {
+      const st = await getState();
+      if (!st.recording || st.stopping || sender.tab?.id !== st.tabId) return { ok: false };
+      if (typeof msg.on !== 'boolean' || (msg.name != null && (typeof msg.name !== 'string' || msg.name.length > 60))) return { ok: false };
+      let name = msg.on && msg.name ? msg.name.replace(/\s+/g, ' ').trim() || null : null;
+      const me = (await getSettings()).myName;
+      if (name && /^you$/i.test(name) && me) name = me;
+      await Promise.resolve(chrome.runtime.sendMessage({ target: 'offscreen', type: 'presenting', on: msg.on, name })).catch(() => {});
+      return { ok: true };
+    },
+    // "Not now" on the record reminder (key stored for this browser session, last 50), or the page saying it raised the reminder
+    // while its tab was hidden (`notified`): then a system notification goes out once per call.
+    'nudge-dismiss': () =>
+      serial(async () => {
+        const key = msg.key;
+        if (typeof key !== 'string' || !key || key.length > 200) return { ok: false };
+        const name = msg.notified === true ? 'nudgeNotified' : 'nudgeDismissed';
+        const list = (await chrome.storage.session.get(name))[name] || [];
+        if (msg.notified === true && list.includes(key)) return { ok: true, notified: false };
+        await chrome.storage.session.set({ [name]: [...list.filter((k) => k !== key), key].slice(-50) });
+        if (msg.notified !== true) return { ok: true };
+        if ((await getSettings()).recordNudge === false || (await getState()).recording) return { ok: true, notified: false };
+        // No meeting title here: notifications can show on a shared screen.
+        notify('debrief-nudge', { title: 'Debrief: record this meeting?', message: `A call that matches one of your meeting types is on. Click the Debrief button or press ${await shortcutText()} to record.` });
+        return { ok: true, notified: true };
+      }),
+    'set-nudge': async () => {
+      if (typeof msg.on !== 'boolean') return { ok: false };
+      await setSetting({ recordNudge: msg.on });
+      return { ok: true };
     },
     'stt-error': async () => {
       await appendMeeting(msg.meetingId, 'errors', [msg.error]);
@@ -646,11 +738,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return applyMic();
     },
     'pill-state': async () => {
+      const s = await getSettings();
       const rec = await getState();
       const { levels } = await chrome.storage.session.get('levels');
       // asked about once a second: the counts come from META and the last chunk, never the whole transcript
       const m = rec.meetingId ? await getMeetingMeta(rec.meetingId, { counts: ['segments', 'errors'] }) : null;
-      return { ok: true, rec, levels: levels || null, counts: { segs: m?.counts.segments || 0, errs: m?.counts.errors || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || 'read', otherSites: (await getSettings()).otherSites !== false };
+      const nudgeOn = s.recordNudge !== false;
+      const text = typeof s.consentText === 'string' ? s.consentText.trim().slice(0, 300) : '';
+      const { nudgeDismissed = [] } = await chrome.storage.session.get('nudgeDismissed');
+      return {
+        ok: true,
+        rec,
+        levels: levels || null,
+        counts: { segs: m?.counts.segments || 0, errs: m?.counts.errors || 0 },
+        follow: s.followMeetMute !== false,
+        showPill: s.pillOnPage === true,
+        captionMode: s.meetCaptions || 'read',
+        otherSites: s.otherSites !== false,
+        shortcut: await shortcutText(),
+        // the recording notice for the meeting chat; done = a result is already kept, so a reload never posts twice
+        notice: { on: s.consentNotice === true && !!text, text, done: !!m?.notice },
+        // only what the record reminder needs to match a call against the user's meeting types
+        nudge: {
+          on: nudgeOn,
+          skipOneOnOne: s.nudgeSkipOneOnOne !== false,
+          meetingTypes: nudgeOn ? (Array.isArray(s.meetingTypes) ? s.meetingTypes : []).slice(0, 50).map((t) => ({ id: String(t?.id ?? ''), name: String(t?.name ?? ''), match: String(t?.match ?? ''), code: String(t?.code ?? '') })) : [],
+          dismissed: nudgeDismissed,
+        },
+      };
     },
   };
   const h = handlers[msg.type];

@@ -32,7 +32,7 @@ const live = (extra = {}) => {
 };
 
 await test('every handler the product needs is registered', async () => {
-  for (const type of ['start', 'stop', 'mic', 'mic-refresh', 'meet-mute', 'whoami', 'level', 'meet-ended', 'dbg', 'segment', 'stt-error', 'usage', 'meet-snap', 'in-call', 'dismiss-alert', 'set-follow', 'pill-state']) {
+  for (const type of ['start', 'stop', 'mic', 'mic-refresh', 'meet-mute', 'whoami', 'level', 'meet-ended', 'dbg', 'segment', 'stt-error', 'usage', 'meet-snap', 'in-call', 'dismiss-alert', 'set-follow', 'pill-state', 'notice-result', 'presenting', 'nudge-dismiss', 'set-nudge', 'screen-note', 'live-state']) {
     const r = await send({ type }, type === 'whoami' ? page(3) : OWN);
     assert.notEqual(r, 'NO-HANDLER', `${type} has no handler`);
   }

@@ -111,6 +111,37 @@ export async function postNotice(doc, msg, opts) {
   }
 }
 
+// ---- presenting -------------------------------------------------------------------------------
+// Someone sharing their screen shows up as a label on a button, a heading or a status line ("Priya Nair is presenting",
+// "You are presenting", "Stop presenting"). Only those places are read: a chat message that says the same words must not count.
+const PRESENTING = /is presenting|presentation from|presentation\s*\(|you are presenting|you're presenting|stop presenting/i;
+const YOU_PRESENT = /you are presenting|you're presenting|stop presenting/i;
+const CHAT_SCOPE = '[role="textbox"], textarea, [contenteditable="true"], [role="log"], [role="complementary"], aside, [aria-label*="chat" i], [aria-label*="message" i]';
+
+function presenterName(s) {
+  const m = s.match(/^(.+?)\s+is presenting\b/i) || s.match(/\bpresentation\s*\(([^)]+)\)/i) || s.match(/(?:un)?pin\s+(.+?)['\u2019]s presentation/i) || s.match(/presentation from\s+(.+)$/i);
+  const raw = m?.[1] || '';
+  return /^(your|someone|somebody|a participant)\b/i.test(raw) ? '' : cleanName(raw);
+}
+
+// -> { on, name } (name 'You' when it is you), or null when it cannot be told (not in a call).
+export function presenting(doc) {
+  if (!inCall(doc)) return null;
+  let found = false;
+  let name = null;
+  for (const el of doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"], [role="status"], [role="alert"], [aria-label]')) {
+    if (el.closest(CHAT_SCOPE)) continue;
+    for (const s of [el.getAttribute('aria-label'), el.getAttribute('title'), ...lines(el).slice(0, 4)]) {
+      const t = String(s || '').trim();
+      if (!t || t.length > 100 || !PRESENTING.test(t)) continue;
+      found = true;
+      if (YOU_PRESENT.test(t)) return { on: true, name: 'You' };
+      name ||= presenterName(t) || null;
+    }
+  }
+  return { on: found, name: found ? name : null };
+}
+
 export function snapshot(doc) {
   return { mic: micButton(doc), participants: readParticipants(doc), captions: readCaptions(doc), ended: endScreen(doc) };
 }
@@ -125,6 +156,10 @@ export function diagnose(doc) {
     captionsButton: captionsButton(doc) ? 'found' : 'not found (captions may already be on)',
     chat: chat.diagnoseChat(doc),
     inCall: inCall(doc) ? 'yes, a call is on' : 'no call detected (lobby or not joined yet)',
+    presenting: (() => {
+      const p = presenting(doc);
+      return !p ? 'unknown (no call detected)' : p.on ? `yes${p.name ? `, ${p.name}` : ', name not read'}` : 'no one is presenting';
+    })(),
     endScreen: s.ended ? 'the end-of-meeting screen is showing' : 'no (normal while in a call)',
   };
 }

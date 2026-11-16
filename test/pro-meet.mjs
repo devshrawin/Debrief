@@ -202,4 +202,33 @@ await test('adapters: every adapter exposes postNotice; diagnose has a chat line
   assert.match(meet.diagnose(page('<div></div>')).chat, /button NOT found/);
 });
 
+// Meet's real markup for sharing could not be inspected: these are guessed ARIA/text shapes, read the way the other readers are.
+const CALL = '<button data-is-muted="false" aria-label="Turn off microphone"></button><button aria-label="Leave call"></button>';
+await test('meet: presenting() sees someone presenting (with a name), you presenting, and nobody', () => {
+  assert.deepEqual(meet.presenting(page(`${CALL}<div role="status">Priya Nair is presenting</div>`)), { on: true, name: 'Priya Nair' });
+  assert.deepEqual(meet.presenting(page(`${CALL}<button aria-label="Priya Nair is presenting"></button>`)), { on: true, name: 'Priya Nair' });
+  assert.deepEqual(meet.presenting(page(`${CALL}<div aria-label="Presentation (Amal Raj)"></div>`)), { on: true, name: 'Amal Raj' });
+  assert.deepEqual(meet.presenting(page(`${CALL}<button aria-label="Unpin Akash Behera's presentation from your main screen"></button>`)), { on: true, name: 'Akash Behera' });
+  assert.deepEqual(meet.presenting(page(`${CALL}<h2>You are presenting</h2>`)), { on: true, name: 'You' });
+  assert.deepEqual(meet.presenting(page(`${CALL}<button>Stop presenting</button>`)), { on: true, name: 'You' });
+  assert.deepEqual(meet.presenting(page(`${CALL}<div aria-label="Someone is presenting"></div>`)), { on: true, name: null });
+  assert.deepEqual(meet.presenting(page(`${CALL}<button aria-label="Present now"></button><div data-participant-id="a"><div>Amal Raj</div></div>`)), { on: false, name: null });
+});
+
+await test('meet: presenting() ignores chat text and a draft; cannot tell outside a call', () => {
+  const chatty = `${CALL}<div role="complementary" aria-label="In-call messages"><div>Bob is presenting the roadmap next</div><div role="status">Ann is presenting</div><div aria-label="Cy is presenting"></div></div><div>Dee is presenting later</div><textarea aria-label="Send a message">Ed is presenting</textarea><div role="textbox" contenteditable="true">You are presenting</div>`;
+  assert.deepEqual(meet.presenting(page(chatty)), { on: false, name: null });
+  assert.equal(meet.presenting(page('<div role="status">Priya Nair is presenting</div>')), null, 'no call controls: cannot tell');
+  assert.equal(meet.presenting(page('<button aria-label="Leave call"></button>')), null);
+});
+
+await test('meet: the diagnostic report has a presenting line; the generic reader cannot tell', () => {
+  assert.match(meet.diagnose(page(`${CALL}<div role="status">Priya Nair is presenting</div>`)).presenting, /^yes, Priya Nair/);
+  assert.match(meet.diagnose(page(CALL)).presenting, /no one/);
+  assert.match(meet.diagnose(page('<div></div>')).presenting, /unknown/);
+  assert.equal(generic.presenting(page(`${CALL}<div role="status">Priya Nair is presenting</div>`)), null);
+  assert.equal(adapterFor('app.zoom.us').presenting(page('<div></div>')), null);
+  assert.equal(typeof adapterFor('meet.google.com').presenting, 'function');
+});
+
 console.log(`\n${passed} passed`);

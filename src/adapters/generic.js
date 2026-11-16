@@ -52,6 +52,11 @@ export async function postNotice() {
   return { ok: false, why: 'not supported in this meeting app' };
 }
 
+// Presenting is read for Google Meet only (null = cannot tell).
+export function presenting() {
+  return null;
+}
+
 export function snapshot(doc) {
   return { mic: micButton(doc), participants: [], captions: [], ended: endScreen(doc), inCall: inCall(doc) };
 }
