@@ -5,7 +5,8 @@ const PAUSE = 0.35 * SR; // this much quiet counts as a pause
 const QUIET_RMS = 0.006;
 // How long a chunk may get. Gemini has a small daily request allowance, so it gets long chunks: 100-150 s by default,
 // about 240 s when "fewer requests" is chosen. Other providers cut at 18-28 s.
-export const chunkSecs = (s) => (s.sttProvider !== 'gemini' ? { minSec: 18, maxSec: 28 } : s.sttGeminiChunk === 'long' ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 });
+// 'short' (30-45 s) lets the live transcript keep up, at about three times the requests.
+export const chunkSecs = (s) => (s.sttProvider !== 'gemini' ? { minSec: 18, maxSec: 28 } : s.sttGeminiChunk === 'long' ? { minSec: 200, maxSec: 240 } : s.sttGeminiChunk === 'short' ? { minSec: 30, maxSec: 45 } : { minSec: 100, maxSec: 150 });
 const SPEECH_RMS = 0.012; // chunk is skipped unless some 128 ms block is louder than this
 export const VOICED_RMS = 0.015; // a block this loud counts as someone speaking (for judging whether the transcript is complete)
 

@@ -1,9 +1,10 @@
 // Offscreen document: captures tab audio (+ optional mic), cuts it into <30 s chunks at pauses,
 // transcribes each chunk, and sends segments to the service worker.
-import { transcribe, resetSttBudget } from './stt.js';
+import { transcribeDetailed, resetSttBudget } from './stt.js';
 import { encodeWav } from './wav.js';
 import { Chunker, SR, chunkSecs } from './chunker.js';
 import { Mixer, Meter, timelineOf, attributeMixed } from './mixer.js';
+import { segmentsFromUtterances } from './utter.js';
 import { createJobRunner, useStore } from './jobs.js';
 import { savePending } from './audiostore.js';
 import { transcribePiece } from './coverage.js';
@@ -134,11 +135,11 @@ async function start({ streamId, settings, meetingId }) {
       try {
         // A long piece answered with a few sentences (or nothing) is read again as short parts (see coverage.js); if it is still thin it is reported as a gap.
         const voicedSec = info?.voicedSec || 0;
-        const { text, gap, chars } = await transcribePiece({
+        const { text, utterances, gap, chars } = await transcribePiece({
           pcm,
           wav,
           voicedSec,
-          transcribeFn: (w) => transcribe(w, settings),
+          transcribeFn: (w) => transcribeDetailed(w, settings), // { text, utterances }
           encode: (x) => encodeWav(x, SR),
           budget: rereads,
           note: (n) => dbgNote(`chunk ${src} @${Math.round(t)}s: ${n}`),
@@ -146,7 +147,9 @@ async function start({ streamId, settings, meetingId }) {
         dbgNote(`chunk ${src} @${Math.round(t)}s ${Math.round(pcm.length / SR)}s -> ${text.length} chars in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
         if (gap) chrome.runtime.sendMessage({ target: 'bg', type: 'gap', meetingId, gap: { t: Math.round(t), dur, src, voicedSec: Math.round(voicedSec), chars } }).catch(() => {});
         // one mixed stream: split the text into who-said-what; otherwise the chunk already has its speaker
-        if (text) for (const seg of tl ? attributeMixed(text, t, tl) : [{ t, src, text }]) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { ...seg, dur, c: Math.round(t * 10) / 10 } }); // c, dur: where the piece this text came from starts and how long it is
+        // timed utterances (when the provider gave them): real times and a me/others call per utterance; otherwise the whole text is placed by the piece's start
+        const segs = !text ? [] : utterances ? segmentsFromUtterances(utterances, { t, src, timeline: tl }) : tl ? attributeMixed(text, t, tl) : [{ t, src, text }];
+        for (const seg of segs) chrome.runtime.sendMessage({ target: 'bg', type: 'segment', meetingId, seg: { ...seg, dur, c: Math.round(t * 10) / 10 } }); // c, dur: where the piece this text came from starts and how long it is
       } catch (e) {
         // Keep the audio so the MOM page can retry it after the meeting.
         let saved = false;

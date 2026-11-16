@@ -3,8 +3,8 @@
 import { rms } from './chunker.js';
 
 export const BLOCK_SEC = 2048 / 16000; // the worklet delivers 2048-sample blocks at 16 kHz
-const QUIET = 0.006;
-const MIC_WINS = 1.5; // the mic counts as the speaker when it is this much louder than the tab
+export const QUIET = 0.006;
+export const MIC_WINS = 1.5; // the mic counts as the speaker when it is this much louder than the tab
 
 // Pairs up tab and mic blocks (they come from two taps of one audio clock) and hands on their sum plus both levels.
 export class Mixer {
@@ -63,6 +63,19 @@ export class Meter {
   }
 
   flush() {}
+}
+
+// Who spoke over the 128 ms blocks [i0, i1) of a timeline: 'me' when the mic was the louder side in at least half of the
+// voiced blocks there, else 'others'; null when none of them is voiced.
+export function sideOver(tl, i0, i1) {
+  let voiced = 0;
+  let mine = 0;
+  for (let i = Math.max(0, i0); i < Math.min(i1, tl.tab.length, tl.mic.length); i++) {
+    if (Math.max(tl.tab[i], tl.mic[i]) <= QUIET) continue;
+    voiced++;
+    if (tl.mic[i] > QUIET && tl.mic[i] > tl.tab[i] * MIC_WINS) mine++;
+  }
+  return voiced ? (mine >= voiced / 2 ? 'me' : 'others') : null;
 }
 
 export const timelineOf = (metas) => ({ tab: metas.map((m) => Math.round(m.tab * 1e4) / 1e4), mic: metas.map((m) => Math.round(m.mic * 1e4) / 1e4) });

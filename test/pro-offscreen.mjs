@@ -62,7 +62,13 @@ Object.defineProperty(globalThis, 'navigator', { value: { mediaDevices: { getUse
 // ---- fake speech-to-text: the answer depends on how long the audio is ----
 let requests = [];
 let answer = () => '';
+let verbose = null; // when set, the OpenAI-compatible path answers with this verbose_json body
 globalThis.fetch = async (url, init = {}) => {
+  if (init.body instanceof FormData) {
+    const sec = (init.body.get('file').size - 44) / 32000;
+    requests.push(sec);
+    return Response.json(typeof verbose === 'function' ? verbose(sec) : verbose);
+  }
   const body = JSON.parse(init.body);
   const b64 = body.contents[0].parts.find((p) => p.inlineData).inlineData.data;
   const sec = (Buffer.from(b64, 'base64').length - 44) / 32000;
@@ -83,7 +89,7 @@ const feed = (node, sec, amp) => {
     node.port.onmessage({ data: b });
   }
 };
-const settings = { ...DEFAULTS, sttProvider: 'gemini', geminiKey: 'k', sttGeminiModel: 'gemini-3.8-flash', geminiModel: 'gemini-3.8-flash', captureMic: false };
+let settings = { ...DEFAULTS, sttProvider: 'gemini', geminiKey: 'k', sttGeminiModel: 'gemini-3.8-flash', geminiModel: 'gemini-3.8-flash', captureMic: false };
 
 async function record(meetingId, play) {
   sent = [];
@@ -158,4 +164,31 @@ await test('a failing request keeps the audio for a retry and says so (no gap is
   }
 });
 
+const gemini = settings;
+const oaSettings = { ...DEFAULTS, sttProvider: 'openai', sttBase: 'http://localhost:9000/v1', sttModel: 'm', captureMic: false };
+
+await test('timed utterances become segments with their own times, and the piece start and length stay on each', async () => {
+  settings = oaSettings;
+  verbose = { text: 'One. Two. Three.', segments: [{ start: 1, end: 3, text: 'One.' }, { start: 3.2, end: 5, text: 'Two.' }, { start: 12, end: 14, text: 'Three.' }] };
+  const r = await record('m6', (n) => feed(n, 20, 0.1));
+  assert.deepEqual(r.segments.map((s) => [s.t, s.text, s.u]), [[1, 'One. Two.', 1], [12, 'Three.', 1]]);
+  assert.ok(r.segments.every((s) => s.c === 0 && Math.abs(s.dur - 20) < 1));
+});
+
+await test('no utterances from the provider: the old single segment at the piece start', async () => {
+  verbose = { text: 'Just text here.' };
+  const r = await record('m7', (n) => feed(n, 20, 0.1));
+  assert.deepEqual(r.segments.map((s) => [s.t, s.text, s.u]), [[0, 'Just text here.', undefined]]);
+});
+
+await test('utterances in a second piece are placed after the first piece, each with its own c', async () => {
+  verbose = (sec) => ({ text: 'Hi there.', segments: [{ start: 2, end: 4, text: 'Hi there.' }] });
+  const r = await record('m8', (n) => feed(n, 40, 0.1)); // cut at the 28 s maximum: two pieces
+  const segs = [...r.segments].sort((x, y) => x.t - y.t);
+  assert.equal(segs.length, 2);
+  assert.deepEqual(segs.map((s) => s.t), [2, segs[1].c + 2]);
+  assert.ok(segs[1].c > 25 && segs.every((s) => s.u === 1));
+});
+
+settings = gemini;
 console.log(`\n${passed} passed`);

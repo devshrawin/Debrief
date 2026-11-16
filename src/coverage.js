@@ -62,18 +62,25 @@ const loudest = (pcm, win = 2048) => {
 };
 
 // Transcribes the piece again as several shorter ones and joins the answers. `encode(pcm)` makes the WAV, `transcribeFn(wav)`
-// asks the speech model. Silent parts are not sent. Returns { text, parts } (parts = how many requests were made).
+// asks the speech model (a string, or { text, utterances } whose times are then moved to where the part sits in the piece).
+// Silent parts are not sent. Returns { text, parts, utterances } (parts = how many requests were made; utterances is null
+// unless every part that had text brought timed utterances).
 export async function readInParts({ pcm, encode, transcribeFn, partSec = 45, sr = SR }) {
   const out = [];
+  let utt = [];
   let parts = 0;
   for (const [a, b] of splitRanges(pcm, partSec, sr)) {
     const sub = pcm.subarray(a, b);
     if (sub.length < sr || loudest(sub) < 0.012) continue;
     parts++;
-    const t = String((await transcribeFn(encode(sub))) || '').trim();
-    if (t) out.push(t);
+    const got = await transcribeFn(encode(sub));
+    const t = String((typeof got === 'string' ? got : got?.text) || '').trim();
+    if (!t) continue;
+    out.push(t);
+    if (utt && Array.isArray(got?.utterances)) utt.push(...got.utterances.map((u) => ({ ...u, t0: u.t0 + a / sr, t1: u.t1 + a / sr })));
+    else utt = null;
   }
-  return { text: out.join(' '), parts };
+  return { text: out.join(' '), parts, utterances: utt && utt.length ? utt : null };
 }
 
 // Can a piece be cut into at least two parts? (A 25 s piece cannot be read in shorter parts than it is.)
@@ -83,18 +90,20 @@ export const canSplit = (pcm, partSec = 45, sr = SR) => splitRanges(pcm, partSec
 // (at most `budget.left` times a recording, as each costs a few requests). The longer of the two answers is kept, and `gap`
 // says the piece is still far too thin. A failing re-read never loses the first answer.
 export async function transcribePiece({ pcm, wav, voicedSec, transcribeFn, encode, budget = { left: 8 }, note = () => {} }) {
-  let text = String((await transcribeFn(wav)) || '');
+  const first = await transcribeFn(wav);
+  let text = String((typeof first === 'string' ? first : first?.text) || '');
+  let utterances = typeof first === 'string' ? null : first?.utterances || null; // timed utterances go with the text that was kept
   let verdict = judgePiece(text, voicedSec);
   if (verdict.short && budget.left > 0 && canSplit(pcm)) {
     budget.left--;
     note(`${verdict.chars} characters for ${Math.round(voicedSec)} s of speech looks incomplete (at least ${verdict.expected} expected), reading it again in parts`);
     const again = await readInParts({ pcm, encode, transcribeFn }).catch((e) => (note(`reading in parts failed (${e.message})`), { text: '', parts: 0 }));
     note(`${again.parts} part(s) -> ${again.text.length} characters`);
-    if (again.text.length > text.length) text = again.text;
+    if (again.text.length > text.length) (text = again.text), (utterances = again.utterances);
     else if ((budget.fruitless = (budget.fruitless || 0) + 1) >= MAX_FRUITLESS) budget.left = 0; // music or noise, or a model that cannot do better: stop spending requests on it
     verdict = judgePiece(text, voicedSec);
   }
-  return { text, gap: verdict.gap, chars: verdict.chars };
+  return { text, utterances, gap: verdict.gap, chars: verdict.chars };
 }
 
 // ---- a finished transcript ---------------------------------------------------------------------------

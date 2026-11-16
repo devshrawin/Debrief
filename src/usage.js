@@ -1,3 +1,4 @@
+import { chunkSecs } from './chunker.js';
 // Local API usage tracking. Debrief makes every call itself, so it can count them; Google does not
 // expose remaining free quota, so "left today" is an estimate against limits learned from 429 replies
 // or typed in by the user. Days roll over at midnight Pacific time, when Gemini's daily quota resets.
@@ -91,7 +92,7 @@ export function quotaCheck(usage, limits, settings, { minutes = 60, now = new Da
   const limit = limits?.[model];
   if (!model || !limit) return null;
   const used = summarize(usage, 1, now).filter((r) => r.model === model && r.kind === 'stt').reduce((a, r) => a + r.req, 0);
-  const secs = settings.sttGeminiChunk === 'long' ? { minSec: 200, maxSec: 240 } : { minSec: 100, maxSec: 150 };
+  const secs = chunkSecs(settings); // gemini here, so short / standard / long
   const need = estimateRequests({ minutes, ...secs, streams: 1 });
   const left = Math.max(0, limit - used);
   return { model, limit, used, left, need, minutes, short: need > left, longHelps: settings.sttGeminiChunk !== 'long' && estimateRequests({ minutes, minSec: 200, maxSec: 240 }) <= left };

@@ -49,43 +49,72 @@ async function sarvam(wav, s) {
   return j.transcript || '';
 }
 
+// Deepgram's utterances (with speaker numbers) come back next to the transcript. If an account or model refuses those
+// options, the piece is read again without them: a transcript must never be lost because of an optional setting.
 async function deepgram(wav, s) {
-  const q = new URLSearchParams({
-    model: s.deepgramModel,
-    language: 'multi', // Hindi-English code-switching on nova-3
-    smart_format: 'true',
-    punctuate: 'true',
-  });
-  for (const t of sttTerms(s).slice(0, 50)) q.append('keyterm', t);
-  const res = await fetch(`https://api.deepgram.com/v1/listen?${q}`, {
-    method: 'POST',
-    headers: { Authorization: `Token ${s.deepgramKey}`, 'Content-Type': 'audio/wav' },
-    body: wav,
-  });
-  const j = await check(res, 'Deepgram');
-  return j.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+  const call = async (extra) => {
+    const q = new URLSearchParams({
+      model: s.deepgramModel,
+      language: 'multi', // Hindi-English code-switching on nova-3
+      smart_format: 'true',
+      punctuate: 'true',
+      ...extra,
+    });
+    for (const t of sttTerms(s).slice(0, 50)) q.append('keyterm', t);
+    const res = await fetch(`https://api.deepgram.com/v1/listen?${q}`, {
+      method: 'POST',
+      headers: { Authorization: `Token ${s.deepgramKey}`, 'Content-Type': 'audio/wav' },
+      body: wav,
+    });
+    return check(res, 'Deepgram');
+  };
+  let j;
+  try {
+    j = await call({ utterances: 'true', diarize: 'true' });
+  } catch (e) {
+    if (!(e.status === 400 && /diariz|utterance/i.test(e.message))) throw e;
+    j = await call({});
+  }
+  const text = j.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+  const utterances = (j.results?.utterances || []).map((u) => ({ t0: u.start, t1: u.end, text: u.transcript, spk: Number.isInteger(u.speaker) ? u.speaker : undefined }));
+  return { text, utterances };
 }
 
-// OpenAI-compatible /audio/transcriptions: OpenAI, Groq, or a local Whisper server.
+// Base URLs whose server refused response_format=verbose_json (it then gets plain json straight away).
+const NO_VERBOSE = new Set();
+export const _resetVerbose = () => NO_VERBOSE.clear();
+
+// OpenAI-compatible /audio/transcriptions: OpenAI, Groq, or a local Whisper server. verbose_json also carries the
+// segments with their start and end; a server that does not know it is asked again for plain json.
 async function openaiCompat(wav, s) {
-  const fd = new FormData();
-  fd.append('file', wav, 'chunk.wav');
-  fd.append('model', s.sttModel);
-  fd.append('response_format', 'json');
+  const base = s.sttBase.replace(/\/+$/, '');
   const chosen = chosenLanguages(s);
   const only = singleLanguage(chosen || []);
-  if (only) fd.append('language', only.code);
-  const base = chosen && s.sttPrompt === DEFAULT_STT_PROMPT ? `${joinNames(chosen)} office meeting. ${languageHint(chosen)}` : s.sttPrompt;
-  const prompt = [base, sttTerms(s).length ? `Names: ${sttTerms(s).join(', ')}.` : ''].filter(Boolean).join(' ');
-  if (prompt) fd.append('prompt', prompt);
-  const headers = s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {};
-  const res = await fetch(`${s.sttBase.replace(/\/+$/, '')}/audio/transcriptions`, {
-    method: 'POST',
-    headers,
-    body: fd,
-  });
-  const j = await check(res, 'Transcription');
-  return j.text || '';
+  const lead = chosen && s.sttPrompt === DEFAULT_STT_PROMPT ? `${joinNames(chosen)} office meeting. ${languageHint(chosen)}` : s.sttPrompt;
+  const prompt = [lead, sttTerms(s).length ? `Names: ${sttTerms(s).join(', ')}.` : ''].filter(Boolean).join(' ');
+  const call = async (format) => {
+    const fd = new FormData();
+    fd.append('file', wav, 'chunk.wav');
+    fd.append('model', s.sttModel);
+    fd.append('response_format', format);
+    if (only) fd.append('language', only.code);
+    if (prompt) fd.append('prompt', prompt);
+    const res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {}, body: fd });
+    return check(res, 'Transcription');
+  };
+  if (!NO_VERBOSE.has(base)) {
+    try {
+      const j = await call('verbose_json');
+      if (typeof j.text === 'string') {
+        const utterances = Array.isArray(j.segments) ? j.segments.map((g) => ({ t0: g.start, t1: g.end, text: g.text })) : null;
+        return { text: j.text, utterances };
+      }
+    } catch (e) {
+      if (![400, 415, 422].includes(e.status)) throw e;
+    }
+    NO_VERBOSE.add(base);
+  }
+  return (await call('json')).text || '';
 }
 
 async function toBase64(blob) {
@@ -218,16 +247,36 @@ export function stripTimestamps(text) {
   return lines.map((l) => l.replace(stamp, '')).filter(Boolean).join(' ');
 }
 
-export async function transcribe(wav, settings) {
+// Makes the utterances a provider gave fit one piece: same cleaning as the text, times inside the piece and in order.
+function tidyUtterances(list, text, dur, terms) {
+  if (!Array.isArray(list) || !text) return null;
+  const clamp = (x) => Math.min(dur, Math.max(0, Number(x) || 0));
+  const out = [];
+  for (const u of list) {
+    const t = cleanTranscript(stripTimestamps(u?.text), terms).text.trim();
+    if (!t || isLoopNoise(t)) continue;
+    const t0 = clamp(u.t0);
+    const o = { t0, t1: Math.max(t0, clamp(u.t1)), text: t };
+    if (Number.isInteger(u.spk)) o.spk = u.spk;
+    out.push(o);
+  }
+  return out.length ? out.sort((a, b) => a.t0 - b.t0) : null;
+}
+
+// { text, utterances }: utterances is null or [{ t0, t1, text, spk? }] in seconds from the start of this piece
+// (spk only means something inside this one piece). One retry loop serves both transcribe() and transcribeDetailed().
+export async function transcribeDetailed(wav, settings) {
   const fn = PROVIDERS[settings.sttProvider];
   if (!fn) throw new Error(`Unknown STT provider ${settings.sttProvider}`);
   let delay = 1500;
   for (let attempt = 0; ; attempt++) {
     try {
-      const raw = await fn(wav, settings);
+      const got = await fn(wav, settings);
       if (settings.sttProvider !== 'gemini') record({ provider: settings.sttProvider, model: sttModelName(settings), kind: 'stt', req: 1, audioSec: audioSeconds(wav) });
+      const raw = typeof got === 'string' ? got : got?.text;
       const text = stripTimestamps(raw).trim();
-      return isLoopNoise(text) ? '' : text;
+      if (isLoopNoise(text)) return { text: '', utterances: null };
+      return { text, utterances: typeof got === 'string' ? null : tidyUtterances(got?.utterances, text, audioSeconds(wav), sttTerms(settings)) };
     } catch (e) {
       if (settings.sttProvider !== 'gemini') record({ provider: settings.sttProvider, model: sttModelName(settings), kind: 'stt', req: 1, fail: true, rl: e.status === 429 });
       const retryable = !(e instanceof SttError) || e.status === 429 || e.status >= 500;
@@ -239,4 +288,8 @@ export async function transcribe(wav, settings) {
       delay *= 2;
     }
   }
+}
+
+export async function transcribe(wav, settings) {
+  return (await transcribeDetailed(wav, settings)).text;
 }
