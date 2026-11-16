@@ -47,6 +47,11 @@ export function endScreen(doc) {
   return meetingEnded(texts) || texts.some((t) => /^(this )?(meeting|call) (has )?(been )?ended( by (the )?host)?\.?$/i.test(t.trim()));
 }
 
+// Posting in the chat is only built for Google Meet; callers need no branching.
+export async function postNotice() {
+  return { ok: false, why: 'not supported in this meeting app' };
+}
+
 export function snapshot(doc) {
   return { mic: micButton(doc), participants: [], captions: [], ended: endScreen(doc), inCall: inCall(doc) };
 }

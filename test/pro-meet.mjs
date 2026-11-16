@@ -196,4 +196,10 @@ await test('meet: a row\'s "More options for Deep Patel" button is read as Deep 
   assert.deepEqual(meet.readParticipants(tiles), ['Ankur Desai']);
 });
 
+await test('adapters: every adapter exposes postNotice; diagnose has a chat line', async () => {
+  assert.equal(typeof adapterFor('meet.google.com').postNotice, 'function');
+  assert.deepEqual(await adapterFor('teams.microsoft.com').postNotice(page('<div></div>'), 'hi'), { ok: false, why: 'not supported in this meeting app' });
+  assert.match(meet.diagnose(page('<div></div>')).chat, /button NOT found/);
+});
+
 console.log(`\n${passed} passed`);

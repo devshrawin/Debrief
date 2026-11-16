@@ -2,6 +2,7 @@
 // on ARIA labels, roles and text structure, with several fallbacks. `diagnose()` reports what was found
 // so a detection problem can be seen (and fixed) instead of failing silently.
 import { meetingEnded } from '../meetend.js';
+import * as chat from './chat.js';
 import { isIconText, isMenuText, personOfTile } from '../iconText.js';
 
 const text = (el) => (el?.innerText ?? el?.textContent ?? '').replace(/ /g, ' ').trim();
@@ -101,6 +102,15 @@ export function inCall(doc) {
   return !!(micButton(doc) && leave && !endScreen(doc));
 }
 
+// Writes one plain line in the meeting chat (the recording notice). Never throws.
+export async function postNotice(doc, msg, opts) {
+  try {
+    return await chat.postNotice(doc, msg, opts);
+  } catch (e) {
+    return { ok: false, why: `chat error: ${e?.message || e}` };
+  }
+}
+
 export function snapshot(doc) {
   return { mic: micButton(doc), participants: readParticipants(doc), captions: readCaptions(doc), ended: endScreen(doc) };
 }
@@ -113,6 +123,7 @@ export function diagnose(doc) {
     participants: s.participants.length ? `${s.participants.length} found: ${s.participants.slice(0, 6).join(', ')}` : 'none found (open the People panel, or join the call first)',
     captions: captionsRegion(doc) ? `region found, ${s.captions.length} caption block(s) now${s.captions[0] ? `, e.g. "${s.captions[0].name}"` : ''}` : 'captions are not showing (turn them on with the CC button)',
     captionsButton: captionsButton(doc) ? 'found' : 'not found (captions may already be on)',
+    chat: chat.diagnoseChat(doc),
     inCall: inCall(doc) ? 'yes, a call is on' : 'no call detected (lobby or not joined yet)',
     endScreen: s.ended ? 'the end-of-meeting screen is showing' : 'no (normal while in a call)',
   };
