@@ -1,7 +1,7 @@
 // Meeting types: matching a meeting to a type, the "Updates by person" call, and both minutes formats carrying the table.
 import assert from 'node:assert/strict';
 import { DEFAULTS } from '../src/store.js';
-import * as A from '../src/amnex.js';
+import * as A from '../src/orgtemplate.js';
 import * as T from '../src/meetingtypes.js';
 import * as P from '../src/prompt.js';
 import { writeMinutes } from '../src/minutes.js';
@@ -84,7 +84,7 @@ await test('markdown: the block goes before Action Items, else before Risks, els
 // ---------------- the pipeline ----------------
 const TABLE = '| Person | Yesterday | Today | Blockers |\n|---|---|---|---|\n| Amal Samad | portal testing | continue testing | No update stated |\n| Shrawin Sisodia | bulk upload tests | close bugs | No update stated |\n| Akhil Azad | created 4 users | No update stated | No update stated |';
 const STANDARD = '# KERALA UR - Cadence Call\n\n## Overview\nx\n\n## Discussion\n### Scheme\n- done\n\n## Action Items\n| # | Action | Owner | Due | Source |\n|---|---|---|---|---|\n| 1 | a | b | c | d |\n';
-const AMNEX = `## Agenda
+const TEMPLATE_REPLY = `## Agenda
 - Status
 
 ## Discussion
@@ -110,7 +110,7 @@ function makeGen(log, { fail = false } = {}) {
       if (fail) throw new Error('boom');
       return TABLE;
     }
-    return /house template/.test(system) ? AMNEX : STANDARD;
+    return /house template/.test(system) ? TEMPLATE_REPLY : STANDARD;
   };
 }
 const type = T.normalizeTypes([{ name: 'Cadence', match: 'cadence call', extra: 'Always write names in English.' }])[0];
@@ -143,13 +143,13 @@ await test('if the updates call fails the minutes still come out, with a note to
 });
 
 await test('official format: the table is stored, parsed back and rendered in the document', async () => {
-  const settings = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'amnex', myName: 'Shrawin Sisodia' };
+  const settings = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'template', myName: 'Shrawin Sisodia' };
   A.setOrg(settings);
   const r = await writeMinutes({ meeting: { ...meeting, presence }, settings, notes: '', gen: makeGen([]), ctx: { meetingType: type } });
-  assert.equal(r.format, 'amnex');
+  assert.equal(r.format, 'template');
   assert.match(r.mom, /## Updates by person\n\| SR \| Name \| Yesterday \| Today \| Blockers \|/);
   assert.ok(r.mom.indexOf('## Updates by person') < r.mom.indexOf('## Action Items'));
-  const doc = A.parseAmnexMarkdown(r.mom);
+  const doc = A.parseTemplateMarkdown(r.mom);
   assert.deepEqual(doc.updates.columns, ['Yesterday', 'Today', 'Blockers']);
   assert.equal(doc.updates.rows.length, 4);
   assert.deepEqual(doc.updates.rows[0], { name: 'Amal Samad', cells: ['portal testing', 'continue testing', 'No update stated'] });
@@ -158,7 +158,7 @@ await test('official format: the table is stored, parsed back and rendered in th
   assert.match(html, /created 4 users/);
   assert.ok(html.indexOf('created 4 users') < html.indexOf('Action Item'));
   // without a type the document has no table and renders as before
-  const plain = A.parseAmnexMarkdown((await writeMinutes({ meeting: { ...meeting, presence }, settings, notes: '', gen: makeGen([]), ctx: {} })).mom);
+  const plain = A.parseTemplateMarkdown((await writeMinutes({ meeting: { ...meeting, presence }, settings, notes: '', gen: makeGen([]), ctx: {} })).mom);
   assert.equal(plain.updates.rows.length, 0);
   assert.doesNotMatch(A.renderDocBody(plain), /Yesterday/);
 });

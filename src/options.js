@@ -1,4 +1,4 @@
-import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret, AMNEX_PRESET } from './store.js';
+import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret, AMNEX_PRESET, normalizeFormat } from './store.js';
 import { isLocalBase } from './local.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, scriptWithSecret, allowListLines } from './mailer.js';
@@ -26,7 +26,7 @@ const el = (tag, props = {}, ...kids) => {
 // ---- secrets ----
 // A key that is already saved is never rendered: the field shows dots and a Replace button. `stored` holds the
 // keys as last loaded or saved, so saving without touching a field writes nothing and cannot erase a stored key.
-const SECRETS = ['geminiKey', 'geminiKey2', 'sarvamKey', 'deepgramKey', 'sttKey', 'anthropicKey', 'oaKey'];
+const SECRETS = ['geminiKey', 'sarvamKey', 'deepgramKey', 'sttKey', 'anthropicKey', 'oaKey'];
 const stored = {};
 const removed = new Set(); // "Remove" pressed: the key is deleted on the next save
 const editing = new Set(); // "Replace" pressed: an empty field is open
@@ -610,9 +610,9 @@ $('testLlm').onclick = async () => {
     const settings = await save();
     const ping = (s) => generate({ settings: s, system: 'You are a connectivity test.', user: 'Reply with exactly: OK', onText: () => {} });
     // Test each Gemini key on its own so a dead backup key doesn't hide behind a working main key.
-    const runs = [['Main', { ...settings, geminiKey2: '', geminiBackups: [] }]];
+    const runs = [['Main', { ...settings, geminiBackups: [] }]];
     if (settings.llmProvider === 'gemini') {
-      [settings.geminiKey2, ...(settings.geminiBackups || [])].filter(Boolean).forEach((k, i) => runs.push([`Backup ${i + 1}`, { ...settings, geminiKey: k, geminiKey2: '', geminiBackups: [] }]));
+      (settings.geminiBackups || []).filter(Boolean).forEach((k, i) => runs.push([`Backup ${i + 1}`, { ...settings, geminiKey: k, geminiBackups: [] }]));
     }
     const results = [];
     for (const [label, s] of runs) {
@@ -751,7 +751,7 @@ $('testMail').onclick = async () => {
 };
 
 // Minutes format: a segmented control over a hidden field, read and saved like every other setting.
-const fmtSeg = () => document.querySelectorAll('#minutesFormatSeg button').forEach((b) => b.classList.toggle('active', b.dataset.v === $('minutesFormat').value));
+const fmtSeg = () => document.querySelectorAll('#minutesFormatSeg button').forEach((b) => b.classList.toggle('active', b.dataset.v === normalizeFormat($('minutesFormat').value)));
 document.querySelectorAll('#minutesFormatSeg button').forEach((b) => (b.onclick = () => {
   $('minutesFormat').value = b.dataset.v;
   fmtSeg();
@@ -760,7 +760,7 @@ document.querySelectorAll('#minutesFormatSeg button').forEach((b) => (b.onclick 
 // One click fills in the Amnex name, footer line, colour and domain, and picks the template. Nothing is Amnex by default.
 $('useAmnexPreset').onclick = () => {
   for (const [k, v] of Object.entries(AMNEX_PRESET)) $(k).value = v;
-  $('minutesFormat').value = 'amnex';
+  $('minutesFormat').value = 'template';
   fmtSeg();
   $('presetMsg').textContent = 'Filled in. Press Save changes to keep it.';
 };

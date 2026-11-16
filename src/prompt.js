@@ -3,7 +3,7 @@ import { applyDictionary, glossaryLine } from './dictionary.js';
 import { cleanTranscript, makeDeduper } from './sttclean.js';
 import { lineNameOf } from './linenames.js';
 
-// Shared by the standard and the Amnex-format prompts.
+// Shared by the standard and the organisation-template prompts.
 const TRANSCRIPT_NOTES = `About the transcript:
 - It is machine speech-to-text. Expect misheard words, garbled names, repeated fragments, and Indian or other non-English languages written in their own script or in Latin script. Infer the intended meaning from context; do not reproduce transcription noise.
 - Lines tagged ME come from the note-taker's own microphone. Lines tagged OTHERS are all remote participants mixed together, so you usually cannot tell which remote person spoke. Attribute statements to a named person only when the transcript itself makes it clear (someone is addressed by name, introduces themselves, or is assigned a task by name), or when a speaker timeline is provided below the transcript.
@@ -119,11 +119,11 @@ export function buildUserPrompt(meeting, settings, notes, ctx = {}) {
   return lines.join('\n');
 }
 
-// ---- the official Amnex minutes format ---------------------------------------------------------------
+// ---- the organisation template minutes format ---------------------------------------------------------------
 
 // The model writes only the language parts of the house template. Header, date, time and the attendee tables are
-// built by code (src/amnex.js), so they are not asked for here.
-export function buildAmnexSystemPrompt(language, { languages = 'Hindi, English, Malayalam', org = '' } = {}) {
+// built by code (src/orgtemplate.js), so they are not asked for here.
+export function buildTemplateSystemPrompt(language, { languages = 'Hindi, English, Malayalam', org = '' } = {}) {
   return `You write the Minutes of Meeting (MOM) of a formal project meeting, in the house template of ${org || 'the organisation'}, from the raw transcript of an online meeting held in ${languages}, or a mix of them.
 
 ${TRANSCRIPT_NOTES}
@@ -153,7 +153,7 @@ Output EXACTLY this structure, with these headings and these pipe tables, and no
 ## Action Items
 | Action Item | Responsibility |
 |---|---|
-| <one action, one sentence that starts with who does it ("KSITM to create…", "Amnex to carry out…") and ends with its due date as "by DD-Mon-YY" when a date was given; omit it when none was> | <name or organisation or [RESPONSIBILITY]> |
+| <one action, one sentence that starts with who does it ("KSITM to create…", "The vendor to carry out…") and ends with its due date as "by DD-Mon-YY" when a date was given; omit it when none was> | <name or organisation or [RESPONSIBILITY]> |
 
 ## Next Meeting
 Date and Time: <date and time if mentioned, otherwise: To be decided and communicated separately>
@@ -164,7 +164,7 @@ Rules for the tables: one row per topic, in the order discussed; separate the po
 
 // people: display names exactly as they must be written, orgs: allowed organisations, dateText: the meeting date
 // (so "by Friday" can be turned into a date).
-export function buildAmnexUserPrompt(meeting, settings, notes, ctx = {}, { people = [], orgs = [], dateText = '' } = {}) {
+export function buildTemplateUserPrompt(meeting, settings, notes, ctx = {}, { people = [], orgs = [], dateText = '' } = {}) {
   const base = buildUserPrompt(meeting, settings, notes, ctx);
   const extra = [];
   if (dateText) extra.push(`Meeting date (use it to turn "by Friday" or "next week" into a DD-Mon-YY date): ${dateText}`);

@@ -6,12 +6,12 @@ import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
 import { stuckJobs } from './jobstate.js';
-import { getSettings, setSetting, sttReady, getMeeting, saveMeeting, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
+import { SCHEMA, getSettings, setSetting, sttReady, getMeeting, saveMeeting, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
 // Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
 chrome.runtime.onInstalled.addListener((d) => {
-  if (d.reason === 'install') chrome.storage.local.set({ schema: 2 }); // a new install starts generic: nothing to migrate
+  if (d.reason === 'install') chrome.storage.local.set({ schema: SCHEMA }); // a new install starts generic: nothing to migrate
   if (d.reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html?restart=1') });
 });
 

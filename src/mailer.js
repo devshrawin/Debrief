@@ -2,7 +2,7 @@
 // so it is sent from their Gmail account with no server of ours in the middle.
 
 import { ensureEmailSecret } from './store.js';
-import { parseAmnexMarkdown, renderWordHtml, renderPdfHtml, renderEmailCover, emailCoverText, renderDocBody, setOrg } from './amnex.js';
+import { parseTemplateMarkdown, renderWordHtml, renderPdfHtml, renderEmailCover, emailCoverText, renderDocBody, setOrg } from './orgtemplate.js';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -34,11 +34,11 @@ const b64 = (str) => {
   return btoa(bin);
 };
 
-// Word opens HTML saved as .doc, tables and headings intact. With opts.md set to minutes in the official Amnex
+// Word opens HTML saved as .doc, tables and headings intact. With opts.md set to minutes in the organisation template
 // format, the document is emitted instead: borders and navy fills on every cell (Word ignores stylesheet rules),
 // rows that do not split across pages, a repeating header row, and a Word header and footer with page numbers.
 export function wordDocHtml(bodyHtml, { md } = {}) {
-  const doc = md ? parseAmnexMarkdown(md) : null;
+  const doc = md ? parseTemplateMarkdown(md) : null;
   if (doc) return renderWordHtml(doc);
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>body{font-family:Calibri,sans-serif}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>${bodyHtml}</body></html>`;
 }
@@ -53,8 +53,8 @@ const meta = (m) => {
   return `${start.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}${mins ? ` · ${mins} min` : ''}`;
 };
 
-// The email for minutes in the official Amnex format: a short cover and the full document as attachments.
-function buildAmnexEmail(meeting, settings, doc, transcriptText) {
+// The email for minutes in the organisation template: a short cover and the full document as attachments.
+function buildTemplateEmail(meeting, settings, doc, transcriptText) {
   const date = new Date(meeting.startedAt).toISOString().slice(0, 10);
   const base = safeName(`MOM ${meeting.title} ${date}`);
   const attachments = [];
@@ -81,8 +81,8 @@ function buildAmnexEmail(meeting, settings, doc, transcriptText) {
 // renderHtml: markdown -> HTML (the MOM page's own renderer, which already escapes raw HTML).
 export function buildEmail(meeting, settings, renderHtml, transcriptText) {
   setOrg(settings); // the organisation's name, footer line and colour go into the attachments
-  const amnexDoc = parseAmnexMarkdown(meeting.mom || '');
-  if (amnexDoc) return buildAmnexEmail(meeting, settings, amnexDoc, transcriptText);
+  const tplDoc = parseTemplateMarkdown(meeting.mom || '');
+  if (tplDoc) return buildTemplateEmail(meeting, settings, tplDoc, transcriptText);
   const date = new Date(meeting.startedAt).toISOString().slice(0, 10);
   const body = inlineStyles(renderHtml(meeting.mom || ''));
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2328;max-width:760px">

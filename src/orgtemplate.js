@@ -1,4 +1,4 @@
-// The official Amnex minutes format. Everything here is pure (no DOM, no chrome.*), so it is unit-tested.
+// The organisation template minutes format. Everything here is pure (no DOM, no chrome.*), so it is unit-tested.
 //
 // Who writes what:
 //   CODE   builds the facts: header block (topic, mode, location, date, time, chairperson) and the two attendee
@@ -7,11 +7,12 @@
 //          asked for a strict markdown shape (parseModelOutput) and its Responsibility column is checked against
 //          the people and organisations code knows (cleanResponsibility), so it cannot invent an owner.
 //   The finished minutes are stored as ONE markdown string (composeMarkdown), tagged with a marker comment, so
-//   Edit, Ask, Copy and .md keep working; parseAmnexMarkdown reads it back into the document that is rendered.
+//   Edit, Ask, Copy and .md keep working; parseTemplateMarkdown reads it back into the document that is rendered.
 import { matchPeople, personLabel } from './attendance.js';
 import { escapeHtml, renderMd } from './md.js';
 
-export const MARKER = '<!-- debrief-format: amnex -->';
+export const MARKER = '<!-- debrief-format: template -->';
+const LEGACY_MARKER = '<!-- debrief-format: amnex -->'; // minutes saved before the rename start with this
 
 // ---- the organisation template: whose name, footer line and colour the official format carries ----
 // Nothing here is Amnex-specific by default. AMNEX_PRESET (a button in Settings) fills in the Amnex values.
@@ -578,11 +579,14 @@ export function composeMarkdown({ facts, prose, review = [], updates = null }) {
   return L.join('\n');
 }
 
-export const isAmnexMd = (md) => String(md || '').trimStart().startsWith(MARKER);
+export const isTemplateMd = (md) => {
+  const t = String(md || '').trimStart();
+  return t.startsWith(MARKER) || t.startsWith(LEGACY_MARKER);
+};
 
-// The stored markdown -> the document model that is rendered, or null (not Amnex format, or unreadable).
-export function parseAmnexMarkdown(md) {
-  if (!isAmnexMd(md)) return null;
+// The stored markdown -> the document model that is rendered, or null (not the template format, or unreadable).
+export function parseTemplateMarkdown(md) {
+  if (!isTemplateMd(md)) return null;
   const secs = splitSections(md);
   const title = (String(md).match(/^#\s+(.+)$/m) || [])[1]?.trim() || 'Meeting';
   const details = {};
@@ -802,14 +806,14 @@ export function emailCoverText(doc) {
 
 // ---- entry points for the minutes page -----------------------------------------------------------------
 
-// Minutes markdown -> HTML for the page: the official layout for Amnex-format minutes, else the given renderer.
+// Minutes markdown -> HTML for the page: the template layout for minutes in that format, else the given renderer.
 export function renderMinutesHtml(md, fallback = renderMd) {
-  const doc = parseAmnexMarkdown(md);
+  const doc = parseTemplateMarkdown(md);
   return doc ? renderPrintFragment(doc) : fallback(md);
 }
 
-// The full standalone A4 HTML document for Amnex-format minutes, or null for any other minutes.
+// The full standalone A4 HTML document for minutes in the template format, or null for any other minutes.
 export function standaloneA4Html(md) {
-  const doc = parseAmnexMarkdown(md);
+  const doc = parseTemplateMarkdown(md);
   return doc ? renderStandaloneHtml(doc) : null;
 }

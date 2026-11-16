@@ -1,7 +1,7 @@
 // The people directory table: text <-> rows loses nothing, the text still parses with the minutes' own reader.
 import assert from 'node:assert/strict';
 import { parseRows, rowsToText, parsePasted, upsertRow, findRow } from '../src/dirtable.js';
-import { parseDirectory } from '../src/amnex.js';
+import { parseDirectory } from '../src/orgtemplate.js';
 
 let passed = 0;
 const test = async (name, fn) => {

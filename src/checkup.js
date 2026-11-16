@@ -4,7 +4,7 @@ import { getSettings, getVoices, listMeetings, getBlockedVoices } from './store.
 import { mailReady } from './mailer.js';
 import { summarize, parseLimits } from './usage.js';
 
-const backupCount = (s) => (s.geminiKey2 ? 1 : 0) + (s.geminiBackups || []).filter(Boolean).length;
+const backupCount = (s) => (s.geminiBackups || []).filter(Boolean).length + (s.geminiKey2 && !(s.geminiBackups || []).includes(s.geminiKey2) ? 1 : 0);
 const OK = '✓';
 const WARN = '!';
 const BAD = '✗';

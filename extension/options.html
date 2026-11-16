@@ -316,16 +316,11 @@
             <div class="secret"><input id="geminiKey" type="password" autocomplete="new-password" placeholder="Paste your key" spellcheck="false"></div>
             <p class="hint">Create one free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. No card needed. Used for transcription and for writing the minutes when you choose Gemini (the default).</p>
           </div>
-          <div class="fld">
-            <label for="geminiKey2">Backup key <span class="opt">optional</span></label>
-            <div class="secret"><input id="geminiKey2" type="password" autocomplete="new-password" placeholder="A key from a second Google project" spellcheck="false"></div>
-            <p class="hint">Used automatically when the main key hits its daily limit.</p>
-          </div>
         </div>
         <div class="fld" id="moreKeysBox">
           <div id="moreKeys" class="bk-list"></div>
-          <button type="button" id="addKey" class="btn sm bk-add" aria-describedby="addKey-d">+ Add another backup key</button>
-          <p class="hint" id="addKey-d">As many as you like. They are tried in order when the one before runs out of quota or is rejected.</p>
+          <button type="button" id="addKey" class="btn sm bk-add" aria-describedby="addKey-d">+ Add a backup key</button>
+          <p class="hint" id="addKey-d">As many as you like, ideally each from a different Google project. They are used automatically, in order, when the main key hits its daily limit or is rejected.</p>
         </div>
         <div class="callout"><p>Limits are counted per Google project, not per key. A backup key only helps if it comes from a different project.</p></div>
         <div class="callout warnc"><p><strong>Google's free tier may use your audio and text to improve its products</strong>, and reviewers may read them. For confidential meetings, use a paid key (billing on) or a local model in Speech to text and Minutes.</p></div>
@@ -594,7 +589,7 @@
         <h2 id="hFmt" class="lbl">Minutes format and organisation template</h2>
         <div class="fld">
           <span class="lab" id="minutesFormatLab">Layout of the minutes</span>
-          <div class="seg-ctl" id="minutesFormatSeg" role="group" aria-labelledby="minutesFormatLab"><button type="button" data-v="amnex">Organisation template</button><button type="button" data-v="standard">Debrief standard</button></div>
+          <div class="seg-ctl" id="minutesFormatSeg" role="group" aria-labelledby="minutesFormatLab"><button type="button" data-v="template">Organisation template</button><button type="button" data-v="standard">Debrief standard</button></div>
           <input type="hidden" id="minutesFormat">
           <p class="hint">The organisation template is a formal layout (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting) for Print / PDF, Word and the email attachment, in your organisation's name and colour. Debrief standard is the plain layout. Per meeting you can switch on the minutes page.</p>
           <div class="btnrow" style="margin-top:8px"><button type="button" class="btn" id="useAmnexPreset">Use Amnex preset</button><span class="hint" id="presetMsg" role="status"></span></div>

@@ -1,0 +1,8 @@
+आज का स्टैंड-अप शुरू करते हैं। Amal, पिछले हफ्ते का deployment कैसा रहा?
+जी, staging पर deploy हो गया है लेकिन payment API में timeout आ रहा है।
+ठीक है, Priya आप कल तक timeout की root cause देखकर बताइए।
+हाँ, मैं कल शाम तक देख लूँगी।
+हम लोगों ने तय किया कि release शुक्रवार से सोमवार को shift करेंगे।
+Ravi, test cases का sheet Thursday तक share कर देना।
+ठीक है, मैं कर दूँगा।
+और QA environment का access अभी तक नहीं मिला है, वो Amal follow up करेगा।

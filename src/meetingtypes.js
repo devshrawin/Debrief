@@ -5,7 +5,7 @@
 //   updates a "Updates by person" table: one row per person present, one column for each of `columns`
 //   extra   free text added to the writing prompt for these meetings
 // A meeting's own `typeId` wins over matching: '' = no type on purpose, an id = that type, absent = match by title/code.
-import { nameMatch, splitRow } from './amnex.js';
+import { nameMatch, splitRow } from './orgtemplate.js';
 
 export const DEFAULT_COLUMNS = ['Yesterday', 'Today', 'Blockers'];
 export const UPDATES_TITLE = 'Updates by person';

@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import * as A from '../src/amnex.js';
+import * as A from '../src/orgtemplate.js';
 import { attendanceMarkdown, setEmailNames } from '../src/attendance.js';
 
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -17,7 +17,7 @@ const profile = mkdtempSync(path.join(tmpdir(), 'debrief-shots-'));
 const at = (d, h, mi) => new Date(2026, 9, d, h, mi).getTime();
 const ORG = { orgName: 'Northwind Systems', orgConfidential: 'Northwind Systems | Confidential', orgAccent: '#3b2fa8', myOrgDomains: 'northwind.example' };
 const SETTINGS = {
-  ...ORG, geminiKey: 'demo-not-a-real-key', llmProvider: 'gemini', sttProvider: 'gemini', minutesFormat: 'amnex', myName: 'Alex Rivera',
+  ...ORG, geminiKey: 'demo-not-a-real-key', llmProvider: 'gemini', sttProvider: 'gemini', minutesFormat: 'template', myName: 'Alex Rivera',
   emailTo: 'alex.rivera@northwind.example', emailWebhook: 'https://script.google.com/macros/s/DEMO/exec', emailAuto: true, voiceOn: true, voiceSamples: true,
   meetingLanguages: ['en', 'hi'], peopleDirectory: '',
 };
@@ -175,7 +175,7 @@ try {
       { id: 'v4', name: 'Unnamed voice 1', lang: 'en', centroid: c, windows: [c], secs: 12, created: Date.now() - 2 * 86400000, auto: true, learnedFrom: ['demo1'] },
     ];
     await chrome.storage.local.set({
-      schema: 2,
+      schema: 3,
       settings: ${JSON.stringify(SETTINGS)},
       voices,
       'meeting:demo1': { ...meeting, mom: ${JSON.stringify(officialMd)}, model: 'Gemini · gemini-3.8-flash', emailedAt: Date.now() - 3000000, emailedTo: 'alex.rivera@northwind.example', attendees: ['Dana Whitfield', 'Marcus Hale', 'Alex Rivera', 'Priya Nair', 'Ravi Menon'], presence: ${JSON.stringify(presence)}, segments: [{ t: 12, src: 'others', text: 'Six of the eight depots are live on the new fare system.' }, { t: 58, src: 'me', text: 'We will take the last two live before the month end.' }], decided: true, format: 'amnex', job: { state: 'done', beat: Date.now() } },

@@ -1,11 +1,11 @@
 import { renderMd, decorateMinutes } from './md.js';
 import { cleanTranscript, makeDeduper } from './sttclean.js';
-import { renderMinutesHtml, isAmnexMd, setOrg, parseDirectory } from './amnex.js';
+import { renderMinutesHtml, isTemplateMd, setOrg, parseDirectory } from './orgtemplate.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
-import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime, normalizeFormat } from './store.js';
 import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, transcriptGaps } from './jobs.js';
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
@@ -37,10 +37,10 @@ const parseAttendees = (text) => text.split(/[\n,]+/).map((x) => x.trim()).filte
 
 function renderMom() {
   applyOrg();
-  // Minutes in the official Amnex format show as the A4 document (and print as such); anything else as markdown.
+  // Minutes in the organisation template show as the A4 document (and print as such); anything else as markdown.
   $('mom').innerHTML = meeting.mom ? renderMinutesHtml(meeting.mom, renderMd) : '<p class="muted">No minutes yet.</p>';
   tidyTables($('mom'));
-  if (meeting.mom && !isAmnexMd(meeting.mom)) decorateMinutes($('mom'));
+  if (meeting.mom && !isTemplateMd(meeting.mom)) decorateMinutes($('mom'));
   $('mom').classList.remove('streaming');
   $('gen').textContent = meeting.mom ? 'Rewrite minutes' : 'Write minutes';
   syncState();
@@ -199,9 +199,9 @@ async function renderNameBox() {
 const wantTranscript = (shared) => wantT(meeting, settings, shared);
 
 // ---- the choice offered when the recording stops: format, and whether the transcript goes out ----
-const FORMATS = { amnex: 'Organisation template', standard: 'Debrief standard' };
+const FORMATS = { template: 'Organisation template', standard: 'Debrief standard' };
 
-// The organisation's name, colour and footer line (Settings) for the official format, on screen and when printing.
+// The organisation's name, colour and footer line (Settings) for the organisation template, on screen and when printing.
 function applyOrg() {
   setOrg(settings);
   let st = document.getElementById('orgPrint');
@@ -211,7 +211,8 @@ function applyOrg() {
   const line = String(settings.orgConfidential || '').trim().replace(/["\\\n]/g, ' ');
   st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-left { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-right { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } }` : '';
 }
-const currentFormat = () => meeting.format || settings.minutesFormat || 'amnex';
+// Old records and settings hold 'amnex' for the template; it reads as 'template'.
+const currentFormat = () => normalizeFormat(meeting.format || settings.minutesFormat || 'template');
 // The meeting type chooser: hidden until Settings has a type. 'Automatic' follows the title rules; 'None' turns types off for this meeting.
 function paintType() {
   const types = normalizeTypes(settings.meetingTypes);
@@ -599,7 +600,7 @@ async function finishJob() {
   if (job.state === 'failed') $('genStatus').textContent = job.aborted ? 'Stopped.' : `Failed: ${job.error}`;
   else if (job.state === 'done') {
     const stats = job.stats || {};
-    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack ? ' · the reply did not fit the official format, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
+    $('genStatus').textContent = `Done · ${meeting.model}${stats.fellBack ? ' · the reply did not fit the organisation template, so standard minutes were written' : ''}${stats.calls > 1 ? ` · ${stats.items} items ${stats.reused ? 'reused from the earlier read of this transcript (press Re-read transcript for a fresh read)' : 'found'}, ${stats.missed} added by the check` : ''}`;
   }
   if (emailProblem) $('mailStatus').textContent = job.error;
   else if (meeting.emailedAt) {
@@ -750,7 +751,7 @@ function paintPreview() {
   const md = currentMd();
   $('mdPreview').innerHTML = renderMinutesHtml(md, renderMd);
   tidyTables($('mdPreview'));
-  if (!isAmnexMd(md)) decorateMinutes($('mdPreview'));
+  if (!isTemplateMd(md)) decorateMinutes($('mdPreview'));
 }
 function saveEdit() {
   clearTimeout(editTimer);

@@ -52,6 +52,12 @@ async function patch(obj) {
   const { shareAutoFlag, ...clean } = obj; // shareAutoFlag is only a view of shareMode
   await setSetting(clean);
 }
+// This page has one backup-key box: it is the first of the backup keys; any further ones (added in Settings) stay as they are.
+function withFirstBackup(typed) {
+  const key = typed.trim();
+  const rest = (S.geminiBackups || []).slice(1).filter((k) => k && k !== key);
+  return key ? [key, ...rest] : rest;
+}
 async function saveTour() {
   await chrome.storage.local.set({ tour });
 }
@@ -111,7 +117,7 @@ const ALL = [
         test.textContent = 'Testing…';
         test.setAttribute('aria-busy', 'true');
         say(st, 'Asking Google…', 'load');
-        await patch({ geminiKey: key, geminiKey2: $('t-key2').value.trim() });
+        await patch({ geminiKey: key, geminiBackups: withFirstBackup($('t-key2').value) });
         try {
           const out = await generate({ settings: { ...S, llmProvider: 'gemini' }, system: 'You are a connectivity test.', user: 'Reply with exactly: OK', onText: () => {} });
           tour.keyOk = true;
@@ -139,10 +145,10 @@ const ALL = [
           p("On the free tier Google may use what you send to improve its products, and reviewers may read it. For confidential meetings, turn on billing for the key, pick another provider in Settings, or keep everything local (Set up more → Local models).")),
         card('Good to know',
           p('The free tier has daily limits per model, so very long or many meetings in one day can hit them. Debrief switches to other models automatically, keeps any audio it could not process, and shows a red alert if a limit stops it.'),
-          field('Backup key (optional)', 't-key2', S.geminiKey2, { type: 'password', placeholder: 'A key from a different Google Cloud project', hint: 'Limits count per project, so a backup only helps if it comes from a different project.' })),
+          field('Backup key (optional)', 't-key2', S.geminiBackups?.[0] || S.geminiKey2 || '', { type: 'password', placeholder: 'A key from a different Google Cloud project', hint: 'Limits count per project, so a backup only helps if it comes from a different project.' })),
       ];
     },
-    save: async () => patch({ geminiKey: $('t-key').value.trim(), geminiKey2: $('t-key2').value.trim() }),
+    save: async () => patch({ geminiKey: $('t-key').value.trim(), geminiBackups: withFirstBackup($('t-key2').value) }),
   },
   {
     id: 'mic',

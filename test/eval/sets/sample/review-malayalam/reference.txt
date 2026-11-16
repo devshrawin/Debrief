@@ -1,0 +1,7 @@
+Good morning everyone, let's start the project review.
+ഡാറ്റാ മൈഗ്രേഷൻ ഏകദേശം എൺപത് ശതമാനം പൂർത്തിയായി.
+Suresh, you will share the migration report by 20th March.
+ശരി, ഞാൻ അയക്കാം.
+The vendor has not confirmed the server upgrade, അത് Anitha ഇന്ന് തന്നെ വിളിച്ച് ചോദിക്കണം.
+We decided to go live in phases, first Kozhikode and then Kochi.
+ടെസ്റ്റിംഗ് ടീമിന് ഒരു ആഴ്ച കൂടി വേണം.

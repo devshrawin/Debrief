@@ -1,7 +1,7 @@
 // The structured minutes editor: Markdown -> blocks -> Markdown loses nothing, and the fields do what they say.
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import * as A from '../src/amnex.js';
+import * as A from '../src/orgtemplate.js';
 import { parseBlocks, serializeBlocks, splitRow, renumber } from '../src/mdedit.js';
 
 const dom = new JSDOM('<!doctype html><body><div id="root"></div></body>');
@@ -61,9 +61,9 @@ await test('standard minutes: Markdown -> blocks -> Markdown keeps every word, l
 
 await test('official format: the stored document reads back exactly the same after a trip through the editor', () => {
   const back = serializeBlocks(parseBlocks(OFFICIAL));
-  assert.ok(back.startsWith('<!-- debrief-format: amnex -->\n# Weekly sync'), 'the format marker stays first, above the title');
-  assert.ok(A.isAmnexMd(back));
-  assert.deepEqual(A.parseAmnexMarkdown(back), A.parseAmnexMarkdown(OFFICIAL));
+  assert.ok(back.startsWith('<!-- debrief-format: template -->\n# Weekly sync'), 'the format marker stays first, above the title');
+  assert.ok(A.isTemplateMd(back));
+  assert.deepEqual(A.parseTemplateMarkdown(back), A.parseTemplateMarkdown(OFFICIAL));
 });
 
 await test('cells: escaped pipes and <br> survive; a row of the wrong width is padded, never dropped', () => {
@@ -139,17 +139,17 @@ await test('the official format can be corrected through the editor and still pa
   assert.ok(!root.textContent.includes('debrief-format'), 'the format marker is not shown');
   const f = [...root.querySelectorAll('.ed-f')].find((x) => x.value === 'Priya Nair' && x.closest('td') && /Responsibility|Discussion/.test(x.getAttribute('aria-label') || ''));
   type(f, 'Priya Nair, Northwind');
-  const doc = A.parseAmnexMarkdown(last());
+  const doc = A.parseTemplateMarkdown(last());
   assert.ok(doc, 'still the official format');
   assert.equal(doc.discussion.length, 1);
   // remove the action item and add a wrongly missing one
   click([...root.querySelectorAll('.ed-table .ed-x')].at(-1));
-  assert.equal(A.parseAmnexMarkdown(last()).actions.length, 0);
+  assert.equal(A.parseTemplateMarkdown(last()).actions.length, 0);
   click([...root.querySelectorAll('.ed-add')].filter((b) => /row/.test(b.textContent)).at(-1));
   const cells = [...root.querySelectorAll('.ed-table')].at(-1).querySelectorAll('tbody .ed-f');
   type(cells[0], 'Confirm the vendor supply by 19-Oct-26.');
   type(cells[1], 'Priya Nair');
-  assert.equal(A.parseAmnexMarkdown(last()).actions[0].text, 'Confirm the vendor supply by 19-Oct-26.');
+  assert.equal(A.parseTemplateMarkdown(last()).actions[0].text, 'Confirm the vendor supply by 19-Oct-26.');
 });
 
 console.log(`\n${passed} passed`);

@@ -90,7 +90,9 @@ function linkCitations(root, sources, prefix) {
     const frag = document.createDocumentFragment();
     let last = 0;
     for (const m of text.matchAll(/\[([^\[\]]+)\]/g)) {
-      const n = index.get(m[1].trim());
+      const cite = m[1].trim();
+      // Whole-meeting answers cite "Title, date, 14:20" while the source list holds "Title, date".
+      const n = index.get(cite) || index.get(cite.replace(/,\s*(minutes|\d+:\d\d(:\d\d)?)$/, ''));
       if (!n) continue;
       frag.append(text.slice(last, m.index));
       const a = h('a', 'src', String(n));
@@ -153,16 +155,16 @@ export function mountAsk(root, opts) {
     notice.append(d, b);
   };
 
-  const addTurn = (q, a, sources) => {
+  const addTurn = (q, a, sources, searchWords) => {
     const turn = h('div', 'ask-turn');
     const qEl = h('div', 'ask-q', q);
     const aEl = h('div', 'ask-a');
     turn.append(qEl, aEl);
     log.prepend(turn);
-    if (a != null) fill(aEl, a, sources);
+    if (a != null) fill(aEl, a, sources, searchWords);
     return { turn, aEl };
   };
-  const fill = (aEl, answer, sources) => {
+  const fill = (aEl, answer, sources, searchWords) => {
     aEl.classList.remove('live', 'err');
     aEl.innerHTML = renderMd(answer);
     const uniq = [];
@@ -196,9 +198,10 @@ export function mountAsk(root, opts) {
     });
     src.append(list);
     aEl.append(src);
+    if (searchWords) aEl.append(h('p', 'hint', `Searched with: ${searchWords}`));
   };
 
-  history.slice(-6).reverse().forEach((e) => addTurn(e.q, e.a, e.sources));
+  history.slice(-6).reverse().forEach((e) => addTurn(e.q, e.a, e.sources, e.searchWords));
   for (const s of opts.suggestions || SUGGESTIONS) {
     const b = h('button', 'chipbtn', s);
     b.onclick = () => {
@@ -254,6 +257,7 @@ export function mountAsk(root, opts) {
         ctx: opts.getCtx(),
         history,
         gen,
+        expand: settings.askExpand !== false,
         onText: (d) => {
           buf += d;
           setBusy('Answering…');
@@ -263,8 +267,8 @@ export function mountAsk(root, opts) {
           }
         },
       });
-      fill(aEl, r.answer, r.sources);
-      const entry = { q: question, a: r.answer, sources: r.sources.slice(0, 8), at: Date.now() };
+      fill(aEl, r.answer, r.sources, r.searchWords);
+      const entry = { q: question, a: r.answer, sources: r.sources.slice(0, 8), searchWords: r.searchWords || '', at: Date.now() };
       history.push(entry);
       opts.onEntry?.(entry);
       setBusy('');

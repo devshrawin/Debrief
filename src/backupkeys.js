@@ -1,6 +1,6 @@
-// Any number of extra Gemini backup keys, with a "+" to add one. The first backup key keeps its own field (geminiKey2); the
-// rest live in a list (geminiBackups). Keys are secrets: a saved key is shown only as dots and can be removed, never read back.
-// Keys that are tried in this order when the main key hits its limit: geminiKey, geminiKey2, then geminiBackups in order.
+// Any number of extra Gemini backup keys, with a "+" to add one. They live in one list (geminiBackups). Keys are secrets: a
+// saved key is shown only as dots and can be removed, never read back.
+// Keys are tried in this order when the main key hits its limit: geminiKey, then geminiBackups in order.
 export function mountBackupKeys(host, addButton) {
   if (!host || !addButton) return { value: () => [], set() {} };
   let saved = []; // keys already stored (their text is known only to the settings code, not shown)
@@ -19,7 +19,7 @@ export function mountBackupKeys(host, addButton) {
   const changed = () => host.dispatchEvent(new Event('input', { bubbles: true })); // Settings notices unsaved changes
   function draw() {
     host.replaceChildren();
-    let n = 2; // "Backup key" above is the first; this list continues from 2
+    let n = 1;
     saved.forEach((_, i) => {
       if (removed.has(i)) return;
       const label = `Backup key ${n}`;

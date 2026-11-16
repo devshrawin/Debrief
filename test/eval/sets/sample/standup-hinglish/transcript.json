@@ -1,0 +1,9 @@
+[
+  { "t": 5, "src": "others", "text": "आज का स्टैंडअप शुरू करते हैं। Amal पिछले हफ्ते का डिप्लॉयमेंट कैसा रहा?" },
+  { "t": 14, "src": "me", "text": "जी staging पर deploy हो गया है लेकिन पेमेंट API में time out आ रहा है।" },
+  { "t": 42, "src": "others", "text": "ठीक है Priya आप कल तक time out की root cause देखकर बताइए।" },
+  { "t": 50, "src": "others", "text": "हां मैं कल शाम तक देख लूंगी।" },
+  { "t": 55, "src": "others", "text": "हम लोगों ने तय किया कि रिलीज शुक्रवार से सोमवार को शिफ्ट करेंगे।" },
+  { "t": 65, "src": "others", "text": "Ravi test case का sheet Thursday तक share कर देना। ठीक है मैं कर दूंगा।" },
+  { "t": 80, "src": "me", "text": "और QA environment का एक्सेस अभी तक नहीं मिला है वो Amal फॉलो अप करेगा।" }
+]

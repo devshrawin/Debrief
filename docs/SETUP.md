@@ -141,9 +141,9 @@ What to expect: names are right most of the time for clear speech and wrong or *
 
 For the minutes you can also pick **Claude** (Anthropic key) or any **OpenAI-compatible** model under *MOM writer*.
 
-## Minutes format (official Amnex template)
+## Minutes format (organisation template)
 
-By default Debrief fills the Amnex house template (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting). To get the attendee sides and honorifics right:
+By default Debrief fills the organisation template (header block, Client / System Integrator attendee tables, numbered discussion and action items, Next Meeting). To get the attendee sides and honorifics right:
 
 1. Open **Settings > Minutes > Minutes format**.
 2. Put your company email domain(s) in **Our email domains**, for example `amnex.com`. Leave it blank to use the domain of your "Send to" address.

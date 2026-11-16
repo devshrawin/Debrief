@@ -1,0 +1,10 @@
+{
+  "actions": [
+    { "text": "Find the root cause of the payment API timeout on staging", "owner": "Priya", "due": "tomorrow evening", "at": "00:42" },
+    { "text": "Share the test cases sheet", "owner": "Ravi", "due": "Thursday", "at": "01:05" },
+    { "text": "Follow up on the QA environment access", "owner": "Amal", "due": "Not stated", "at": "01:20" }
+  ],
+  "decisions": [
+    { "text": "Move the release from Friday to Monday", "at": "00:55" }
+  ]
+}

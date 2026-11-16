@@ -336,11 +336,11 @@ try {
     out.noDuplicates = !document.getElementById('fmtSeg') && !document.getElementById('chkMine') && !document.getElementById('chkShare');
     document.getElementById('fmtChange').click();
     out.focus = document.activeElement?.closest('#fmtSwitch') ? 'switch' : document.activeElement?.id;
-    document.querySelector('#fmtSwitch button[data-v="amnex"]').click();
+    document.querySelector('#fmtSwitch button[data-v="template"]').click();
     document.getElementById('shareTranscript').click();
     await new Promise((r) => setTimeout(r, 700));
     const m = (await chrome.storage.local.get('meeting:sc1'))['meeting:sc1'];
-    out.saved = m.format === 'amnex' && m.transcriptShare === true;
+    out.saved = m.format === 'template' && m.transcriptShare === true;
     out.stopped = /ready/i.test(document.getElementById('startCount').textContent) || out.count !== document.getElementById('startCount').textContent;
     out.pressed = [...document.querySelectorAll('#fmtSwitch button')].map((b) => b.getAttribute('aria-checked'));
     out.text1 = document.getElementById('fmtText').textContent;

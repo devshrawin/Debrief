@@ -1,0 +1,9 @@
+{
+  "actions": [
+    { "text": "Share the migration report", "owner": "Suresh", "due": "20 March", "at": "00:50" },
+    { "text": "Call the vendor to confirm the server upgrade", "owner": "Anitha", "due": "today", "at": "01:15" }
+  ],
+  "decisions": [
+    { "text": "Go live in phases, first Kozhikode and then Kochi", "at": "01:30" }
+  ]
+}

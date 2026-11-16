@@ -8,7 +8,6 @@ export const DEFAULTS = {
   myName: '',
   captureMic: true,
   meetingLanguages: [], // languages to expect (codes from languages.js); empty = automatic
-  meetingLanguage: 'auto', // older single setting (auto | hinglish | malayalam), still honoured when the list is empty
   pillOnPage: false, // also show the pill inside the Meet page
   hideRecIcon: false, // no glowing toolbar icon during a call and no REC badge while recording ("!" still shows)
   quotaWarnings: true, // warn in the popup when a model is near its daily limit (off for a paid key)
@@ -29,7 +28,7 @@ export const DEFAULTS = {
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
   sttGeminiChunk: 'standard', // short = about 40 s (the live transcript keeps up; more requests); standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
-  minutesFormat: 'standard', // amnex = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
+  minutesFormat: 'standard', // template = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
   orgName: '', // organisation template: name, confidentiality line (page footer) and accent colour; empty = generic. Settings has a "Use Amnex preset" button
   orgConfidential: '',
   orgAccent: '',
@@ -67,8 +66,7 @@ export const DEFAULTS = {
   voiceModelUrl: '', // where to download the speaker model from when it is not bundled (lite build)
 
   geminiKey: '', // shared by Gemini transcription and the Gemini MOM writer
-  geminiKey2: '', // optional backup key from a different Google Cloud project
-  geminiBackups: [], // any number of further backup keys, tried in order after geminiKey2
+  geminiBackups: [], // backup keys (ideally from other Google Cloud projects), tried in order after the main key
   sttProvider: 'gemini', // gemini | sarvam | deepgram | openai
   sttGeminiModel: 'gemini-3.5-transcribe',
   sarvamKey: '',
@@ -91,21 +89,48 @@ export const DEFAULTS = {
   geminiModel: 'gemini-3.8-flash',
 };
 
-// Installs that existed before the organisation template keep what they had: minutes in the Amnex format with the Amnex
-// name, footer and colour. A brand-new install starts generic. Runs once (schema 2), in whichever context asks first.
+// Installs that existed before the organisation template keep what they had: minutes in the template format with the Amnex
+// name, footer and colour. A brand-new install starts generic. Each schema step runs once, in whichever context asks first.
 export const AMNEX_PRESET = { orgName: 'Amnex Infotechnologies', orgConfidential: 'Amnex Infotechnologies Pvt Ltd | Confidential', orgAccent: '#0c2461', myOrgDomains: 'amnex.com' };
+export const SCHEMA = 3;
+// The format was first stored as 'amnex'; 'template' is the name now. Old saved values are still read as the template.
+export const isTemplateFormat = (f) => f === 'template' || f === 'amnex';
+export const normalizeFormat = (f) => (isTemplateFormat(f) ? 'template' : f);
+// Same mapping as src/languages.js applies to the old single setting when the list is empty.
+const LEGACY_LANGUAGES = { auto: [], hinglish: ['hi', 'en'], malayalam: ['ml', 'en'] };
 export function migrateSettings(settings) {
   const next = { ...settings, minutesFormat: settings.minutesFormat ?? 'amnex' };
   for (const [k, v] of Object.entries(AMNEX_PRESET)) if (!next[k]) next[k] = v;
+  return next;
+}
+// Schema 3: 'amnex' becomes 'template'; the old single language setting and the separate second Gemini key are folded
+// into the list settings that replaced them.
+export function migrateSettings3(settings) {
+  const next = { ...settings };
+  if (next.minutesFormat === 'amnex') next.minutesFormat = 'template';
+  if ('meetingLanguage' in next) {
+    if (!(Array.isArray(next.meetingLanguages) && next.meetingLanguages.length)) next.meetingLanguages = [...(LEGACY_LANGUAGES[next.meetingLanguage] || [])];
+    delete next.meetingLanguage;
+  }
+  if ('geminiKey2' in next) {
+    const k2 = String(next.geminiKey2 || '').trim();
+    if (k2) next.geminiBackups = [k2, ...(next.geminiBackups || []).filter((k) => k && k !== k2)];
+    delete next.geminiKey2;
+  }
   return next;
 }
 let migrating = null;
 export function ensureMigrated() {
   migrating ||= (async () => {
     const { settings, schema } = await chrome.storage.local.get(['settings', 'schema']);
-    if (schema >= 2) return;
+    if (schema >= SCHEMA) return;
     const legacy = !!settings && Object.keys(settings).length > 0;
-    await chrome.storage.local.set({ schema: 2, ...(legacy ? { settings: migrateSettings(settings) } : {}) });
+    let next = settings;
+    if (legacy) {
+      if (!(schema >= 2)) next = migrateSettings(next); // steps run in order
+      next = migrateSettings3(next);
+    }
+    await chrome.storage.local.set({ schema: SCHEMA, ...(legacy ? { settings: next } : {}) });
   })().catch(() => {
     migrating = null;
   });

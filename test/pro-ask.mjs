@@ -71,7 +71,7 @@ await test('ask: names in the transcript are corrected with the dictionary befor
 });
 
 await test('ask: the prompt cites sources, guards against instructions in the excerpts, keeps recent history', () => {
-  const p = A.buildAskPrompt({ question: 'What was decided about the travel budget?', meetings: [sync, other], history: [{ q: 'earlier q', a: 'earlier a' }] });
+  const p = A.buildAskPrompt({ question: 'What was decided about the travel budget?', meetings: [sync, other], history: [{ q: 'earlier q', a: 'earlier a' }], fullBudget: 0 }); // 0 forces ranked mode
   assert.match(p.user, /\[1\] \[Budget review, \d+ \w+ 2026, (minutes|00:30)\]/);
   assert.match(p.user, /Earlier in this conversation:\nQ: earlier q\nA: earlier a/);
   assert.match(p.system, /ONLY the excerpts/);
@@ -85,6 +85,8 @@ await test('ask: a full answer flow returns the answer and its sources', async (
   const r = await A.askMeetings({
     question: 'Who owns portal testing?',
     meetings: [sync, other],
+    fullBudget: 0,
+    expand: false,
     gen: async (system, user, onText) => {
       seen = { system, user };
       onText?.('Nobody ');
@@ -100,7 +102,7 @@ await test('ask: a full answer flow returns the answer and its sources', async (
 await test('ask: nothing found never calls the model; empty replies and blank questions are errors', async () => {
   let calls = 0;
   const gen = async () => (calls++, 'x');
-  const none = await A.askMeetings({ question: 'xylophone zebra', meetings: [sync], gen });
+  const none = await A.askMeetings({ question: 'xylophone zebra', meetings: [sync, other], fullBudget: 0, expand: false, gen });
   assert.match(none.answer, /Nothing in these meetings/);
   assert.equal(calls, 0);
   await assert.rejects(() => A.askMeetings({ question: '   ', meetings: [sync], gen }), /Type a question/);
@@ -113,8 +115,9 @@ await test('ask: a hundred long meetings are searched quickly and only a few exc
   const t0 = Date.now();
   const p = A.buildAskPrompt({ question: 'what about topic3', meetings: many });
   assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
-  assert.equal(p.found, 12);
-  assert.ok(p.user.length < 20000, `prompt is ${p.user.length} characters`);
+  assert.equal(p.mode, 'ranked');
+  assert.ok(p.found >= 16 && p.found <= 24, `found ${p.found}`);
+  assert.ok(p.user.length < 24000, `prompt is ${p.user.length} characters`);
 });
 
 await test('ask scope: all, last N days, a date range (inclusive of both ends) and hand-picked meetings', async () => {

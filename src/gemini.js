@@ -89,6 +89,7 @@ export async function geminiFetch(url, init, settings, meta = {}) {
 
 // The main key first, then each backup key in order (the first backup, then the list), while a key is out of quota,
 // rejected, or the network failed. Any other answer is the answer.
+// geminiKey2 was a separate second key before the backup list took its place; an old value still counts, right after the main key.
 export const keyOrder = (settings) => [settings.geminiKey, settings.geminiKey2, ...(settings.geminiBackups || [])].filter(Boolean);
 
 async function geminiFetchInner(url, init, settings) {

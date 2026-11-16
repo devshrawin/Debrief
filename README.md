@@ -301,7 +301,7 @@ src/
   jobs.js             the minutes job: pipeline, runner, email and share (shared by the page and the background)
   jobstate.js         job states and resume rules
   minutes.js          the multi-pass minutes pipeline
-  amnex.js            the organisation template: facts, parsing, A4 / Word / email rendering
+  orgtemplate.js      the organisation template: facts, parsing, A4 / Word / email rendering
   attendance.js       invited vs present, "Name (address)", learned names
   llm.js, prompt.js   minutes generation and prompts
   mailer.js           builds and sends email through the relay
