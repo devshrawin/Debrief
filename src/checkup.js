@@ -3,6 +3,7 @@
 import { getSettings, getVoices, listMeetingMetas, getMeeting, getBlockedVoices } from './store.js';
 import { mailReady } from './mailer.js';
 import { summarize, parseLimits } from './usage.js';
+import { checkConfigured, summary as modelSummary } from './models.js';
 
 const backupCount = (s) => (s.geminiBackups || []).filter(Boolean).length + (s.geminiKey2 && !(s.geminiBackups || []).includes(s.geminiKey2) ? 1 : 0);
 const OK = '✓';
@@ -32,6 +33,18 @@ export async function runCheckup() {
       if (cooling.length) add(WARN, 'Models resting after hitting their limit', cooling.map(([m, u]) => `${m} until ${new Date(u).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`).join(', '));
     } catch {}
   }
+
+  // model names: only from the provider lists fetched earlier ("Check model names" or a past meeting). Nothing is requested here.
+  try {
+    const noNetwork = async () => {
+      throw new Error('not asked');
+    };
+    const found = await checkConfigured(s, { fetch: noNetwork });
+    const main = found.filter((f) => f.role !== 'fallback');
+    const spare = found.filter((f) => f.role === 'fallback').length;
+    if (found.some((f) => f.state === 'missing')) add(WARN, 'Model names', `${modelSummary(main).join(' ') || `${spare} of the backup models ${spare === 1 ? 'is' : 'are'} not in the provider's list.`} Press "Check model names" above for the details.`);
+    else if (found.some((f) => f.state === 'ok')) add(OK, 'Model names', 'every model you chose is in its provider\'s model list (as last checked)');
+  } catch {}
 
   // microphone
   try {

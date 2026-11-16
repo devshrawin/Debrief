@@ -1,4 +1,4 @@
-import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret, AMNEX_PRESET, normalizeFormat } from './store.js';
+import { DEFAULTS, getSettings, saveSettings, ensureEmailSecret, AMNEX_PRESET, normalizeFormat, listMeetingMetas, getState } from './store.js';
 import { isLocalBase } from './local.js';
 import { generate } from './llm.js';
 import { sendMail, mailReady, parseAddresses, parseGroups, scriptWithAllowList, scriptWithSecret, allowListLines } from './mailer.js';
@@ -14,6 +14,11 @@ import { mountDirectoryTable } from './dirtable.js';
 import { mountRecipients } from './recipients.js';
 import { mountBackupKeys } from './backupkeys.js';
 import { mountMeetingTypes } from './typesui.js';
+import { NUMERIC, DEPENDENTS, clampNum, backupFileName, formatMB, plural, describeBackup, webhookTestBody, originPattern, guardCannotTell, modelFieldFor } from './settingslogic.js';
+import { validWebhook } from './webhook.js';
+import { checkConfigured, summary as modelSummary } from './models.js';
+import { exportAll, importAll } from './backup.js';
+import { totalKept, deleteAudio, purgeOld } from './audiokeep.js';
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = Object.keys(DEFAULTS);
@@ -160,8 +165,9 @@ function read() {
   for (const k of FIELDS) {
     const f = $(k);
     if (!f) continue;
-    s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === 'checkbox' ? f.checked : f.value.trim();
+    s[k] = SECRETS.includes(k) ? secretValue(k) : f.type === 'checkbox' ? f.checked : NUMERIC[k] ? clampNum(f.value, NUMERIC[k]) : f.value.trim();
   }
+  if (!s.consentText) s.consentText = DEFAULTS.consentText; // an empty notice would post nothing
   s.geminiBackups = backupKeys.value();
   s.meetingTypes = meetingTypes.value();
   s.shareMode = $('shareAuto').checked ? 'auto' : 'review';
@@ -188,7 +194,41 @@ function fill(s) {
   editing.clear();
   $('shareAuto').checked = s.shareMode === 'auto';
   renderSecrets();
+  syncDeps();
+  guardNote();
 }
+
+// A field that follows a switch is disabled, and dimmed, while the switch is off.
+function syncDeps() {
+  for (const [dep, parent] of Object.entries(DEPENDENTS)) {
+    const f = $(dep);
+    const p = $(parent);
+    if (!f || !p) continue;
+    f.disabled = !p.checked;
+    f.closest('.trow, .fld')?.classList.toggle('is-off', !p.checked);
+    if (dep === 'consentText') $('consentReset').disabled = !p.checked;
+  }
+}
+// Number boxes snap to their range when you leave them; an empty notice goes back to the default text.
+function tidyFields(e) {
+  const f = e.target;
+  if (NUMERIC[f.id]) f.value = clampNum(f.value, NUMERIC[f.id]);
+  else if (f.id === 'consentText' && !f.value.trim()) f.value = DEFAULTS.consentText;
+}
+$('consentReset').onclick = () => {
+  $('consentText').value = DEFAULTS.consentText;
+  $('consentText').dispatchEvent(new Event('input', { bubbles: true }));
+};
+// The share guard can only tell who is outside once it has domains to compare with.
+function guardNote() {
+  $('guardNote').hidden = !guardCannotTell({ guard: $('shareExternalGuard').checked, myOrgDomains: $('myOrgDomains').value, emailTo: $('emailTo').value });
+}
+$('goDomains').onclick = (e) => {
+  e.preventDefault();
+  showTab('minutes');
+  $('myOrgDomains').scrollIntoView({ block: 'center' });
+  $('myOrgDomains').focus({ preventScroll: true });
+};
 
 // ---- segmented controls that drive a hidden <select> ----
 const MODE_NOTE = {
@@ -455,6 +495,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 async function save() {
   const vals = read();
+  if (vals.webhookUrl && !validWebhook(vals.webhookUrl)) throw new Error('The address for sending minutes is not valid.');
   const out = { ...(await getSettings()) };
   for (const k of Object.keys(vals)) if (!same(vals[k], loaded[k])) out[k] = vals[k];
   await requestOrigins(out);
@@ -505,10 +546,15 @@ function applyValues(v) {
 }
 document.querySelector('.content').addEventListener('input', () => {
   if (flash?.kind === 'saved') flash = null;
+  syncDeps();
+  guardNote();
   updateDirty();
 });
-document.querySelector('.content').addEventListener('change', () => {
+document.querySelector('.content').addEventListener('change', (e) => {
   if (flash?.kind === 'saved') flash = null;
+  tidyFields(e);
+  syncDeps();
+  guardNote();
   updateDirty();
 });
 $('undo').onclick = () => {
@@ -528,13 +574,67 @@ async function micStatus() {
 $('sttProvider').onchange = showProviderFields;
 $('llmProvider').onchange = showProviderFields;
 
+// ---- the address minutes are sent to ----
+const webhookErr = (text) => {
+  $('webhookErr').textContent = text;
+  $('webhookErr').hidden = !text;
+  $('webhookUrl').setAttribute('aria-invalid', String(!!text));
+};
+const webhookStatus = (text, kind = '') => {
+  $('webhookMsg').textContent = text;
+  $('webhookMsg').className = `status${kind ? ` ${kind}` : ''}`;
+};
+const NO_HOOK_PERMISSION = 'Debrief was not given permission for this address, so nothing will be sent.';
+async function webhookPermitted() {
+  const url = $('webhookUrl').value.trim();
+  if (!url || !validWebhook(url)) return;
+  let has = false;
+  try {
+    has = await chrome.permissions.contains({ origins: [originPattern(url)] });
+  } catch {}
+  webhookStatus(has ? '' : NO_HOOK_PERMISSION, has ? '' : 'warn');
+}
+$('webhookUrl').addEventListener('input', () => webhookErr(''));
+
 $('save').onclick = async () => {
+  // The permission prompt needs this click, so it is asked first: nothing before it waits.
+  const hook = $('webhookUrl').value.trim();
+  webhookErr('');
+  if (hook && !validWebhook(hook)) {
+    webhookErr('Use an https:// address with no user name or password. Only an address on this computer may use http://.');
+    showTab('minutes');
+    $('webhookUrl').focus();
+    showFlash('bad', 'The address for sending minutes is not valid', 7000);
+    return;
+  }
+  const asked = hook && hook !== loaded.webhookUrl ? chrome.permissions.request({ origins: [originPattern(hook)] }).catch(() => false) : null;
   try {
     await save();
     showFlash('saved', 'Saved ✓', 3000);
     updateGuide();
+    if (asked && !(await asked)) webhookStatus(NO_HOOK_PERMISSION, 'warn');
+    else webhookPermitted();
   } catch (e) {
     showFlash('bad', e.message, 7000);
+  }
+};
+
+$('webhookTest').onclick = async () => {
+  const url = $('webhookUrl').value.trim();
+  webhookErr('');
+  if (!url || !validWebhook(url)) {
+    webhookErr(url ? 'Use an https:// address with no user name or password. Only an address on this computer may use http://.' : 'Type the address first.');
+    $('webhookUrl').focus();
+    return;
+  }
+  const asked = chrome.permissions.request({ origins: [originPattern(url)] }).catch(() => false);
+  webhookStatus('Sending…');
+  if (!(await asked)) return webhookStatus(NO_HOOK_PERMISSION, 'warn');
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(webhookTestBody(url)), credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(10000) });
+    webhookStatus(res.ok ? `Sent. The address answered HTTP ${res.status}.` : `The address answered HTTP ${res.status}.`, res.ok ? 'ok' : 'bad');
+  } catch (e) {
+    webhookStatus(`Could not reach the address (${String(e?.message || e).slice(0, 120)}).`, 'bad');
   }
 };
 
@@ -730,6 +830,159 @@ $('checkup').onclick = async () => {
   }
 };
 
+
+// ---- Check model names: asks each provider whether the models chosen here still exist ----
+function useModel(fieldId, id) {
+  const f = $(fieldId);
+  if (!f) return;
+  if (f.tagName === 'SELECT') modelOption(f, id);
+  f.value = id;
+  f.dispatchEvent(new Event('input', { bubbles: true }));
+}
+const MODEL_ROLE = { speech: 'speech', minutes: 'minutes', fallback: 'backup' };
+function renderModelFindings(findings) {
+  const rows = [];
+  for (const f of findings) {
+    if (f.state === 'ok') continue;
+    const li = el('li');
+    const ic = el('span', { className: `ic lv-${f.state === 'missing' ? 'warn' : 'ok'}`, textContent: f.state === 'missing' ? '!' : 'i' });
+    ic.setAttribute('aria-label', f.state === 'missing' ? 'Warning' : 'Could not check');
+    const ck = el('div', { className: 'ck' });
+    if (f.state === 'missing') {
+      ck.append(el('p', { className: 'hint', textContent: modelSummary([f])[0] }));
+      const field = f.role === 'fallback' ? '' : modelFieldFor(f);
+      if (f.suggestion && field) {
+        const use = el('button', { type: 'button', className: 'btn sm', textContent: `Use ${f.suggestion}` });
+        use.setAttribute('aria-label', `Use ${f.suggestion} as the ${MODEL_ROLE[f.role]} model`);
+        use.onclick = () => {
+          useModel(field, f.suggestion);
+          use.disabled = true;
+          use.textContent = 'Filled in. Save to keep it';
+        };
+        ck.append(el('div', { className: 'btnrow' }, use));
+      }
+    } else ck.append(el('p', { className: 'hint', textContent: `Could not check the ${MODEL_ROLE[f.role]} model "${f.id}": ${String(f.detail || 'no answer').replace(/\.$/, '')}.` }));
+    li.append(ic, ck);
+    rows.push(li);
+  }
+  $('modelOut').replaceChildren(...rows);
+  $('modelOut').hidden = !rows.length;
+}
+$('checkModels').onclick = async () => {
+  $('checkModels').disabled = true;
+  $('checkupMsg').textContent = 'Asking your providers for their model lists…';
+  try {
+    const s = { ...(await getSettings()), ...read() };
+    await requestOrigins(s); // a custom server needs the same permission as when you save
+    const findings = await checkConfigured(s);
+    renderModelFindings(findings);
+    const missing = findings.filter((f) => f.state === 'missing').length;
+    const unknown = findings.filter((f) => f.state === 'unknown').length;
+    $('checkupMsg').textContent = missing ? `${plural(missing, 'model name')} not found. Pick the closest one below, or fix the name.` : unknown && unknown === findings.length ? 'Could not check the model names.' : unknown ? 'All the model names that could be checked were found.' : findings.length ? 'All model names were found.' : 'No models to check yet.';
+  } catch (e) {
+    $('checkupMsg').textContent = `Could not check the model names: ${e.message}`;
+  } finally {
+    $('checkModels').disabled = false;
+  }
+};
+
+// ---- kept recordings ----
+async function renderKept() {
+  try {
+    const t = await totalKept();
+    $('keptNow').textContent = `Kept now: ${plural(t.meetings, 'meeting')}, ${formatMB(t.bytes)}`;
+    $('keptDelete').disabled = !t.meetings;
+  } catch {
+    $('keptNow').textContent = 'Kept now: could not be read.';
+  }
+}
+$('keptDelete').onclick = async () => {
+  const ok = await modal({ text: 'Delete all kept recordings? You will no longer be able to play back lines or read a stretch again. Transcripts and minutes are not touched. It cannot be undone.', buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Delete recordings', value: 'yes', danger: true }] });
+  if (ok?.value !== 'yes') return;
+  $('keptMsg').textContent = 'Deleting…';
+  try {
+    const live = await getState();
+    const keep = live?.recording ? live.meetingId : null; // never pull audio out from under a recording in progress
+    for (const m of await listMeetingMetas({ counts: [] })) if (m.id !== keep) await deleteAudio(m.id);
+    if (!keep) await purgeOld(Number.MIN_VALUE); // anything left belongs to no meeting any more
+    $('keptMsg').textContent = keep ? 'Deleted, except the recording in progress.' : 'Deleted.';
+  } catch (e) {
+    $('keptMsg').textContent = `Could not delete: ${e.message}`;
+  }
+  renderKept();
+};
+
+// ---- back up and restore ----
+const backupMsg = (id, text, kind = '') => {
+  $(id).textContent = text;
+  $(id).className = `status${kind ? ` ${kind}` : ''}`;
+};
+$('backupDownload').onclick = async () => {
+  backupMsg('backupDownloadMsg', 'Preparing…');
+  try {
+    const withKeys = $('backupKeys').checked;
+    const data = await exportAll({ includeKeys: withKeys });
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    const a = el('a', { href: url, download: backupFileName() });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    backupMsg('backupDownloadMsg', `Saved ${a.download}: ${plural(data.meetings.length, 'meeting')}.${withKeys ? ' It contains your keys. Keep it private.' : ''}`, withKeys ? 'warn' : 'ok');
+  } catch (e) {
+    backupMsg('backupDownloadMsg', `Could not make the backup: ${e.message}`, 'bad');
+  }
+};
+$('backupRestore').onclick = () => $('backupFile').click();
+$('backupFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  $('backupWarnings').hidden = true;
+  const fail = (t) => backupMsg('backupRestoreMsg', t, 'bad');
+  if (file.size > 64 * 1048576) return fail('That file is too large to be a Debrief backup.');
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    return fail('That file could not be read. Choose a backup made by Debrief.');
+  }
+  const info = describeBackup(data);
+  if (!info) return fail('That file is not a Debrief backup.');
+  const has = [plural(info.meetings, 'meeting'), info.settings ? 'settings' : 'no settings', plural(info.voices, 'voice')].join(', ');
+  const pick = await modal({
+    text: `This backup has ${has}.\n\nAdd to what is here keeps your current meetings and keys and adds what is new. Replace everything deletes your current meetings first.`,
+    buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Replace everything', value: 'replace', danger: true }, { label: 'Add to what is here', value: 'merge', primary: true }],
+  });
+  if (!pick || pick.value === 'no') return backupMsg('backupRestoreMsg', 'Nothing was restored.');
+  if (pick.value === 'replace') {
+    const here = (await listMeetingMetas({ counts: [] })).length;
+    const sure = await modal({ text: `Replace everything? This deletes the ${plural(here, 'meeting')} here now, with their transcripts and minutes, and puts the backup in their place. It cannot be undone.`, buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Delete and replace', value: 'yes', danger: true }] });
+    if (sure?.value !== 'yes') return backupMsg('backupRestoreMsg', 'Nothing was restored.');
+  }
+  backupMsg('backupRestoreMsg', 'Restoring…');
+  try {
+    const r = await importAll(data, { mode: pick.value });
+    const bits = [`${plural(r.meetings.added, 'meeting')} added`];
+    if (r.meetings.skipped) bits.push(`${r.meetings.skipped} already here`);
+    bits.push(r.settingsApplied ? 'settings restored' : 'no settings');
+    bits.push(plural(r.voices, 'voice') + ' added');
+    backupMsg('backupRestoreMsg', `Restored: ${bits.join(', ')}.`, 'ok');
+    $('backupWarnings').replaceChildren(...r.warnings.slice(0, 8).map((w) => el('li', { textContent: w })));
+    $('backupWarnings').hidden = !r.warnings.length;
+    const fresh = await getSettings();
+    applyValues(fresh);
+    loaded = read();
+    fmtSeg();
+    updateDirty();
+    updateGuide();
+    renderLearned();
+    renderKept();
+  } catch (err) {
+    fail(`Nothing was restored: ${err.message}`);
+  }
+};
+
 $('testMail').onclick = async () => {
   $('mailMsg').textContent = 'Sending…';
   try {
@@ -789,6 +1042,10 @@ $('useAmnexPreset').onclick = () => {
   updateGuide();
   renderUsage();
   renderLearned();
+  renderKept();
+  webhookPermitted();
+  syncDeps();
+  guardNote();
   initVoices();
   updateDirty();
   showTab(location.hash.slice(1) || 'start');
@@ -817,6 +1074,8 @@ chrome.storage.onChanged.addListener(async (changes) => {
     loaded.meetingLanguages = read().meetingLanguages;
   }
   syncSegs();
+  syncDeps();
+  guardNote();
   updateDirty();
   updateGuide();
 });

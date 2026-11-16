@@ -261,7 +261,7 @@
 
     @media (max-width: 760px) {
       .shell { flex-direction: column; align-items: stretch; }
-      .side { position: static; flex: none; width: 100%; height: auto; overflow: visible; padding: 14px 16px 6px; }
+      .side { position: static; flex: none; width: auto; height: auto; overflow: visible; padding: 14px 16px 6px; }
       .nav { flex-direction: row; flex-wrap: wrap; }
       .nav button { width: auto; }
       .side .foot { flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
@@ -272,6 +272,10 @@
       .page > .card, .page > .grid2 > .card { padding: 16px; }
       .prompt { font-size: 18px; padding: 16px; }
       .menu { right: 0; }
+      .savebar { flex-wrap: wrap; justify-content: flex-end; border-radius: var(--r-md); }
+      #msg { white-space: normal; }
+      .rec-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 32px; }
+      .rec-row.one { grid-template-columns: minmax(0, 1fr) 32px; }
     }
   </style>
 </head>
@@ -329,10 +333,11 @@
 
       <section class="card" aria-labelledby="hCheck">
         <div class="btnrow" style="justify-content:space-between">
-          <div><h2 id="hCheck" class="lbl">Check my setup</h2><p class="hint" style="margin-top:4px">Lists what is ready and what is not: keys, today's quota, microphone, the mute button, email relay, voices and your last meeting.</p></div>
-          <div class="btnrow"><button type="button" class="btn" id="checkupCopy" hidden>Copy the result</button><button type="button" class="btn primary" id="checkup">Check my setup</button></div>
+          <div><h2 id="hCheck" class="lbl">Check my setup</h2><p class="hint" style="margin-top:4px">Lists what is ready and what is not: keys, today's quota, microphone, the mute button, email relay, voices and your last meeting. "Check model names" asks your providers whether the models you chose still exist.</p></div>
+          <div class="btnrow"><button type="button" class="btn" id="checkupCopy" hidden>Copy the result</button><button type="button" class="btn" id="checkModels">Check model names</button><button type="button" class="btn primary" id="checkup">Check my setup</button></div>
         </div>
         <ul id="checkupOut" class="checks" hidden></ul>
+        <ul id="modelOut" class="checks" hidden></ul>
         <p id="checkupMsg" class="hint" role="status">Nothing secret is shown, so the result is safe to paste into a chat or email when you ask for help.</p>
       </section>
     </section>
@@ -439,6 +444,70 @@
           </div>
         </div>
       </section>
+
+      <section class="card" aria-labelledby="hNudge">
+        <h2 id="hNudge" class="lbl">Record reminder</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="recordNudge">Remind me to record meetings that match my meeting types</label><p class="hint" id="recordNudge-d">A small card on the meeting page. Debrief cannot start recording by itself: Chrome needs you to click its button or press the shortcut.</p></div><input type="checkbox" class="sw" role="switch" id="recordNudge" aria-describedby="recordNudge-d"></div>
+          <div class="trow"><div class="tx"><label for="nudgeSkipOneOnOne">Not for one-to-one calls</label><p class="hint" id="nudgeSkipOneOnOne-d">No reminder when only two people are in the call.</p></div><input type="checkbox" class="sw" role="switch" id="nudgeSkipOneOnOne" aria-describedby="nudgeSkipOneOnOne-d"></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hTell">
+        <h2 id="hTell" class="lbl">Telling people</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="consentNotice">Post a notice in the meeting chat when recording starts</label><p class="hint" id="consentNotice-d">Google Meet only. If the chat is off or the notice cannot be posted, Debrief tells you so you can say it yourself.</p></div><input type="checkbox" class="sw" role="switch" id="consentNotice" aria-describedby="consentNotice-d"></div>
+          <div class="fld">
+            <label for="consentText">What the notice says</label>
+            <input id="consentText" maxlength="300" autocomplete="off" aria-describedby="consentText-d">
+            <div class="btnrow"><button type="button" class="btn sm plain" id="consentReset">Reset to default</button><span class="hint" id="consentText-d">Up to 300 characters.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hKeep">
+        <h2 id="hKeep" class="lbl">Keep the recording</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="keepAudio">Keep the recording on this computer</label><p class="hint" id="keepAudio-d">Lets you play back any line and read a stretch again with another model. About 11 MB per hour. It never leaves this computer.</p></div><input type="checkbox" class="sw" role="switch" id="keepAudio" aria-describedby="keepAudio-d"></div>
+          <div class="fld">
+            <label for="keepAudioDays">Delete kept recordings after (days)</label>
+            <input id="keepAudioDays" class="num-in" type="number" min="0" max="365" step="1" inputmode="numeric" aria-describedby="keepAudioDays-d">
+            <p class="hint" id="keepAudioDays-d">0 keeps them until you delete the meeting. Up to 365.</p>
+          </div>
+          <div class="fld">
+            <p class="hint" id="keptNow" role="status">Checking…</p>
+            <div class="btnrow"><button type="button" class="btn danger" id="keptDelete">Delete all kept recordings…</button><span class="status" id="keptMsg" role="status"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hScreen">
+        <h2 id="hScreen" class="lbl">Shared screen</h2>
+        <div class="rows">
+          <div class="trow"><div class="tx"><label for="screenNotes">Describe what is shown on the shared screen</label><p class="hint" id="screenNotes-d">Slides, numbers and documents reach the minutes. Each new slide is one extra request to your minutes model, about 30 for a one-hour meeting with a slide every two minutes. The picture goes to the same service that writes your minutes.</p></div><input type="checkbox" class="sw" role="switch" id="screenNotes" aria-describedby="screenNotes-d"></div>
+          <div class="fld">
+            <label for="screenNotesEverySec">Look at the screen at most every (seconds)</label>
+            <input id="screenNotesEverySec" class="num-in" type="number" min="10" max="300" step="1" inputmode="numeric" aria-describedby="screenNotesEverySec-d">
+            <p class="hint" id="screenNotesEverySec-d">Between 10 and 300. A slide is only described when the picture has changed.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hBackup">
+        <h2 id="hBackup" class="lbl">Back up and restore</h2>
+        <p class="hint">One file with your meetings, settings, voices and learned names. Kept recordings and voice clips are not in the backup.</p>
+        <div class="rows">
+          <div class="fld">
+            <div class="trow"><div class="tx"><label for="backupKeys">Include my API keys and the email secret</label><p class="hint" id="backupKeys-d">Leave this off if you will store or send the file anywhere.</p></div><input type="checkbox" class="sw" role="switch" id="backupKeys" aria-describedby="backupKeys-d"></div>
+            <div class="btnrow"><button type="button" class="btn" id="backupDownload">Download a backup</button><span class="status" id="backupDownloadMsg" role="status"></span></div>
+          </div>
+          <div class="fld">
+            <p class="hint">Choose a file made by Debrief. You can add it to what is here, or replace everything.</p>
+            <div class="btnrow"><button type="button" class="btn" id="backupRestore">Restore from a backup…</button><input type="file" id="backupFile" accept=".json,application/json" aria-label="Backup file" hidden><span class="status" id="backupRestoreMsg" role="status"></span></div>
+            <ul class="hint" id="backupWarnings" hidden></ul>
+          </div>
+        </div>
+      </section>
     </section>
 
     <!-- ============ Speech to text ============ -->
@@ -463,9 +532,11 @@
             <select id="sttGeminiModel" data-models="gemini-3.5-transcribe|Gemini 3.5 Transcribe (made for speech, default);gemini-3.8-flash|Gemini 3.8 Flash;gemini-3.7-flash|Gemini 3.7 Flash;gemini-3.6-flash|Gemini 3.6 Flash;gemini-3.5-flash|Gemini 3.5 Flash;gemini-3.5-flash-lite|Gemini 3.5 Flash Lite"></select>
             <label for="sttGeminiChunk" style="margin-top:12px">Piece length</label>
             <select id="sttGeminiChunk">
+              <option value="short">Short (about 40 seconds)</option>
               <option value="standard">About 2 minutes</option>
               <option value="long">About 4 minutes (fewer requests)</option>
             </select>
+            <p class="hint" id="chunkShortNote">Short pieces let the live transcript keep up with the meeting. They use about three times as many requests, so the free daily allowance runs out sooner.</p>
             <p class="hint">Debrief sends one request per piece, so longer pieces use less of Gemini's free daily allowance. A failed long piece takes a little longer to retry. With your microphone on, your voice and the call are sent together in one request.</p>
             <p class="hint">The gemini-3.5-transcribe model handles Hindi and English switching. If your key has no quota for it, Debrief falls back to general Gemini models automatically. The key is set on the Get started page.</p>
           </div>
@@ -585,6 +656,25 @@
         </div>
       </section>
 
+      <section class="card" aria-labelledby="hEngine">
+        <h2 id="hEngine" class="lbl">How the minutes are built</h2>
+        <div class="rows">
+          <div class="fld">
+            <span class="lab" id="minutesEngineLab">Method</span>
+            <div class="seg-ctl" role="radiogroup" aria-labelledby="minutesEngineLab" data-seg-for="minutesEngine">
+              <button type="button" role="radio" data-v="structured">Structured (recommended)</button>
+              <button type="button" role="radio" data-v="classic">Classic</button>
+            </div>
+            <select id="minutesEngine" hidden aria-hidden="true" tabindex="-1">
+              <option value="structured">Structured (recommended)</option>
+              <option value="classic">Classic</option>
+            </select>
+            <p class="hint">Structured asks the model for the decisions, actions, risks and questions as data and builds the page from them, so actions can be tracked and carried forward. If a model cannot do that, the classic way is used by itself.</p>
+          </div>
+          <div class="trow"><div class="tx"><label for="actionCarry">Review open actions from the previous meeting in the same series</label><p class="hint" id="actionCarry-d">The next minutes say for each one whether it was done, is still open, or was not mentioned.</p></div><input type="checkbox" class="sw" role="switch" id="actionCarry" aria-describedby="actionCarry-d"></div>
+        </div>
+      </section>
+
       <section class="card" id="minutesFormatCard" aria-labelledby="hFmt">
         <h2 id="hFmt" class="lbl">Minutes format and organisation template</h2>
         <div class="fld">
@@ -628,6 +718,22 @@
         <div id="meetingTypesList" class="mt-list"></div>
         <button type="button" id="addType" class="btn sm">+ Add meeting type</button>
       </section>
+
+      <section class="card" aria-labelledby="hAsk">
+        <h2 id="hAsk" class="lbl">Ask your meetings</h2>
+        <div class="trow"><div class="tx"><label for="askExpand">Let the model widen a question before searching all meetings</label><p class="hint" id="askExpand-d">Finds matches across Hindi, English and Malayalam spellings. One small extra request per question.</p></div><input type="checkbox" class="sw" role="switch" id="askExpand" aria-describedby="askExpand-d"></div>
+      </section>
+
+      <section class="card" aria-labelledby="hHook">
+        <h2 id="hHook" class="lbl">Send the minutes to another tool</h2>
+        <div class="fld">
+          <label for="webhookUrl">Address to send them to</label>
+          <input id="webhookUrl" placeholder="https://hooks.example.com/…" autocomplete="off" spellcheck="false" inputmode="url" aria-describedby="webhookUrl-d webhookErr">
+          <p class="hint" id="webhookUrl-d">When minutes are written, Debrief posts them here as JSON: title, attendee names, decisions, actions and the minutes. Never the transcript or email addresses. Slack and Teams incoming-webhook addresses get a short text digest.</p>
+          <p class="field-err" id="webhookErr" role="alert" hidden></p>
+        </div>
+        <div class="btnrow"><button type="button" class="btn" id="webhookTest">Send a test</button><span class="status" id="webhookMsg" role="status"></span></div>
+      </section>
     </section>
 
     <!-- ============ Email ============ -->
@@ -667,6 +773,7 @@
           <textarea id="shareGroups" hidden aria-hidden="true" tabindex="-1"></textarea>
           <div class="rows">
           <div class="trow"><div class="tx"><label for="shareAuto">Send to them automatically</label><p class="hint" id="shareAuto-d">Off (recommended): you get the minutes first and press Share after checking names and numbers. On: they get a copy the moment it is written.</p></div><input type="checkbox" class="sw" role="switch" id="shareAuto" aria-describedby="shareAuto-d"></div>
+          <div class="trow"><div class="tx"><label for="shareExternalGuard">Ask before sharing with people outside my organisation</label><p class="hint" id="shareExternalGuard-d">Automatic sharing only goes to your organisation's addresses (from "Our email domains" in <a href="#minutes" id="goDomains">Settings → Minutes</a>, else the domain of your own address). Others wait until you press Share.</p><p class="hint note" id="guardNote" hidden>Debrief cannot tell who is outside your organisation until "Our email domains" is filled in.</p></div><input type="checkbox" class="sw" role="switch" id="shareExternalGuard" aria-describedby="shareExternalGuard-d guardNote"></div>
           <div class="fld">
             <label for="shareHow">Address them as</label>
             <select id="shareHow"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc (hidden from each other)</option></select>
@@ -717,6 +824,18 @@
           <div class="trow"><div class="tx"><label for="voiceOn">Name speakers by their voice</label><p class="hint" id="voiceOn-d">A best guess. When Debrief is not sure, or people talk over each other, the line says "Unknown speaker". When Meet's own captions name a different person, both names are shown. Debrief makes a small numeric fingerprint of each stretch of the other participants' speech, on this computer, and compares it with the voices below. Applies when you press Save changes.</p></div><input type="checkbox" class="sw" role="switch" id="voiceOn" aria-describedby="voiceOn-d"></div>
           <div class="trow" style="align-items:flex-start"><div class="tx"><label for="voiceLearn">Learn voices on its own</label><p class="hint" id="voiceLearn-d">Debrief fingerprints the other participants' speech and groups voices that keep coming back. A voice heard enough in two or more meetings shows up below as <b>Unnamed voice 1, 2&hellip;</b>: you name it once and from then on it is named in every meeting, in any language. If Meet's captions are on and name exactly one speaker, Debrief also uses that to name the voice for you, but captions are optional. A voice is <b>not used</b> until it has about 45 seconds of clean speech from at least two meetings, and a group that sounds like two people or like someone already known is left out. Voices you record yourself are never changed. It can mix up people who sound alike, such as relatives or people on the same poor line, so check the names and delete anything that looks off. This builds a voice profile of the people on your calls: tell your colleagues, and you can delete anyone, or everyone, at any time. Applies when you press Save changes.</p></div><input type="checkbox" class="sw" role="switch" id="voiceLearn" aria-describedby="voiceLearn-d"></div>
           <div class="trow" style="align-items:flex-start"><div class="tx"><label for="voiceSamples">Keep short samples of voices</label><p class="hint" id="voiceSamples-d">So you can press play on any voice in the list below and hear who it is. These clips are <b>the audio Debrief keeps for voice recognition</b> (audio that failed to transcribe is also kept until retried or the meeting is deleted). While you record with learning on, short pieces of the other participants' speech wait in this browser (never uploaded); after the meeting one clip of about 8 seconds is kept for each learned voice (and for each person you record here) and everything else is deleted. A clip stays when you name the voice. Switching this off stops new clips but does not delete existing ones. A clip is deleted when you delete or merge the voice, or press <b>Forget all voices</b>. People on your calls have not agreed to be recorded in this way by you alone: tell them, or leave this off. Applies when you press Save changes.</p></div><input type="checkbox" class="sw" role="switch" id="voiceSamples" aria-describedby="voiceSamples-d"></div>
+          <div class="fld" id="modelBox">
+            <p class="hint" id="modelState" role="status">Speaker model: checking…</p>
+            <div class="stack" id="modelDl" hidden>
+              <div class="fld">
+                <label for="voiceModelUrl">Address to download the speaker model from</label>
+                <input id="voiceModelUrl" placeholder="https://…" autocomplete="off" spellcheck="false" inputmode="url" aria-describedby="voiceModelUrl-d">
+                <p class="hint" id="voiceModelUrl-d">An https address. About 26 MB. Debrief checks the file against its checksum and does not use it if it does not match.</p>
+              </div>
+              <div class="btnrow"><button type="button" class="btn" id="modelGet">Download</button><button type="button" class="btn danger" id="modelRemove" hidden>Remove</button><span class="status" id="modelMsg" role="status"></span></div>
+              <div class="meter" id="modelMeter" aria-hidden="true" hidden><i id="modelBar"></i></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -872,8 +991,8 @@
         <div class="trow"><div class="tx"><label for="uiEffects">Animated borders, orbs and sliding highlights</label><p class="hint" id="uiEffects-d">The glowing border on search and recording, the thinking orb while Debrief works, and the sliding highlight on tabs. Off keeps everything still and shows the same information plainly.</p></div><input type="checkbox" class="sw" role="switch" id="uiEffects" aria-describedby="uiEffects-d" checked></div>
       </section>
 
-      <section class="card" aria-labelledby="hRec">
-        <h2 id="hRec" class="lbl">While recording</h2>
+      <section class="card" aria-labelledby="hWhileRec">
+        <h2 id="hWhileRec" class="lbl">While recording</h2>
         <div class="trow"><div class="tx"><label for="pillOnPage">Show the recording pill on the Meet page</label><p class="hint" id="pillOnPage-d">A small draggable control with the timer, a mic switch and alerts. Off keeps the call page clear; recording still works.</p></div><input type="checkbox" class="sw" role="switch" id="pillOnPage" aria-describedby="pillOnPage-d"></div>
         <div class="trow"><div class="tx"><label for="hideRecIcon">Hide the recording icon on the toolbar</label><p class="hint" id="hideRecIcon-d">No glowing icon during a call and no REC badge while recording. Problems still show a "!" so you do not miss them.</p></div><input type="checkbox" class="sw" role="switch" id="hideRecIcon" aria-describedby="hideRecIcon-d"></div>
       </section>

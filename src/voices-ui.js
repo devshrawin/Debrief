@@ -3,6 +3,7 @@
 import { getSettings, setSetting, getVoices, saveVoices, forgetAllVoices, listMeetingMetas, getMeeting, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
 import { unnamedGroups, isAnon, mergePeople, blockEntry, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
+import { MODEL_SHA256, MODEL_BYTES, resolveModel, removeModel, modelStatus } from './voice/modelstore.js';
 import { buildPrint, upsertPerson, addRecording, speechPieces, PROMPTS, ENROL, SR } from './voice/enrol.js';
 import { exportVoices, parseImport, mergeImport } from './voice/share.js';
 import { encodeWav } from './wav.js';
@@ -23,6 +24,8 @@ let pcm = null; // the recording, in memory only
 let audioUrl = '';
 let rec = null; // { ctx, stream, node, blocks, started, timer }
 let client = null;
+let modelUrl = ''; // where the speaker model may be downloaded from (Settings, saved); empty in the full build
+let onModelProgress = () => {};
 
 const el = (tag, props = {}, ...kids) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -54,6 +57,9 @@ function getClient() {
       workerUrl: chrome.runtime.getURL('dist/worker.js'),
       modelUrl: chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx'),
       wasmPaths: chrome.runtime.getURL('vendor/ort/'),
+      modelDownloadUrl: modelUrl || undefined,
+      ...(modelUrl ? { modelSha256: MODEL_SHA256 } : {}),
+      onModelProgress: (got, total) => onModelProgress(got, total),
       maxQueue: 64,
     });
   }
@@ -584,7 +590,75 @@ async function importFile(file) {
   }
 }
 
+// ---- the speaker model: bundled in the full build (one quiet line), otherwise a download from the address you give ----
+const BUNDLED = () => chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx');
+const mb = (n) => `${Math.round((n || 0) / 1048576)} MB`;
+async function renderModel() {
+  const typed = $('voiceModelUrl').value.trim();
+  const st = await modelStatus({ bundledUrl: BUNDLED(), downloadUrl: typed || undefined });
+  $('modelState').textContent = st.bundled ? 'Speaker model: included with this install' : st.cached ? `Speaker model: downloaded (${mb(st.bytes)})` : 'Speaker model: not installed';
+  $('modelDl').hidden = st.bundled;
+  $('modelRemove').hidden = st.bundled || !st.cached;
+  $('modelGet').textContent = st.cached ? 'Download again' : 'Download';
+}
+const modelMsg = (t, kind = '') => {
+  $('modelMsg').textContent = t;
+  $('modelMsg').className = `status${kind ? ` ${kind}` : ''}`;
+};
+function initModel() {
+  getSettings().then((s) => (modelUrl = s.voiceModelUrl || '')).catch(() => {});
+  chrome.storage.onChanged.addListener((c) => {
+    if (c.settings) {
+      const next = c.settings.newValue?.voiceModelUrl || '';
+      if (next === modelUrl) return;
+      modelUrl = next;
+      closeClient(); // the next voice test uses the new address
+    }
+  });
+  $('voiceModelUrl').addEventListener('change', renderModel);
+  $('modelGet').onclick = async () => {
+    const url = $('voiceModelUrl').value.trim();
+    if (!/^https:\/\//i.test(url)) return modelMsg('Type an https:// address first.', 'bad');
+    let origin;
+    try {
+      origin = `${new URL(url).origin}/*`;
+    } catch {
+      return modelMsg('That address is not valid.', 'bad');
+    }
+    const asked = chrome.permissions.request({ origins: [origin] }).catch(() => false); // needs this click
+    $('modelGet').disabled = true;
+    $('modelMeter').hidden = false;
+    $('modelBar').style.width = '0%';
+    modelMsg('Starting…');
+    onModelProgress = (got, total) => {
+      const pct = total ? Math.min(100, Math.round((got / total) * 100)) : 0;
+      $('modelBar').style.width = `${pct}%`;
+      modelMsg(`Downloading… ${mb(got)} of ${mb(total || MODEL_BYTES)}`);
+    };
+    try {
+      if (!(await asked)) throw new Error('Debrief was not given permission for this address.');
+      await resolveModel({ bundledUrl: BUNDLED(), downloadUrl: url, expectedSha256: MODEL_SHA256, onProgress: onModelProgress });
+      modelMsg('Downloaded and checked.', 'ok');
+    } catch (e) {
+      modelMsg(e.message, 'bad');
+    } finally {
+      onModelProgress = () => {};
+      $('modelGet').disabled = false;
+      $('modelMeter').hidden = true;
+      renderModel();
+    }
+  };
+  $('modelRemove').onclick = async () => {
+    await removeModel();
+    modelMsg('Removed.');
+    closeClient();
+    renderModel();
+  };
+  renderModel();
+}
+
 export async function initVoices() {
+  initModel();
   await refresh();
   setLang('en');
   const langBtns = [...document.querySelectorAll('#enrolLang button')];

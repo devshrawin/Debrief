@@ -170,22 +170,22 @@ try {
   if (process.env.SHOT3) { await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1400, deviceScaleFactor: 1, mobile: false }, pg.sessionId); await sleep(500); await pg.evaluate(`document.getElementById('hShare').scrollIntoView()`); const r = await send('Page.captureScreenshot', { format: 'png' }, pg.sessionId); writeFileSync(process.env.SHOT3, Buffer.from(r.data, 'base64')); }
 
   // ---- Settings > Get started: more backup keys with a + button; the check-my-setup icons stay round
-  await pg.evaluate(`chrome.storage.local.set({ settings: { geminiKey: 'main-key', geminiKey2: 'backup-two', geminiBackups: ['backup-three'], llmProvider: 'gemini', sttProvider: 'gemini' } })`);
+  await pg.evaluate(`chrome.storage.local.set({ settings: { geminiKey: 'main-key', geminiBackups: ['backup-two', 'backup-three'], llmProvider: 'gemini', sttProvider: 'gemini' } })`);
   await send('Page.reload', {}, pg.sessionId);
   await sleep(1500);
   const k0 = await pg.evaluate(`({ saved: document.querySelectorAll('#moreKeys .bk-row').length, name: document.querySelector('#moreKeys .bk-name')?.textContent, shownKey: document.body.innerText.includes('backup-three') })`);
-  check('Get started: a saved extra backup key shows as "Saved", never as text', k0.saved === 1 && /Backup key 2/.test(k0.name) && !k0.shownKey, JSON.stringify(k0));
+  check('Get started: a saved extra backup key shows as "Saved", never as text', k0.saved === 2 && /Backup key 1/.test(k0.name) && !k0.shownKey, JSON.stringify(k0));
   await pg.evaluate(`document.getElementById('addKey').click()`);
   await sleep(200);
   await pg.evaluate(`(() => { const i = document.querySelector('#moreKeys input.bk-in'); i.value = 'backup-four'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   await pg.evaluate(`document.getElementById('addKey').click()`);
   await sleep(200);
   const k1 = await pg.evaluate(`({ rows: document.querySelectorAll('#moreKeys .bk-row').length, bar: document.getElementById('savebar').className })`);
-  check('the + button adds rows, and Settings sees unsaved changes', k1.rows === 3 && /dirty/.test(k1.bar), JSON.stringify(k1));
+  check('the + button adds rows, and Settings sees unsaved changes', k1.rows === 4 && /dirty/.test(k1.bar), JSON.stringify(k1));
   await pg.evaluate(`document.getElementById('save').click()`);
   await sleep(1200);
   const k2 = await pg.evaluate(`chrome.storage.local.get('settings').then((r) => r.settings.geminiBackups)`);
-  check('saving keeps the old extra key and adds the new one (the empty row is ignored)', JSON.stringify(k2) === JSON.stringify(['backup-three', 'backup-four']), JSON.stringify(k2));
+  check('saving keeps the old extra key and adds the new one (the empty row is ignored)', JSON.stringify(k2) === JSON.stringify(['backup-two', 'backup-three', 'backup-four']), JSON.stringify(k2));
   await pg.evaluate(`document.querySelector('#nav [data-tab="start"]').click()`);
   await sleep(400);
   await pg.evaluate(`document.getElementById('checkup').click()`);

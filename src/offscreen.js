@@ -10,6 +10,7 @@ import { savePending } from './audiostore.js';
 import { transcribePiece } from './coverage.js';
 import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
+import { MODEL_SHA256 } from './voice/modelstore.js';
 import { pack } from './voice/match.js';
 import { putPiece, pieceKey, toInt16, MAX_PIECES } from './voice/samples.js';
 import { startKeeping, purgeOld } from './audiokeep.js';
@@ -63,11 +64,14 @@ async function tap(ctx, stream, onBlock) {
   src.connect(node).connect(mute).connect(ctx.destination);
 }
 
-async function startVoice(meetingId, keepAudio = false, room = false) {
+async function startVoice(meetingId, keepAudio = false, room = false, modelDownloadUrl = '') {
   const client = createVoiceClient({
     workerUrl: chrome.runtime.getURL('dist/worker.js'),
     modelUrl: chrome.runtime.getURL('models/wespeaker_resnet34_lm.onnx'),
     wasmPaths: chrome.runtime.getURL('vendor/ort/'),
+    modelDownloadUrl: modelDownloadUrl || undefined,
+    ...(modelDownloadUrl ? { modelSha256: MODEL_SHA256 } : {}),
+    onModelProgress: () => {},
   });
   await Promise.race([client.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('model load timed out')), 45000))]);
   const out = [];
@@ -316,7 +320,7 @@ async function start({ streamId, settings, meetingId }) {
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
   // Only the fingerprints leave this document; the audio is never stored and never sent anywhere.
   if ((settings.voiceOn && (settings.voices || []).length) || settings.voiceLearn) {
-    rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples), !!settings.roomMode).catch(() => null);
+    rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples), !!settings.roomMode, settings.voiceModelUrl).catch(() => null);
     chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: rec.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
   }
 
