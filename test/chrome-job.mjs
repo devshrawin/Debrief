@@ -92,7 +92,7 @@ try {
   const base = `startedAt: Date.now() - 600000, endedAt: Date.now() - 1000, segments: ${seg}, errors: [], mom: ''`;
   await opts.evaluate(`(async () => {
     await chrome.storage.local.set({
-      settings: { llmProvider: 'openai', oaBase: 'http://127.0.0.1:${PORT}/v1', oaModel: 'fake', minutesFormat: 'standard', minutesMode: 'quick', calendarLookup: false, emailAuto: false },
+      settings: { llmProvider: 'openai', oaBase: 'http://127.0.0.1:${PORT}/v1', oaModel: 'fake', minutesFormat: 'standard', minutesMode: 'quick', minutesEngine: 'classic', calendarLookup: false, emailAuto: false },
       'meeting:jb1': { id: 'jb1', title: 'Background job', ${base} },
       'meeting:jb2': { id: 'jb2', title: 'Left half done', ${base}, decided: true, job: { state: 'writing', beat: 1 } },
       meetingIds: ['jb2', 'jb1'],

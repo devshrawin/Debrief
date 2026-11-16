@@ -506,7 +506,7 @@ await test('pipeline: the template writes facts from code and prose from the mod
 
 await test('pipeline: a reply that does not fit the template falls back to standard minutes (one extra call) with a flag', async () => {
   const log = [];
-  const r = await writeMinutes({ meeting: talk, settings, notes: '', gen: makeGen((sys) => (/Amnex Infotechnologies/.test(sys) ? 'Here are some thoughts, no tables.' : '# Standard\n\n## Action Items\n| 1 | x |'), log), ctx: {} });
+  const r = await writeMinutes({ meeting: talk, settings: { ...settings, minutesEngine: 'classic' }, notes: '', gen: makeGen((sys) => (/Amnex Infotechnologies/.test(sys) ? 'Here are some thoughts, no tables.' : '# Standard\n\n## Action Items\n| 1 | x |'), log), ctx: {} });
   assert.equal(r.format, 'standard');
   assert.equal(r.stats.fellBack, true);
   assert.match(r.mom, /# Standard/);

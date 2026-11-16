@@ -6,7 +6,7 @@
 //   queued -> transcribing-retry -> writing -> emailing -> done | failed
 // "held" = the person touched the minutes page during the countdown, so nothing starts until they press Write minutes.
 
-import { getMeeting, saveMeeting, patchMeeting, getSettings, llmReady, mergeEmailNames } from './store.js';
+import { getMeeting, saveMeeting, patchMeeting, appendMeeting, getSettings, llmReady, mergeEmailNames, stampLoaded, withWireStamps } from './store.js';
 import { parseDictionary } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { pickType } from './meetingtypes.js';
@@ -27,9 +27,24 @@ import { findGaps, mergeGaps } from './coverage.js';
 export { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs };
 
 // The offscreen document has no chrome.storage: there, the store calls are sent to the service worker (see useStore).
-let IO = { getMeeting, saveMeeting, patchMeeting, getSettings, mergeEmailNames };
+let IO = { getMeeting, saveMeeting, patchMeeting, appendMeeting, getSettings, mergeEmailNames };
 export function useStore(io) {
-  IO = { ...IO, ...io };
+  const next = { ...IO, ...io };
+  // A copy that came by message has lost the hidden marks saveMeeting uses to see what this side changed (see
+  // meetingstore.js). They are a function of the content, so they are put back on arrival and sent along on the way back.
+  if (io.getMeeting) next.getMeeting = async (id) => stampLoaded(await io.getMeeting(id));
+  if (io.saveMeeting) next.saveMeeting = (m) => io.saveMeeting(withWireStamps(m));
+  // Appending where only get and save were given (the offscreen document): read, push, save; the save writes only the new items.
+  if (io.saveMeeting && !io.appendMeeting)
+    next.appendMeeting = async (id, list, items) => {
+      const m = await next.getMeeting(id);
+      if (!m) return false;
+      if (Array.isArray(m[list])) m[list].push(...items); // the same array keeps its mark, so the save appends just these
+      else m[list] = [...items];
+      await next.saveMeeting(m);
+      return true;
+    };
+  IO = next;
 }
 
 export const wantTranscript = (meeting, settings, shared) => (shared ? !!meeting.transcriptShare : meeting.transcriptMine ?? !!settings.emailTranscript);
@@ -111,9 +126,12 @@ export async function retryPendingAudio({ id, meeting, settings, onProgress = ()
     onProgress(done, pending.length);
     try {
       const text = await transcribeFn(p.wav, settings);
-      if (text) for (const seg of p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]) meeting.segments.push({ ...seg, recovered: true, c: p.t, dur: Math.round(((p.wav.size - 44) / 32000) * 10) / 10 });
+      const segs = text ? (p.tl ? attributeMixed(text, p.t, p.tl) : [{ t: p.t, src: p.src, text }]).map((seg) => ({ ...seg, recovered: true, c: p.t, dur: Math.round(((p.wav.size - 44) / 32000) * 10) / 10 })) : [];
+      // stored first, then the piece of audio is deleted: a crash in between re-transcribes it rather than losing it
+      if (segs.length) await IO.appendMeeting(id, 'segments', segs);
+      // the caller's copy gets the same lines; its array keeps its mark, so a later save of it does not add them twice
+      meeting.segments.push(...segs);
       await deletePending(p.id);
-      await IO.saveMeeting(meeting);
       done++;
     } catch (e) {
       lastError = e.message;
@@ -182,10 +200,10 @@ const sleep = (ms, signal) =>
   });
 
 // One generate call with retry-on-rate-limit.
-export async function generateWithRetry({ generate = realGenerate, settings, system, user, signal, onText, temperature, onRetry = () => {}, wait = [5, 15, 30] }) {
+export async function generateWithRetry({ generate = realGenerate, settings, system, user, signal, onText, temperature, json, onRetry = () => {}, wait = [5, 15, 30] }) {
   for (let i = 0; ; i++) {
     try {
-      return await generate({ settings, system, user, signal, onText: onText || (() => {}), temperature });
+      return await generate({ settings, system, user, signal, onText: onText || (() => {}), temperature, ...(json ? { json: true } : {}) });
     } catch (e) {
       if (i >= 3 || !isRetryable(e)) throw e;
       onRetry(i + 1, e, wait[i]);
@@ -197,6 +215,9 @@ export async function generateWithRetry({ generate = realGenerate, settings, sys
 // Stretches with no transcript: the ones found while recording plus the ones the finished transcript shows.
 export const transcriptGaps = (meeting) => mergeGaps(meeting.gaps || [], findGaps(meeting.segments || [], [...(meeting.pauses || []), ...(meeting.silences || []).map((s) => ({ from: s.t, to: s.t + s.dur }))]));
 
+// Fields writeMinutes may return besides the text that are stored on the meeting (META) with the minutes.
+export const SAVED_WITH_MINUTES = ['extract', 'items'];
+
 // The whole write: the model calls, saving the minutes, the pending-audio count for the coverage note.
 // `ui` has onStatus(text) and onText(delta). Returns { text, stats }.
 export async function writeAndStore({ id, meeting, settings, reread = false, signal, ui, patch, cache, generate }) {
@@ -204,21 +225,25 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
   const ctx = nameCtxFor(meeting, settings, cache);
   const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name); // names only: no addresses go to the model
   const meetingType = pickType(settings.meetingTypes, meeting);
-  const { mom: text, stats, extract } = await writeMinutes({
+  const written = await writeMinutes({
     meeting,
     settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
     notes: meeting.notes,
     ctx: { ...ctx, absent, captions: meeting.captions, reread, meetingType, extraInstructions: meetingType?.extra || '' },
     gen: (system, user, onText, opts) =>
       generateWithRetry({
-        generate, settings, system, user, signal, onText: onText && ui.onText, temperature: opts?.temperature,
+        generate, settings, system, user, signal, onText: onText && !opts?.json && ui.onText, temperature: opts?.temperature, json: !!opts?.json,
         onRetry: (n, e, wait) => ui.onStatus(`Attempt ${n} failed (${e.message.slice(0, 80)}). Retrying in ${wait} s…`, { keep: true }),
       }),
     onText: () => {},
     onStatus: (t) => ui.onStatus(t),
     coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length, gaps: transcriptGaps(meeting) },
   });
-  await patch({ mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...(extract ? { extract } : {}) });
+  const { mom: text, stats } = written;
+  // whatever else writeMinutes returns to keep with the minutes (the extracted facts, structured items) is saved with them;
+  // only these names, so nothing unexpected (and never a transcript list) is written by accident
+  const keep = Object.fromEntries(SAVED_WITH_MINUTES.filter((k) => written[k] !== undefined && written[k] !== null).map((k) => [k, written[k]]));
+  await patch({ mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...keep });
   return { text, stats };
 }
 

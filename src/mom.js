@@ -5,7 +5,7 @@ import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
-import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, saveMeeting, deleteMeeting, fmtTime, normalizeFormat } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, getMeetingMeta, saveMeeting, patchMeeting as patchStored, deleteMeeting, fmtTime, normalizeFormat } from './store.js';
 import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, transcriptGaps } from './jobs.js';
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
@@ -483,15 +483,14 @@ function renderErrors() {
 }
 
 // Saves only the fields that changed onto the stored meeting, so another tab's or the recorder's newer
-// writes (segments, captions, emailedAt) are never overwritten by this page's older copy.
+// writes (segments, captions, emailedAt) are never overwritten by this page's older copy. Small fields touch only the
+// meeting's META record (src/meetingstore.js), not the transcript.
 // Changes are applied one after the other: two quick changes (a checkbox and a format) must not overwrite each other.
 let patchChain = Promise.resolve();
 function patchMeeting(fields) {
   const run = patchChain.then(async () => {
-    const latest = (await getMeeting(id)) || meeting;
-    Object.assign(latest, fields);
     Object.assign(meeting, fields);
-    await saveMeeting(latest);
+    if (!(await patchStored(id, fields))) await saveMeeting(meeting); // deleted meanwhile: this page's copy is all there is
   });
   patchChain = run.catch(() => {});
   return run;
@@ -615,7 +614,7 @@ async function finishJob() {
 function watchJob() {
   if (jobUi.timer) return;
   jobUi.timer = setInterval(async () => {
-    const m = await getMeeting(id).catch(() => null);
+    const m = await getMeetingMeta(id, { counts: [] }).catch(() => null); // the job state only: no transcript every 1.5 s
     if (!m) return;
     if (isActive(m)) {
       if (Date.now() - (m.job.beat || 0) > STALE_MS) runner.run(id, { resume: true });

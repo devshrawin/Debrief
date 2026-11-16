@@ -1,6 +1,6 @@
 // The Voices page in Settings: add people, record about 20 seconds, play it back, save only the fingerprint,
 // rename, re-record, delete, and forget everything. The recording lives in memory until saved or cancelled.
-import { getSettings, setSetting, getVoices, saveVoices, forgetAllVoices, listMeetings, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, forgetAllVoices, listMeetingMetas, getMeeting, fmtTime, getBlockedVoices, saveBlockedVoices } from './store.js';
 import { unnamedGroups, isAnon, mergePeople, blockEntry, LEARN } from './voice/learn.js';
 import { createVoiceClient } from './voice/client.js';
 import { buildPrint, upsertPerson, addRecording, speechPieces, PROMPTS, ENROL, SR } from './voice/enrol.js';
@@ -235,8 +235,9 @@ async function refresh() {
 
 // Voices in the latest meeting that match nobody: name them in one step.
 async function renderUnnamed() {
-  const meetings = (await listMeetings()).filter((m) => (m.voiceSegs || []).length >= 20).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
-  const m = meetings[0];
+  // counts first; only the newest meeting with enough voice pieces is read in full
+  const newest = (await listMeetingMetas({ counts: ['voiceSegs'] })).find((x) => x.counts.voiceSegs >= 20);
+  const m = newest ? await getMeeting(newest.id) : null;
   const groups = m ? unnamedGroups(m, people) : [];
   $('unnamedCard').hidden = !groups.length;
   if (m) $('unnamedSub').textContent = `${m.title || 'Your latest meeting'}${m.startedAt ? ` · ${fmtDate(m.startedAt)}` : ''}. Name a voice once and it is recognised next time.`;

@@ -1,6 +1,7 @@
 import { clearAllAudio, deletePieces, deleteUnnamedClips } from './voice/samples.js';
 import { cleanTerms } from './sttclean.js';
 import { deleteAllPending } from './audiostore.js';
+import { plain, removeMeetingRecords, stripVoicesFromAll } from './meetingstore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
 export const DEFAULTS = {
@@ -164,46 +165,13 @@ export function llmReady(s) {
   return !!s.oaBase && !!s.oaModel;
 }
 
-const key = (id) => `meeting:${id}`;
-
-export async function getMeeting(id) {
-  const r = await chrome.storage.local.get(key(id));
-  return r[key(id)] || null;
-}
-
-export async function saveMeeting(m) {
-  try {
-    await chrome.storage.local.set({ [key(m.id)]: m });
-  } catch (e) {
-    if (!/serialize/i.test(String(e?.message))) throw e;
-    await chrome.storage.local.set({ [key(m.id)]: plain(m) }); // a typed array slipped into the record: store it as an ordinary array
-  }
-}
-
-// Changes only the given fields of a stored meeting (the job writes small updates, not the whole record every few seconds).
-export async function patchMeeting(id, fields) {
-  const m = await getMeeting(id);
-  if (!m) return null;
-  Object.assign(m, fields);
-  await saveMeeting(m);
-  return m;
-}
-
-export async function listMeetings() {
-  const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
-  const r = await chrome.storage.local.get(meetingIds.map(key));
-  return meetingIds.map((id) => r[key(id)]).filter(Boolean).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
-}
-
-export async function addMeetingId(id) {
-  const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
-  await chrome.storage.local.set({ meetingIds: [id, ...meetingIds] });
-}
+// Meetings live in src/meetingstore.js (META plus chunked lists); these names stay importable from here.
+export { LISTS, CAPS, getMeeting, getMeetingMeta, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, replaceMeetingList, trimMeetingList, listMeetings, listMeetingMetas, addMeetingId, stampLoaded, withWireStamps } from './meetingstore.js';
 
 export async function deleteMeeting(id) {
   const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
   await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
-  await chrome.storage.local.remove(key(id));
+  await removeMeetingRecords(id);
   // the audio that belonged to it too: waiting voice pieces and chunks that failed to transcribe
   await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id)]);
 }
@@ -263,11 +231,9 @@ export async function getVoices() {
   return voices || [];
 }
 
-// chrome.storage cannot hold typed arrays ("Cannot serialize value to JSON"). Anything that might carry one goes through
-// plain() first: typed arrays become ordinary arrays. findTyped() says where one was, for the debug note.
-export function plain(v) {
-  return JSON.parse(JSON.stringify(v, (_k, x) => (ArrayBuffer.isView(x) ? Array.from(x) : x)));
-}
+// plain(): typed arrays become ordinary arrays (chrome.storage cannot hold them); it lives with the meeting store.
+export { plain };
+// findTyped() says where a typed array was, for the debug note.
 export function findTyped(v, path = '', seen = new Set()) {
   if (ArrayBuffer.isView(v)) return path || '(root)';
   if (!v || typeof v !== 'object' || seen.has(v)) return '';
@@ -288,18 +254,7 @@ export async function forgetAllVoices() {
   // the blocklist holds voice templates and emailNames holds who-is-who: both go with the voices
   await chrome.storage.local.remove(['voices', 'voiceBlock', 'emailNames']);
   await clearAllAudio().catch(() => {});
-  const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
-  const r = await chrome.storage.local.get(meetingIds.map(key));
-  const changed = {};
-  for (const id of meetingIds) {
-    const m = r[key(id)];
-    if (m && (m.voiceSegs || m.voiceModel)) {
-      const { voiceSegs, voiceModel, ...rest } = m;
-      changed[key(id)] = rest;
-    }
-  }
-  if (Object.keys(changed).length) await chrome.storage.local.set(changed);
-  return Object.keys(changed).length;
+  return stripVoicesFromAll();
 }
 
 // Learned voices the user deleted and asked not to learn again: [{ name, centroid }].

@@ -42,6 +42,8 @@ globalThis.chrome = {
 await import('../src/background.js');
 
 export const state = { mem, created, notes, badge, title, icon, offLog, winState, winLog };
+// The registered listeners: a test can drop them and import the worker again to act out a service-worker restart.
+export { listeners };
 // Sends a message the way Chrome would and waits for the reply (or reports that none came).
 export function send(msg, sender = { id: 'testid', tab: { id: 7 }, url: 'chrome-extension://testid/popup.html' }) {
   return new Promise((resolve) => {

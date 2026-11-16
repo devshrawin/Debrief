@@ -70,7 +70,8 @@ try {
     const meeting = { id: 'ml1', title: 'Learn', startedAt: Date.now() - 900000, endedAt: Date.now() - 1000, segments: [], errors: [], voiceSegs: segs, captions: [] };
     await chrome.storage.local.set({ schema: 2, settings: { voiceOn: true, voiceLearn: true, voiceSamples: true }, voices: [], 'meeting:ml1': meeting, meetingIds: ['ml1'] });
     const res = await chrome.runtime.sendMessage({ target: 'bg', type: 'learn-voices', id: 'ml1' });
-    const st = await chrome.storage.local.get(['meeting:ml1', 'voices']);
+    const st = await chrome.storage.local.get(['voices']);
+    st['meeting:ml1'] = await (async (id) => { const k = 'meeting:' + id; const m = (await chrome.storage.local.get(k))[k]; if (!m) return m; for (const [l, p] of Object.entries(m.parts || {})) { const keys = Array.from({ length: p.chunks }, (_, i) => 'mp:' + id + ':' + l + ':' + (p.first + i)); const r = await chrome.storage.local.get(keys); m[l] = keys.flatMap((x) => r[x] || []); } return m; })('ml1'); // the lists are kept in chunks next to the record (src/meetingstore.js)
     return { res, learn: st['meeting:ml1'].voiceLearn, debug: st['meeting:ml1'].debug, voices: (st.voices || []).map((v) => [v.name, typeof v.centroid, Array.isArray(v.windows) ? v.windows.length : typeof v.windows]) }; })()`);
   console.log(JSON.stringify(r.learn.error || 'learn ok'));
   // now the Voices page: name an unnamed group of the same meeting by hand

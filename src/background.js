@@ -6,9 +6,8 @@ import { classifyError } from './alerts.js';
 import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
 import { stuckJobs } from './jobstate.js';
-import { SCHEMA, getSettings, setSetting, sttReady, getMeeting, saveMeeting, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
+import { SCHEMA, getSettings, setSetting, sttReady, getMeeting, getMeetingMeta, listMeetingMetas, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, CAPS, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
-// Meeting records are read-modify-written from several messages; run those one at a time.
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
 chrome.runtime.onInstalled.addListener((d) => {
   if (d.reason === 'install') chrome.storage.local.set({ schema: SCHEMA }); // a new install starts generic: nothing to migrate
@@ -146,14 +145,55 @@ const mutateState = (fn) =>
     return next;
   });
 
-async function updateMeeting(id, fn) {
-  return serial(async () => {
-    const m = await getMeeting(id);
-    if (!m) return;
-    fn(m);
-    await saveMeeting(m);
-  });
+// Meeting writes go through the meeting store (src/meetingstore.js), which runs them one at a time per meeting. A transcript
+// line, a debug note or a caption only rewrites the last chunk of its list, never the whole meeting.
+const note = (id, text) => appendMeeting(id, 'debug', [text]);
+
+// Who was seen when ({ name: [first seen, last seen, sightings] }) changes with every snapshot of the meeting page, about
+// once a second. It is kept here and written to the meeting at most every 15 s and when the recording stops. After a
+// service-worker restart it is read back from the meeting, so at most the last 15 s of sightings can be lost.
+const PRESENCE_EVERY_MS = 15000;
+let pres = null; // { id, map, dirty, at, timer, ready }
+async function presenceFor(id) {
+  if (pres?.id !== id) {
+    const p = { id, map: {}, dirty: false, at: 0, timer: null };
+    p.ready = getMeetingMeta(id, { counts: [] }).then((m) => (p.map = { ...(m?.presence || {}) }), () => {});
+    if (pres) flushPresence(pres).catch(() => {});
+    pres = p;
+  }
+  const p = pres;
+  await p.ready;
+  return p;
 }
+function flushPresence(p = pres) {
+  if (!p) return Promise.resolve();
+  clearTimeout(p.timer);
+  p.timer = null;
+  if (!p.dirty) return Promise.resolve();
+  p.dirty = false;
+  p.at = Date.now();
+  return patchMeeting(p.id, { presence: { ...p.map } }).catch(() => (p.dirty = true));
+}
+function presenceChanged(p) {
+  p.dirty = true;
+  const wait = PRESENCE_EVERY_MS - (Date.now() - p.at);
+  if (wait <= 0) return flushPresence(p);
+  if (!p.timer) {
+    p.timer = setTimeout(() => flushPresence(p).catch(() => {}), wait);
+    p.timer?.unref?.();
+  }
+  return Promise.resolve();
+}
+// The recording ended: write what is held now and forget it.
+async function endPresence(id) {
+  if (pres?.id !== id) return;
+  const p = pres;
+  pres = null;
+  await p.ready;
+  await flushPresence(p);
+}
+
+const voiceModelSet = new Set(); // meetings whose voiceModel was written since this worker started
 
 // A notification needs its icon as a full address: written as 'icons/icon128.png' it is looked for next to the service worker
 // (in dist/), is not found, and the whole notification fails with "Unable to download all specified images".
@@ -216,17 +256,15 @@ async function jobCommand(type, msg, { create = true } = {}) {
 }
 
 async function startJob(id) {
-  await updateMeeting(id, (m) => {
-    m.job = { state: 'queued', beat: Date.now(), error: null };
-  });
+  await patchMeeting(id, { job: { state: 'queued', beat: Date.now(), error: null } });
   return jobCommand('job-run', { id });
 }
 
 // After a restart (or when the service worker wakes), jobs that were running and have no runner any more are picked up.
 async function resumeJobs() {
   const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
-  const rows = await chrome.storage.local.get(meetingIds.slice(0, 30).map((i) => `meeting:${i}`));
-  for (const id of stuckJobs(Object.values(rows))) await jobCommand('job-run', { id, resume: true });
+  const rows = await listMeetingMetas({ ids: meetingIds.slice(0, 30), counts: [] }); // job state is in META: no transcripts read
+  for (const id of stuckJobs(rows)) await jobCommand('job-run', { id, resume: true });
 }
 resumeJobs().catch(() => {});
 chrome.runtime.onStartup?.addListener(() => resumeJobs().catch(() => {}));
@@ -270,10 +308,8 @@ async function startInner(msg) {
   const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'start', streamId: msg.streamId, settings: { ...settings, roomMode: room, captureMic: settings.captureMic || room }, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
   if (!r?.ok) {
     await closeOffscreen();
-    await updateMeeting(id, (m) => {
-      m.endedAt = Date.now();
-      m.errors.push(`Start failed: ${r?.error}`);
-    });
+    await patchMeeting(id, { endedAt: Date.now() });
+    await appendMeeting(id, 'errors', [`Start failed: ${r?.error}`]);
     return { ok: false, error: r?.error || 'Recorder did not start.' };
   }
   await mutateState(() => ({ recording: true, room, meetingId: id, tabId: msg.tabId, startedAt: Date.now(), micOn: r.mic, micWanted: r.mic, meetMuted: null, mic: r.mic, micError: r.micError || null, meetCode: (msg.url || '').match(MEET_CODE)?.[0] || null }));
@@ -324,7 +360,7 @@ async function setPaused(want) {
   if (!changed || !st.recording) return { ok: true, paused: !!st.paused };
   await chrome.runtime.sendMessage({ target: 'offscreen', type: 'pause', on: !!st.paused }).catch(() => {});
   const sec = Math.max(0, Math.round((now - st.startedAt) / 1000));
-  await updateMeeting(st.meetingId, (m) => {
+  await updateMeetingMeta(st.meetingId, (m) => {
     const list = (m.pauses ||= []);
     if (st.paused) list.push({ from: sec, to: null });
     else if (list.length && list.at(-1).to == null) list.at(-1).to = sec;
@@ -348,9 +384,7 @@ async function learnVoices(meetingId) {
     if (!m) return { ok: false, error: 'meeting not found' };
     if (!s.voiceLearn) {
       await saveSamples(meetingId, null, []).catch(() => {}); // only clears waiting audio
-      await updateMeeting(meetingId, (mm) => {
-        mm.voiceLearn = { off: true };
-      });
+      await patchMeeting(meetingId, { voiceLearn: { off: true } });
       return { ok: true, off: true };
     }
     step = 'reading the blocked voices';
@@ -365,17 +399,15 @@ async function learnVoices(meetingId) {
     step = 'keeping the audio clips';
     await saveSamples(meetingId, s.voiceSamples ? m : null, r2.list).catch(() => {});
     step = 'saving the result in the meeting';
-    await updateMeeting(meetingId, (mm) => {
-      mm.voiceLearn = plain({ ...r.report, recurring: r2.report });
-      if (typedAt) (mm.debug ||= []).push(`voice learning: a typed array was found at voices.${typedAt} and converted`);
-      (mm.debug ||= []).push(`voice learning: ${r2.report.created.length} new, ${r2.report.updated.length + r.report.learned.length} updated, from ${(m.voiceSegs || []).length} pieces`);
-    });
+    await patchMeeting(meetingId, { voiceLearn: plain({ ...r.report, recurring: r2.report }) });
+    await appendMeeting(meetingId, 'debug', [
+      ...(typedAt ? [`voice learning: a typed array was found at voices.${typedAt} and converted`] : []),
+      `voice learning: ${r2.report.created.length} new, ${r2.report.updated.length + r.report.learned.length} updated, from ${(m.voiceSegs || []).length} pieces`,
+    ]);
     return { ok: true, created: r2.report.created.length };
   } catch (e) {
-    await updateMeeting(meetingId, (mm) => {
-      mm.voiceLearn = { error: `${String(e?.message || e)} (while ${step})` };
-      (mm.debug ||= []).push(`voice learning failed while ${step}: ${e?.message || e}`);
-    }).catch(() => {});
+    await patchMeeting(meetingId, { voiceLearn: { error: `${String(e?.message || e)} (while ${step})` } }).catch(() => {});
+    await note(meetingId, `voice learning failed while ${step}: ${e?.message || e}`).catch(() => {});
     return { ok: false, error: String(e?.message || e) };
   }
 }
@@ -395,12 +427,17 @@ function stop(opts = {}) {
     } catch {}
     if (opts.discard) {
       // an accidental recording: nothing is kept, nothing is transcribed, no minutes, no email
+      if (pres?.id === st.meetingId) {
+        clearTimeout(pres.timer);
+        pres = null;
+      }
       await deleteMeeting(st.meetingId).catch(() => {});
       await mutateState(() => ({ recording: false }));
       hideRec(st.tabId);
       return { ok: true, discarded: true };
     }
-    await updateMeeting(st.meetingId, (m) => {
+    await endPresence(st.meetingId).catch(() => {});
+    await updateMeetingMeta(st.meetingId, (m) => {
       m.endedAt = Date.now();
       const open = (m.pauses || []).at(-1); // stopped while paused: the pause ends with the meeting
       if (open && open.to == null) open.to = Math.round((m.endedAt - m.startedAt) / 1000);
@@ -434,7 +471,7 @@ async function applyMic(patch = {}) {
     return cur;
   });
   if (!cur) return { ok: false };
-  if (noted && cur.meetingId) updateMeeting(cur.meetingId, (m) => (m.debug ||= []).push(`${noted}; Debrief mic ${eff ? 'on' : 'off'}`)).catch(() => {});
+  if (noted && cur.meetingId) note(cur.meetingId, `${noted}; Debrief mic ${eff ? 'on' : 'off'}`).catch(() => {});
   let micOn = cur.micOn;
   if (changed) {
     const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'mic', on: eff }).catch(() => null);
@@ -448,7 +485,7 @@ async function applyMic(patch = {}) {
 async function autoStop(reason) {
   const st = await getState();
   if (!st.recording || st.stopping) return;
-  await updateMeeting(st.meetingId, (m) => (m.debug ||= []).push(`auto-stop: ${reason}`));
+  await note(st.meetingId, `auto-stop: ${reason}`);
   await stop({ background: true });
   notify('debrief-autostop', { title: 'Debrief stopped recording', message: `${reason} Writing the minutes now.` });
 }
@@ -514,24 +551,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     store: async () => {
       if (msg.op === 'settings') return { ok: true, value: await getSettings() };
       if (msg.op === 'getMeeting') return { ok: true, value: await getMeeting(msg.id) };
-      if (msg.op === 'saveMeeting') return serial(async () => (await saveMeeting(msg.meeting), { ok: true }));
-      if (msg.op === 'patchMeeting') return { ok: true, value: await updateMeeting(msg.id, (m) => Object.assign(m, msg.fields)) };
+      if (msg.op === 'getMeetingMeta') return { ok: true, value: await getMeetingMeta(msg.id, msg.counts ? { counts: msg.counts } : undefined) };
+      // a copy sent from there carries what it held when read as `__loaded` (jobs.js useStore), so only its changes are written
+      if (msg.op === 'saveMeeting') return (await saveMeeting(msg.meeting), { ok: true });
+      if (msg.op === 'patchMeeting') return { ok: true, value: await patchMeeting(msg.id, msg.fields || {}) };
+      if (msg.op === 'appendMeeting') return { ok: true, value: await appendMeeting(msg.id, msg.list, msg.items || []) };
       if (msg.op === 'mergeEmailNames') return { ok: true, value: await mergeEmailNames(msg.found) };
       if (msg.op === 'emailNames') return { ok: true, value: await getEmailNames() };
       return { ok: false };
     },
-    dbg: () => updateMeeting(msg.meetingId, (m) => (m.debug ||= []).push(msg.note)),
+    dbg: async () => void (await note(msg.meetingId, msg.note)),
     segment: async () => {
-      await updateMeeting(msg.meetingId, (m) => m.segments.push(msg.seg));
+      await appendMeeting(msg.meetingId, 'segments', [msg.seg]);
       await clearAlert();
     },
     'stt-error': async () => {
-      await updateMeeting(msg.meetingId, (m) => m.errors.push(msg.error));
+      await appendMeeting(msg.meetingId, 'errors', [msg.error]);
       await raiseAlert(msg.meetingId, msg.error);
     },
     // a stretch the speech-to-text answered with far too little text, even after it was read again in parts (see coverage.js)
-    gap: () => updateMeeting(msg.meetingId, (m) => (m.gaps ||= []).push(msg.gap)),
-    silence: () => updateMeeting(msg.meetingId, (m) => ((m.silences ||= []).length < 400 ? m.silences.push({ t: msg.t, dur: msg.dur }) : 0)),
+    gap: async () => void (await appendMeeting(msg.meetingId, 'gaps', [msg.gap])),
+    silence: async () => void (await appendMeeting(msg.meetingId, 'silences', [{ t: msg.t, dur: msg.dur }], { limit: CAPS.silences })),
     usage: () =>
       serial(async () => {
         const { usage, learnedLimits = {} } = await chrome.storage.local.get(['usage', 'learnedLimits']);
@@ -545,34 +585,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!st.recording || sender.tab?.id !== st.tabId) return { ok: false };
       const me = (await getSettings()).myName;
       const who = (n) => (/^you$/i.test(n) && me ? me : n);
-      await updateMeeting(st.meetingId, (m) => {
-        const pres = (m.presence ||= {});
-        for (const n of (msg.names || []).filter((x) => !isIconText(x) && !isMenuText(x))) {
+      const names = (msg.names || []).filter((x) => !isIconText(x) && !isMenuText(x));
+      if (names.length) {
+        // Someone absent from this sample may just be off-screen, so only the last time seen of those present is extended.
+        const p = await presenceFor(st.meetingId);
+        for (const n of names) {
           const k = who(n);
-          const p = pres[k];
-          if (p) {
-            p[1] = msg.t;
-            p[2] = (p[2] || 0) + 1;
-          } else pres[k] = [msg.t, msg.t, 1];
+          const v = p.map[k];
+          if (v) {
+            v[1] = msg.t;
+            v[2] = (v[2] || 0) + 1;
+          } else p.map[k] = [msg.t, msg.t, 1];
         }
-        if (msg.names) {
-          // Someone absent from this sample may just be off-screen, so only the last time seen is extended.
-        }
-        const caps = (m.captions ||= []);
-        for (const c of msg.captions || []) {
-          const name = who(c.name);
-          let last = null;
-          for (let i = caps.length - 1; i >= 0 && i > caps.length - 40; i--) if (caps[i].name === name) {
-            last = caps[i];
-            break;
+        await presenceChanged(p);
+      }
+      const incoming = (msg.captions || []).filter((c) => c && typeof c.text === 'string');
+      // A caption that grows (Meet rewrites the current sentence as it is heard) replaces its earlier version when that is
+      // among the last 40 lines of the newest chunk; otherwise it is a new line. Only that chunk is rewritten.
+      if (incoming.length)
+        await editMeetingTail(st.meetingId, 'captions', (caps) => {
+          for (const c of incoming) {
+            const name = who(c.name);
+            let last = null;
+            for (let i = caps.length - 1; i >= 0 && i > caps.length - 40; i--) if (caps[i].name === name) {
+              last = caps[i];
+              break;
+            }
+            if (last && c.t - last.t2 < 15 && (c.text.startsWith(last.text) || last.text.startsWith(c.text) || last.text.slice(0, 20) === c.text.slice(0, 20))) {
+              last.text = c.text.length >= last.text.length ? c.text : last.text;
+              last.t2 = c.t;
+            } else caps.push({ t: c.t, t2: c.t, name, text: c.text });
           }
-          if (last && c.t - last.t2 < 15 && (c.text.startsWith(last.text) || last.text.startsWith(c.text) || last.text.slice(0, 20) === c.text.slice(0, 20))) {
-            last.text = c.text.length >= last.text.length ? c.text : last.text;
-            last.t2 = c.t;
-          } else caps.push({ t: c.t, t2: c.t, name, text: c.text });
-        }
-        if (caps.length > 4000) caps.splice(0, caps.length - 4000);
-      });
+        }, { max: CAPS.captions });
       return { ok: true };
     },
     // A page script saw a live call (or the call ended): glow the icon amber unless we are already recording it.
@@ -589,12 +633,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     'voice-seg': async () => {
       const segs = (msg.segs || []).filter((x) => Number.isFinite(x?.t0) && Number.isFinite(x?.t1) && typeof x.e === 'string' && x.e.length < 600).map((x) => ({ t0: x.t0, t1: x.t1, e: x.e, ...(x.s === 'm' ? { s: 'm' } : {}) })).slice(0, 200);
       if (!segs.length) return { ok: false };
-      await updateMeeting(msg.meetingId, (m) => {
-        const all = (m.voiceSegs ||= []);
-        all.push(...segs);
-        m.voiceModel = 'wespeaker-resnet34-lm';
-        if (all.length > 12000) all.splice(0, all.length - 12000);
-      });
+      if (!voiceModelSet.has(msg.meetingId)) {
+        await patchMeeting(msg.meetingId, { voiceModel: 'wespeaker-resnet34-lm' });
+        voiceModelSet.add(msg.meetingId);
+      }
+      await appendMeeting(msg.meetingId, 'voiceSegs', segs, { max: CAPS.voiceSegs });
       return { ok: true };
     },
     'dismiss-alert': () => clearAlert(),
@@ -605,8 +648,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     'pill-state': async () => {
       const rec = await getState();
       const { levels } = await chrome.storage.session.get('levels');
-      const m = rec.meetingId ? await getMeeting(rec.meetingId) : null;
-      return { ok: true, rec, levels: levels || null, counts: { segs: m?.segments.length || 0, errs: m?.errors.length || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || 'read', otherSites: (await getSettings()).otherSites !== false };
+      // asked about once a second: the counts come from META and the last chunk, never the whole transcript
+      const m = rec.meetingId ? await getMeetingMeta(rec.meetingId, { counts: ['segments', 'errors'] }) : null;
+      return { ok: true, rec, levels: levels || null, counts: { segs: m?.counts.segments || 0, errs: m?.counts.errors || 0 }, follow: (await getSettings()).followMeetMute !== false, showPill: (await getSettings()).pillOnPage === true, captionMode: (await getSettings()).meetCaptions || 'read', otherSites: (await getSettings()).otherSites !== false };
     },
   };
   const h = handlers[msg.type];

@@ -443,7 +443,7 @@ try {
     q('fixRemember').checked = true;
     q('fixApply').click();
     await new Promise((r) => setTimeout(r, 600));
-    const meeting = (await chrome.storage.local.get('meeting:mtest'))['meeting:mtest'];
+    const meeting = await (async (id) => { const k = 'meeting:' + id; const m = (await chrome.storage.local.get(k))[k]; if (!m) return m; for (const [l, p] of Object.entries(m.parts || {})) { const keys = Array.from({ length: p.chunks }, (_, i) => 'mp:' + id + ':' + l + ':' + (p.first + i)); const r = await chrome.storage.local.get(keys); m[l] = keys.flatMap((x) => r[x] || []); } return m; })('mtest'); // the lists are kept in chunks next to the record (src/meetingstore.js)
     const settings = (await chrome.storage.local.get('settings')).settings;
     return { shareBox, attendees: meeting.attendees, seg: meeting.segments[1].text, dict: settings.dictionary, msg: q('fixMsg').textContent, shown: q('transcript').textContent };
   })()`);

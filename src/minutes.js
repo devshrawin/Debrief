@@ -1,5 +1,9 @@
-// The minutes pipeline: extract every item window by window, write the minutes with that checklist,
-// then audit the result against the transcript. gen(system, user, onText) does one model call.
+// The minutes pipeline. gen(system, user, onText, opts) does one model call.
+//   structured (default): ONE call returns a JSON document (src/structured.js); code validates it, guards it and renders
+//     the Markdown; the structured items are returned too (meeting.items). Weak replies fall back to the classic way.
+//   classic: extract every item window by window, write the minutes with that checklist, then audit the result against
+//     the transcript. The structured items are read back from the Markdown, best effort.
+//   organisation template: its own dedicated call (formal register); the items are read from its parsed result.
 import {
   buildSystemPrompt,
   buildUserPrompt,
@@ -23,6 +27,8 @@ import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
 import { languagesOf, joinNames } from './languages.js';
 import { gapLabel, gapMinutes } from './coverage.js';
+import { structuredSystem, structuredUser, structuredFixSystem, structuredFixUser, parseStructured, guardStructured, assignIds, renderMinutes, itemsFromMarkdown, itemsFromTemplate, countsOf, withCarry } from './structured.js';
+import { normalizeReview, parseReview } from './actions.js';
 import { updatesSystem, updatesUser, parseUpdates, fillRoster, updatesMarkdown, insertUpdates, rosterOf } from './meetingtypes.js';
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
@@ -74,11 +80,20 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   // Small local models read less at a time: use smaller windows and skip the whole-transcript audit for long meetings.
   const local = settings.llmProvider === 'openai' && isLocalBase(settings.oaBase);
   const thorough = settings.minutesMode !== 'quick' && words >= 400;
-  const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0 };
+  const engine = settings.minutesEngine === 'classic' ? 'classic' : 'structured';
+  const wantTemplate = settings.minutesFormat !== 'standard';
+  const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0, engine };
+  const carry = ctx.carry?.open?.length ? ctx.carry : null; // open action items of the previous meeting in the series
+  const languages = joinNames(languagesOf(settings));
 
   let checklist = '';
   let extract = null;
-  if (thorough) {
+  let extracted = false;
+  // The item extraction. The structured engine reads the whole transcript in one call and skips it, except for local
+  // models and very long transcripts (and the template format, which keeps its dedicated flow); the classic fallback runs it when needed.
+  async function ensureExtract() {
+    if (extracted || !thorough) return;
+    extracted = true;
     const windows = splitWindows(lines, local ? 1500 : 3200);
     const items = [];
     // The same transcript gives the same list: items found once are reused when the minutes are written again,
@@ -107,14 +122,19 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     // only a complete read is worth keeping: a read with failed parts would lock in the gaps
     if (!cached && !stats.extractFailed) extract = { key, items };
   }
+  if (thorough && (wantTemplate || engine === 'classic' || local || words > 24000)) await ensureExtract();
 
   const presence = { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) };
   const clock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
   ctx = { ...ctx, presenceLine: ctx.presenceLine || Object.entries(presence).filter(([n, v]) => n && Array.isArray(v)).map(([n, v]) => `${n} ${clock(v[0])}–${clock(v[1])}`).join('; ') };
+  const roster = rosterOf({ presence, attendees: ctx.attendees || [] });
   let mom = '';
   let tpl = null; // { facts, prose } when the template was written and parsed
   let wasEmpty = false;
-  if (settings.minutesFormat !== 'standard') {
+  let items = null; // the structured minutes
+  let review = null; // what the meeting said about the carried action items: [{ id, status, note }]
+  let viaStructured = false;
+  if (wantTemplate) {
     // Organisation template: code builds the header and attendee tables, the model writes only the language parts.
     setOrg(settings);
     const dir = parseDirectory(settings.peopleDirectory);
@@ -125,7 +145,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     const people = [...new Set([...facts.known.people, ...(meeting.invited || []).map((p) => p.name).filter(Boolean)])];
     const raw = sanitizeMinutes(
       await gen(
-        buildTemplateSystemPrompt(settings.momLanguage, { languages: joinNames(languagesOf(settings)), org: getOrg().name }),
+        buildTemplateSystemPrompt(settings.momLanguage, { languages, org: getOrg().name }),
         buildTemplateUserPrompt(meeting, settings, notes, { ...ctx, checklist }, { people, orgs: known.orgs, dateText: fmtDate(meeting.startedAt) }),
         onText,
         { temperature: TEMPERATURE.write }
@@ -136,15 +156,53 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     if (prose) {
       tpl = { facts, prose: guardProse(prose, known) };
       mom = composeMarkdown(tpl);
+      stats.engine = 'template';
+      items = itemsFromTemplate(tpl.prose);
     } else if (raw) {
       stats.fellBack = true; // the reply did not fit the template: write the standard minutes instead
       onStatus('The reply did not fit the official format. Writing standard minutes instead…');
     }
   }
+
+  const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
+  const guardOpts = { transcript, attendees: roster, absent: ctx.absent || [], known: [settings.myName, ...(meeting.invited || []).map((p) => p.name)].filter(Boolean), durationSec };
+
+  // The structured call: one JSON document for the whole transcript. null when the model failed or the reply is unusable.
+  async function structuredWrite() {
+    onStatus('Writing the minutes…');
+    let raw;
+    try {
+      stats.calls++;
+      raw = await gen(structuredSystem(settings.momLanguage, { languages }), structuredUser(meeting, settings, notes, { ...ctx, checklist, carry }), onText, { temperature: TEMPERATURE.write, json: true });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      return null;
+    }
+    const parsed = parseStructured(raw);
+    if (!parsed) return null;
+    const { previous, ...doc } = guardStructured(parsed, guardOpts);
+    return { items: assignIds(doc, meeting.items), review: carry ? normalizeReview(previous, carry.open) : null };
+  }
+  const renderStructured = () => renderMinutes(items, { meeting, attendees: roster, evidence: true, carry, review: review || [] });
+
   if (!mom && !wasEmpty) {
-    if (!tpl) onStatus('Writing the minutes…');
-    stats.calls++;
-    mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages: joinNames(languagesOf(settings)) }), buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), onText, { temperature: TEMPERATURE.write }));
+    let done = null;
+    if (engine === 'structured') done = await structuredWrite();
+    if (done) {
+      ({ items, review } = done);
+      viaStructured = true;
+      mom = renderStructured();
+    } else {
+      if (engine === 'structured') {
+        // a model that cannot produce JSON still gets its minutes, the classic way
+        stats.fellBack = stats.fellBack || 'classic';
+        stats.engine = 'classic';
+        onStatus('The reply was not usable as structured minutes. Writing them the classic way…');
+      } else if (!tpl) onStatus('Writing the minutes…');
+      await ensureExtract();
+      stats.calls++;
+      mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages }), withCarry(buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), carry, 'classic'), onText, { temperature: TEMPERATURE.write }));
+    }
   }
   if (!mom) throw new Error('The model returned an empty reply. Try again, or choose another model in Settings.');
   const format = tpl ? 'template' : 'standard';
@@ -159,7 +217,29 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
       stats.missed = missing.length;
       if (missing.length) {
         completeness = `## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;
-        if (!tpl) {
+        if (viaStructured) {
+          // the same JSON comes back with the missing points added; it is accepted only when nothing was lost and something was gained
+          let fixed = null;
+          try {
+            onStatus('Adding the points that were missed…');
+            stats.calls++;
+            const p = parseStructured(await gen(structuredFixSystem(settings.momLanguage, { languages }), structuredFixUser(items, missing), undefined, { temperature: TEMPERATURE.check, json: true }));
+            if (p) {
+              const { previous: _p, ...doc } = guardStructured(p, guardOpts);
+              const next = assignIds({ ...doc, title: doc.title || items.title, overview: doc.overview || items.overview }, items);
+              const [a, b] = [countsOf(items), countsOf(next)];
+              if (Object.keys(a).every((k) => b[k] >= a[k]) && Object.keys(a).some((k) => b[k] > a[k])) fixed = next;
+            }
+          } catch (e) {
+            if (e?.name === 'AbortError') throw e;
+          }
+          if (fixed) {
+            items = fixed;
+            mom = renderStructured();
+            stats.merged = true;
+            completeness = '';
+          } else mom += `\n\n${completeness}`;
+        } else if (!tpl) {
           // fold the missing points into the right sections; if the model returns something that is not the full minutes, list them at the end instead
           let merged = '';
           try {
@@ -183,6 +263,13 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     }
   }
 
+  // Classic minutes only exist as Markdown: read the items back, and what the meeting said about the carried actions.
+  if (!tpl && !viaStructured) {
+    items = itemsFromMarkdown(mom);
+    if (carry) review = parseReview(mom, carry.open);
+  }
+  if (items) items = assignIds(items, meeting.items);
+
   // Meeting type with an "Updates by person" table: one extra, focused call over the whole transcript.
   let updates = null;
   let updatesNote = '';
@@ -191,8 +278,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     try {
       onStatus('Writing the updates by person…');
       stats.calls++;
-      const roster = rosterOf({ presence, attendees: ctx.attendees || [] });
-      const raw = await gen(updatesSystem(mt.columns, settings.momLanguage), updatesUser({ meeting, roster, transcript }), undefined, { temperature: TEMPERATURE.check });
+      const raw = await gen(updatesSystem(mt.columns, settings.momLanguage), updatesUser({ meeting, roster: roster, transcript }), undefined, { temperature: TEMPERATURE.check });
       const rows = fillRoster(parseUpdates(raw, mt.columns), roster, mt.columns);
       if (rows.length) updates = { columns: mt.columns, rows };
       else updatesNote = 'The updates by person could not be read from the model reply. Press Rewrite minutes to try again.';
@@ -203,18 +289,23 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   }
 
   const cov = coverageMarkdown(coverage);
-  const written = `_Written with ${thorough ? `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})` : 'a single pass'}._`;
+  let how = 'a single pass';
+  if (viaStructured) {
+    if (stats.calls > 1) how = `${stats.calls} model calls (${[stats.items || stats.extractWindows ? 'item extraction' : '', 'structured writing', thorough ? 'completeness check' : ''].filter(Boolean).join(', ')}${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})`;
+  } else if (thorough || stats.fellBack === 'classic') {
+    how = `${stats.calls} model calls (item extraction, writing, completeness check${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})`;
+  }
+  const written = `_Written with ${how}._`;
   if (tpl) {
     // The attendee tables replace the Attendance section; warnings and the check go to a section that is hidden in print and mail.
-    return { mom: composeMarkdown({ ...tpl, updates, review: [updatesNote, cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format };
+    return { mom: composeMarkdown({ ...tpl, updates, review: [updatesNote, cov, written, completeness].filter(Boolean) }), stats, checklist, extract, format, items, review: null };
   }
   if (updates) mom = insertUpdates(mom, updatesMarkdown(updates.rows, updates.columns));
-  const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
   const attendance = attendanceMarkdown({ invited: meeting.invited, presence, durationSec, entries: ctx.entries, myName: settings.myName, whyNoInvite: noInviteReason(meeting, settings) });
   const foot = [];
   if (attendance) foot.push(attendance);
   if (cov) foot.push(cov);
   if (updatesNote) foot.push(`**${updatesNote}**`);
   foot.push(written);
-  return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist, extract, format };
+  return { mom: `${mom}\n\n---\n\n${foot.join('\n\n')}`, stats, checklist, extract, format, items, review };
 }

@@ -1,7 +1,7 @@
 import { nearLimit, parseLimits, quotaCheck, nextQuotaReset, istClock } from './usage.js';
 import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
-import { getSettings, setSetting, sttReady, llmReady, getState, getMeeting, listMeetings, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, sttReady, llmReady, getState, getMeetingMeta, listMeetingMetas, deleteMeeting, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -85,9 +85,9 @@ async function refresh() {
       setMeter('lvMic', 'lvMicT', null);
       $('lvTabT').textContent = 'No sound data: stop and restart';
     }
-    const m = await getMeeting(st.meetingId);
-    const n = m?.segments.length || 0;
-    const errs = m?.errors.length || 0;
+    const m = await getMeetingMeta(st.meetingId, { counts: ['segments', 'errors'] }); // counts only, not the transcript
+    const n = m?.counts.segments || 0;
+    const errs = m?.counts.errors || 0;
     const info = $('segInfo');
     const spans = [pieces(n), `${errs} error${errs === 1 ? '' : 's'}`];
     if (!n) spans.push('First one lands after about 2 to 3 min.');
@@ -149,7 +149,7 @@ function emptyState(title, hint) {
 }
 
 async function renderRecent() {
-  allMeetings = await listMeetings();
+  allMeetings = await listMeetingMetas({ counts: [] }); // titles, times and people only
   show('clearAll', !!allMeetings.length);
   $('meetCount').textContent = allMeetings.length;
   const last = allMeetings[0];
@@ -273,7 +273,7 @@ $('clearAll').onclick = async () => {
     return;
   }
   const st = await getState();
-  for (const m of await listMeetings()) if (!(st.recording && st.meetingId === m.id)) await deleteMeeting(m.id);
+  for (const m of await listMeetingMetas({ counts: [] })) if (!(st.recording && st.meetingId === m.id)) await deleteMeeting(m.id);
   b.dataset.armed = '';
   b.classList.remove('armed');
   b.textContent = 'Clear all';

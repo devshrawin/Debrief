@@ -1,6 +1,6 @@
 // "Check my setup": one list of what is ready, what is not, and why, to read or paste when something fails.
 // Nothing here prints a key, and nothing is sent anywhere except one harmless GET to your own mail relay.
-import { getSettings, getVoices, listMeetings, getBlockedVoices } from './store.js';
+import { getSettings, getVoices, listMeetingMetas, getMeeting, getBlockedVoices } from './store.js';
 import { mailReady } from './mailer.js';
 import { summarize, parseLimits } from './usage.js';
 
@@ -70,7 +70,9 @@ export async function runCheckup() {
 
   // the last meeting
   try {
-    const m = (await listMeetings()).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    // only the newest meeting is read in full (its debug notes); the others are not loaded
+    const newest = (await listMeetingMetas({ counts: [] }))[0];
+    const m = newest && (await getMeeting(newest.id));
     if (m) {
       const dbg = m.debug || [];
       const muteLines = dbg.filter((x) => /^Meet mic/.test(x));

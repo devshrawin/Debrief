@@ -7,6 +7,7 @@ import { record } from './usage.js';
 const MODERN_CLAUDE = /^claude-(opus-5|fable-5|sonnet-5-5)/;
 
 // Claude through the Messages API with plain fetch (the official SDK added about 500 KB to every page).
+// json: true asks for one JSON document. Claude has no switch for it (the prompt does the work), so it is ignored here.
 async function anthropic({ settings, system, user, onText, signal, temperature }) {
   const model = settings.anthropicModel;
   const modern = MODERN_CLAUDE.test(model);
@@ -93,23 +94,31 @@ export function isRetryable(e) {
 }
 
 // OpenAI Chat Completions shape: OpenAI, Groq, OpenRouter, Ollama, LM Studio, etc.
-async function openaiCompat({ settings, system, user, onText, signal, temperature }) {
+async function openaiCompat({ settings, system, user, onText, signal, temperature, json }) {
   const headers = { 'Content-Type': 'application/json' };
   if (settings.oaKey) headers.Authorization = `Bearer ${settings.oaKey}`;
-  const res = await fetch(`${settings.oaBase.replace(/\/+$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers,
-    signal,
-    body: JSON.stringify({
-      model: settings.oaModel,
-      stream: true,
-      ...(temperature != null ? { temperature } : {}),
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-  });
+  const post = (withJson) =>
+    fetch(`${settings.oaBase.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers,
+      signal,
+      body: JSON.stringify({
+        model: settings.oaModel,
+        stream: true,
+        ...(temperature != null ? { temperature } : {}),
+        ...(withJson ? { response_format: { type: 'json_object' } } : {}),
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+    });
+  let res = await post(!!json);
+  // JSON mode is optional: a server that does not know response_format must not lose the result over it, so step down once.
+  if (json && (res.status === 400 || res.status === 422)) {
+    record({ provider: 'openai', model: settings.oaModel, kind: 'llm', req: 1, fail: true });
+    res = await post(false);
+  }
   record({ provider: 'openai', model: settings.oaModel, kind: 'llm', req: 1, fail: !res.ok, rl: res.status === 429 });
   if (!res.ok) throw await httpError(res, 'LLM');
   let text = '';
@@ -123,18 +132,25 @@ async function openaiCompat({ settings, system, user, onText, signal, temperatur
   return text;
 }
 
-async function gemini({ settings, system, user, onText, signal, temperature }) {
+async function gemini({ settings, system, user, onText, signal, temperature, json }) {
   const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
-  const { res, model } = await geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
-      ...(temperature != null ? { generationConfig: { temperature } } : {}),
-    }),
-  }, settings, { kind: 'llm' });
+  const send = (withJson) => {
+    const generationConfig = { ...(temperature != null ? { temperature } : {}), ...(withJson ? { responseMimeType: 'application/json' } : {}) };
+    return geminiChainFetch(modelChain(settings.geminiModel), urlFor, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        ...(Object.keys(generationConfig).length ? { generationConfig } : {}),
+      }),
+    }, settings, { kind: 'llm' });
+  };
+  let sent = await send(!!json);
+  // JSON mode is optional: a model that rejects it with a 400 is asked again without it.
+  if (json && !sent.res.ok && sent.res.status === 400) sent = await send(false);
+  const { res, model } = sent;
   if (!res.ok) throw await httpError(res, 'Gemini');
   let text = '';
   let usage = null;

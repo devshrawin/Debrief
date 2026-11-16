@@ -1,6 +1,9 @@
 // The real service worker run against a fake chrome API (see bg-harness.mjs).
 import assert from 'node:assert/strict';
 const { send, state } = await import('./bg-harness.mjs');
+// meetings are stored as META plus chunks (src/meetingstore.js): read them back assembled, the way the product does
+const { getMeeting } = await import('../src/store.js');
+const stored = (id) => getMeeting(id);
 
 let passed = 0;
 async function test(name, fn) {
@@ -40,7 +43,7 @@ await test('transcript segments from the recorder are saved in the meeting', asy
   assert.deepEqual(await send({ type: 'segment', meetingId: 'mt', seg: { t: 1, src: 'others', text: 'hello' } }, OFFSCREEN), { ok: true });
   await send({ type: 'segment', meetingId: 'mt', seg: { t: 2, src: 'me', text: 'hi' } }, OFFSCREEN);
   await send({ type: 'dbg', meetingId: 'mt', note: 'n' }, OFFSCREEN);
-  const m = state.mem.local['meeting:mt'];
+  const m = (await stored('mt'));
   assert.deepEqual(m.segments.map((s) => s.text), ['hello', 'hi']);
   assert.deepEqual(m.debug, ['n']);
 });
@@ -55,7 +58,7 @@ await test('a quota error raises one alert and a later segment clears it', async
   live();
   await send({ type: 'stt-error', meetingId: 'mt', error: '[10s me] Gemini HTTP 429: quota, limit: 20, model: gemini-3.8-flash' }, OFFSCREEN);
   assert.equal(state.mem.session.rec.alert.kind, 'quota');
-  assert.match(state.mem.local['meeting:mt'].errors[0], /429/);
+  assert.match((await stored('mt')).errors[0], /429/);
   await send({ type: 'segment', meetingId: 'mt', seg: { t: 5, src: 'others', text: 'ok' } }, OFFSCREEN);
   assert.equal(state.mem.session.rec.alert, null);
 });
@@ -66,7 +69,7 @@ await test('end of the meeting from the recorded tab stops it; another tab canno
   assert.equal(state.mem.session.rec.recording, true);
   assert.deepEqual(await send({ type: 'meet-ended' }, page(7)), { ok: true });
   assert.equal(state.mem.session.rec.recording, false);
-  assert.ok(state.mem.local['meeting:mt'].endedAt);
+  assert.ok((await stored('mt')).endedAt);
   assert.equal(state.created.length, 1);
   assert.match(state.created[0].url, /mom\.html\?id=mt/);
   assert.equal(state.created[0].active, false, 'an automatic stop opens the minutes in the background');
@@ -84,7 +87,7 @@ await test('a page script cannot forge recorder messages, but may use its own', 
   for (const type of ['segment', 'stt-error', 'usage', 'dbg', 'start']) {
     assert.equal(await send({ type, meetingId: 'mt', seg: { t: 1, text: 'FORGED' }, entry: { provider: 'x', kind: 'llm', req: 9 }, error: 'x', note: 'x' }, page(7)), 'NO-HANDLER', `${type} from a page must be ignored`);
   }
-  assert.equal(state.mem.local['meeting:mt'].segments.length, 0);
+  assert.equal((await stored('mt')).segments.length, 0);
   assert.equal(state.mem.local.usage, undefined);
   assert.notEqual(await send({ type: 'in-call', on: true, site: 'Zoom' }, page(7)), 'NO-HANDLER');
   assert.equal(await send({ type: 'segment', meetingId: 'mt', seg: { t: 1, text: 'x' } }, { id: 'someone-else', url: 'chrome-extension://someone-else/x.html' }), 'NO-HANDLER', 'other extensions are ignored');
@@ -123,7 +126,7 @@ await test('every change of Meet mute is written to the meeting log, and a silen
   await send({ type: 'meet-mute', muted: false }, page(7));
   await send({ type: 'meet-mute', muted: null }, page(7));
   await new Promise((r) => setTimeout(r, 50));
-  const dbg = (state.mem.local['meeting:mt'].debug || []).filter((x) => /^Meet mic/.test(x));
+  const dbg = ((await stored('mt')).debug || []).filter((x) => /^Meet mic/.test(x));
   assert.equal(dbg.length, 3, JSON.stringify(dbg));
   assert.match(dbg[0], /muted at \+\d+s; Debrief mic off/);
   assert.match(dbg[1], /unmuted.*Debrief mic on/);
@@ -145,7 +148,7 @@ await test('room mode: the microphone stays on when Meet says muted, and microph
   assert.equal(state.mem.session.rec.micOn, false, 'outside room mode muting still pauses the mic');
   live();
   await send({ type: 'voice-seg', meetingId: 'mt', segs: [{ t0: 1, t1: 4, e: 'AAAA', s: 'm', extra: 'dropped' }, { t0: 5, t1: 8, e: 'BBBB' }] }, OFFSCREEN);
-  const segs = state.mem.local['meeting:mt'].voiceSegs;
+  const segs = (await stored('mt')).voiceSegs;
   assert.deepEqual(segs, [{ t0: 1, t1: 4, e: 'AAAA', s: 'm' }, { t0: 5, t1: 8, e: 'BBBB' }]);
 });
 
@@ -158,7 +161,7 @@ await test('pause: pausing tells the recorder, shows the badge, notes the pause 
   assert.equal(state.mem.session.rec.paused, true);
   assert.deepEqual(state.offLog.filter((m) => m.type === 'pause').map((m) => m.on), [true]);
   assert.equal(state.badge.g, 'II');
-  const during = state.mem.local['meeting:mt'].pauses;
+  const during = (await stored('mt')).pauses;
   assert.equal(during.length, 1);
   assert.equal(during[0].to, null);
   // a long quiet stretch while paused never stops the recording
@@ -168,16 +171,16 @@ await test('pause: pausing tells the recorder, shows the badge, notes the pause 
   assert.equal(state.mem.session.rec.recording, true, 'paused is not silent');
   // pausing again does nothing, toggling resumes
   await send({ type: 'pause', on: true }, OWN);
-  assert.equal(state.mem.local['meeting:mt'].pauses.length, 1);
+  assert.equal((await stored('mt')).pauses.length, 1);
   const b = await send({ type: 'pause' }, OWN);
   assert.equal(b.paused, false);
   assert.equal(state.badge.g, 'REC');
-  assert.equal(typeof state.mem.local['meeting:mt'].pauses[0].to, 'number');
+  assert.equal(typeof (await stored('mt')).pauses[0].to, 'number');
   assert.deepEqual(state.offLog.filter((m) => m.type === 'pause').map((m) => m.on), [true, false]);
   // stopping while paused closes the pause
   await send({ type: 'pause', on: true }, OWN);
   await send({ type: 'stop' }, OWN);
-  const last = state.mem.local['meeting:mt'].pauses.at(-1);
+  const last = (await stored('mt')).pauses.at(-1);
   assert.equal(typeof last.to, 'number');
 });
 
@@ -222,7 +225,7 @@ await test('pressing start twice does not start two recordings', async () => {
   assert.equal(state.mem.session.rec.recording, true);
   assert.equal(state.mem.session.rec.meetCode, 'abc-defg-hij');
   assert.equal(Object.keys(state.mem.local).filter((k) => k.startsWith('meeting:')).length, 1, 'only one meeting record');
-  assert.equal(state.mem.local['meeting:' + state.mem.session.rec.meetingId].title, 'Sync');
+  assert.equal((await stored(state.mem.session.rec.meetingId)).title, 'Sync');
 });
 
 await test('the page-facing state never carries keys', async () => {
@@ -315,12 +318,12 @@ await test('voice learning always leaves a trace, and can be run again from the 
   state.mem.local['meeting:lv'] = { ...meet };
   state.mem.local.meetingIds = ['lv'];
   assert.deepEqual((await send({ type: 'learn-voices', id: 'lv' }, OWN)).off, true);
-  assert.deepEqual(state.mem.local['meeting:lv'].voiceLearn, { off: true });
+  assert.deepEqual((await stored('lv')).voiceLearn, { off: true });
   // it is on now: asking again learns from the stored pieces
   state.mem.local.settings = { voiceLearn: true, voiceSamples: true, schema: 2 };
   const r = await send({ type: 'learn-voices', id: 'lv' }, OWN);
   assert.equal(r.ok, true);
-  const m = state.mem.local['meeting:lv'];
+  const m = (await stored('lv'));
   assert.ok(m.voiceLearn.recurring, 'a report was written');
   assert.equal(m.voiceLearn.recurring.created.length, 1);
   assert.match(state.mem.local.voices[0].name, /^Unnamed voice 1$/);
@@ -335,7 +338,7 @@ await test('voice learning always leaves a trace, and can be run again from the 
   state.mem.local.voiceBlock = 'corrupt'; // a damaged list of blocked voices makes learning throw
   const bad = await send({ type: 'learn-voices', id: 'lv' }, OWN);
   assert.equal(bad.ok, false);
-  assert.ok(state.mem.local['meeting:lv'].voiceLearn.error);
+  assert.ok((await stored('lv')).voiceLearn.error);
   delete state.mem.local.voiceBlock;
 });
 
@@ -344,11 +347,11 @@ await test('the recorder reports stretches with too little text and silent piece
   assert.notEqual(await send({ type: 'gap', meetingId: 'mt', gap: { t: 1247, dur: 150, src: 'mix', voicedSec: 120, chars: 40 } }, OFFSCREEN), 'NO-HANDLER');
   await send({ type: 'silence', meetingId: 'mt', t: 300, dur: 100 }, OFFSCREEN);
   await send({ type: 'silence', meetingId: 'mt', t: 400, dur: 100 }, OFFSCREEN);
-  let m = state.mem.local['meeting:mt'];
+  let m = (await stored('mt'));
   assert.deepEqual(m.gaps, [{ t: 1247, dur: 150, src: 'mix', voicedSec: 120, chars: 40 }]);
   assert.deepEqual(m.silences, [{ t: 300, dur: 100 }, { t: 400, dur: 100 }]);
   for (const type of ['gap', 'silence']) assert.equal(await send({ type, meetingId: 'mt', gap: { t: 1, dur: 1 }, t: 1, dur: 1 }, page(7)), 'NO-HANDLER', `${type} from a page must be ignored`);
-  m = state.mem.local['meeting:mt'];
+  m = (await stored('mt'));
   assert.equal(m.gaps.length, 1);
   assert.equal(m.silences.length, 2);
 });
@@ -357,7 +360,7 @@ await test('the list of silent pieces stops growing at 400 (a very long recordin
   live();
   state.mem.local['meeting:mt'].silences = Array.from({ length: 400 }, (_, i) => ({ t: i, dur: 1 }));
   await send({ type: 'silence', meetingId: 'mt', t: 999, dur: 1 }, OFFSCREEN);
-  assert.equal(state.mem.local['meeting:mt'].silences.length, 400);
+  assert.equal((await stored('mt')).silences.length, 400);
 });
 
 await test('notifications carry their icon as a full extension address (a relative one fails inside the service worker)', async () => {

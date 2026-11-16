@@ -40,7 +40,7 @@ globalThis.fetch = async (url, init) => {
 };
 
 const SETTINGS = {
-  llmProvider: 'gemini', geminiKey: 'k', geminiModel: 'm', minutesFormat: 'standard', minutesMode: 'quick', calendarLookup: false,
+  llmProvider: 'gemini', geminiKey: 'k', geminiModel: 'm', minutesFormat: 'standard', minutesMode: 'quick', minutesEngine: 'classic', calendarLookup: false,
   emailAuto: true, emailWebhook: 'https://script.google.com/macros/s/abc/exec', emailSecret: 'x'.repeat(30),
 };
 const seed = (extra = {}) => {

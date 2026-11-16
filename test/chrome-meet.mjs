@@ -108,7 +108,8 @@ const pillText = async () => (await ext.evaluate(`chrome.scripting.executeScript
   await sleep(2500);
   const c = await read();
   check('unmuted again: Debrief sees it', c.meetMuted === false, JSON.stringify(c));
-  const dbg = await ext.evaluate(`chrome.storage.local.get('meeting:mm1').then((r) => r['meeting:mm1'].debug || [])`);
+  // the lists are kept in chunks next to the meeting record (src/meetingstore.js)
+  const dbg = await ext.evaluate(`(async (id) => { const k = 'meeting:' + id; const m = (await chrome.storage.local.get(k))[k]; if (!m) return m; for (const [l, p] of Object.entries(m.parts || {})) { const keys = Array.from({ length: p.chunks }, (_, i) => 'mp:' + id + ':' + l + ':' + (p.first + i)); const r = await chrome.storage.local.get(keys); m[l] = keys.flatMap((x) => r[x] || []); } return m; })('mm1').then((m) => m.debug || [])`);
   check('the meeting records each mute change', dbg.some((x) => /Meet mic: muted/.test(x)) && dbg.some((x) => /Meet mic: unmuted/.test(x)), JSON.stringify(dbg));
 
   // the panel on this page: an online meeting, not a room
