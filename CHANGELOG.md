@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.0 — 2026-11-16
+Nothing in this release has been tried on a live call or against a real provider yet: it is covered by automated tests on made-up data and by headless Chrome. See "Needs a live test" in docs/AUDIT.md.
+- New: Live transcript page (popup → Live transcript while recording). The text appears as each piece is transcribed, with a provisional "Summary so far" and Ask about the meeting in progress. A new "Short pieces" setting (about 40 seconds) makes it keep up; it uses about three times the requests.
+- New: structured minutes. The model returns decisions, actions, risks and questions as data and Debrief builds the page from them (one writing call instead of several). If a model cannot do that, the classic way is used by itself. Settings → Minutes → Structured / Classic.
+- New: actions you can track. Tick an action off on the minutes page; an Open actions page lists every open action across meetings by meeting, owner or due date. The next meeting of the same series reviews the open ones (done, still open, not mentioned).
+- New: real times for each line with Deepgram and Whisper-style providers (and who spoke from the levels inside each line). Gemini and Sarvam still estimate times within a piece.
+- New: keep the recording (off by default). Stored on this computer in 30 second parts, about 11 MB an hour, deleted after the number of days you choose. Play any line or time in the minutes, and read a stretch again.
+- New: shared-screen notes (off by default). A vision model describes each new slide so numbers and titles reach the minutes. One extra request per slide.
+- New: recording notice in the meeting chat (off by default, Google Meet), and a reminder to record when a call matches one of your meeting types (Chrome does not let an extension start recording by itself).
+- New: automatic sharing holds back addresses outside your organisation until you press Share; manual sharing asks first.
+- New: back up and restore everything (API keys left out unless you tick the box), Download .json for one meeting, and an optional webhook that posts the minutes to another tool (a text digest for Slack and Teams).
+- New: Check model names compares your model settings with what your account offers and suggests the closest one.
+- Ask your meetings: one meeting is read whole instead of searched; questions match across Hindi, English and Malayalam spellings; actions and decisions are searched as data; screen notes are included.
+- Faster and safer storage: a meeting's transcript, captions and voice pieces are stored in small parts. A new line used to rewrite the whole meeting (several megabytes late in a long call); now it writes about one kilobyte. A minutes page left open can no longer overwrite lines added since. Old meetings are read as they are and moved over when next changed.
+- A smaller store package is possible (`npm run pack-lite`, 4 MB instead of 29 MB) that downloads the speaker model when Voices is first used. The normal package is unchanged.
+- The organisation template is no longer named after one company in the code and stored settings (the "Use Amnex preset" button stays). The separate second Gemini key field is gone: backup keys are one list. Existing settings are moved over once.
+- Fix: stopping a recording with Gemini and the microphone on could throw while the last audio was being cut.
+- Developers: built files are no longer kept in git (`npm run build` first); `npm run eval` scores transcripts and minutes against reference meetings (docs/EVAL.md).
+
 ## 1.3.0 — 2026-11-02
 - New: Meeting types (Settings > Minutes). A recurring meeting such as a daily cadence call gets an "Updates by person" table in its minutes: one row for everyone who was there, with columns you choose (default Yesterday, Today, Blockers), plus optional extra instructions for the writer. A type applies by itself when the meeting title contains your words (or the Meet code matches). On the minutes page a chooser lets you pick another type, or none, and rewrites the minutes. Works in the standard layout and in the organisation template (print, Word and email too).
 - New: name a speaker by hand, for one meeting. On the minutes page, click the label on any transcript line ("Unknown speaker", "Others" or a wrong guess) and pick who it was, or type a name. Only that line changes, and only in this meeting: voice profiles and other meetings are not touched. The name shows in the transcript, in Download .txt and in the text the minutes are written from, so Rewrite minutes uses it for owners, actions and the updates table. A small reset puts the original label back.
