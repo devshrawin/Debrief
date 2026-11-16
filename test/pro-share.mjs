@@ -230,4 +230,136 @@ await test('script v7: an event whose Meet link is not in the description is sti
   assert.ok(!('event' in withCode), 'no event text leaves the script');
 });
 
+// ---- manual sharing and the webhook ----
+const { shareMinutes } = await import('../src/jobs.js');
+const { webhookPayload, validWebhook, chatDigest, postWebhook, runWebhook, NO_PERMISSION } = await import('../src/webhook.js');
+
+await test('share: manual share is not blocked but reports outsiders and whether the transcript goes to them', async () => {
+  responder = () => new Response(JSON.stringify({ ok: true, to: 'a@co.com,x@other.com' }));
+  const s = { ...settings, myOrgDomains: 'co.com' };
+  const patches = [];
+  const base = { meeting: { id: 'm', title: 'T', startedAt: 1, mom: '## x', transcriptShare: true, segments: [] }, settings: s, how: 'to', patch: async (f) => patches.push(f), ctxFor: () => ({}) };
+  const r = await shareMinutes({ ...base, list: ['a@co.com', 'x@other.com'] });
+  assert.deepEqual([r.external, r.transcriptToExternal], [['x@other.com'], true]);
+  assert.equal(patches[0].sharedTo.length, 2, 'the outsider was sent to');
+  const r2 = await shareMinutes({ ...base, meeting: { ...base.meeting, transcriptShare: false }, list: ['a@co.com', 'x@other.com'] });
+  assert.deepEqual([r2.external, r2.transcriptToExternal], [['x@other.com'], false]);
+  const r3 = await shareMinutes({ ...base, list: ['a@co.com'] });
+  assert.deepEqual([r3.external, r3.transcriptToExternal], [[], false]);
+  const r4 = await shareMinutes({ ...base, settings: { ...s, shareExternalGuard: false }, list: ['x@other.com'] });
+  assert.deepEqual(r4.external, []);
+});
+
+await test('share: addresses sent by hand are no longer shown as held', async () => {
+  responder = () => new Response(JSON.stringify({ ok: true, to: 'x@other.com' }));
+  const patches = [];
+  await shareMinutes({ meeting: { id: 'm', title: 'T', startedAt: 1, mom: '## x', shareHeld: ['x@other.com', 'y@other.com'], segments: [] }, settings, list: ['x@other.com'], how: 'to', patch: async (f) => patches.push(f), ctxFor: () => ({}) });
+  assert.deepEqual(patches[0].shareHeld, ['y@other.com']);
+  assert.match(patches[0].shareStatus, /y@other\.com/);
+});
+
+const MEETING = {
+  id: 'm1', title: 'Sync with amal@co.com', startedAt: Date.UTC(2026, 10, 13, 10), endedAt: Date.UTC(2026, 10, 13, 10, 30), attendees: ['Amal Raj', 'Priya (priya@co.com)'], format: 'standard',
+  mom: '# Sync\nAttendance: priya@co.com attended.', segments: [{ text: 'SECRET TRANSCRIPT LINE' }], voiceSegs: [[1, 2]], invited: [{ email: 'i@co.com' }],
+  items: { overview: 'Shipped.', decisions: [{ text: 'Ship Friday', at: '01:00' }], actions: [{ id: 'a1', text: 'Run test', owner: 'Amal', due: 'Thu', quote: 'run the SECRET TRANSCRIPT LINE', status: 'open' }] },
+};
+
+await test('webhook: the payload has the minutes and nothing else (no transcript, email addresses, voices or keys)', () => {
+  const p = webhookPayload(MEETING, { settings: { geminiKey: 'KEY123', emailSecret: 'SEC', webhookUrl: 'https://h.example/x' } });
+  assert.deepEqual(Object.keys(p), ['app', 'version', 'event', 'meeting', 'items', 'minutesMarkdown']);
+  assert.deepEqual([p.app, p.version, p.event], ['debrief', 1, 'minutes.written']);
+  assert.deepEqual(p.meeting, { id: 'm1', title: 'Sync with [email hidden]', startedAt: MEETING.startedAt, endedAt: MEETING.endedAt, durationMin: 30, attendees: ['Amal Raj', 'Priya'], format: 'standard' });
+  const text = JSON.stringify(p);
+  for (const bad of ['SECRET TRANSCRIPT', 'KEY123', 'SEC"', 'i@co.com', '@co.com', 'voiceSegs', 'segments', 'quote']) assert.ok(!text.includes(bad), bad);
+  assert.equal(p.items.actions[0].text, 'Run test');
+  assert.equal(webhookPayload({ ...MEETING, items: undefined }).items, null);
+});
+
+await test('webhook: only https (or this computer), no credentials, not too long', () => {
+  for (const ok of ['https://hooks.example.com/a?b=1', 'http://localhost:8080/x', 'http://127.0.0.1/x', 'https://x.org']) assert.equal(validWebhook(ok), true, ok);
+  for (const bad of ['http://example.com/x', 'https://user:pw@example.com/x', 'https://user@example.com/x', 'ftp://x.org', 'not a url', '', undefined, `https://x.org/${'a'.repeat(2000)}`, 'http://localhost.evil.org/x']) assert.equal(validWebhook(bad), false, String(bad).slice(0, 40));
+});
+
+await test('webhook: Slack and Teams get { text } with a short digest, capped', () => {
+  const d = chatDigest(MEETING);
+  assert.match(d, /^Minutes: Sync with \[email hidden\] \(2026-11-13\)/);
+  assert.match(d, /Decisions:\n- Ship Friday/);
+  assert.match(d, /Action items:\n- Run test \(owner: Amal; due: Thu\)/);
+  assert.ok(!d.includes('SECRET'));
+  const big = chatDigest({ ...MEETING, items: { decisions: Array.from({ length: 400 }, (_, i) => ({ text: `decision number ${i} with some words` })) } });
+  assert.ok(big.length <= 3500);
+  const bodies = [];
+  const f = async (url, init) => (bodies.push([url, JSON.parse(init.body)]), { status: 200 });
+  return Promise.all([
+    postWebhook(MEETING, { webhookUrl: 'https://hooks.slack.com/services/T/B/x' }, { fetch: f }),
+    postWebhook(MEETING, { webhookUrl: 'https://contoso.webhook.office.com/webhookb2/x' }, { fetch: f }),
+    postWebhook(MEETING, { webhookUrl: 'https://outlook.office.com/webhook/x' }, { fetch: f }),
+    postWebhook(MEETING, { webhookUrl: 'https://example.com/hook' }, { fetch: f }),
+  ]).then(() => {
+    assert.deepEqual(bodies.slice(0, 3).map(([, b]) => Object.keys(b)), [['text'], ['text'], ['text']]);
+    assert.equal(bodies[3][1].event, 'minutes.written');
+  });
+});
+
+await test('webhook: JSON POST, no cookies, no redirects, a timeout, and one retry after a network error or 5xx', async () => {
+  const seen = [];
+  const mk = (...answers) => async (url, init) => {
+    seen.push(init);
+    const a = answers[Math.min(seen.length - 1, answers.length - 1)];
+    if (a === 'hang') return new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+    if (a instanceof Error) throw a;
+    return { status: a };
+  };
+  const S = { webhookUrl: 'https://example.com/hook' };
+  const fast = { retryMs: 1, sleep: async () => {} };
+  let r = await postWebhook(MEETING, S, { ...fast, fetch: mk(200) });
+  assert.deepEqual(r, { ok: true, status: 200 });
+  assert.equal(seen[0].method, 'POST');
+  assert.equal(seen[0].headers['content-type'], 'application/json');
+  assert.equal(seen[0].credentials, 'omit');
+  assert.equal(seen[0].redirect, 'error');
+  seen.length = 0;
+  r = await postWebhook(MEETING, S, { ...fast, fetch: mk(503, 200) });
+  assert.deepEqual([r.ok, seen.length], [true, 2]);
+  seen.length = 0;
+  r = await postWebhook(MEETING, S, { ...fast, fetch: mk(new TypeError('Failed to fetch'), 502) });
+  assert.deepEqual([r.ok, r.status, seen.length], [false, 502, 2], 'one retry only');
+  seen.length = 0;
+  r = await postWebhook(MEETING, S, { ...fast, fetch: mk(400) });
+  assert.deepEqual([r.ok, r.status, seen.length], [false, 400, 1], 'a 4xx is not retried');
+  seen.length = 0;
+  r = await postWebhook(MEETING, S, { ...fast, timeoutMs: 20, fetch: mk('hang') });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /did not answer/);
+  assert.equal(seen.length, 2);
+  r = await postWebhook(MEETING, { webhookUrl: 'http://evil.example/x' }, { fetch: mk(200) });
+  assert.equal(r.ok, false, 'an invalid address is never called');
+  assert.equal(seen.length, 2);
+});
+
+await test('webhook: runWebhook records the outcome, skips when unset, and respects a missing permission', async () => {
+  const patches = [];
+  const patch = async (f) => patches.push(f);
+  const f = async () => ({ status: 200 });
+  assert.equal(await runWebhook(MEETING, { webhookUrl: '' }, patch, { fetch: f }), null);
+  assert.equal(patches.length, 0);
+  const ok = await runWebhook(MEETING, { webhookUrl: 'https://example.com/h' }, patch, { fetch: f });
+  assert.equal(ok.ok, true);
+  assert.ok(patches[0].webhookAt && patches[0].webhookError === null);
+  await runWebhook(MEETING, { webhookUrl: 'https://example.com/h' }, patch, { fetch: async () => ({ status: 404 }) });
+  assert.match(patches[1].webhookError, /HTTP 404/);
+  let called = 0;
+  globalThis.chrome = { permissions: { contains: async ({ origins }) => (called++, assert.deepEqual(origins, ['https://example.com/*']), false) } };
+  try {
+    const no = await runWebhook(MEETING, { webhookUrl: 'https://example.com/h' }, patch, { fetch: async () => { throw new Error('must not be called'); } });
+    assert.equal(no.error, NO_PERMISSION);
+    assert.equal(patches.at(-1).webhookError, 'Debrief has no permission for this address. Open Settings and save the webhook again.');
+    assert.equal(called, 1);
+  } finally {
+    delete globalThis.chrome;
+  }
+  const boom = await runWebhook(MEETING, { webhookUrl: 'https://example.com/h' }, async () => { throw new Error('store gone'); }, { fetch: f });
+  assert.equal(boom.ok, false, 'never throws');
+});
+
 console.log(`\n${passed} passed`);

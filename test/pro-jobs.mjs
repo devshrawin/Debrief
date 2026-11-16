@@ -24,19 +24,27 @@ async function test(name, fn) {
   try {
     for (const k of Object.keys(mem)) delete mem[k];
     sent.length = 0;
+    hooks.length = 0;
+    hookAnswer = () => ({ status: 200 });
     await fn();
     passed++;
     console.log(`ok   ${name}`);
   } catch (e) {
-    console.log(`FAIL ${name}\n     ${e.stack.split('\n').slice(0, 4).join('\n     ')}`);
+    console.log(`FAIL ${name}\n     ${e.stack.split("\n").slice(0, 14).join('\n     ')}`);
     process.exitCode = 1;
   }
 }
 
 const sent = [];
+const hooks = []; // webhook calls: [url, init]
+let hookAnswer = () => ({ status: 200 });
 globalThis.fetch = async (url, init) => {
+  if (!String(url).includes('script.google.com')) {
+    hooks.push([String(url), init]);
+    return hookAnswer(init);
+  }
   sent.push(JSON.parse(init.body));
-  return { status: 200, text: async () => JSON.stringify({ ok: true, to: 'me@x.com' }) };
+  return { status: 200, text: async () => JSON.stringify({ ok: true, to: String(JSON.parse(init.body).to || 'me@x.com') }) };
 };
 
 const SETTINGS = {
@@ -185,6 +193,154 @@ await test('only jobs that are active, not held and without a recent beat are re
     mk('g', { state: 'failed', beat: 1 }),
   ], now);
   assert.deepEqual(ids, ['a', 'e']);
+});
+
+// ---- the external-guest guard on automatic sharing ----
+const sharing = (extra = {}) => ({ ...SETTINGS, shareMode: 'auto', shareList: 'a@co.com, x@other.com, y@third.com', emailTo: 'me@co.com', ...extra });
+const notes = [];
+
+await test('guard: automatic sharing sends to the organisation, holds outsiders, and the notification only counts them', async () => {
+  seed();
+  mem.settings = sharing();
+  notes.length = 0;
+  const r = runner({ notify: (n) => notes.push(n) });
+  r.run('m1');
+  await r.whenIdle();
+  const m = await getMeeting('m1');
+  assert.equal(m.job.state, 'done');
+  assert.equal(sent.length, 2, 'the email to me and one share');
+  assert.equal(sent[1].to, 'a@co.com');
+  assert.ok(!JSON.stringify(sent[1]).includes('other.com'));
+  assert.deepEqual(m.shareHeld, ['x@other.com', 'y@third.com']);
+  assert.match(m.shareStatus, /^Not sent automatically to people outside your organisation: x@other\.com, y@third\.com\. Open the minutes and press Share to send to them\.$/);
+  assert.match(notes[0].message, /2 people outside your organisation/);
+  assert.ok(!/@/.test(notes[0].message + notes[0].title), 'no addresses in the notification');
+});
+
+await test('guard: switched off, or the organisation unknown, everyone is sent to and nothing is held', async () => {
+  for (const extra of [{ shareExternalGuard: false, myOrgDomains: 'co.com' }, { emailTo: 'me@gmail.com' }]) {
+    seed();
+    mem.settings = sharing(extra);
+    const r = runner();
+    r.run('m1');
+    await r.whenIdle();
+    const m = await getMeeting('m1');
+    assert.equal(sent.length, 2);
+    assert.equal(sent[1].to, 'a@co.com,x@other.com,y@third.com');
+    assert.equal(m.shareHeld, undefined);
+    sent.length = 0;
+  }
+});
+
+await test('guard: when everyone is outside, nothing is shared automatically and the job is still done', async () => {
+  seed();
+  mem.settings = sharing({ shareList: 'x@other.com' });
+  const r = runner();
+  r.run('m1');
+  await r.whenIdle();
+  const m = await getMeeting('m1');
+  assert.deepEqual([m.job.state, sent.length, m.shareHeld], ['done', 1, ['x@other.com']]);
+  assert.ok(!m.sharedAt);
+});
+
+// ---- the webhook ----
+const hooked = (extra = {}) => ({ ...SETTINGS, webhookUrl: 'https://example.com/hook', ...extra });
+const hookOpts = { webhook: { retryMs: 1, sleep: async () => {}, timeoutMs: 100 } };
+
+await test('webhook: the minutes are posted once they are stored, on the first write and on a rewrite, and the time is recorded', async () => {
+  seed();
+  mem.settings = hooked();
+  let r = runner(hookOpts);
+  r.run('m1');
+  await r.whenIdle();
+  let m = await getMeeting('m1');
+  assert.equal(hooks.length, 1);
+  assert.equal(hooks[0][0], 'https://example.com/hook');
+  const body = JSON.parse(hooks[0][1].body);
+  assert.match(body.minutesMarkdown, /Ship on Friday/);
+  assert.ok(!JSON.stringify(body).includes('We agreed to ship'), 'no transcript');
+  assert.ok(m.webhookAt && m.webhookError == null);
+  assert.equal(m.job.state, 'done');
+  r = runner(hookOpts);
+  r.run('m1', { force: true });
+  await r.whenIdle();
+  assert.equal(hooks.length, 2);
+});
+
+await test('webhook: a failing webhook never fails the job, and the email is still sent', async () => {
+  seed();
+  mem.settings = hooked();
+  hookAnswer = () => ({ status: 500 });
+  const r = runner(hookOpts);
+  r.run('m1');
+  await r.whenIdle();
+  const m = await getMeeting('m1');
+  assert.equal(hooks.length, 2, 'one retry');
+  assert.deepEqual([m.job.state, sent.length], ['done', 1]);
+  assert.ok(m.emailedAt);
+  assert.match(m.webhookError, /HTTP 500/);
+  assert.ok(!m.webhookAt);
+  hookAnswer = () => { throw new TypeError('Failed to fetch'); };
+  const r2 = runner(hookOpts);
+  r2.run('m1', { force: true });
+  await r2.whenIdle();
+  const m2 = await getMeeting('m1');
+  assert.equal(m2.job.state, 'done');
+  assert.match(m2.webhookError, /Could not reach the webhook/);
+});
+
+await test('webhook: not called when it is unset or invalid, nor when only the email is resumed', async () => {
+  for (const url of ['', 'http://example.com/hook', 'https://u:p@example.com/h']) {
+    seed();
+    sent.length = 0;
+    mem.settings = hooked({ webhookUrl: url });
+    const r = runner(hookOpts);
+    r.run('m1');
+    await r.whenIdle();
+    assert.equal(hooks.length, 0, url);
+    assert.equal((await getMeeting('m1')).webhookError, undefined);
+  }
+  sent.length = 0;
+  seed({ mom: '## Summary\nShip on Friday.', decided: true, job: { state: 'emailing', beat: 1 } });
+  mem.settings = hooked();
+  const r = runner(hookOpts);
+  r.run('m1', { resume: true });
+  await r.whenIdle();
+  assert.deepEqual([hooks.length, sent.length], [0, 1]);
+});
+
+await test('webhook: no permission for the address means no call and a message that says what to do', async () => {
+  seed();
+  mem.settings = hooked();
+  globalThis.chrome.permissions = { contains: async () => false };
+  try {
+    const r = runner(hookOpts);
+    r.run('m1');
+    await r.whenIdle();
+  } finally {
+    delete globalThis.chrome.permissions;
+  }
+  const m = await getMeeting('m1');
+  assert.equal(hooks.length, 0);
+  assert.equal(m.webhookError, 'Debrief has no permission for this address. Open Settings and save the webhook again.');
+  assert.equal(m.job.state, 'done');
+});
+
+await test('webhook: a slow webhook does not hold up the email', async () => {
+  seed();
+  mem.settings = hooked();
+  const order = [];
+  hookAnswer = (init) => new Promise((res) => { order.push('hook-start'); setTimeout(() => (order.push('hook-end'), res({ status: 200 })), 60); });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u, i) => { if (String(u).includes('script.google.com')) order.push('mail'); return real(u, i); };
+  try {
+    const r = runner(hookOpts);
+    r.run('m1');
+    await r.whenIdle();
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.deepEqual(order, ['hook-start', 'mail', 'hook-end']);
 });
 
 console.log(`\n${passed} passed`);
