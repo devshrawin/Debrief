@@ -49,6 +49,7 @@ async function refresh() {
   $('statusText').textContent = st.stopping ? 'Finishing transcription…' : st.recording ? (st.paused ? 'Paused' : st.room ? 'Recording the room' : 'Recording') : 'Idle';
   show('pause', !!recording);
   show('fullscreen', !!recording);
+  show('liveLink', !!(recording && st.meetingId));
   $('pause').textContent = st.paused ? 'Resume recording' : 'Pause recording';
   $('pause').setAttribute('aria-pressed', String(!!st.paused));
   $('timer').textContent = st.recording ? fmtTime((Date.now() - st.startedAt) / 1000) : '';
@@ -389,6 +390,11 @@ $('start').onclick = async () => {
     $('start').disabled = false;
     refresh();
   }
+};
+
+$('liveLink').onclick = async () => {
+  const st = await getState();
+  if (st.meetingId) chrome.tabs.create({ url: chrome.runtime.getURL(`live.html?id=${encodeURIComponent(st.meetingId)}`) });
 };
 
 $('fullscreen').onclick = async () => {

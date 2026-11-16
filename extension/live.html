@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live · Debrief</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="fx/theme.js"></script>
+</head>
+<body>
+<main class="lv-main">
+  <header class="lv-head">
+    <div class="lv-crumb">
+      <div class="crumb"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint" style="margin:0">/ Live</span></div>
+      <a id="minutesLink" class="button hidden" href="mom.html">Open minutes</a>
+    </div>
+    <div class="lv-titlerow">
+      <h1>Live</h1>
+      <span id="chip" class="badge lv-chip"><span class="recdot hidden" id="chipDot" aria-hidden="true"></span><span id="chipText">Looking for the meeting…</span></span>
+    </div>
+    <p id="mtitle" class="lede lv-mtitle"></p>
+    <p id="latency" class="hint"></p>
+    <p id="latencyHint" class="hint hidden"></p>
+    <p id="stateNote" class="sr-only" role="status"></p>
+  </header>
+
+  <div class="lv-grid">
+    <section class="lv-tr" aria-label="Transcript">
+      <div id="log" class="lv-log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Transcript so far" tabindex="0"><p id="empty" class="lv-empty">Looking for the meeting…</p></div>
+      <button id="newLines" class="primary lv-new hidden" type="button">New lines <span aria-hidden="true">↓</span></button>
+    </section>
+
+    <aside class="lv-side" aria-label="Summary and questions">
+      <h2 class="lv-h">Summary so far</h2>
+      <div class="lv-panel">
+        <p class="hint" style="margin:0">One summary of what has been said up to now. Press it again for a newer one.</p>
+        <div class="row" style="margin-top:12px">
+          <button id="sumGo" class="primary" type="button">Summarise so far</button>
+          <button id="sumStop" class="hidden" type="button">Stop</button>
+        </div>
+        <p id="sumStatus" class="hint lv-status" role="status"></p>
+        <div id="sumNotice" class="ask-notice hidden" role="alert"></div>
+        <div id="sumOut" class="lv-sum hidden">
+          <p id="sumLabel" class="lv-prov"></p>
+          <div id="sumBody" class="lv-md"></div>
+        </div>
+      </div>
+
+      <h2 class="lv-h">Ask about this meeting</h2>
+      <div id="askBox"></div>
+      <p class="hint" id="privacy">Your question and the transcript so far go to the model you chose for the minutes. No audio is sent. Answers can be wrong.</p>
+    </aside>
+  </div>
+</main>
+<script src="dist/live.js"></script>
+</body>
+</html>
