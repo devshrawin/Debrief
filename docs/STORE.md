@@ -1,6 +1,6 @@
 # Chrome Web Store listing
 
-Source: docs/redesign/Brand.dc.html.
+Source: the brand sheet (no longer kept in the repo).
 
 ## Short description (115 of 132 characters)
 

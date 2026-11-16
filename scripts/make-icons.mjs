@@ -11,7 +11,7 @@ const DIR = path.resolve('extension/icons');
 const main = readFileSync(path.join(DIR, 'icon.svg'), 'utf8');
 const inner = main.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
 
-// 16 px hinted variant from docs/redesign/Brand.dc.html (bars and line snapped to whole-ish pixels).
+// 16 px hinted variant from the brand sheet (bars and line snapped to whole-ish pixels).
 const hinted16 = `<rect width="16" height="16" rx="4" fill="#3a33a8"/><rect x="2" y="2.5" width="12" height="9" rx="2.5" fill="#fff"/><path d="M4 11h3l-3 3z" fill="#fff"/><rect x="3.5" y="4" width="9" height="1.6" rx=".8" fill="#ff7a1a"/><rect x="5" y="5" width="1.6" height="4" rx=".8" fill="#3a33a8"/><rect x="7.2" y="5" width="1.6" height="5" rx=".8" fill="#3a33a8"/><rect x="9.4" y="5" width="1.6" height="3" rx=".8" fill="#3a33a8"/>`;
 
 const svg = (vb, body, defs = '') => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb} ${vb}">${defs}${body}</svg>`;

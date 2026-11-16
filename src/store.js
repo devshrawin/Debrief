@@ -28,7 +28,7 @@ export const DEFAULTS = {
   dictAutoAlias: false, // accept clear-cut learned fixes (3+ sightings) without asking
   dictionary: '', // names and terms, one per line: Right | misheard, as, this
   minutesMode: 'thorough', // thorough = extract, write, then check; quick = one pass
-  sttGeminiChunk: 'standard', // standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
+  sttGeminiChunk: 'standard', // short = about 40 s (the live transcript keeps up; more requests); standard = 100-150 s chunks; long = about 240 s (fewer requests per meeting)
   minutesFormat: 'standard', // amnex = the organisation template (header block, attendee tables; Print/PDF, Word, email); standard = Debrief's own layout
   orgName: '', // organisation template: name, confidentiality line (page footer) and accent colour; empty = generic. Settings has a "Use Amnex preset" button
   orgConfidential: '',
@@ -49,6 +49,22 @@ export const DEFAULTS = {
   voiceLearn: false, // learn voices on its own from Meet's captions (needs captions read) and fingerprints of the meeting
   followMeetMute: true, // ignore my mic while Meet's own mic button is muted
   momLanguage: 'English',
+
+  // ---- 1.4.0 ----
+  minutesEngine: 'structured', // structured = one JSON call (decisions, actions, risks, questions) rendered by code, with the classic pipeline as the fallback; classic = extract, write, check
+  actionCarry: true, // open action items of the previous meeting in the same series are reviewed in the next one
+  webhookUrl: '', // optional: POST the structured minutes (JSON) here when they are written
+  shareExternalGuard: true, // never auto-share with addresses outside my organisation's domains; ask first
+  keepAudio: false, // keep the compressed recording on this computer so a line can be played back and re-transcribed
+  keepAudioDays: 14, // ...for this many days (0 = until the meeting is deleted)
+  screenNotes: false, // describe what is shown on the shared screen (costs model requests)
+  screenNotesEverySec: 30, // at most one screen description per this many seconds, and only when the picture changed
+  consentNotice: false, // post a notice in the meeting chat when recording starts (Google Meet)
+  consentText: 'This meeting is being transcribed by Debrief to write the minutes.',
+  recordNudge: true, // remind me to record when a call matches one of my meeting types
+  nudgeSkipOneOnOne: true, // ...but not when only two people are in the call
+  askExpand: true, // let the model rewrite a question into search words in every script before searching all meetings
+  voiceModelUrl: '', // where to download the speaker model from when it is not bundled (lite build)
 
   geminiKey: '', // shared by Gemini transcription and the Gemini MOM writer
   geminiKey2: '', // optional backup key from a different Google Cloud project

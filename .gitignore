@@ -7,3 +7,7 @@ brag-output/work/
 brag-output/*.mp4
 brag-output/*.jpg
 docs/img/audit/
+extension/dist/
+extension/vendor/ort/
+fx/.tmp/
+test/eval/out/
