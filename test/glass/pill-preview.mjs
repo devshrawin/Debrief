@@ -11,12 +11,12 @@ const css = src.slice(src.indexOf('const CSS = `') + 13, src.indexOf('`;', src.i
 const MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 const pill = (mic, label, extra = '', alert = false) => `<div class="wrap"><div class="pill${alert ? ' alert' : ''}"><span class="rec"></span><span class="eq live"><i></i><i></i><i></i><i></i></span><span class="time">12:48</span>${extra}<button class="mic ${mic}">${MIC}${label}</button></div></div>`;
 const panel = `<div class="wrap"><div class="panel"><h4>Debrief <b>is recording</b></h4>
-  <div class="meter"><div class="top"><span>Meeting audio</span><span>good</span></div><div class="bar"><div class="fill" style="width:70%"></div></div></div>
-  <div class="meter"><div class="top"><span>Your mic</span><span>very quiet</span></div><div class="bar"><div class="fill low" style="width:18%"></div></div></div>
+  <div class="meter"><div class="top"><span>Meeting audio</span><span>Good</span></div><div class="bar"><div class="fill" style="width:70%"></div></div></div>
+  <div class="meter"><div class="top"><span>Your mic</span><span>Quiet</span></div><div class="bar"><div class="fill low" style="width:18%"></div></div></div>
   <div class="alertbox key"><strong><span>⚠ Gemini limit reached</span><button>×</button></strong><p>Audio is kept and sent when the limit resets.</p></div>
-  <div class="stats"><div class="stat"><b>38</b><span>transcript segments</span></div><div class="stat err"><b>1</b><span>chunks failed</span></div></div>
-  <label class="switch"><span>Ignore my mic while Meet is muted</span><input type="checkbox" checked><span class="track"></span></label>
-  <button class="stop">Stop and write the minutes</button></div>${pill('on', 'Mic on')}</div>`;
+  <div class="stats"><div class="stat"><b>38</b><span>transcript pieces</span></div><div class="stat err"><b>1</b><span>errors</span></div></div>
+  <label class="switch"><span>Include my microphone</span><input type="checkbox" checked><span class="track"></span></label>
+  <button class="stop">Stop and write minutes</button></div>${pill('on', 'Mic on')}</div>`;
 const html = `<!doctype html><html><head><style>${css}
  body{margin:0;font-family:system-ui;display:grid;grid-template-columns:1fr 1fr;gap:0}
  .bg{padding:28px;display:flex;flex-direction:column;gap:18px;align-items:flex-end;min-height:560px}

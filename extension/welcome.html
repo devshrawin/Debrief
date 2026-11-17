@@ -40,6 +40,8 @@
     .kicker { color: var(--brand); }
     .lede { margin: 0; font-size: 16px; color: var(--muted); overflow-wrap: anywhere; }
     .wrap .card { padding: 24px; display: flex; flex-direction: column; gap: 14px; overflow-wrap: anywhere; }
+    .wrap > .card, .wrap > .callout { margin: 0; }
+    .checklist li .btn { min-width: 88px; }
     .wrap .card.tight { padding: 8px 24px; gap: 0; }
     .wrap .card p { margin: 0; }
     .wrap .card p.hint { margin: 0; }
@@ -78,7 +80,7 @@
     .promise { flex-direction: row !important; align-items: flex-start; gap: 16px !important; }
     .promise svg { flex: none; stroke: var(--ok); }
     .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .mini { background: var(--sunk); border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; }
+    .mini { background: var(--sunk); border-radius: 11px; padding: 12px 14px; }
     .mini b { display: block; margin-bottom: 3px; }
     .callout svg { flex: none; margin-top: 2px; }
     .callout p { margin: 0; }

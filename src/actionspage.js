@@ -3,6 +3,7 @@
 import { openActionsAcrossMeetings, setActionDone } from './jobs.js';
 import { listMeetingMetas, getSettings } from './store.js';
 import * as L from './actionslogic.js';
+import { fmtDay, fmtDue } from './datefmt.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
@@ -13,7 +14,7 @@ const el = (tag, props = {}, ...kids) => {
 const MODE_KEY = 'db.actions.mode';
 const MODES = ['meeting', 'owner', 'due'];
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-const day = (ms) => (Number.isFinite(ms) ? new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+const day = fmtDay;
 
 const state = { open: [], done: [], hasItems: false, classic: false, mode: 'meeting', showDone: false, q: '', loaded: false };
 try {
@@ -47,19 +48,23 @@ function shown() {
 function rowEl(a, mode) {
   const done = a.status === 'done';
   const cb = el('input', { type: 'checkbox', checked: done });
-  const label = el('label', { className: 'ac-tick' }, cb, el('span', { className: 'sr-only', textContent: `${done ? 'Mark not done' : 'Mark done'}: ${a.text}` }));
+  const text = L.plainInline(a.text);
+  const label = el('label', { className: 'ac-tick' }, cb, el('span', { className: 'sr-only', textContent: `${done ? 'Mark not done' : 'Mark done'}: ${text}` }));
   const meta = el('div', { className: 'ac-meta' });
   const bit = (node) => meta.append(node);
   if (mode !== 'owner') bit(el('span', { textContent: `Owner: ${a.owner || 'Not stated'}` }));
   if (a.due) {
-    const due = el('span', { className: 'ac-due' }, `Due: ${a.due}`);
+    const due = el('span', { className: 'ac-due' }, el('span', { textContent: `Due: ${fmtDue(a.due, a.date)}` }));
     if (a.overdue && !done) due.append(el('span', { className: 'chip warn', textContent: 'Overdue' }));
     bit(due);
   }
   if (done && a.doneAt) bit(el('span', { textContent: `Done ${day(a.doneAt)}` }));
-  if (mode !== 'meeting') bit(el('a', { className: 'ac-src', href: `mom.html?id=${encodeURIComponent(a.meetingId)}#actions`, textContent: [a.title || 'Untitled meeting', day(a.date)].filter(Boolean).join(', ') }));
-  if (a.at) bit(el('span', { className: 'ac-at', textContent: `[${a.at}]` }));
-  const li = el('li', { className: `ac-row${done ? ' is-done' : ''}` }, label, el('div', { className: 'ac-body' }, el('div', { className: 'ac-text', textContent: a.text }), meta));
+  // the source and the time of the line it came from are one item, so the time never drops onto a line of its own
+  const where = el('span', { className: 'ac-where' });
+  if (mode !== 'meeting') where.append(el('a', { className: 'ac-src', href: `mom.html?id=${encodeURIComponent(a.meetingId)}#actions`, textContent: [a.title || 'Untitled meeting', day(a.date)].filter(Boolean).join(', ') }));
+  if (a.at) where.append(mode !== 'meeting' ? ' ' : '', el('span', { className: 'ac-at', textContent: `[${a.at}]` }));
+  if (where.childNodes.length) bit(where);
+  const li = el('li', { className: `ac-row${done ? ' is-done' : ''}` }, label, el('div', { className: 'ac-body' }, el('div', { className: 'ac-text', textContent: text }), meta));
   li.dataset.key = `${a.meetingId}/${a.id}`;
   cb.onchange = () => tick(a, cb, li);
   return li;
@@ -72,7 +77,7 @@ function render(focusAt) {
   for (const b of $('modes').querySelectorAll('button')) {
     const on = b.dataset.mode === state.mode;
     b.classList.toggle('active', on);
-    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-checked', String(on));
   }
   const list = shown();
   const box = $('list');
@@ -131,11 +136,11 @@ async function tick(a, cb, li) {
   }
   // the row may be gone: the keyboard carries on from the next one
   await load(leaving ? { index } : { key: `${a.meetingId}/${a.id}` });
-  announce(want ? `Marked done: ${a.text}` : `Reopened: ${a.text}`, want ? async () => {
+  announce(want ? `Marked done: ${L.plainInline(a.text)}` : `Reopened: ${L.plainInline(a.text)}`, want ? async () => {
     try {
       await setActionDone(a.meetingId, a.id, false);
       await load();
-      announce(`Reopened: ${a.text}`);
+      announce(`Reopened: ${L.plainInline(a.text)}`);
     } catch (e) {
       announce(`Could not undo: ${e.message}`);
     }

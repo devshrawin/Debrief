@@ -109,7 +109,7 @@ try {
   const t0 = await pg.evaluate(`({ rows: document.querySelectorAll('#dirTable .dir-body .dir-row').length, first: document.querySelector('#dirTable .dir-in').value, chair: document.querySelector('#dirTable .dir-chair').checked, hidden: document.getElementById('peopleDirectory').hidden })`);
   check('the people directory shows as a table with both people, Chair ticked, text field hidden', t0.rows === 2 && t0.first === 'Suresh K.' && t0.chair && t0.hidden, JSON.stringify(t0));
   await pg.evaluate(`(() => { const i = document.querySelectorAll('#dirTable .dir-in')[0]; i.value = 'Suresh Kumar'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-  await pg.evaluate(`(() => { const i = document.querySelector('#dirTable .dir-body .dir-row:last-child .c-name'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
+  await pg.evaluate(`(() => { const i = document.querySelector('#dirTable .dir-body .dir-row:last-child input.c-name'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
   await sleep(300);
   const t1 = await pg.evaluate(`({ rows: document.querySelectorAll('#dirTable .dir-body .dir-row').length, text: document.getElementById('peopleDirectory').value, bar: document.getElementById('savebar').className })`);
   check('editing a cell writes the text, Enter adds a person, and Settings sees unsaved changes', t1.rows === 3 && /^Suresh Kumar \| Sri\./.test(t1.text) && /dirty/.test(t1.bar), JSON.stringify(t1));

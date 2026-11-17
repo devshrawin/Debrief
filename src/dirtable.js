@@ -85,7 +85,7 @@ export function mountDirectoryTable(textarea, host) {
 
   function draw(focus) {
     host.replaceChildren();
-    const head = make('div', { class: 'dir-row dir-head', role: 'row' }, ...COLS.map((c) => make('span', { class: `dir-h ${c.cls}`, role: 'columnheader' }, c.label)), make('span', { class: 'dir-h c-chair', role: 'columnheader' }, 'Chair'), make('span', { class: 'c-x' }));
+    const head = make('div', { class: 'dir-row dir-head', role: 'row', 'aria-hidden': 'true' }, ...COLS.map((c) => make('span', { class: `dir-h ${c.cls}`, role: 'columnheader' }, c.label)), make('span', { class: 'dir-h c-chair', role: 'columnheader' }, 'Chair'), make('span', { class: 'c-x' }));
     const body = make('div', { class: 'dir-body', role: 'rowgroup' });
     rows.forEach((r, ri) => {
       const cells = COLS.map((c) => {
@@ -112,13 +112,14 @@ export function mountDirectoryTable(textarea, host) {
           }
         });
         input.dataset.key = `${ri}.${c.key}`;
-        return input;
+        return make('label', { class: `dir-cell ${c.cls}` }, make('span', { class: 'dir-lab' }, c.label), input);
       });
-      const chair = make('input', { class: 'dir-chair c-chair', type: 'checkbox', 'aria-label': `${r.name || `Person ${ri + 1}`} is the usual chairperson` });
-      chair.checked = !!r.chair;
-      chair.addEventListener('change', () => {
-        rows.forEach((x, i) => (x.chair = i === ri ? chair.checked : x.chair)); // more than one chair is allowed: different meetings
-        r.chair = chair.checked;
+      const chairBox = make('input', { class: 'dir-chair', type: 'checkbox', 'aria-label': `${r.name || `Person ${ri + 1}`} is the usual chairperson` });
+      const chair = make('label', { class: 'dir-cell c-chair dir-chairlab' }, chairBox, make('span', { class: 'dir-lab' }, 'Chair'));
+      chairBox.checked = !!r.chair;
+      chairBox.addEventListener('change', () => {
+        rows.forEach((x, i) => (x.chair = i === ri ? chairBox.checked : x.chair)); // more than one chair is allowed: different meetings
+        r.chair = chairBox.checked;
         emit();
       });
       const del = make('button', { class: 'dir-x c-x', type: 'button', title: 'Remove this person', 'aria-label': `Remove ${r.name || `person ${ri + 1}`}` }, '×');
@@ -129,7 +130,7 @@ export function mountDirectoryTable(textarea, host) {
       });
       body.append(make('div', { class: 'dir-row', role: 'row' }, ...cells, chair, del));
     });
-    const add = make('button', { class: 'btn sm dir-add', type: 'button' }, '+ Add a person');
+    const add = make('button', { class: 'btn sm dir-add', type: 'button' }, '+ Add a row');
     add.addEventListener('click', () => {
       rows.push(blank());
       draw(`${rows.length - 1}.name`);

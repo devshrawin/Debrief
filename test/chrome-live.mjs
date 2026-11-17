@@ -128,6 +128,9 @@ try {
     meetingIds: ['lv1', 'lv2'],
   })`);
 
+  // lv1 is being recorded: the background's recording state says so (it lives in session storage)
+  const setRec = (extra = {}) => opts.evaluate(`chrome.storage.session.set({ rec: ${JSON.stringify({ recording: true, meetingId: 'lv1', tabId: 1, startedAt: now - 300000, mic: true, micOn: true, micWanted: true, ...extra })} })`);
+  await setRec();
   const p = await openPage(`chrome-extension://${id}/live.html?id=lv1`, 2500);
   check('lines render, with the time, who and text', (await p.evaluate(`document.querySelectorAll('.lv-line:not(.screen)').length`)) === 5 && (await p.evaluate(`document.querySelector('.lv-line .who').textContent`)) === 'Amal');
   check('the screen note shows as "On screen (Priya): …"', await p.evaluate(`!!document.querySelector('.lv-line.screen') && /^01:20On screen \\(Priya\\): Slide: Q2 budget table$/.test(document.querySelector('.lv-line.screen').textContent)`));
@@ -163,27 +166,33 @@ try {
   await bcast({ kind: 'state', item: { recording: true, paused: false, startedAt: Date.now() - 125000 } });
   await sleep(500);
   check('a state broadcast gives "Recording · mm:ss"', await p.evaluate(`/^Recording · 0[23]:\\d\\d$/.test(document.getElementById('chipText').textContent)`), await p.evaluate(`document.getElementById('chipText').textContent`));
+  await setRec({ paused: true });
   await bcast({ kind: 'state', item: { recording: true, paused: true, startedAt: Date.now() - 125000 } });
   await sleep(400);
   check('paused shows Paused', (await p.evaluate(`document.getElementById('chipText').textContent`)) === 'Paused');
+  await setRec();
 
   // scroll behaviour: fill the log, follow at the bottom, leave the reader alone when they scrolled up
   await opts.evaluate(`(async () => { const k = 'meeting:lv1'; const m = (await chrome.storage.local.get(k))[k]; for (let i = 0; i < 60; i++) m.segments.push({ t: 300 + i * 7, src: i % 3 ? 'others' : 'me', text: 'Filler line number ' + i + ' about the plan.' }); await chrome.storage.local.set({ [k]: m }); })()`);
   await until(async () => (await lineCount(p, 'Filler line number 59')) === 1, 9000);
   await sleep(300);
-  const nearBottom = `(() => { const l = document.getElementById('log'); return l.scrollHeight - l.scrollTop - l.clientHeight < 60; })()`;
-  check('at the bottom the log follows new lines', (await p.evaluate(nearBottom)) && (await p.evaluate(`document.getElementById('log').scrollHeight > document.getElementById('log').clientHeight + 200`)));
+  // the page is the only scroller: the transcript flows in the window
+  const nearBottom = `(() => { const l = document.scrollingElement; return l.scrollHeight - l.scrollTop - l.clientHeight < 60; })()`;
+  check('at the bottom the log follows new lines', (await p.evaluate(nearBottom)) && (await p.evaluate(`document.scrollingElement.scrollHeight > innerHeight + 200`)));
   await bcast({ kind: 'segment', item: { t: 900, src: 'others', text: 'FOLLOWED line one at the bottom.' } });
   await sleep(400);
   check('a new line keeps the view at the bottom', await p.evaluate(nearBottom));
-  await p.evaluate(`document.getElementById('log').scrollTop = 0`);
+  await p.evaluate(`window.scrollTo(0, 0)`);
   await sleep(400);
   await bcast({ kind: 'segment', item: { t: 910, src: 'others', text: 'UNREAD line while scrolled up.' } });
   await sleep(500);
-  check('scrolled up: the view is not moved and "New lines" shows', (await p.evaluate(`document.getElementById('log').scrollTop`)) < 5 && (await p.evaluate(`!document.getElementById('newLines').classList.contains('hidden')`)));
+  check('scrolled up: the view is not moved and "New lines" shows', (await p.evaluate(`document.scrollingElement.scrollTop`)) < 5 && (await p.evaluate(`!document.getElementById('newLines').classList.contains('hidden')`)));
   await p.evaluate(`document.getElementById('newLines').click()`);
   await sleep(400);
   check('"New lines" jumps to the bottom and hides', (await p.evaluate(nearBottom)) && (await p.evaluate(`document.getElementById('newLines').classList.contains('hidden')`)));
+
+  check('only the page scrolls: the transcript has no scroller of its own, the header stays at the top, the side column stays in view', await p.evaluate(`(() => { const log = document.getElementById('log'); const head = document.querySelector('.lv-head'); window.scrollTo(0, 400); const t = head.getBoundingClientRect().top; const side = getComputedStyle(document.querySelector('.lv-side')).position; return getComputedStyle(log).overflowY === 'visible' && log.scrollHeight <= log.clientHeight + 1 && t >= 0 && t < 40 && (innerWidth < 900 || side === 'sticky'); })()`));
+  await p.evaluate(`window.scrollTo(0, 0)`);
 
   // summary so far, against the local model
   const before = asked.length;
@@ -214,22 +223,28 @@ try {
   await bcast({ kind: 'state', item: { recording: true, paused: false, startedAt: Date.now() - 900000 } });
   await sleep(300);
 
+  check('while recording there is no "Open minutes" and "Summarise so far" is the primary button', await p.evaluate(`document.getElementById('minutesLink').classList.contains('hidden') && document.getElementById('sumGo').classList.contains('primary')`));
+
   // the meeting ends: Ended, and the link to the minutes
   await opts.evaluate(`(async () => { const k = 'meeting:lv1'; const m = (await chrome.storage.local.get(k))[k]; m.endedAt = Date.now(); await chrome.storage.local.set({ [k]: m }); })()`);
   check('an ended meeting shows Ended and "Open minutes"', await until(() => p.evaluate(`document.getElementById('chipText').textContent === 'Ended' && !document.getElementById('minutesLink').classList.contains('hidden') && /mom\\.html\\?id=lv1$/.test(document.getElementById('minutesLink').getAttribute('href'))`), 8000));
+  check('once it has ended "Open minutes" is the primary button and the note about pieces of text is gone', await p.evaluate(`document.getElementById('minutesLink').classList.contains('primary') && !document.getElementById('sumGo').classList.contains('primary') && document.getElementById('latency').classList.contains('hidden')`));
 
   files.push(await shot(p, 'live-ended', { width: 1280, dark: false }));
 
+  await opts.evaluate(`chrome.storage.session.remove('rec')`);
   // no id and nothing recording
   const e = await openPage(`chrome-extension://${id}/live.html`, 2500);
   check('with nothing recording it says so and links to the meetings', await e.evaluate(`/^Nothing is being recorded right now\\./.test(document.getElementById('log').textContent) && document.querySelector('#log a')?.getAttribute('href') === 'ask.html'`), await e.evaluate(`document.getElementById('log').textContent`));
   files.push(await shot(e, 'live-empty', { width: 1280, dark: false }));
   // a meeting with nothing said yet
+  // it is really being recorded: the background says so (the recording state lives in session storage)
+  await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'lv3', tabId: 1, startedAt: Date.now() - 20000, mic: true, micOn: true, micWanted: true } })`);
   await opts.evaluate(`chrome.storage.local.set({ 'meeting:lv3': { id: 'lv3', title: 'Just started', startedAt: Date.now() - 20000, segments: [], errors: [] }, meetingIds: ['lv3', 'lv1', 'lv2'] })`);
   const w = await openPage(`chrome-extension://${id}/live.html?id=lv3`, 2500);
   check('a meeting with no speech yet says it is waiting', await w.evaluate(`document.getElementById('empty')?.textContent === 'Waiting for the first piece of speech…'`));
-  const sumNo = await w.evaluate(`(document.getElementById('sumGo').click(), new Promise((r) => setTimeout(() => r(document.getElementById('sumStatus').textContent), 800)))`);
-  check('the summary refuses politely when little has been said', sumNo === 'Not enough has been said yet.', sumNo);
+  check('a recording with nothing said yet reads "Recording", not "Ended"; no "Open minutes"', await w.evaluate(`/^Recording/.test(document.getElementById('chipText').textContent) && document.getElementById('minutesLink').classList.contains('hidden')`), await w.evaluate(`document.getElementById('chipText').textContent`));
+  check('"Summarise so far" waits until there is enough to summarise', await w.evaluate(`document.getElementById('sumGo').disabled`));
   files.push(await shot(w, 'live-waiting', { width: 1280, dark: true }));
 
   check('no errors on any page', errors.length === 0, errors.slice(0, 3).join(' | '));

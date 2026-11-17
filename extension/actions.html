@@ -16,10 +16,10 @@
     <p class="ac-counts" id="counts" role="status"></p>
   </div>
   <div class="ac-tools hidden" id="tools">
-    <div class="seg-ctl" id="modes" role="group" aria-label="Group by">
-      <button type="button" data-mode="meeting">By meeting</button>
-      <button type="button" data-mode="owner">By owner</button>
-      <button type="button" data-mode="due">By due date</button>
+    <div class="seg-ctl" id="modes" role="radiogroup" aria-label="Group by">
+      <button type="button" role="radio" aria-checked="false" data-mode="meeting">By meeting</button>
+      <button type="button" role="radio" aria-checked="false" data-mode="owner">By owner</button>
+      <button type="button" role="radio" aria-checked="false" data-mode="due">By due date</button>
     </div>
     <label class="sr-only" for="q">Filter by owner or text</label>
     <input id="q" type="search" placeholder="Filter by owner or text" autocomplete="off">

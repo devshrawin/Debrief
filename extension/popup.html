@@ -54,6 +54,10 @@
     header.recbar { box-shadow: none; }
     header.recbar::after, header.recbar::before { box-shadow: none; }
     .lv { }
+    /* the three quiet buttons while recording are one size; Stop is the only bigger one */
+    #pause, #fullscreen, #liveLink { width: 100%; min-height: 44px; padding-block: 8px; font-size: 14.5px; border-radius: 12px; }
+    /* the beam is the card's outline while it runs: no second border inside it */
+    html:not(.fx-off):not(.solid) header.recbar[data-active] { border-color: transparent; }
     .big.stopbtn { background: var(--rec); border-color: var(--rec); color: var(--on-rec); font-weight: 700; gap: 10px; }
     .big.stopbtn:hover:not(:disabled) { background: var(--rec); filter: brightness(0.93); color: var(--on-rec); }
 
@@ -65,7 +69,8 @@
 
     .linkrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .linkrow a { font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
-    #diagnose { min-height: 36px; padding: 4px 6px; font-size: 13px; color: var(--muted); }
+    #diagnose { min-height: 36px; padding: 4px 6px; font: var(--t-subheadline); font-weight: 600; color: var(--tint); text-decoration: underline; }
+    #diagnose:hover:not(:disabled) { background: transparent; }
     #diagnose[aria-expanded="true"]::after { content: "\2191"; }
     #diagnose[aria-expanded="false"]::after { content: "\2193"; }
     #diagResult { border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; align-items: center; }

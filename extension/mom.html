@@ -41,7 +41,7 @@
     #del { background: none; box-shadow: none; border: 0; min-height: 32px; padding: 4px 8px; font: var(--t-footnote); font-weight: 600; color: var(--rec-ink); text-decoration: underline; margin-left: auto; }
     #nameWhy { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--r-md); background: var(--fill); color: var(--label-2); font: var(--t-footnote); line-height: 1.5; }
     #nameWhy.hidden { display: none; }
-    .seg-ctl.small > button { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+    .seg-ctl.small > button { min-height: 32px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
     details.box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin: 0; }
     details.box > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; padding: 0 18px; border-radius: 14px; }
     details.box > summary::-webkit-details-marker { display: none; }
@@ -80,7 +80,12 @@
     .toolbar .stat { display: inline-flex; gap: 8px; align-items: center; min-width: 0; overflow-wrap: anywhere; margin: 0; }
     .toolbar .stat:empty { display: none; }
     .toolbar .stat.busy::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--brand); border-right-color: transparent; animation: sp 0.8s linear infinite; flex: none; }
+    .acts { align-items: center; }
     .acts button { font-size: 13.5px; padding: 6px 12px; }
+    /* the email button and its option are one group, set apart from the buttons before it */
+    .mailgrp { display: inline-flex; align-items: center; gap: 12px; margin-inline-start: 8px; padding-inline-start: 14px; border-inline-start: 1px solid var(--separator); }
+    .mailgrp .chk { margin: 0; }
+    .mailgrp input[type="checkbox"] { margin: 0; vertical-align: baseline; }
 
     /* share */
     .sharebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -133,6 +138,8 @@
     #mom .added > :last-child { margin-bottom: 0; }
     #mom .added p.note, #mom .added p.note em { font-size: 12.5px; color: var(--muted); font-style: normal; }
     #mom p.foot, #mom p.foot em { margin-top: 18px; font-size: 12.5px; color: var(--muted); font-style: normal; }
+    /* the official sheet fills its card with the same space on every side */
+    @media screen { #mom:has(> .amx) { padding: 20px; } #mom:has(> .amx) > .amx { max-width: none !important; margin: 0 !important; border-radius: var(--r-sm); } #mom:has(> .amx) > :first-child { margin-top: 0; } }
     #mom.streaming > :last-child::after { content: ""; display: inline-block; width: 8px; height: 18px; margin-left: 3px; background: var(--brand); vertical-align: text-bottom; animation: bl 1s steps(2) infinite; }
     @keyframes bl { 50% { opacity: 0; } }
     #mom .skel { display: flex; flex-direction: column; gap: 10px; padding-top: 24px; }
@@ -205,6 +212,8 @@
       .seg .text { grid-column: 1 / -1; }
       .tabs button { padding: 0 12px; }
       #shareStatus { text-align: left; flex-basis: 100%; }
+      #del { margin-left: 0; }
+      .mailgrp { flex-basis: 100%; margin-inline-start: 0; padding-inline-start: 0; border-inline-start: 0; }
     }
     @media print {
       .no-print, .tabs, .toolbar, details, #errors, #pendingBox, .crumb { display: none !important; }
@@ -289,8 +298,8 @@
         <button id="dlMd">.md</button>
         <button id="dlDoc">Word</button>
         <button id="print">Print / PDF</button>
-        <label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript"> Attach transcript to my email</label>
-        <button id="mail" title="Send this MOM to your email">Email me</button>
+        <span class="mailgrp"><label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript">Attach transcript to my email</label>
+        <button id="mail" title="Send this MOM to your email">Email me</button></span>
       </div>
     </div>
     <section id="editor" class="editor no-print hidden" aria-label="Edit the minutes">

@@ -28,6 +28,14 @@ export function clockText(sec) {
   return `${h ? `${h}:${pad(m)}` : pad(m)}:${pad(sec % 60)}`;
 }
 
+// Inline emphasis markers ("**bold**", "*italic*", "_x_", `code`) as plain text. Only markers that wrap a word are removed; the text is never turned into HTML.
+export function plainInline(text) {
+  return String(text ?? '')
+    .replace(/(\*\*|__)(?=\S)(.+?)(?<=\S)\1/g, '$2')
+    .replace(/(^|[\s(])([*_])(?=[^\s*_])(.+?)(?<=[^\s*_])\2(?=$|[\s).,;:!?])/g, '$1$3')
+    .replace(/`([^`]+)`/g, '$1');
+}
+
 // ---- time references inside the minutes: "[12:40]" -------------------------------------------------------------
 
 // Every "[mm:ss]" or "[h:mm:ss]" in a piece of text: where it is, how long it is, its label and its second.

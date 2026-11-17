@@ -36,7 +36,7 @@ const el = (tag, props = {}, ...kids) => {
 // kind: '' (neutral) | 'info' | 'warn' | 'bad' | 'ok'. `true` means 'bad', as older callers pass it.
 const setMsg = (t, kind = '') => {
   $('enrolMsg').textContent = t;
-  $('enrolMsg').className = `msgbox ${kind === true ? 'bad' : kind || ''}`.trim();
+  $('enrolMsg').className = `status ${kind === true ? 'bad' : kind || ''}`.trim();
 };
 const READY_MSG = 'Type a name, then press Record and read the text above. Use the mic you use in meetings.';
 const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
@@ -73,7 +73,7 @@ function closeClient() {
 
 const LANG_NAME = { en: 'English', hi: 'Hindi', ml: 'Malayalam', free: 'free speech' };
 const ORDER = ['en', 'hi', 'ml', 'free'];
-const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+import { fmtDay as fmtDate } from './datefmt.js';
 
 function badgeOf(p) {
   if (!p.auto) return ['Recorded', 'brand'];
@@ -94,7 +94,7 @@ function closeMenu(refocus) {
 }
 
 function moreMenu(p, items) {
-  const more = el('button', { type: 'button', className: 'btn sm', textContent: 'More ▾' });
+  const more = el('button', { type: 'button', className: 'btn sm' }, 'More', el('span', { className: 'chev', 'aria-hidden': 'true' }));
   more.setAttribute('aria-haspopup', 'menu');
   more.setAttribute('aria-expanded', 'false');
   more.setAttribute('aria-label', `More actions for ${p.name}`);

@@ -2,6 +2,7 @@ import { renderMd, decorateMinutes } from './md.js';
 import { cleanTranscript, makeDeduper, isLegacyCapture } from './sttclean.js';
 import { renderMinutesHtml, isTemplateMd, setOrg, parseDirectory } from './orgtemplate.js';
 import { mountAsk } from './askui.js';
+import { fmtDay } from './datefmt.js';
 import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
@@ -70,7 +71,7 @@ function showSkeleton() {
 function renderMeta() {
   const start = new Date(meeting.startedAt);
   const dur = meeting.endedAt ? `${Math.max(1, Math.round((meeting.endedAt - meeting.startedAt) / 60000))} min` : 'in progress';
-  const bits = [start.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }), dur];
+  const bits = [`${fmtDay(meeting.startedAt)}, ${start.toLocaleTimeString('en-IN', { timeStyle: 'short' })}`, dur];
   if (attendeeList().length) bits.push(attendeeList().join(', '));
   $('meta').replaceChildren(...bits.map((b, i) => Object.assign(document.createElement('span'), { textContent: b, className: i === 2 ? 'who-list' : '' })));
   renderChips();

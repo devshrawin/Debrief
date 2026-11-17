@@ -413,8 +413,12 @@ try {
   const g = async () => ap.evaluate(`({ counts: document.getElementById('counts').textContent, groups: [...document.querySelectorAll('.ac-group')].map((s) => ({ h: s.querySelector('h2').textContent, rows: [...s.querySelectorAll('.ac-row .ac-text')].map((t) => t.textContent) })), active: document.querySelector('#modes .active')?.textContent, chips: [...document.querySelectorAll('.ac-row .chip')].map((c) => c.textContent) })`);
   const a0 = await g();
   check('the page counts open and overdue actions in its heading', a0.counts === '6 open · 1 overdue', JSON.stringify(a0.counts));
-  check('by meeting: newest meeting first, rows sorted (overdue first)', a0.active === 'By meeting' && a0.groups.map((x) => x.h.replace(/[A-Z][a-z]{2} \d+, \d{4}\d+ open/g, '').trim()).join('|') === 'Weekly sync|Budget review|Last week' && a0.groups[2].rows[0] === 'Prepare the vendor list', JSON.stringify(a0.groups));
+  check('by meeting: newest meeting first, rows sorted (overdue first)', a0.active === 'By meeting' && a0.groups.map((x) => x.h.replace(/\d+ [A-Z][a-z]{2} \d{4}\d+ open/g, '').trim()).join('|') === 'Weekly sync|Budget review|Last week' && a0.groups[2].rows[0] === 'Prepare the vendor list', JSON.stringify(a0.groups));
   check('the overdue chip appears once, on the overdue action', a0.chips.length === 1 && a0.chips[0] === 'Overdue', JSON.stringify(a0.chips));
+  const seg1 = await ap.evaluate(`({ on: [...document.querySelectorAll('#modes button')].filter((b) => b.getAttribute('aria-checked') === 'true').length, cls: document.querySelectorAll('#modes button.active').length, role: document.getElementById('modes').getAttribute('role'), raised: [...document.querySelectorAll('#modes button')].filter((b) => getComputedStyle(b).boxShadow !== 'none').length })`);
+  check('exactly one grouping segment is selected, announced and raised', seg1.on === 1 && seg1.cls === 1 && seg1.role === 'radiogroup' && seg1.raised === 1, JSON.stringify(seg1));
+  const fmt = await ap.evaluate(`({ subs: [...document.querySelectorAll('.ac-sub')].map((e) => e.textContent), text: [...document.querySelectorAll('.ac-text')].map((e) => e.textContent).join('|'), dues: [...document.querySelectorAll('.ac-due')].map((e) => e.textContent.replace('Overdue', '')) })`);
+  check('dates read "16 Nov 2026" everywhere and emphasis marks are plain text', fmt.subs.every((d) => /^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(d)) && fmt.dues.every((d) => /^Due: (\d{1,2} [A-Z][a-z]{2} \d{4}|Not stated)$/.test(d)) && /and stars$|and stars\|/.test(fmt.text) && !/\*stars\*/.test(fmt.text), JSON.stringify(fmt));
   await ap.shot('actions-meeting-light-1280');
   await ap.evaluate(`document.querySelector('#modes [data-mode=owner]').click()`);
   const a1b = await g();

@@ -4,7 +4,9 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import * as A from '../src/orgtemplate.js';
+import { renderMinutes } from '../src/structured.js';
 import { attendanceMarkdown, setEmailNames } from '../src/attendance.js';
 
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -79,6 +81,26 @@ const standardMd = `# Fare system weekly sync
 
 ${attendanceMarkdown({ invited, presence, durationSec: 3120, entries: [], myName: 'Alex Rivera' })}`;
 
+// ---------------------------------------------------------------- a stand-in model (so the Live summary and a running job are real)
+// `modelDelay` holds every answer back, which keeps a minutes job in its "writing" state for the picture.
+let modelDelay = 0;
+const model = http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  if (req.method === 'OPTIONS') return res.writeHead(204).end();
+  let body = '';
+  req.on('data', (d) => (body += d));
+  req.on('end', async () => {
+    if (modelDelay) await new Promise((r) => setTimeout(r, modelDelay));
+    const text = JSON.stringify({ title: 'Pilot readiness review', overview: 'The pilot is on track: six of eight depots are live.', summary: ['Six of eight depots are live on the new fare system', 'Validator supply for the balance needs a written plan'], topics: [], decisions: [{ text: 'The last two depots go live before the month end', at: '00:41' }], actions: [{ text: 'Share the written validator delivery plan', owner: 'Ravi Menon', due: '2026-10-19', at: '01:20', quote: 'I will send the plan' }], risks: [], questions: [], next: [] });
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    for (const part of text.match(/.{1,40}/gs)) res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: part } }] })}\n\n`);
+    res.end('data: [DONE]\n\n');
+  });
+});
+await new Promise((r) => model.listen(0, '127.0.0.1', r));
+const MODEL = { llmProvider: 'openai', oaBase: `http://127.0.0.1:${model.address().port}/v1`, oaModel: 'demo-model' };
+
 // ---------------------------------------------------------------- Chrome over a pipe
 const proc = spawn(CHROME, ['--headless=new', '--remote-debugging-pipe', '--enable-unsafe-extension-debugging', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
 const out = proc.stdio[3];
@@ -121,9 +143,12 @@ async function openPage(url, { width = 1100, height = 800, scale = 1.5 } = {}) {
     return r.result.value;
   };
   // full page or an area; white-on-transparent corners are avoided by the page background
-  const shot = async (name, { full = true, maxHeight = 2400, clip, rectJs } = {}) => {
+  const shot = async (name, { full = true, maxHeight = 2400, clip, rectJs, keepFixed = false } = {}) => {
+    // fonts loaded and the liquid segment thumbs (about 400 ms) and fades finished: nothing is caught half way
+    await evaluate(`document.fonts.ready.then(() => true)`);
+    await sleep(700);
     // sticky save / navigation bars would float in the middle of a full-page capture
-    await evaluate(`document.querySelectorAll('body *').forEach((el) => { const p = getComputedStyle(el).position; const cs = getComputedStyle(el); if ((p === 'fixed' || p === 'sticky') && cs.bottom !== 'auto' && cs.top === 'auto') el.style.display = 'none'; })`);
+    if (!keepFixed) await evaluate(`document.querySelectorAll('body *').forEach((el) => { const p = getComputedStyle(el).position; const cs = getComputedStyle(el); if ((p === 'fixed' || p === 'sticky') && cs.bottom !== 'auto' && cs.top === 'auto') el.style.display = 'none'; })`);
     let c = clip;
     if (full && !clip && !rectJs) {
       const m0 = await send('Page.getLayoutMetrics', {}, sessionId);
@@ -148,7 +173,19 @@ async function openPage(url, { width = 1100, height = 800, scale = 1.5 } = {}) {
     writeFileSync(path.join(OUT, `${name}.png`), Buffer.from(data, 'base64'));
     console.log('wrote', name);
   };
-  return { targetId, sessionId, evaluate, shot };
+  // the popup at its real width (360 px) and its full height (the body scrolls inside 600 px)
+  const popupShot = async (name) => {
+    // the real popup scrolls inside 600 px; the picture shows all of it, so nothing is cut at the bottom
+    await evaluate(`document.body.style.maxHeight = 'none'; document.body.style.overflowY = 'visible'`);
+    const h = await evaluate(`Math.ceil(document.body.scrollHeight)`);
+    await send('Emulation.setDeviceMetricsOverride', { width: 360, height: h, deviceScaleFactor: scale, mobile: false }, sessionId);
+    await evaluate(`document.fonts.ready.then(() => true)`);
+    await sleep(800);
+    const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+    writeFileSync(path.join(OUT, `${name}.png`), Buffer.from(data, 'base64'));
+    console.log('wrote', name);
+  };
+  return { targetId, sessionId, evaluate, shot, popupShot, sleep };
 }
 
 try {
@@ -201,9 +238,11 @@ try {
   // ---- the countdown card (the background job is about to write the minutes)
   // the countdown is re-armed right before its shot so it reads a few seconds, not zero
   await opts.evaluate(`(async () => { const k = 'meeting:demo3'; const m = (await chrome.storage.local.get(k))[k]; m.job = { state: 'queued', countdownEnd: Date.now() + 14000, beat: Date.now() }; await chrome.storage.local.set({ [k]: m }); })()`);
-  const m3 = await openPage(`chrome-extension://${id}/mom.html?id=demo3`, { width: 1100, height: 700 });
+  const m3 = await openPage(`chrome-extension://${id}/mom.html?id=demo3`, { width: 1100, height: 900 });
   await sleep(500);
-  await m3.shot('countdown', { full: false, clip: { x: 0, y: 0, width: 1100, height: 520 } });
+  // the whole card, its button and the countdown running ("Writing automatically in 12 s"), plus the toolbar under it
+  const cardBottom = await m3.evaluate(`Math.ceil(document.querySelector('.toolbar').getBoundingClientRect().bottom + scrollY)`);
+  await m3.shot('countdown', { full: false, clip: { x: 0, y: 0, width: 1100, height: Math.min(900, cardBottom + 32) } });
 
   // ---- settings: voices
   const v = await openPage(`chrome-extension://${id}/options.html`, { width: 1100, height: 900 });
@@ -242,18 +281,92 @@ try {
   await opts.evaluate(`chrome.storage.local.remove(['usage', 'learnedLimits'])`);
   // ---- the popup while recording
   await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetCode: 'abc-defg-hij' }, levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
-  const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 640, scale: 2 });
+  const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 640, scale: 2 });
   await sleep(1500);
   await pr.evaluate(`chrome.storage.session.set({ levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
   await sleep(800);
-  await pr.shot('popup-recording', { full: false, clip: { x: 0, y: 0, width: 400, height: 560 } });
+  await pr.popupShot('popup-recording');
   await opts.evaluate(`chrome.storage.session.remove(['rec', 'levels'])`);
 
-  // ---- the minutes page while a job is writing (orb, glowing toolbar)
-  await opts.evaluate(`(async () => { const k = 'meeting:demo4'; const base = (await chrome.storage.local.get('meeting:demo1'))['meeting:demo1']; await chrome.storage.local.set({ [k]: { ...base, id: 'demo4', title: 'Weekly planning', mom: '', emailedAt: null, job: { state: 'writing', status: 'Reading the transcript carefully (part 2 of 3)…', beat: Date.now() + 600000 } }, meetingIds: ['demo3', 'demo1', 'demo2', 'demo4'] }); })()`);
-  const wr = await openPage(`chrome-extension://${id}/mom.html?id=demo4`, { width: 1100, height: 760 });
-  await sleep(2200);
-  await wr.shot('writing', { full: false, clip: { x: 0, y: 0, width: 1100, height: 640 } });
+  // ---- the minutes page while a job is writing: a real job, held in its writing state by a slow stand-in model
+  await opts.evaluate(`(async () => { const k = 'meeting:demo4'; const base = (await chrome.storage.local.get('meeting:demo1'))['meeting:demo1']; const { settings } = await chrome.storage.local.get('settings'); await chrome.storage.local.set({ settings: { ...settings, ...${JSON.stringify(MODEL)}, minutesFormat: 'standard' }, [k]: { ...base, parts: undefined, id: 'demo4', title: 'Weekly planning', mom: '', items: undefined, emailedAt: null, job: undefined, format: 'standard', segments: [{ t: 3, src: 'others', text: 'Six of the eight depots are live on the new fare system.' }, { t: 21, src: 'me', text: 'Good. Which ones are still open?' }, { t: 34, src: 'others', text: 'Depot 7 and Depot 8, both waiting for the network link.' }, { t: 58, src: 'others', text: 'The link can be ordered this week.' }] }, meetingIds: ['demo3', 'demo1', 'demo2', 'demo4'] }); })()`);
+  modelDelay = 60000;
+  const wr = await openPage(`chrome-extension://${id}/mom.html?id=demo4`, { width: 1100, height: 1180 });
+  await wr.evaluate(`(document.getElementById('gen') || document.getElementById('genEmpty')).click()`);
+  await sleep(2500);
+  await wr.shot('writing', { full: false, clip: { x: 0, y: 0, width: 1100, height: 1180 } }); // the toolbar and its status, the job's skeleton below
+  await wr.evaluate(`document.getElementById('abort')?.click()`);
+  modelDelay = 0;
+  await sleep(500);
+  await opts.evaluate(`chrome.storage.local.set({ settings: ${JSON.stringify(SETTINGS)} })`);
+
+  // ---- Open actions, Live, and the minutes with ticked actions and the player bar (made-up meetings, removed again)
+  {
+    const D = 86400000;
+    const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+    const nowMs = Date.now();
+    const act = (aid, text, owner, due, atT, status = 'open') => ({ id: aid, text, owner, due, at: atT, quote: '', status, ...(status === 'done' ? { doneAt: nowMs - D } : {}) });
+    const mk = (actions) => ({ overview: '', summary: [], topics: [], decisions: [], risks: [], questions: [], next: [], actions });
+    const rec = (mid, title, days, actions, extra = {}) => ({ ...meeting, id: mid, title, startedAt: nowMs - days * D, endedAt: nowMs - days * D + 2400000, segments: [{ t: 3, src: 'others', text: 'Opening remarks.' }], items: mk(actions), mom: '# ' + title, format: 'standard', ...extra });
+    const acts = {
+      demo5: rec('demo5', 'Depot 7 network review', 5, [act('a1', 'Order the second network link for Depot 7', 'Marcus Hale', iso(nowMs + 3 * D), '04:12'), act('a2', 'Confirm the cut-over window with the depot manager', 'Priya Nair', iso(nowMs - 2 * D), '09:30'), act('a3', 'Write up the downtime for the steering group', 'Alex Rivera', 'Not stated', '12:05')]),
+      demo6: rec('demo6', 'Validator delivery call', 12, [act('b1', 'Send the written delivery plan for the balance of 40 validators', 'Ravi Menon', iso(nowMs + 9 * D), '01:20'), act('b2', 'Share the test results with the depots', 'Priya Nair', iso(nowMs + 25 * D), '07:44'), act('b3', 'Update the stock sheet', 'Ravi Menon', iso(nowMs - 6 * D), '11:02', 'done')]),
+    };
+    const ids = ['demo3', 'demo1', 'demo2'];
+    await opts.evaluate(`(async () => { const l = ${JSON.stringify(acts)}; await chrome.storage.local.set({ 'meeting:demo5': l.demo5, 'meeting:demo6': l.demo6, meetingIds: ['demo3', 'demo1', 'demo2', 'demo5', 'demo6'] }); })()`);
+    const ac = await openPage(`chrome-extension://${id}/actions.html`, { width: 1100, height: 760 });
+    await ac.evaluate(`document.querySelector('#modes [data-mode=due]').click(); document.activeElement?.blur()`);
+    await sleep(300);
+    await ac.shot('actions', { full: false, clip: { x: 0, y: 0, width: 1100, height: 760 } });
+    await opts.evaluate(`chrome.storage.local.remove(['meeting:demo5', 'meeting:demo6']).then(() => chrome.storage.local.set({ meetingIds: ${JSON.stringify(ids)} }))`);
+
+    // Live: a meeting that is being recorded, with a summary so far
+    const speech = [
+      [4, 'me', 'Let us start with the pilot. Priya, where are we on the depots?'],
+      [19, 'others', 'Six of the eight depots are live on the new fare system. The last two are waiting for the network link at Depot 7.'],
+      [41, 'others', 'If the second link is ordered this week, both can go live before the month end.'],
+      [63, 'me', 'Good. Marcus, can you order the link today?'],
+      [71, 'others', 'Yes, I will place the order this afternoon and confirm the date.'],
+      [96, 'others', 'On validators, 140 of the 180 can be supplied this month. We still need a written delivery plan for the balance.'],
+      [124, 'me', 'Ravi, please send the plan in writing. I will send the plan to Dana after that.'],
+      [150, 'others', 'I will send the plan by the nineteenth, together with the test results from the first depots.'],
+    ].map(([t, src, text]) => ({ t, src, text }));
+    await opts.evaluate(`(async () => { const { settings } = await chrome.storage.local.get('settings'); await chrome.storage.local.set({ settings: { ...settings, ...${JSON.stringify(MODEL)} }, 'meeting:demo8': { ...${JSON.stringify(meeting)}, id: 'demo8', title: 'Pilot readiness review', startedAt: Date.now() - 190000, endedAt: undefined, segments: ${JSON.stringify(speech)}, screens: [{ t: 52, text: 'Slide: depot go-live tracker', presenter: 'Priya Nair' }] }, meetingIds: ['demo8', 'demo3', 'demo1', 'demo2'] }); await chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo8', tabId: 1, startedAt: Date.now() - 190000, mic: true, micOn: true, micWanted: true } }); })()`);
+    const lv = await openPage(`chrome-extension://${id}/live.html?id=demo8`, { width: 1100, height: 800 });
+    await sleep(1500);
+    await lv.evaluate(`document.getElementById('sumGo').click()`);
+    for (let i = 0; i < 40 && (await lv.evaluate(`document.getElementById('sumOut').classList.contains('hidden')`)); i++) await sleep(250);
+    await lv.evaluate(`window.scrollTo(0, 0)`);
+    await lv.shot('live', { full: false, clip: { x: 0, y: 0, width: 1100, height: 800 } });
+    await opts.evaluate(`chrome.storage.session.remove('rec'); chrome.storage.local.remove('meeting:demo8').then(() => chrome.storage.local.set({ settings: ${JSON.stringify(SETTINGS)}, meetingIds: ${JSON.stringify(ids)} }))`);
+
+    // the minutes with ticked actions, and the player bar open on a line of the kept recording
+    const items7 = mk([act('c1', 'Take the two remaining depots live', 'Priya Nair', iso(nowMs + 10 * D), '00:41', 'done'), act('c2', 'Share the written validator delivery plan', 'Ravi Menon', iso(nowMs + 2 * D), '01:20'), act('c3', 'Provision the second network link at Depot 7', 'Marcus Hale', iso(nowMs + 6 * D), '02:05')]);
+    items7.decisions = [{ text: 'The last two depots go live before the month end', at: '00:41' }];
+    items7.summary = ['Six of eight depots are live on the new fare system.', 'A second network link for Depot 7 unblocks the last two.'];
+    items7.overview = 'The pilot is on track. The remaining work is the network link and the validator plan.';
+    const mom7 = renderMinutes(items7, { meeting: { title: 'Fare system weekly sync', startedAt: nowMs - 3600000, endedAt: nowMs - 600000 }, attendees: ['Alex Rivera', 'Priya Nair', 'Ravi Menon', 'Marcus Hale'] });
+    const clips = await opts.evaluate(`(async () => {
+      if (typeof MediaRecorder === 'undefined') return 'no MediaRecorder';
+      const clip = async (freq) => { const ac = new AudioContext(); const osc = ac.createOscillator(); osc.frequency.value = freq; const dest = ac.createMediaStreamDestination(); osc.connect(dest); osc.start();
+        const r = new MediaRecorder(dest.stream, { mimeType: 'audio/webm;codecs=opus' }); const ch = []; r.ondataavailable = (e) => e.data.size && ch.push(e.data);
+        const stopped = new Promise((res) => (r.onstop = res)); r.start(); await new Promise((res) => setTimeout(res, 4000)); r.stop(); await stopped; osc.stop(); ac.close(); return new Blob(ch, { type: 'audio/webm' }); };
+      const db = await new Promise((res, rej) => { const r = indexedDB.open('debrief-audio', 1); r.onupgradeneeded = () => { const st = r.result.createObjectStore('seg', { keyPath: ['meetingId', 'seq'] }); st.createIndex('meetingId', 'meetingId'); st.createIndex('savedAt', 'savedAt'); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+      for (const [seq, t0, f] of [[0, 0, 330], [1, 41, 392]]) { const blob = await clip(f); await new Promise((res, rej) => { const t = db.transaction('seg', 'readwrite'); t.objectStore('seg').put({ meetingId: 'demo7', seq, t0, dur: 4, blob, savedAt: Date.now() }); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+      db.close(); return 'ok'; })()`);
+    const lines7 = [[2, 'Welcome, everyone. Let us go through the depots.'], [41, 'Both remaining depots will go live before the month end.'], [80, 'The network link at Depot 7 is the blocker.'], [125, 'Ravi will send the delivery plan in writing.']].map(([t, text], i) => ({ t, src: 'others', text, c: i * 30, dur: 30 }));
+    await opts.evaluate(`(async () => { const { settings } = await chrome.storage.local.get('settings'); await chrome.storage.local.set({ settings: { ...settings, keepAudio: true }, 'meeting:demo7': { ...${JSON.stringify(meeting)}, id: 'demo7', title: 'Fare system weekly sync', startedAt: ${nowMs - 3600000}, endedAt: ${nowMs - 600000}, segments: ${JSON.stringify(lines7)}, items: ${JSON.stringify(items7)}, mom: ${JSON.stringify(mom7)}, model: 'Gemini · gemini-3.8-flash', format: 'standard' }, meetingIds: ['demo7', 'demo3', 'demo1', 'demo2'] }); })()`);
+    const mp = await openPage(`chrome-extension://${id}/mom.html?id=demo7`, { width: 1100, height: 800 });
+    await sleep(800);
+    if (clips === 'ok') {
+      await mp.evaluate(`[...document.querySelectorAll('#mom .timebtn')].find((b) => /00:41/.test(b.textContent))?.click()`);
+      await sleep(900);
+    }
+    await mp.evaluate(`document.querySelector('#mom .act-summary').scrollIntoView({ block: 'start' }); window.scrollBy(0, -30)`); // the table sits in the upper half; the player bar floats below it
+    await sleep(300);
+    await mp.shot('minutes-actions', { full: false, keepFixed: true }); // the visible window (the page is scrolled, so no clip)
+    await opts.evaluate(`chrome.storage.local.remove('meeting:demo7').then(() => chrome.storage.local.set({ settings: ${JSON.stringify(SETTINGS)}, meetingIds: ${JSON.stringify(ids)} }))`);
+  }
 
   // ---- Ask page, the first settings page
   const ask = await openPage(`chrome-extension://${id}/ask.html`, { width: 1100, height: 760 });
@@ -275,11 +388,11 @@ try {
   const dk = await openPage(`chrome-extension://${id}/mom.html?id=demo2`, { width: 1100, height: 800 });
   await sleep(1500);
   await dk.shot('minutes-dark', { full: false, clip: { x: 0, y: 0, width: 1100, height: 800 } });
-  const dp = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 640, scale: 2 });
+  const dp = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 640, scale: 2 });
   await sleep(900);
   await dp.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('start').disabled = false;`);
   await sleep(400);
-  await dp.shot('popup-dark', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
+  await dp.popupShot('popup-dark');
   await opts.evaluate(`chrome.storage.local.remove('uiTheme')`);
   await sleep(300);
 
@@ -296,11 +409,11 @@ try {
   await store('store-4-ask', `chrome-extension://${id}/ask.html`, `document.querySelector('#askBox input')?.focus()`);
 
   // ---- the popup, as it looks outside a meeting
-  const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+  const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
   // a popup opened as a page cannot record its own tab: show the idle popup as it looks on a meeting tab
   await p.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('modeOnline')?.click(); document.getElementById('modeHint').textContent = 'Online meeting: the call is recorded from this tab and your voice from your microphone.'; document.getElementById('start').disabled = false;`);
   await sleep(500);
-  await p.shot('popup', { full: false, clip: { x: 0, y: 0, width: 400, height: 500 } });
+  await p.popupShot('popup');
 
   // ---- PDF=<dir>: the official and the standard minutes as the print preview makes them (page footer and header included)
   if (process.env.PDF) {
@@ -334,21 +447,21 @@ try {
         await sleep(400);
         await tr.shot(`audit/${theme}-tour-${step + 1}`, { maxHeight: 2000 });
       }
-      const pop = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+      const pop = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
       await pop.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('start').disabled = false;`);
       await sleep(600);
-      await pop.shot(`audit/${theme}-popup-home`, { full: false, clip: { x: 0, y: 0, width: 400, height: 560 } });
+      await pop.popupShot(`audit/${theme}-popup-home`);
       await pop.evaluate(`document.getElementById('tabMeet').click()`);
       await sleep(600);
-      await pop.shot(`audit/${theme}-popup-meetings`, { full: false, clip: { x: 0, y: 0, width: 400, height: 640 } });
+      await pop.popupShot(`audit/${theme}-popup-meetings`);
       await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetCode: 'abc-defg-hij' }, levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
-      const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+      const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
       await sleep(1200);
-      await pr.shot(`audit/${theme}-popup-recording`, { full: false, clip: { x: 0, y: 0, width: 400, height: 640 } });
+      await pr.popupShot(`audit/${theme}-popup-recording`);
       await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, stopping: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000 } })`);
-      const pf = await openPage(`chrome-extension://${id}/popup.html`, { width: 400, height: 760, scale: 2 });
+      const pf = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
       await sleep(1200);
-      await pf.shot(`audit/${theme}-popup-finishing`, { full: false, clip: { x: 0, y: 0, width: 400, height: 400 } });
+      await pf.popupShot(`audit/${theme}-popup-finishing`);
       await opts.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
       for (const [name, url] of [['minutes-official', 'mom.html?id=demo1'], ['minutes-standard', 'mom.html?id=demo2'], ['ask', 'ask.html']]) {
         const pg = await openPage(`chrome-extension://${id}/${url}`, { width: 1280, height: 900 });
@@ -368,6 +481,7 @@ try {
   process.exitCode = 1;
 } finally {
   proc.kill();
+  model.close();
   await sleep(500);
   try {
     rmSync(profile, { recursive: true, force: true });

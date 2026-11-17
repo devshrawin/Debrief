@@ -2,6 +2,7 @@
 // again, tick off actions, notes about the shared screen, the share confirmation, the .json download.
 // Everything built from meeting, settings or model text uses textContent or DOM methods, never an HTML string.
 // The pure parts (matching, ranges, file names) are in actionslogic.js.
+import { fmtDay } from './datefmt.js';
 import { listSegs, segAt, segRange, pcm16kRange } from './audiokeep.js';
 import { transcribeDetailed } from './stt.js';
 import { encodeWav } from './wav.js';
@@ -586,7 +587,7 @@ export function paintCarried(meeting) {
   const ok = from && typeof from.id === 'string' && from.id;
   box.classList.toggle('hidden', !ok);
   if (!ok) return;
-  const when = Number.isFinite(from.at) ? new Date(from.at).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '';
+  const when = Number.isFinite(from.at) ? fmtDay(from.at) : '';
   const a = el('a', { href: `mom.html?id=${encodeURIComponent(from.id)}`, textContent: [from.title || 'an earlier meeting', when].filter(Boolean).join(', ') });
   box.replaceChildren('Reviews open actions from ', a);
 }

@@ -462,7 +462,7 @@ try {
     const fs = await import('node:fs');
     await send('Emulation.setDeviceMetricsOverride', { width: 1180, height: 760, deviceScaleFactor: 1.4, mobile: false }, tour.sessionId);
     fs.writeFileSync(`${process.env.SHOTS}/tour-welcome.png`, Buffer.from((await send('Page.captureScreenshot', {}, tour.sessionId)).data, 'base64'));
-    await tour.evaluate(`document.querySelectorAll('#stepsNav button')[5].click()`);
+    await tour.evaluate(`document.querySelectorAll('#stepsNav button')[2].click()`);
     await sleep(500);
     fs.writeFileSync(`${process.env.SHOTS}/tour-record.png`, Buffer.from((await send('Page.captureScreenshot', {}, tour.sessionId)).data, 'base64'));
     await tour.evaluate(`document.querySelectorAll('#stepsNav button')[0].click()`);

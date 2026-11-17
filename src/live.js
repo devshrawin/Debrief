@@ -9,7 +9,7 @@ import { generateWithRetry } from './jobs.js';
 import { parseStructured, renderMinutes } from './structured.js';
 import { renderMd, decorateMinutes } from './md.js';
 import { mountAsk } from './askui.js';
-import { LiveStore, POLL_MS, fromContentScript, needsReread, pollOver, continues, reduceState, chipText, latencyNote, atBottom, summaryPrompt, summaryAt, provisionalLabel } from './livelogic.js';
+import { LiveStore, MIN_WORDS, POLL_MS, fromContentScript, needsReread, pollOver, continues, reduceState, chipText, latencyNote, atBottom, summaryPrompt, summaryAt, provisionalLabel } from './livelogic.js';
 
 const $ = (id) => document.getElementById(id);
 const BATCH = 150; // rows drawn per step when a long meeting is first opened
@@ -51,8 +51,10 @@ function makeRow(row, prev) {
   return el;
 }
 
+// The page is the only scroller: following the transcript means being at the bottom of the window.
+const scroller = () => document.scrollingElement || document.documentElement;
 const toBottom = () => {
-  log.scrollTop = log.scrollHeight;
+  scroller().scrollTop = scroller().scrollHeight;
   following = true;
   $('newLines').classList.add('hidden');
 };
@@ -67,7 +69,7 @@ function pump() {
     for (let i = next; i < end; i++) frag.append(makeRow(store.rows[i], store.rows[i - 1]));
     next = end;
     log.append(frag);
-    if (following) log.scrollTop = log.scrollHeight;
+    if (following) scroller().scrollTop = scroller().scrollHeight;
     else if (end > 0) $('newLines').classList.remove('hidden');
     if (next < store.rows.length) setTimeout(step, 0);
     else pumping = false;
@@ -89,10 +91,11 @@ function show(fresh) {
     }
   }
   pump();
+  syncControls();
 }
 
-log.addEventListener('scroll', () => {
-  following = atBottom(log);
+window.addEventListener('scroll', () => {
+  following = atBottom(scroller());
   if (following) $('newLines').classList.add('hidden');
 });
 $('newLines').onclick = () => {
@@ -104,6 +107,7 @@ function take(m) {
   if (!m) return;
   show([...store.add('segment', m.segments), ...store.add('screen', m.screens)]);
   store.markRead(m);
+  syncControls();
 }
 
 // ---- header: title, state chip ----
@@ -124,6 +128,20 @@ function setState() {
   }
   $('minutesLink').classList.toggle('hidden', state.phase !== 'ended');
   $('minutesLink').href = `mom.html?id=${encodeURIComponent(id)}`;
+  syncControls();
+}
+
+// Once the meeting is over, "Open minutes" is the next step: it is the primary button, and the summary-so-far button and the
+// note about pieces of text (which is about a running meeting) step back. A summary needs enough words to be worth asking for.
+function syncControls() {
+  const ended = state.phase === 'ended';
+  $('minutesLink').classList.toggle('primary', ended);
+  $('sumGo').classList.toggle('primary', !ended);
+  for (const x of ['latency', 'latencyHint']) $(x).classList.toggle('hidden', ended || !$(x).textContent);
+  if (!id) return;
+  const enough = store.wordCount() >= MIN_WORDS;
+  $('sumGo').disabled = !!sumAbort || !(enough || ended);
+  $('sumGo').title = enough || ended ? '' : 'Available once there is a little more to summarise.';
 }
 
 function setEmpty(text) {
@@ -183,6 +201,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   else if (msg.kind === 'screen') show(store.addBroadcast('screen', [msg.item]));
   else if (msg.kind === 'state') {
     broadcast = msg.item;
+    // the push is newer than the last poll's answer about this recording: it wins until the next poll
+    if (rec && rec.meetingId === id) rec = { ...rec, recording: msg.item.recording !== false, paused: !!msg.item.paused };
     setState();
   }
 });
@@ -194,7 +214,18 @@ function showSummary(md, at) {
   $('sumOut').classList.remove('hidden');
   $('sumLabel').textContent = provisionalLabel(at);
   $('sumBody').innerHTML = renderMd(md); // sanitised by the renderer; the text came from the model
-  decorateMinutes($('sumBody')); // tables scroll sideways inside their own box
+  decorateMinutes($('sumBody')); // action tables stack to fit the column; others scroll sideways inside their own box
+  chipTimes($('sumBody'));
+}
+// "[12:40]" in the summary looks like it does in the minutes: a small time chip (plain text; the page does not play audio)
+function chipTimes(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if (/\[(?:\d{1,2}:)?\d{1,2}:\d{2}\]/.test(n.nodeValue) && !n.parentElement.closest('code, pre')) nodes.push(n);
+  for (const n of nodes) {
+    const parts = n.nodeValue.split(/(\[(?:\d{1,2}:)?\d{1,2}:\d{2}\])/);
+    n.replaceWith(...parts.filter(Boolean).map((x) => (/^\[.*\]$/.test(x) ? h('span', 'timechip', x) : document.createTextNode(x))));
+  }
 }
 function setStatus(text, busy) {
   const s = $('sumStatus');
@@ -248,6 +279,7 @@ async function summarise() {
   } finally {
     sumAbort = null;
     $('sumGo').disabled = false;
+    syncControls();
     $('sumStop').classList.add('hidden');
   }
 }
@@ -260,6 +292,8 @@ async function start() {
   $('latency').textContent = lat.text;
   $('latencyHint').textContent = lat.hint;
   $('latencyHint').classList.toggle('hidden', !lat.hint);
+  const head = document.querySelector('.lv-head');
+  if (head && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--lv-head', `${head.offsetHeight}px`)).observe(head);
   store = new LiveStore({ myName: settings.myName });
   if (llmReady(settings)) $('privacy').textContent = `Your question and the transcript so far go to ${modelLabel(settings)}, the model you chose for the minutes. No audio is sent. Answers can be wrong.`;
 

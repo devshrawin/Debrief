@@ -175,6 +175,10 @@ function read() {
   return s;
 }
 
+// The accent colour shows its value beside the swatch.
+const showAccent = () => { const a = $('orgAccent'); if (a && $('orgAccentHex')) $('orgAccentHex').textContent = a.value.toUpperCase(); };
+$('orgAccent')?.addEventListener('input', showAccent);
+
 // Put values into the fields (page load, and Undo).
 function fill(s) {
   for (const k of FIELDS) {
@@ -196,6 +200,7 @@ function fill(s) {
   renderSecrets();
   syncDeps();
   guardNote();
+  showAccent();
 }
 
 // A field that follows a switch is disabled, and dimmed, while the switch is off.
@@ -215,6 +220,7 @@ function tidyFields(e) {
   if (NUMERIC[f.id]) f.value = clampNum(f.value, NUMERIC[f.id]);
   else if (f.id === 'consentText' && !f.value.trim()) f.value = DEFAULTS.consentText;
 }
+$('consentText').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); }); // a notice is one paragraph; Enter does not add a line
 $('consentReset').onclick = () => {
   $('consentText').value = DEFAULTS.consentText;
   $('consentText').dispatchEvent(new Event('input', { bubbles: true }));
@@ -392,7 +398,7 @@ async function renderUsage() {
   const cost = estimateCost(rows, prices);
   const paid = paidTotal(rows, prices);
   const tn = $('tildeNote');
-  if (tn) tn.style.display = table.textContent.includes('~') ? 'flex' : 'none'; // the note explains "~", so it shows only when a value has one
+  if (tn) tn.hidden = !table.textContent.includes('~'); // the note explains "~", so it shows only when a value has one
   $('usageTotals').replaceChildren(
     el('strong', { textContent: `Total ${RANGE[usageDays] || ''}`.trim() }),
     el('span', { textContent: `${reqs} request${reqs === 1 ? '' : 's'}` }),
@@ -525,6 +531,7 @@ function updateDirty() {
   bar.classList.toggle('saved', flash?.kind === 'saved');
   bar.classList.toggle('bad', flash?.kind === 'bad');
   $('undo').hidden = !dirty;
+  $('save').setAttribute('aria-disabled', String(!dirty && !flash?.kind));
   $('msg').textContent = flash ? flash.text : dirty ? 'You have unsaved changes' : 'All changes saved';
 }
 function showFlash(kind, text, ms) {

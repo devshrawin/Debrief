@@ -126,9 +126,10 @@ try {
     const box = document.getElementById('askBox');
     box.querySelector('input').focus();
     await new Promise((r) => setTimeout(r, 400));
-    return { on: box.hasAttribute('data-beam') && box.hasAttribute('data-active') };
+    const row = box.querySelector('.ask-row'); // the beam is on the question field itself, not on the whole box with the chips
+    return { on: row.hasAttribute('data-beam') && row.hasAttribute('data-active') && !box.hasAttribute('data-beam') };
   })()`);
-  check('Ask page: the question box carries the beam while focused', ak.on, JSON.stringify(ak));
+  check('Ask page: the question field carries the beam while focused', ak.on, JSON.stringify(ak));
 
   // 5b. popup: the mode switch fits on one line; Settings is a gear and the tour link sits at the bottom
   // a popup opened as a page cannot record its own tab, so the mode box is hidden; show it to measure how it is laid out

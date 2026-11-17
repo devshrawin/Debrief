@@ -94,6 +94,26 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .stop { width:100%; min-height:40px; margin-top:12px; padding:9px; border-radius:12px; border:0; font:inherit; font-weight:700; font-size:13px; cursor:pointer;
     color:#2a0705; background:var(--bad); box-shadow:0 6px 16px -8px rgba(255,105,97,.8); }
   .stop:hover { filter:brightness(1.06); }
+  .stop { display:flex; align-items:center; justify-content:center; gap:8px; }
+  .stop svg { flex:none; }
+  /* what the card is actually made of: a red dot, meter bars, plain lines, a note with a close button, the mic switch row */
+  .rd { width:8px; height:8px; border-radius:50%; background:var(--bad); box-shadow:0 0 0 0 rgba(255,105,97,.7); animation:ring 1.6s infinite; flex:none; }
+  .silentmsg { font-size:12px; font-weight:600; color:#ffd59a; }
+  .meter .m { height:6px; border-radius:4px; background:rgba(255,255,255,.12); overflow:hidden; }
+  .meter .m i { display:block; height:100%; border-radius:4px; background:var(--ok); transition:width .3s; }
+  .meter .m i.q { background:var(--warn); }
+  .line { margin:8px 0 0; color:var(--dim); font-size:12px; line-height:1.5; }
+  .note { position:relative; margin:10px 0; padding:10px 36px 10px 12px; border-radius:12px; background:rgba(255,179,64,.12); border:1px solid rgba(255,179,64,.45); color:#ececf2; font-size:12px; line-height:1.5; }
+  .note strong { display:block; margin-bottom:2px; color:#ffd59a; font-size:12.5px; }
+  .note .x { all:unset; position:absolute; top:6px; right:6px; width:24px; height:24px; display:grid; place-items:center; cursor:pointer; color:var(--dim); font-size:16px; line-height:1; border-radius:8px; }
+  .note .x:hover { background:rgba(255,255,255,.12); color:var(--ink); }
+  .note .x:focus-visible, .psw:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:40px; margin:12px 0 4px; }
+  .row .grow { flex:1; min-width:0; color:#ececf2; font-size:12.5px; }
+  .psw { all:unset; box-sizing:border-box; position:relative; flex:none; width:40px; height:24px; border-radius:999px; background:rgba(255,255,255,.18); cursor:pointer; transition:background .25s; }
+  .psw::after { content:""; position:absolute; left:2px; top:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .28s cubic-bezier(.2,.9,.3,1.15); box-shadow:0 2px 4px rgba(0,0,0,.35); }
+  .psw[aria-checked="true"] { background:var(--ok); } .psw[aria-checked="true"]::after { transform:translateX(16px); }
+  .psw:disabled { opacity:.5; cursor:default; }
   .hint { color:var(--dim); font-size:11.5px; margin-top:8px; line-height:1.45; }
   .hidden { display:none !important; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
@@ -324,7 +344,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     });
   }
 
-  const label = (v) => (v == null ? 'Off' : v < 0.003 ? 'Silent' : v < 0.012 ? 'Very quiet' : 'Good');
+  const label = (v) => (v == null ? 'Off' : v < 0.003 ? 'Silent' : v < 0.012 ? 'Quiet' : 'Good');
   function meter(name, v, text) {
     const box = el('div', 'meter');
     const top = el('div', 'top');
@@ -480,7 +500,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
           ? 'Your voice is going into the transcript.'
           : 'Your mic is not recorded. The call still is.';
     panel.append(el('p', 'line', line));
-    panel.append(el('p', 'line', `${S.counts.segs} pieces transcribed · ${S.counts.errs} ${S.counts.errs === 1 ? 'error' : 'errors'}`));
+    panel.append(el('p', 'line', `${S.counts.segs} transcript piece${S.counts.segs === 1 ? '' : 's'} · ${S.counts.errs} error${S.counts.errs === 1 ? '' : 's'}`));
     if (!fresh) {
       const box = el('div', 'note');
       box.setAttribute('role', 'alert');
@@ -539,7 +559,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     discard.type = 'button';
     discard.dataset.k = 'discard';
     discard.textContent = 'Started by mistake? Discard';
-    discard.style.cssText = 'background:none;box-shadow:none;font-size:12px;text-decoration:underline;min-height:28px;opacity:.85';
+    discard.style.cssText = 'background:none;box-shadow:none;color:var(--dim);font-size:12px;text-decoration:underline;min-height:28px;opacity:.85';
     discard.onclick = () => {
       if (discard.dataset.sure !== '1') {
         discard.dataset.sure = '1';

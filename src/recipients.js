@@ -56,7 +56,7 @@ export function mountRecipients(host, listTa, groupsTa) {
   };
   function draw(focus) {
     host.replaceChildren();
-    const head = make('div', { class: `rec-row rec-head${groupsTa ? '' : ' one'}`, role: 'row' }, make('span', { role: 'columnheader' }, 'Email'), groupsTa ? make('span', { role: 'columnheader' }, 'Only for meetings titled…') : null, make('span'));
+    const head = make('div', { class: `rec-row rec-head${groupsTa ? '' : ' one'}`, role: 'row', 'aria-hidden': 'true' }, make('span', { role: 'columnheader' }, 'Email'), groupsTa ? make('span', { role: 'columnheader' }, 'Only for meetings titled…') : null, make('span'));
     const body = make('div', { class: 'rec-body', role: 'rowgroup' });
     rows.forEach((r, ri) => {
       const email = make('input', { class: 'rec-in', type: 'text', inputmode: 'email', value: r.email, placeholder: ri === 0 ? 'priya@company.com' : '', 'aria-label': `Email, person ${ri + 1}`, autocomplete: 'off', spellcheck: 'false' });
@@ -94,9 +94,10 @@ export function mountRecipients(host, listTa, groupsTa) {
         emit();
         draw();
       });
-      body.append(make('div', { class: `rec-row${groupsTa ? '' : ' one'}`, role: 'row' }, email, group, del));
+      const cell = (text, input) => (input ? make('label', { class: 'rec-cell' }, make('span', { class: 'rec-lab' }, text), input) : null);
+      body.append(make('div', { class: `rec-row${groupsTa ? '' : ' one'}`, role: 'row' }, cell('Email', email), cell('Only for meetings titled…', group), del));
     });
-    const add = make('button', { class: 'btn sm', type: 'button' }, '+ Add a person');
+    const add = make('button', { class: 'btn sm', type: 'button' }, '+ Add an address');
     add.addEventListener('click', () => {
       rows.push(blank());
       draw(`${rows.length - 1}.email`);
