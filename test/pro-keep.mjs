@@ -210,7 +210,127 @@ await test('keeper: a second take of the same meeting continues the numbering in
   const k = await K.startKeeping({ stream: {}, meetingId: 'k4', now: c.now, setTimer: c.setTimer, clearTimer: c.clearTimer });
   c.advance(7);
   await k.stop();
-  assert.deepEqual((await K.listSegs('k4')).map((s) => s.seq), [0, 1, 2]);
+  assert.deepEqual((await K.listSegs('k4', { allTakes: true })).map((s) => s.seq), [0, 1, 2]);
+  assert.deepEqual((await K.listSegs('k4')).map((s) => [s.seq, s.take]), [[2, 1]], 'readers see the latest take only');
+});
+
+await test('a meeting id recorded twice: segAt, segRange, listSegs and keptInfo use the latest take only (unless asked for all)', async () => {
+  // take 1 (saved before takes existed: no field) and a second recording whose t0 starts at 0 again
+  await K.putSeg(seg('tk', 0, 0, 30, 100));
+  await K.putSeg(seg('tk', 1, 30, 30, 100));
+  const c = manual();
+  const k = await K.startKeeping({ stream: {}, meetingId: 'tk', now: c.now, setTimer: c.setTimer, clearTimer: c.clearTimer });
+  c.advance(20);
+  await k.stop();
+  assert.deepEqual((await K.listSegs('tk')).map((s) => [s.seq, s.t0, s.take]), [[2, 0, 1]]);
+  assert.equal((await K.segAt('tk', 10)).seq, 2, 'not the old take that also covers second 10');
+  assert.equal(await K.segAt('tk', 45), null, 'the old take reached 60 s, the new one only 20');
+  assert.deepEqual((await K.segRange('tk', 0, 100)).map((s) => s.seq), [2]);
+  assert.deepEqual((await K.segRange('tk', 0, 100, { allTakes: true })).map((s) => s.seq), [0, 1, 2]);
+  assert.equal((await K.keptInfo('tk')).segs, 1);
+});
+
+await test('layoutOnTimeline: a segment sits at its own second, a pause stays silent, the length is the range asked for', () => {
+  const ones = (n, v = 1) => new Float32Array(n).fill(v);
+  const SR = 10; // a small rate keeps the arrays readable
+  // segments at 0-3 s and 8-10 s (a pause between), range 0..10
+  const out = K.layoutOnTimeline([{ t0: 0, pcm: ones(30) }, { t0: 8, pcm: ones(20, 2) }], 0, 10, SR);
+  assert.equal(out.length, 100);
+  assert.deepEqual([out[0], out[29], out[30], out[79], out[80], out[99]], [1, 1, 0, 0, 2, 2]);
+  // a range that starts inside the first segment: times shift by `from`, the tail is not cut
+  const mid = K.layoutOnTimeline([{ t0: 0, pcm: ones(30) }, { t0: 8, pcm: ones(20, 2) }], 2, 10, SR);
+  assert.equal(mid.length, 80);
+  assert.deepEqual([mid[9], mid[10], mid[59], mid[60], mid[79]], [1, 0, 0, 2, 2]);
+  // overlapping rotation edges: the later segment wins in the overlap, nothing is lost or doubled in length
+  const seam = K.layoutOnTimeline([{ t0: 0, pcm: ones(32, 1) }, { t0: 3, pcm: ones(30, 3) }], 0, 6, SR);
+  assert.equal(seam.length, 60);
+  assert.deepEqual([seam[29], seam[30], seam[59]], [1, 3, 3]);
+  // segments past the range are cut at it; an empty list is silence
+  assert.equal(K.layoutOnTimeline([{ t0: 5, pcm: ones(100) }], 0, 8, SR).length, 80);
+  assert.ok(K.layoutOnTimeline([], 0, 2, SR).every((x) => x === 0));
+});
+
+await test('pcm16kRange: decoded segments are placed by their t0, so a pause does not shift the later words', async () => {
+  const decoded = { a: new Float32Array(16000 * 2).fill(1), b: new Float32Array(16000 * 2).fill(2) };
+  class Ctx {
+    decodeAudioData(buf) {
+      return Promise.resolve({ key: new Uint8Array(buf)[0] === 1 ? 'a' : 'b', duration: 2 });
+    }
+    close() {
+      return Promise.resolve();
+    }
+  }
+  class Off {
+    constructor() {
+      this.destination = {};
+    }
+    createBufferSource() {
+      const o = this;
+      return { connect() {}, start() {}, set buffer(b) { o.key = b.key; } };
+    }
+    startRendering() {
+      return Promise.resolve({ getChannelData: () => decoded[this.key] });
+    }
+  }
+  const mk = (v, t0) => ({ t0, dur: 2, blob: { arrayBuffer: async () => new Uint8Array([v]).buffer } });
+  const pcm = await K.pcm16kRange([mk(1, 0), mk(2, 10)], 0, 12, { AudioContextCtor: Ctx, OfflineCtor: Off });
+  assert.equal(pcm.length, 16000 * 12);
+  assert.equal(pcm[16000 * 1], 1);
+  assert.equal(pcm[16000 * 5], 0, 'the pause is silence');
+  assert.equal(pcm[16000 * 10 + 5], 2, 'the later segment is at its own second');
+  assert.equal(pcm[16000 * 12 - 1], 2, 'the tail is not cut');
+});
+
+await test('keeper: resuming from a pause on a dead stream reports once through onError and keeping stops cleanly', async () => {
+  recorders.length = 0;
+  const c = manual();
+  const errs = [];
+  const put = [];
+  const k = await K.startKeeping({ stream: {}, meetingId: 'k5', put: async (s) => put.push(s), now: c.now, setTimer: c.setTimer, clearTimer: c.clearTimer, onError: (e) => errs.push(e.message) });
+  c.advance(5);
+  k.setPaused(true);
+  const Real = globalThis.MediaRecorder;
+  globalThis.MediaRecorder = undefined;
+  // the keeper took Recorder at start, so make the same class refuse to start instead
+  const realStart = FakeRecorder.prototype.start;
+  FakeRecorder.prototype.start = () => {
+    throw new Error('InvalidStateError');
+  };
+  try {
+    assert.doesNotThrow(() => k.setPaused(false));
+    assert.doesNotThrow(() => k.rotate());
+    assert.doesNotThrow(() => k.setPaused(true));
+  } finally {
+    FakeRecorder.prototype.start = realStart;
+    globalThis.MediaRecorder = Real;
+  }
+  assert.deepEqual(errs, ['InvalidStateError']);
+  assert.equal(k.failed, true);
+  await k.stop();
+});
+
+await test('keeper: a rotation that cannot start a recorder ends the old one, reports once and stops the interval', async () => {
+  recorders.length = 0;
+  const c = manual();
+  const errs = [];
+  let cleared = 0;
+  const put = [];
+  const k = await K.startKeeping({ stream: {}, meetingId: 'k6', put: async (s) => put.push(s), now: c.now, setTimer: c.setTimer, clearTimer: () => cleared++, onError: (e) => errs.push(e.message) });
+  c.advance(30);
+  const realStart = FakeRecorder.prototype.start;
+  FakeRecorder.prototype.start = () => {
+    throw new Error('dead stream');
+  };
+  try {
+    assert.doesNotThrow(() => c.fire());
+    assert.doesNotThrow(() => c.fire());
+  } finally {
+    FakeRecorder.prototype.start = realStart;
+  }
+  await k.stop();
+  assert.deepEqual(errs, ['dead stream']);
+  assert.ok(cleared >= 1);
+  assert.deepEqual(put.map((s) => [s.seq, s.dur]), [[0, 30]], 'what was recorded before the failure is still saved');
 });
 
 // ---- the offscreen document with keepAudio ----

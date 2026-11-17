@@ -17,6 +17,7 @@ import { startKeeping, purgeOld } from './audiokeep.js';
 import { ScreenWatcher } from './screen.js';
 import { describeScreen, resetVision, visionUnavailable } from './vision.js';
 import { allExhausted, modelChain } from './gemini.js';
+import { visionBudget, parseLimits } from './usage.js';
 
 const CONCURRENCY = 3;
 const MAX_REREADS = 8; // pieces read again in parts per recording (each costs a few requests)
@@ -73,7 +74,15 @@ async function startVoice(meetingId, keepAudio = false, room = false, modelDownl
     ...(modelDownloadUrl ? { modelSha256: MODEL_SHA256 } : {}),
     onModelProgress: () => {},
   });
-  await Promise.race([client.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('model load timed out')), 45000))]);
+  let guard;
+  try {
+    await Promise.race([client.ready, new Promise((_, rej) => (guard = setTimeout(() => rej(new Error('model load timed out')), 45000)))]);
+  } catch (e) {
+    client.close(); // the worker is already running: do not leave it behind when the model cannot load
+    throw e;
+  } finally {
+    clearTimeout(guard);
+  }
   const out = [];
   const flush = () => {
     if (!out.length) return;
@@ -130,6 +139,22 @@ async function setupKeep({ playCtx, tabStream, micStream, meetingId, dbgNote }) 
   return { keeper, tabGain, micGain };
 }
 
+// Today's request counts and the daily limits, for visionBudget. This document has no chrome.storage, so they come through the
+// service worker (op 'usage' of the store handler: { usage, learnedLimits }); read at most every 30 s. -> [usage, limits]
+let usageCache = { at: 0, v: [{}, {}] };
+async function usageNow() {
+  if (Date.now() - usageCache.at < 30000) return usageCache.v;
+  usageCache.at = Date.now();
+  try {
+    const got = await viaBg({ op: 'usage' });
+    const set = await viaBg({ op: 'settings' }).catch(() => null);
+    usageCache.v = [got?.usage || {}, { ...(got?.learnedLimits || {}), ...parseLimits(set?.usageLimits) }];
+  } catch {
+    usageCache.v = [{}, {}]; // not known: no limit to hold back for
+  }
+  return usageCache.v;
+}
+
 // Screen notes: a hidden <video> shows the tab's picture, a ScreenWatcher samples it, vision.js describes changed frames.
 function setupScreen({ videoStream, settings, meetingId, getRec, dbgNote }) {
   resetVision();
@@ -138,33 +163,105 @@ function setupScreen({ videoStream, settings, meetingId, getRec, dbgNote }) {
   video.srcObject = videoStream;
   Promise.resolve(video.play?.()).catch(() => {});
   let prev = '';
+  let budgetSaid = false;
   const watcher = new ScreenWatcher({
     video,
     everySec: settings.screenNotesEverySec,
-    // nothing is asked while every general Gemini model is over its limit, or once the model has shown it cannot see pictures
-    budgetOk: async () => !visionUnavailable() && (settings.llmProvider !== 'gemini' || !(await allExhausted(modelChain(settings.geminiModel)))),
-    onFrame: async (blob, t) => {
-      const text = await describeScreen(blob, settings, { prev, onNote: dbgNote });
-      if (text) {
-        prev = text;
-        chrome.runtime.sendMessage({ target: 'bg', type: 'screen-note', meetingId, note: { t, text, presenter: getRec()?.presenter || null } }).catch(() => {});
+    // nothing is asked while every general Gemini model is over its limit, once the model has shown it cannot see pictures, or
+    // when asking would eat into what the minutes need (see visionBudget)
+    budgetOk: async () => {
+      if (visionUnavailable()) return false;
+      if (settings.llmProvider !== 'gemini') return true;
+      if (await allExhausted(modelChain(settings.geminiModel))) return false;
+      const b = visionBudget(...(await usageNow()), settings);
+      if (b.known && !b.ok) {
+        if (!budgetSaid) {
+          budgetSaid = true;
+          dbgNote(`screen notes: stopped to keep the last ${b.reserve} of today's ${b.limit} requests for ${b.model} for the minutes (${b.used} used)`);
+        }
+        return false;
       }
-      return text;
+      return true;
+    },
+    onFrame: async (blob, t) => {
+      const r = await describeScreen(blob, settings, { prev, onNote: dbgNote });
+      if (r.text) {
+        prev = r.text;
+        chrome.runtime.sendMessage({ target: 'bg', type: 'screen-note', meetingId, note: { t, text: r.text, presenter: getRec()?.presenter || null } }).catch(() => {});
+      }
+      return r;
     },
   });
   watcher.start();
   return { watcher, video };
 }
 
+// Everything a recording holds, undone. Used by stop() and by a start() that failed or was stopped half-way, so it may meet a
+// recording with only some of its parts and runs twice without harm (each part is cleared as it goes).
+async function teardown(r) {
+  if (rec === r) rec = null;
+  clearInterval(r.levelTimer);
+  clearInterval(r.dbgTimer);
+  try {
+    r.mixer?.drain();
+    Object.values(r.chunkers || {}).forEach((c) => c.flush());
+  } catch {}
+  try {
+    r.screen?.watcher.stop();
+    if (r.screen) {
+      r.screen.video.srcObject = null;
+      r.screen.video.remove?.();
+    }
+  } catch {}
+  r.screen = null;
+  const keep = r.keep;
+  r.keep = null;
+  await keep?.keeper.stop().catch(() => {}); // the last piece is written before the audio contexts close
+  [r.tabStream, r.micStream, r.videoStream].forEach((x) => x?.getTracks().forEach((t) => t.stop()));
+  await Promise.allSettled([r.ctx?.close(), r.playCtx?.close()]);
+  await r.pool?.drain();
+  const voice = r.voice;
+  r.voice = null;
+  if (voice) {
+    clearInterval(voice.timer);
+    try {
+      voice.tracker.flush();
+      voice.trackerMic?.flush();
+      await voice.client.drain(20000);
+    } catch {}
+    voice.flush();
+    voice.client.close();
+  }
+}
+
 async function start({ streamId, settings, meetingId }) {
   if (rec) throw new Error('Already recording');
+  // From here `rec` exists, so a stop() that arrives while we wait finds everything made so far and undoes it; after each wait
+  // we look whether that happened (`gone()`) and undo what was just made too.
+  const r = { tabStream: null, micStream: null, videoStream: null, playCtx: null, ctx: null, pool: null, micOn: false, chunkers: {} };
+  rec = r;
+  const gone = async () => {
+    if (rec === r) return;
+    await teardown(r);
+    throw new Error('Recording was stopped while it was starting');
+  };
+  try {
+    return await startInner(r, gone, { streamId, settings, meetingId });
+  } catch (e) {
+    await teardown(r).catch(() => {});
+    throw e;
+  }
+}
+
+async function startInner(r, gone, { streamId, settings, meetingId }) {
   const dbgNote = (note) => chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note }).catch(() => {});
   purgeOld(settings.keepAudioDays).catch(() => {}); // cheap: drops kept audio older than the setting
 
-  const tabStream = await navigator.mediaDevices.getUserMedia({
+  const tabStream = (r.tabStream = await navigator.mediaDevices.getUserMedia({
     audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
     video: false,
-  });
+  }));
+  await gone();
 
   // The picture is wanted only for screen notes. The audio above is already safe, so nothing here can cost it.
   let videoStream = null;
@@ -187,10 +284,12 @@ async function start({ streamId, settings, meetingId }) {
       videoStream = null;
       dbgNote('screen notes: could not capture the tab picture');
     }
+    r.videoStream = videoStream;
+    await gone();
   }
 
   // Capturing a tab mutes it for the user, so play it back at full quality.
-  const playCtx = new AudioContext();
+  const playCtx = (r.playCtx = new AudioContext());
   playCtx.createMediaStreamSource(tabStream).connect(playCtx.destination);
 
   let micStream = null;
@@ -203,17 +302,22 @@ async function start({ streamId, settings, meetingId }) {
     } catch (e) {
       micError = e.name === 'NotAllowedError' ? 'Microphone permission not granted (open Settings → Grant microphone).' : e.message;
     }
+    r.micStream = micStream;
+    r.micOn = !!micStream;
+    await gone();
   }
 
-  const ctx = new AudioContext({ sampleRate: SR });
+  const ctx = (r.ctx = new AudioContext({ sampleRate: SR }));
   // An offscreen document has no user gesture, so Chrome may leave audio contexts suspended; a
   // suspended context never runs the worklet and records nothing.
   await Promise.all([ctx.resume(), playCtx.resume()]);
+  await gone();
   if (ctx.state !== 'running') throw new Error(`Audio context is ${ctx.state}, recording would capture nothing.`);
   await ctx.audioWorklet.addModule(chrome.runtime.getURL('worklet.js'));
+  await gone();
 
   resetSttBudget();
-  const pool = makePool(CONCURRENCY);
+  const pool = (r.pool = makePool(CONCURRENCY));
   const rereads = { left: MAX_REREADS }; // a limit on the extra requests a recording may spend on doubtful pieces
   const onChunk = (src, t, pcm, metas, info) =>
     pool.add(async () => {
@@ -263,17 +367,16 @@ async function start({ streamId, settings, meetingId }) {
     if (src === 'mix' || !micStream) chrome.runtime.sendMessage({ target: 'bg', type: 'silence', meetingId, t: Math.round(t), dur: Math.round(dur || 0) }).catch(() => {});
   };
 
-  rec = { tabStream, micStream, videoStream, playCtx, ctx, pool, micOn: !!micStream, chunkers: {} };
   // Gemini with the mic on: ONE mixed stream and one request per chunk (the speaker comes from the levels afterwards).
   // Other providers have no tight daily limit and keep two streams.
   const mixed = !!micStream && settings.sttProvider === 'gemini';
   if (mixed) {
     const mixChunker = new Chunker('mix', onChunk, chunkSize(settings, onSkip));
-    rec.chunkers.mix = mixChunker;
+    r.chunkers.mix = mixChunker;
     // not rec.chunkers: stop() has already cleared rec when the mixer drains its last blocks
-    rec.mixer = new Mixer((blk, meta) => mixChunker.push(blk, meta));
+    r.mixer = new Mixer((blk, meta) => mixChunker.push(blk, meta));
   }
-  rec.chunkers.others = mixed ? new Meter() : new Chunker('others', onChunk, chunkSize(settings, onSkip));
+  r.chunkers.others = mixed ? new Meter() : new Chunker('others', onChunk, chunkSize(settings, onSkip));
   await tap(ctx, tabStream, (b) => {
     // Paused: the clock keeps running (so times stay right) but only silence goes on, and silence is never sent anywhere.
     const blk = rec?.paused ? new Float32Array(b.length) : b;
@@ -281,8 +384,9 @@ async function start({ streamId, settings, meetingId }) {
     rec?.mixer?.pushTab(blk);
     rec?.voice?.tracker.push(blk);
   });
+  await gone();
   if (micStream) {
-    rec.chunkers.me = mixed ? new Meter() : new Chunker('me', onChunk, chunkSize(settings, onSkip));
+    r.chunkers.me = mixed ? new Meter() : new Chunker('me', onChunk, chunkSize(settings, onSkip));
     // While the mic is paused, feed silence so timestamps stay aligned.
     await tap(ctx, micStream, (b) => {
       if (rec) {
@@ -291,27 +395,30 @@ async function start({ streamId, settings, meetingId }) {
         rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
         rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
       }
-      const blk = rec.micOn && !rec.paused ? b : new Float32Array(b.length);
-      rec?.chunkers.me.push(blk);
+      const blk = rec?.micOn && !rec.paused ? b : new Float32Array(b.length);
+      rec?.chunkers.me?.push(blk);
       rec?.mixer?.pushMic(blk);
       rec?.voice?.trackerMic?.push(blk);
     });
+    await gone();
   }
 
   // Keep the recording (optional, off by default): stays on this computer, see audiokeep.js.
   if (settings.keepAudio) {
     try {
-      rec.keep = await setupKeep({ playCtx, tabStream, micStream, meetingId, dbgNote });
-      applyKeepGains(rec);
+      r.keep = await setupKeep({ playCtx, tabStream, micStream, meetingId, dbgNote });
+      await gone();
+      applyKeepGains(r);
     } catch (e) {
+      if (rec !== r) throw e; // stopped meanwhile: gone() has already undone it
       dbgNote(`keep recording: could not start (${e.message}); transcription continues`);
     }
   }
 
   if (videoStream) {
     try {
-      rec.screen = setupScreen({ videoStream, settings, meetingId, getRec: () => rec, dbgNote });
-      if (rec.presentingOn != null) rec.screen.watcher.setPresenting(rec.presentingOn); // told before the watcher existed
+      r.screen = setupScreen({ videoStream, settings, meetingId, getRec: () => rec, dbgNote });
+      if (r.presentingOn != null) r.screen.watcher.setPresenting(r.presentingOn); // told before the watcher existed
     } catch (e) {
       dbgNote(`screen notes: could not start (${e.message})`);
     }
@@ -320,15 +427,16 @@ async function start({ streamId, settings, meetingId }) {
   // Voice recognition (optional): fingerprints of the other participants' speech, made here in a worker.
   // Only the fingerprints leave this document; the audio is never stored and never sent anywhere.
   if ((settings.voiceOn && (settings.voices || []).length) || settings.voiceLearn) {
-    rec.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples), !!settings.roomMode, settings.voiceModelUrl).catch(() => null);
-    chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: rec.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
+    r.voice = await startVoice(meetingId, !!(settings.voiceLearn && settings.voiceSamples), !!settings.roomMode, settings.voiceModelUrl).catch(() => null);
+    await gone(); // a stop() during the model load: the voice worker and its timer are closed with the rest
+    chrome.runtime.sendMessage({ target: 'bg', type: 'dbg', meetingId, note: r.voice ? 'voice recognition: on' : 'voice recognition: could not start (recording continues without it)' });
   }
 
   // Stop if the tab stops sharing audio (tab closed or navigated away).
   tabStream.getAudioTracks()[0].addEventListener('ended', () => chrome.runtime.sendMessage({ target: 'bg', type: 'stop' }));
 
   // Live input levels for the popup meter (0 = dead/silent source).
-  rec.levelTimer = setInterval(() => {
+  r.levelTimer = setInterval(() => {
     if (!rec) return;
     chrome.runtime.sendMessage({
       target: 'bg',
@@ -344,7 +452,7 @@ async function start({ streamId, settings, meetingId }) {
   const trk = (s) => s?.getAudioTracks().map((t) => `${t.readyState}${t.muted ? ' MUTED' : ''}${t.enabled ? '' : ' disabled'}`).join('|') || 'none';
   dbg(`start: ctx=${ctx.state} play=${playCtx.state} tab=${trk(tabStream)} mic=${trk(micStream)}`);
   let n = 0;
-  rec.dbgTimer = setInterval(() => {
+  r.dbgTimer = setInterval(() => {
     if (!rec) return;
     n++;
     // A microphone that delivers exactly nothing for a minute is the wrong device or blocked, not a quiet room.
@@ -355,7 +463,7 @@ async function start({ streamId, settings, meetingId }) {
     }
     const c = rec.chunkers.others;
     dbg(`t+${n * 5}s ctx=${rec.ctx.state} play=${rec.playCtx.state} tab=${trk(rec.tabStream)} tabSamples=${c.total} tabPeak=${c.maxEver.toFixed(4)}` + (rec.chunkers.me ? ` micSamples=${rec.chunkers.me.total} micPeak=${rec.chunkers.me.maxEver.toFixed(4)}` : ''));
-    if (n >= 24) clearInterval(rec.dbgTimer);
+    if (n >= 24) clearInterval(r.dbgTimer);
   }, 5000);
 
   return { mic: !!micStream, micError };
@@ -363,26 +471,7 @@ async function start({ streamId, settings, meetingId }) {
 
 async function stop() {
   if (!rec) return;
-  const r = rec;
-  rec = null;
-  clearInterval(r.levelTimer);
-  clearInterval(r.dbgTimer);
-  r.mixer?.drain();
-  Object.values(r.chunkers).forEach((c) => c.flush());
-  r.screen?.watcher.stop();
-  if (r.screen) r.screen.video.srcObject = null;
-  await r.keep?.keeper.stop().catch(() => {}); // the last piece is written before the audio contexts close
-  [r.tabStream, r.micStream, r.videoStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
-  await Promise.allSettled([r.ctx.close(), r.playCtx.close()]);
-  await r.pool.drain();
-  if (r.voice) {
-    r.voice.tracker.flush();
-    r.voice.trackerMic?.flush();
-    await r.voice.client.drain(20000);
-    clearInterval(r.voice.timer);
-    r.voice.flush();
-    r.voice.client.close();
-  }
+  await teardown(rec);
 }
 
 // ---- minutes jobs (see jobs.js): this document has no chrome.storage, so reading and saving go through the service worker ----
@@ -399,6 +488,7 @@ useStore({
   mergeEmailNames: (found) => viaBg({ op: 'mergeEmailNames', found }),
   listMeetingMetas: (opts) => viaBg({ op: 'listMeetingMetas', opts }),
   getMeetingMeta: (id, opts) => viaBg({ op: 'getMeetingMeta', id, opts }),
+  appendMeeting: (id, list, items) => viaBg({ op: 'appendMeeting', id, list, items }),
 });
 const jobs = createJobRunner({
   emit: (m) => chrome.runtime.sendMessage(m).catch(() => {}),
@@ -407,7 +497,10 @@ const jobs = createJobRunner({
   onIdle: (left) => !left && !rec && chrome.runtime.sendMessage({ target: 'bg', type: 'offscreen-idle' }).catch(() => {}),
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // A web page's content script (Meet, Teams) can message the extension too; it must not reach 'mic', 'pause', 'stop', 'job-run'
+  // or 'presenting' here. The service worker and Debrief's own pages carry no tab, or a tab on an extension address.
+  if (sender?.tab && !String(sender.url || '').startsWith(chrome.runtime.getURL(''))) return;
   if (msg.target !== 'offscreen') return;
   if (msg.type === 'job-run') return sendResponse(jobs.run(msg.id, { force: !!msg.force, reread: !!msg.reread, resume: !!msg.resume }));
   if (msg.type === 'job-hold') return sendResponse(jobs.hold(msg.id));
@@ -427,9 +520,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'pause') {
     if (rec) {
       rec.paused = !!msg.on;
-      applyKeepGains(rec);
-      rec.keep?.keeper.setPaused(rec.paused);
-      rec.screen?.watcher.setPaused(rec.paused);
+      // each part is told on its own: one that throws must not leave the others (or the reply) undone
+      for (const f of [() => applyKeepGains(rec), () => rec.keep?.keeper.setPaused(rec.paused), () => rec.screen?.watcher.setPaused(rec.paused)]) {
+        try {
+          f();
+        } catch {}
+      }
     }
     sendResponse({ ok: true, paused: !!rec?.paused });
     return;
@@ -443,7 +539,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // From the meeting page via the service worker: who is presenting (Google Meet only; never sent elsewhere = unknown).
   if (msg.type === 'presenting') {
     if (rec) {
-      if (msg.on && msg.name) rec.presenter = String(msg.name).slice(0, 80);
+      if (msg.on) rec.presenter = msg.name ? String(msg.name).slice(0, 80) : null; // a new presenter whose name cannot be read is not the previous one
       rec.presentingOn = !!msg.on;
       rec.screen?.watcher.setPresenting(!!msg.on);
     }

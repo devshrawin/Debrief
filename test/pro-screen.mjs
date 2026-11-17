@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import * as S from '../src/screen.js';
 import * as V from '../src/vision.js';
-import { sink } from '../src/usage.js';
+import { sink, visionBudget, addEntry } from '../src/usage.js';
 import { DEFAULTS } from '../src/store.js';
 import { SR } from '../src/chunker.js';
 
@@ -77,15 +77,15 @@ await test('gate: frames in motion (a transition, a scrolling page) are not desc
   assert.equal(step(g, rest, 330), true);
 });
 
-await test('gate: at most 120 described frames per recording', () => {
+await test('gate: at most 60 described frames per recording (the rest of the allowance is for the minutes)', () => {
   const g = new S.ScreenGate();
   let n = 0;
   for (let k = 0; k < 400; k++) {
     const sig = flip(base, 0, k % 4 < 2 ? 0 : 60); // two pictures, each held for two samples, so each swap is a change
     if (step(g, sig, k * 30)) n++;
   }
-  assert.equal(S.MAX_FRAMES, 120);
-  assert.equal(n, 120);
+  assert.equal(S.MAX_FRAMES, 60);
+  assert.equal(n, 60);
 });
 
 await test('gate: paused samples are skipped and two fresh samples are needed afterwards', () => {
@@ -167,7 +167,7 @@ await test('watcher: emits a JPEG with its time when the picture changed and hel
   const state = { pixels: left(16, 16) };
   let clock = 10_000;
   const frames = [];
-  const w = new S.ScreenWatcher({ video: video(), everySec: 30, now: () => clock, makeCanvas: fakeCanvasKit(state), onFrame: async (b, t) => (frames.push([b.type, t]), '') });
+  const w = new S.ScreenWatcher({ video: video(), everySec: 30, now: () => clock, makeCanvas: fakeCanvasKit(state), onFrame: async (b, t) => (frames.push([b.type, t]), { none: true }) });
   assert.equal(await w.tick(), false);
   clock += 30000;
   assert.equal(await w.tick(), true);
@@ -192,14 +192,87 @@ await test('watcher: nothing is sent while the budget says no, and the same pict
   let ok = false;
   let asked = 0;
   let boom = true;
-  const w = new S.ScreenWatcher({ video: video(), everySec: 30, makeCanvas: fakeCanvasKit(state), budgetOk: async () => ok, onFrame: async () => (asked++, boom ? Promise.reject(new Error('x')) : 'a slide') });
+  const w = new S.ScreenWatcher({ video: video(), everySec: 30, makeCanvas: fakeCanvasKit(state), budgetOk: async () => ok, onFrame: async () => (asked++, boom ? Promise.reject(new Error('x')) : { text: 'a slide' }) });
   await w.tick();
   assert.equal(await w.tick(), false);
   assert.equal(asked, 0);
   ok = true;
   assert.equal(await w.tick(), false); // onFrame rejected: swallowed, not thrown
   assert.equal(asked, 1);
+  assert.equal(w.gate.frames, 0, 'a frame that failed to describe is not counted');
+});
+
+await test('watcher: a failed describe leaves the frame uncommitted, backs off 30 s, 60 s, 120 s, 5 min, and the same picture is described later', async () => {
+  const state = { pixels: left(16, 16) };
+  let clock = 10_000;
+  let mode = 'error';
+  let asked = 0;
+  const w = new S.ScreenWatcher({ video: video(), everySec: 5, now: () => clock, makeCanvas: fakeCanvasKit(state), onFrame: async () => (asked++, mode === 'error' ? { error: 'HTTP 429', retryable: true } : { text: 'Budget slide' }) });
+  const tickAt = async (sec) => {
+    clock = 10_000 + sec * 1000;
+    return w.tick();
+  };
+  await tickAt(5); // first sample: nothing to compare yet
+  assert.equal(await tickAt(10), false); // asked, failed
+  assert.equal(asked, 1);
+  assert.equal(w.gate.frames, 0, 'not counted as a frame');
+  assert.equal(w.gate.noneRun, 0, 'not counted as NONE either');
+  assert.equal(w.gate.described, null, 'not remembered as described');
+  assert.equal(await tickAt(35), false); // inside the 30 s wait
+  assert.equal(asked, 1);
+  assert.equal(await tickAt(41), false); // 30 s passed: the same picture is asked again, fails again
+  assert.equal(asked, 2);
+  assert.equal(await tickAt(100), false); // the wait is now 60 s (until 101)
+  assert.equal(asked, 2);
+  await tickAt(102);
+  assert.equal(asked, 3);
+  assert.deepEqual([S.retryDelay(1), S.retryDelay(2), S.retryDelay(3), S.retryDelay(4), S.retryDelay(9)], [30, 60, 120, 300, 300]);
+  assert.equal(await tickAt(200), false); // 120 s wait from 102 -> 222
+  assert.equal(asked, 3);
+  mode = 'ok';
+  assert.equal(await tickAt(225), true);
+  assert.equal(asked, 4);
   assert.equal(w.gate.frames, 1);
+  assert.equal(w.gate.described != null, true);
+  assert.equal(w.errRun, 0, 'a success clears the back-off');
+  assert.equal(await tickAt(230), false, 'the picture is described now: nothing more to ask');
+  assert.equal(asked, 4);
+});
+
+await test('watcher: many failures never disable it for the recording (no cut-off), and "NONE" still counts only for real NONE answers', async () => {
+  const state = { pixels: left(16, 16) };
+  let clock = 0;
+  let r = { error: 'network', retryable: true };
+  const w = new S.ScreenWatcher({ video: video(), everySec: 5, now: () => clock, makeCanvas: fakeCanvasKit(state), onFrame: async () => r });
+  for (let i = 1; i <= 40; i++) {
+    clock = i * 400_000;
+    await w.tick();
+  }
+  assert.equal(w.gate.backoff, false);
+  assert.equal(w.gate.noneRun, 0);
+  r = { none: true };
+  clock += 400_000;
+  await w.tick();
+  assert.equal(w.gate.noneRun, 1);
+});
+
+await test('watcher: a legacy string answer still works (text or empty = none)', () => {
+  assert.deepEqual([S.verdict('x').kind, S.verdict('').kind, S.verdict({ text: 'a' }).kind, S.verdict({ none: true }).kind, S.verdict({ error: 'e', retryable: false }), S.verdict(undefined).kind], ['text', 'none', 'text', 'none', { kind: 'error', retryable: false }, 'unknown']);
+});
+
+await test('visionBudget: Gemini with a known daily limit stops screen notes before the minutes run out; unknown limits and other providers never block', () => {
+  const g = { llmProvider: 'gemini', geminiModel: 'gemini-3.8-flash' };
+  const used = (n, kind = 'llm') => addEntry({}, { provider: 'gemini', model: 'gemini-3.8-flash', kind, req: n });
+  const limits = { 'gemini-3.8-flash': 100 };
+  assert.equal(visionBudget(used(10), limits, g).ok, true);
+  assert.equal(visionBudget(used(91), limits, g).ok, true, '9 left: after this one 8 remain');
+  assert.equal(visionBudget(used(92), limits, g).ok, false, '8 left: this one would leave 7');
+  assert.equal(visionBudget(used(100), limits, g).ok, false);
+  const b = visionBudget(addEntry(used(50), { provider: 'gemini', model: 'gemini-3.8-flash', kind: 'vision', req: 45 }), limits, g);
+  assert.deepEqual([b.used, b.left, b.ok, b.known], [95, 5, false, true], 'minutes and screen requests share the allowance');
+  assert.deepEqual(visionBudget(used(99), {}, g), { ok: true, known: false }, 'no known limit');
+  assert.deepEqual(visionBudget(used(99), limits, { ...g, llmProvider: 'anthropic' }), { ok: true, known: false });
+  assert.equal(visionBudget(used(80), limits, g, { reserve: 30 }).ok, false);
 });
 
 // ---- vision.js ----
@@ -227,7 +300,7 @@ await test('vision, Gemini: the image goes inline with the language and the prev
   usage.length = 0;
   reply = gemAnswer('Q3 revenue slide: 4.2 crore, up 12%.');
   const out = await V.describeScreen(jpeg, gem, { prev: 'Title slide: Q3 review' });
-  assert.equal(out, 'Q3 revenue slide: 4.2 crore, up 12%.');
+  assert.deepEqual(out, { text: 'Q3 revenue slide: 4.2 crore, up 12%.' });
   const [r] = requests;
   assert.match(r.url, /models\/gemini-3\.8-flash:generateContent$/); // not the streaming endpoint
   assert.equal(r.headers['x-goog-api-key'], 'k');
@@ -247,7 +320,7 @@ await test('vision, Claude: image block, same headers as the minutes, 500 tokens
   requests = [];
   usage.length = 0;
   reply = () => Response.json({ content: [{ type: 'text', text: 'NONE' }], usage: { input_tokens: 900, output_tokens: 2 } });
-  assert.equal(await V.describeScreen(jpeg, claude), ''); // NONE is nothing
+  assert.deepEqual(await V.describeScreen(jpeg, claude), { none: true }); // NONE is nothing
   const [r] = requests;
   assert.match(r.url, /^https:\/\/api\.anthropic\.com\/v1\/messages/);
   assert.equal(r.headers['x-api-key'], 'sk');
@@ -266,15 +339,16 @@ await test('vision, OpenAI-compatible: image_url data URL; a 400 means no vision
   usage.length = 0;
   const notes = [];
   reply = () => Response.json({ choices: [{ message: { content: 'Agenda: 1. Budget 2. Hiring' } }] });
-  assert.equal(await V.describeScreen(jpeg, oa), 'Agenda: 1. Budget 2. Hiring');
+  assert.deepEqual(await V.describeScreen(jpeg, oa), { text: 'Agenda: 1. Budget 2. Hiring' });
   assert.equal(requests[0].url, 'http://localhost:1234/v1/chat/completions');
   assert.deepEqual(requests[0].body.messages[1].content[1], { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpegB64}` } });
   assert.ok(usage.some((u) => u.kind === 'vision' && u.provider === 'openai' && u.req === 1));
   reply = () => new Response('{"error":"this model does not support images"}', { status: 400 });
   requests = [];
-  assert.equal(await V.describeScreen(jpeg, oa, { onNote: (n) => notes.push(n) }), '');
+  const no = await V.describeScreen(jpeg, oa, { onNote: (n) => notes.push(n) });
+  assert.equal(no.retryable, false);
   assert.equal(V.visionUnavailable(), true);
-  assert.equal(await V.describeScreen(jpeg, oa, { onNote: (n) => notes.push(n) }), '');
+  assert.equal((await V.describeScreen(jpeg, oa, { onNote: (n) => notes.push(n) })).retryable, false);
   assert.equal(requests.length, 1); // not asked again
   assert.equal(notes.length, 1);
   assert.match(notes[0], /does not accept pictures/);
@@ -282,14 +356,24 @@ await test('vision, OpenAI-compatible: image_url data URL; a 400 means no vision
   assert.equal(V.visionUnavailable(), false);
 });
 
-await test('vision: three failed requests in a row stop it for the recording; a failure is never thrown', async () => {
+await test('vision: a failure is a tagged result, never thrown; a 429, a 5xx or a dropped connection is retryable and does not switch vision off', async () => {
   V.resetVision();
   requests = [];
   const notes = [];
-  reply = () => new Response('{"error":{"message":"bad key"}}', { status: 401 });
-  for (let i = 0; i < 4; i++) assert.equal(await V.describeScreen(jpeg, claude, { onNote: (n) => notes.push(n) }), '');
-  assert.equal(requests.length, 3);
-  assert.ok(notes.some((n) => /stopped after 3 failed/.test(n)));
+  for (const [mk, retryable] of [[() => new Response('{"error":{"message":"slow down"}}', { status: 429 }), true], [() => new Response('oops', { status: 503 }), true], [() => new Response('{"error":{"message":"bad key"}}', { status: 401 }), false]]) {
+    reply = mk;
+    for (let i = 0; i < 4; i++) {
+      const r = await V.describeScreen(jpeg, claude, { onNote: (n) => notes.push(n) });
+      assert.equal(r.retryable, retryable);
+      assert.ok(r.error);
+    }
+  }
+  reply = () => Promise.reject(new TypeError('Failed to fetch'));
+  assert.equal((await V.describeScreen(jpeg, claude, { onNote: (n) => notes.push(n) })).retryable, true);
+  assert.equal(V.visionUnavailable(), false, 'twelve failures later it is still on');
+  reply = () => Response.json({ content: [{ type: 'text', text: 'Slide: Budget' }], usage: { input_tokens: 5, output_tokens: 5 } });
+  assert.deepEqual(await V.describeScreen(jpeg, claude), { text: 'Slide: Budget' });
+  assert.ok(notes.length <= 4, `each kind of failure is noted once: ${notes.length}`);
   V.resetVision();
 });
 

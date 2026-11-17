@@ -7,14 +7,24 @@
 // 3. Spelling hints must be people's names, never Meet's own button text ("Backgrounds and effects", "More options for X").
 import { isIconText, isMenuText, personOfTile } from './iconText.js';
 
-// Where the thinking starts.
+// Where the thinking starts. Every one of these is also ordinary speech ("Let's check the numbers", "Wait, the budget is
+// approved?"), so a start alone proves nothing: see stripThinking.
 const LEAK_START = [
   /(?:^|[\s"“”.!?।])(?:The user (?:wants|is asking|asked|has provided)|Rules:|Audio breakdown|Let'?s (?:double-?)?check|Let'?s (?:re-?listen|hear)|Re-?listen\b|Wait, (?:is|maybe|let|the)|Is it ["“'][^"”']{1,40}["”'] or)/i,
   /\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*:/, // "0:00 - 0:05:" a breakdown by time
 ];
+// The separate kinds of start, to count how many different ones one passage has.
+const LEAK_KINDS = [/The user (?:wants|is asking|asked|has provided)/i, /Rules:/i, /Audio breakdown/i, /Let'?s (?:double-?)?check/i, /Let'?s (?:re-?listen|hear)|Re-?listen\b/i, /Wait, (?:is|maybe|let|the)/i, /Is it ["“'][^"”']{1,40}["”'] or/i, /\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*:/];
+// A model reading its instructions back: words people do not say about their own meeting.
+const LEAK_ECHO = /\b(?:transcribe|exact transcription|transcription of the (?:meeting )?audio|the audio\b|speaker labels?|as an AI|provided spellings|output ONLY)/i;
 // Where the thinking ends and the real answer follows.
 const LEAK_END = /(?:Looks (?:very )?(?:good|solid)!?|Final (?:answer|transcript|output):?|Here(?:'s| is) the (?:final )?transcript:?)\s*/gi;
 
+const wordsIn = (s) => (String(s).match(/\S+/g) || []).length;
+
+// Cuts a reasoning block a general model wrote into its transcript. A sentence opener is not enough (people say "Let's check
+// the numbers"): the passage must have an end marker, or two different kinds of leak marker, or instruction-echo words. A
+// short passage (under 25 words) needs the end marker or the echo words, and one that would vanish whole is kept.
 export function stripThinking(text) {
   const t = String(text || '');
   let first = -1;
@@ -23,15 +33,26 @@ export function stripThinking(text) {
     if (m && (first < 0 || m.index < first)) first = m.index;
   }
   if (first < 0) return { text: t, leaked: false };
-  const before = t.slice(0, first).trim().replace(/["“”]+$/, '').trim();
-  let after = '';
-  let m;
   let endAt = -1;
+  let m;
   LEAK_END.lastIndex = 0;
   while ((m = LEAK_END.exec(t))) if (m.index > first) endAt = m.index + m[0].length;
-  if (endAt >= 0) after = t.slice(endAt).trim();
-  return { text: [before, after].filter(Boolean).join(' ').trim(), leaked: true };
+  const kinds = LEAK_KINDS.filter((re) => re.test(t)).length;
+  const echo = LEAK_ECHO.test(t);
+  const long = wordsIn(t) >= 25;
+  const proven = endAt >= 0 || echo || (long && kinds >= 2);
+  if (!proven || (!long && endAt < 0 && !echo)) return { text: t, leaked: false };
+  const before = t.slice(0, first).trim().replace(/["“”]+$/, '').trim();
+  const after = endAt >= 0 ? t.slice(endAt).trim() : '';
+  const out = [before, after].filter(Boolean).join(' ').trim();
+  if (!out && !long) return { text: t, leaked: false }; // one short sentence is never wiped out whole
+  return { text: out, leaked: true };
 }
+
+// Meetings recorded before 1.1.2 (2026-10-28) were cleaned only when shown; later ones were cleaned when captured, so display
+// need not look for thinking again. Pass { thinking: isLegacyCapture(meeting) } to cleanTranscript at display time.
+export const CLEANED_AT_CAPTURE_FROM = Date.parse('2026-10-28T00:00:00Z');
+export const isLegacyCapture = (meeting) => !(Number(meeting?.startedAt) >= CLEANED_AT_CAPTURE_FROM);
 
 const norm = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim();
 
@@ -155,9 +176,11 @@ export function makeDeduper(keep = 60) {
 }
 
 // Everything above, in order. `names`: people we know (to strip the labels the model made up). `dedupe`: a makeDeduper().
-export function cleanTranscript(text, names = [], dedupe = null) {
+// `opts.thinking: false` skips stripThinking: speech models (Deepgram, Sarvam, Whisper) never think out loud, and a line
+// already cleaned when captured need not be looked at again.
+export function cleanTranscript(text, names = [], dedupe = null, opts = {}) {
   const notes = stripNotes(text); // line-level notes first: their time ranges would otherwise look like the start of thinking
-  const { text: t, leaked } = stripThinking(notes.text);
+  const { text: t, leaked } = opts.thinking === false ? { text: notes.text, leaked: false } : stripThinking(notes.text);
   let clean = dropRepeats(stripStamps(t));
   if (dedupe) clean = dedupe(clean);
   clean = stripLabels(clean, names);

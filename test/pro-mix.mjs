@@ -92,7 +92,7 @@ await test('quota maths: requests for a one-hour meeting against what is left to
   assert.deepEqual([half.short, half.longHelps], [true, true], '25 left: 29 does not fit but 17 does');
   assert.equal(quotaCheck(usage, limits, { ...s, sttGeminiChunk: 'long' }).need, 17);
   assert.deepEqual(chunkSecs({ ...s, sttGeminiChunk: 'short' }), { minSec: 30, maxSec: 45 });
-  assert.equal(quotaCheck(usage, limits, { ...s, sttGeminiChunk: 'short' }).need, 96, 'short chunks need about three times the requests');
+  assert.equal(quotaCheck(usage, limits, { ...s, sttGeminiChunk: 'short' }).need, 110, 'short chunks (cut at the first pause after 30 s, about 33 s) need about four times the requests');
   assert.equal(quotaCheck(usage, limits, { ...s, sttProvider: 'sarvam' }), null, 'only Gemini has the tight limit');
   assert.equal(quotaCheck(usage, {}, s), null, 'unknown limit: nothing to compare with');
 });

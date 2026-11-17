@@ -124,19 +124,34 @@ function presenterName(s) {
   return /^(your|someone|somebody|a participant)\b/i.test(raw) ? '' : cleanName(raw);
 }
 
-// -> { on, name } (name 'You' when it is you), or null when it cannot be told (not in a call).
-export function presenting(doc) {
-  if (!inCall(doc)) return null;
+// -> { on, name } (name 'You' when it is you), or null when it cannot be told (not in a call). `call`: the caller's own answer
+// to inCall(doc), when it already has one (it is the costly part of the question).
+// The pill asks every few seconds, so this stays cheap: labels and titles are read first (attributes, no layout); the text of
+// small elements only when no label said it, and never textContent of a big region (a chat, a participants list).
+const BIG = 200;
+export function presenting(doc, call) {
+  if (!(call ?? inCall(doc))) return null;
   let found = false;
   let name = null;
-  for (const el of doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"], [role="status"], [role="alert"], [aria-label]')) {
+  const see = (s) => {
+    const t = String(s || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 100 || !PRESENTING.test(t)) return null;
+    found = true;
+    if (YOU_PRESENT.test(t)) return { on: true, name: 'You' };
+    name ||= presenterName(t) || null;
+    return null;
+  };
+  for (const el of doc.querySelectorAll('[aria-label], [title]')) {
     if (el.closest(CHAT_SCOPE)) continue;
-    for (const s of [el.getAttribute('aria-label'), el.getAttribute('title'), ...lines(el).slice(0, 4)]) {
-      const t = String(s || '').trim();
-      if (!t || t.length > 100 || !PRESENTING.test(t)) continue;
-      found = true;
-      if (YOU_PRESENT.test(t)) return { on: true, name: 'You' };
-      name ||= presenterName(t) || null;
+    const you = see(el.getAttribute('aria-label')) || see(el.getAttribute('title'));
+    if (you) return you;
+  }
+  if (!found) {
+    for (const el of doc.querySelectorAll('button, [role="button"], h1, h2, h3, [role="heading"], [role="status"], [role="alert"]')) {
+      const raw = el.textContent || '';
+      if (raw.length > BIG || el.closest(CHAT_SCOPE)) continue;
+      const you = see(raw);
+      if (you) return you;
     }
   }
   return { on: found, name: found ? name : null };

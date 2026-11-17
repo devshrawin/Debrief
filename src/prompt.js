@@ -1,6 +1,6 @@
 import { fmtTime } from './store.js';
 import { applyDictionary, glossaryLine } from './dictionary.js';
-import { cleanTranscript, makeDeduper } from './sttclean.js';
+import { cleanTranscript, makeDeduper, isLegacyCapture } from './sttclean.js';
 import { lineNameOf } from './linenames.js';
 
 // Shared by the standard and the organisation-template prompts.
@@ -97,15 +97,16 @@ function withScreens(speech, screens) {
 export function formatTranscript(meeting, myName, ctx = {}) {
   const me = myName ? `ME (${myName})` : 'ME';
   const dd = makeDeduper();
+  const clean = (text) => cleanTranscript(text, ctx.attendees || [], dd, { thinking: isLegacyCapture(meeting) }).text; // later meetings were cleaned when captured
   const screens = ctx.screens ?? meeting?.screens;
   // With voice recognition the remote passages are split into labelled lines: [mm:ss] Amal Raj: ...
   if (ctx.labeled?.length) {
-    return withScreens(ctx.labeled.map((l) => ({ t: l.t, line: `[${fmtTime(l.t)}] ${lineNameOf(ctx.lineNames, l) || (l.src === 'me' && !ctx.room ? me : l.label)}: ${applyDictionary(cleanTranscript(l.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}` })), screens).join('\n');
+    return withScreens(ctx.labeled.map((l) => ({ t: l.t, line: `[${fmtTime(l.t)}] ${lineNameOf(ctx.lineNames, l) || (l.src === 'me' && !ctx.room ? me : l.label)}: ${applyDictionary(clean(l.text), ctx.entries, ctx.attendees)}` })), screens).join('\n');
   }
   return withScreens(
     [...meeting.segments]
       .sort((a, b) => a.t - b.t)
-      .map((s) => ({ t: s.t, line: `[${fmtTime(s.t)}] ${lineNameOf(ctx.lineNames, s) || (s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS')}: ${applyDictionary(cleanTranscript(s.text, ctx.attendees || [], dd).text, ctx.entries, ctx.attendees)}` })),
+      .map((s) => ({ t: s.t, line: `[${fmtTime(s.t)}] ${lineNameOf(ctx.lineNames, s) || (s.src === 'me' ? (ctx.room ? 'ROOM' : me) : 'OTHERS')}: ${applyDictionary(clean(s.text), ctx.entries, ctx.attendees)}` })),
     screens
   ).join('\n');
 }

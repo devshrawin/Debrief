@@ -121,6 +121,27 @@ await test('expansion: failure, slow reply, junk and empty all fall back to the 
   }
 });
 
+await test('expansion: the call gets its own abort signal and no retries; a timeout aborts it, a quick answer does not, and the answer call is untouched', async () => {
+  const ms = many(['Payments are late again.']);
+  const seen = [];
+  let expansionSignal;
+  const gen = (s, u, onText, o) => {
+    seen.push(o);
+    if (!/search words/.test(s)) return Promise.resolve('answer');
+    expansionSignal = o?.signal;
+    return new Promise((_, rej) => o?.signal?.addEventListener('abort', () => rej(new Error('aborted'))));
+  };
+  const r = await A.askMeetings({ question: 'payments late', meetings: ms, fullBudget: 100, gen, expandTimeoutMs: 30 });
+  assert.equal(r.answer, 'answer');
+  assert.deepEqual(seen[0] && { retries: seen[0].retries }, { retries: 0 }, 'the expansion call must not retry');
+  assert.equal(expansionSignal?.aborted, true, 'cancelled at the timeout');
+  assert.equal(seen[1], undefined, 'the answer is asked as before: three arguments');
+  let sig2;
+  const quick = await A.askMeetings({ question: 'payments late', meetings: ms, fullBudget: 100, gen: async (s, u, t, o) => (/search words/.test(s) ? ((sig2 = o.signal), 'invoice reconciliation') : 'ok') });
+  assert.equal(quick.expanded, true);
+  assert.equal(sig2.aborted, false, 'a quick answer is not cancelled');
+});
+
 await test('ranked: neighbouring windows come along, in meeting and time order, capped', () => {
   const segs = Array.from({ length: 8 }, (_, i) => `${i === 3 ? 'The zebra migration decision is here.' : ''} ${filler(i, 120)}.`.trim());
   const m = mk('a', 'Long', 5, segs);

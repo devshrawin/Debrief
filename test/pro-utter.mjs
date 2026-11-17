@@ -188,9 +188,57 @@ await test('chunkSecs short, and the free-quota estimate follows it', () => {
   const s = { ...g, sttGeminiModel: 'm' };
   const std = quotaCheck({}, { m: 1000 }, { ...s, sttGeminiChunk: 'standard' }).need;
   const sh = quotaCheck({}, { m: 1000 }, s);
-  assert.equal(sh.need, 96); // 3600 / 37.5
-  assert.ok(sh.need / std > 3 && sh.need / std < 3.5);
+  assert.equal(sh.need, 110); // 3600 / 33: pieces are cut at the first pause after 30 s, so they run near 33 s, not 37.5
+  assert.ok(sh.need / std > 3 && sh.need / std < 4);
   assert.equal(sh.longHelps, true);
+});
+
+await test('openai-compatible: one transient 400 does not switch verbose_json off; a plain retry that fails is not remembered either', async () => {
+  calls = [];
+  let n = 0;
+  handler = (url, init) => {
+    if (init.body.get('response_format') === 'verbose_json') return n++ === 0 ? new Response('{"error":"overloaded, try later"}', { status: 400 }) : Response.json({ text: 'Back.', segments: [{ start: 0, end: 1, text: 'Back.' }] });
+    return Response.json({ text: 'Plain.' });
+  };
+  assert.equal(await transcribe(wav, oa), 'Plain.');
+  const r = await transcribeDetailed(wav, oa);
+  assert.equal(r.utterances?.length, 1, 'verbose_json is tried again after a transient 400');
+  handler = (url, init) => (init.body.get('response_format') === 'verbose_json' ? new Response('{"error":"bad response_format"}', { status: 400 }) : new Response('{"error":"down"}', { status: 400 }));
+  await assert.rejects(transcribe(wav, { ...oa, sttBase: 'http://other:1/v1' }));
+  calls = [];
+  handler = () => Response.json({ text: 'ok', segments: [] });
+  await transcribe(wav, { ...oa, sttBase: 'http://other:1/v1' });
+  assert.equal(formats()[0], 'verbose_json', 'the plain retry failed, so nothing was remembered');
+});
+
+await test('openai-compatible: the "no verbose_json" memo expires after 30 minutes and a 415/422 counts', async () => {
+  calls = [];
+  const realNow = Date.now;
+  handler = (url, init) => (init.body.get('response_format') === 'verbose_json' ? new Response('nope', { status: 422 }) : Response.json({ text: 'Plain.' }));
+  const s = { ...oa, sttBase: 'http://memo:1/v1' };
+  try {
+    await transcribe(wav, s);
+    calls = [];
+    await transcribe(wav, s);
+    assert.deepEqual(formats(), ['json'], 'remembered');
+    Date.now = () => realNow() + 31 * 60 * 1000;
+    calls = [];
+    await transcribe(wav, s);
+    assert.equal(formats()[0], 'verbose_json', 'forgotten after 30 minutes');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+const SPEECH = ["Let's check the numbers for Q3.", 'Rules: no phones in the room.', 'The user wants a faster export.', 'Wait, the budget is approved?', 'चलो Q3 के numbers check करते हैं. Let us check the numbers for Q3.', 'Wait, budget approve हो गया क्या?'];
+
+await test('deepgram and whisper utterances keep ordinary speech that looks like a reasoning opener', async () => {
+  handler = () => Response.json({ results: { channels: [{ alternatives: [{ transcript: SPEECH.join(' ') }] }], utterances: SPEECH.map((t, i) => ({ start: i * 3, end: i * 3 + 2, transcript: t, speaker: 0 })) } });
+  const d = await transcribeDetailed(wav, dg);
+  assert.deepEqual(d.utterances.map((u) => u.text), SPEECH);
+  handler = () => Response.json({ text: SPEECH.join(' '), segments: SPEECH.map((t, i) => ({ start: i * 3, end: i * 3 + 2, text: t })) });
+  const w = await transcribeDetailed(wav, oa);
+  assert.deepEqual(w.utterances.map((u) => u.text), SPEECH);
 });
 
 console.log(`\n${passed} passed`);

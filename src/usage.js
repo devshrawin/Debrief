@@ -79,10 +79,14 @@ export function nearLimit(usage, limits, now = new Date()) {
 
 // Requests one meeting needs: a request per chunk per stream. Gemini with the mic on is ONE mixed stream; chunks average
 // about halfway between the shortest and longest length.
-export function estimateRequests({ minutes = 60, minSec, maxSec, streams = 1 }) {
-  const avg = (minSec + maxSec) / 2;
+// `avgSec` overrides the midpoint: the 'short' setting cuts at the first pause after 30 s, so its pieces run about 33 s, not 37.5.
+// Only live pieces are counted: a piece read again in parts (up to 8 per recording) or a retry after a failure costs extra.
+export function estimateRequests({ minutes = 60, minSec, maxSec, streams = 1, avgSec }) {
+  const avg = avgSec || (minSec + maxSec) / 2;
   return Math.ceil((minutes * 60) / avg) * streams;
 }
+
+export const SHORT_AVG_SEC = 33;
 
 // Will a meeting of `minutes` fit in what is left of today's allowance for the Gemini transcription model?
 // Returns null when there is nothing to warn about (not Gemini, or the limit is not known yet).
@@ -93,7 +97,7 @@ export function quotaCheck(usage, limits, settings, { minutes = 60, now = new Da
   if (!model || !limit) return null;
   const used = summarize(usage, 1, now).filter((r) => r.model === model && r.kind === 'stt').reduce((a, r) => a + r.req, 0);
   const secs = chunkSecs(settings); // gemini here, so short / standard / long
-  const need = estimateRequests({ minutes, ...secs, streams: 1 });
+  const need = estimateRequests({ minutes, ...secs, streams: 1, avgSec: settings.sttGeminiChunk === 'short' ? SHORT_AVG_SEC : undefined });
   const left = Math.max(0, limit - used);
   return { model, limit, used, left, need, minutes, short: need > left, longHelps: settings.sttGeminiChunk !== 'long' && estimateRequests({ minutes, minSec: 200, maxSec: 240 }) <= left };
 }
@@ -183,4 +187,18 @@ export function istClock(ms, now = Date.now()) {
   const time = f({ hour: 'numeric', minute: '2-digit', hour12: true }).format(ms).replace(/\s?([ap])m/i, (m, c) => ` ${c.toLowerCase()}m`);
   const sameDay = f({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms) === f({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   return `${sameDay ? '' : `${f({ weekday: 'short' }).format(ms)} `}${time} IST`;
+}
+
+// Screen notes share the minutes model's daily allowance with the minutes themselves. With Gemini, and a daily limit and today's
+// count known for that model, a note is asked for only while at least `reserve` requests would still be left after it.
+// -> { ok, known, ... }: known is false (and ok true) when there is nothing to judge by.
+export const VISION_RESERVE = 8;
+export function visionBudget(usage, limits, settings, { reserve = VISION_RESERVE, now = new Date() } = {}) {
+  if (settings?.llmProvider !== 'gemini') return { ok: true, known: false };
+  const model = settings.geminiModel;
+  const limit = Number(limits?.[model]);
+  if (!model || !(limit > 0)) return { ok: true, known: false };
+  const used = summarize(usage, 1, now).filter((r) => r.model === model).reduce((a, r) => a + r.req, 0);
+  const left = Math.max(0, limit - used);
+  return { ok: left - 1 >= reserve, known: true, model, limit, used, left, reserve };
 }

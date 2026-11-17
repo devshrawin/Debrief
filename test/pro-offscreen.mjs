@@ -23,7 +23,7 @@ globalThis.chrome = {
   runtime: {
     onMessage: { addListener: (f) => (onMessage = f) },
     sendMessage: (m) => (sent.push(m), Promise.resolve({ ok: true })),
-    getURL: (p) => p,
+    getURL: (p) => `chrome-extension://debrief/${p}`,
   },
   storage: { local: { get: async () => ({}), set: async () => {} }, session: { get: async () => ({}), set: async () => {} } },
 };
@@ -37,11 +37,14 @@ globalThis.AudioWorkletNode = class {
     return x;
   }
 };
+let ctxs = [];
+let addModule = async () => {};
 globalThis.AudioContext = class {
   constructor() {
     this.state = 'running';
     this.destination = {};
-    this.audioWorklet = { addModule: async () => {} };
+    this.audioWorklet = { addModule: (u) => addModule(u) };
+    ctxs.push(this);
   }
   resume() {
     return Promise.resolve();
@@ -52,18 +55,56 @@ globalThis.AudioContext = class {
   createGain() {
     return { gain: {}, connect: (x) => x };
   }
+  createMediaStreamDestination() {
+    return { stream: {} };
+  }
   close() {
+    this.closed = true;
     return Promise.resolve();
   }
 };
-const fakeStream = () => ({ getAudioTracks: () => [{ addEventListener() {}, readyState: 'live', muted: false, enabled: true }], getTracks: () => [{ stop() {} }] });
-Object.defineProperty(globalThis, 'navigator', { value: { mediaDevices: { getUserMedia: async () => fakeStream() } }, configurable: true });
+// every track ever handed out, to see that none is left running after a failed or stopped start
+let tracks = [];
+const fakeStream = () => {
+  const mine = [{ addEventListener() {}, readyState: 'live', muted: false, enabled: true, stop() { this.stopped = true; } }];
+  tracks.push(...mine);
+  return { getAudioTracks: () => mine, getVideoTracks: () => [], getTracks: () => mine };
+};
+let getUserMedia = async () => fakeStream();
+Object.defineProperty(globalThis, 'navigator', { value: { mediaDevices: { getUserMedia: (c) => getUserMedia(c) } }, configurable: true });
+// timers: count the intervals that were set and not cleared
+const realSetInterval = globalThis.setInterval;
+const realClearInterval = globalThis.clearInterval;
+const liveTimers = new Set();
+globalThis.setInterval = (...a) => {
+  const h = realSetInterval(...a);
+  liveTimers.add(h);
+  return h;
+};
+globalThis.clearInterval = (h) => {
+  liveTimers.delete(h);
+  return realClearInterval(h);
+};
+
+// a voice worker we can hold back, fail or count closes of
+const voice = { mode: 'ok', gate: null, closed: 0 };
+globalThis.Worker = class {
+  postMessage(m) {
+    if (m?.type !== 'init') return;
+    if (voice.mode === 'fail') setTimeout(() => this.onerror?.({ message: 'no model' }), 0);
+    else Promise.resolve(voice.gate).then(() => this.onmessage?.({ data: { ready: true } }));
+  }
+  terminate() {
+    voice.closed++;
+  }
+};
 
 // ---- fake speech-to-text: the answer depends on how long the audio is ----
 let requests = [];
 let answer = () => '';
 let verbose = null; // when set, the OpenAI-compatible path answers with this verbose_json body
 globalThis.fetch = async (url, init = {}) => {
+  if (init.body === undefined) return new Response(new Uint8Array(16)); // the voice model file
   if (init.body instanceof FormData) {
     const sec = (init.body.get('file').size - 44) / 32000;
     requests.push(sec);
@@ -193,12 +234,12 @@ await test('utterances in a second piece are placed after the first piece, each 
 await test('features off (the defaults): the tab is asked for audio exactly once, with the same constraints as always, and nothing else is started', async () => {
   settings = gemini;
   const calls = [];
-  const real = navigator.mediaDevices.getUserMedia;
-  navigator.mediaDevices.getUserMedia = async (c) => (calls.push(c), real(c));
+  const real = getUserMedia;
+  getUserMedia = async (c) => (calls.push(c), real(c));
   try {
     await record('m9', (n) => feed(n, 3, 0.1));
   } finally {
-    navigator.mediaDevices.getUserMedia = real;
+    getUserMedia = real;
   }
   assert.deepEqual(calls, [{ audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 's' } }, video: false }]);
 });
@@ -208,6 +249,182 @@ await test('one mixed stream (Gemini with the microphone): stopping while the mi
   answer = () => words(100);
   const r = await record('m10', (n) => feed(n, 3, 0.1));
   assert.equal(r.errors.length, 0);
+});
+
+// ---- a start that fails or is stopped half-way leaves nothing behind (fix 3) ----
+const clean = (what) => {
+  assert.ok(tracks.length > 0, 'a stream was made');
+  assert.ok(tracks.every((t) => t.stopped), `${what}: every track stopped`);
+  assert.ok(ctxs.every((c) => c.closed), `${what}: every audio context closed`);
+  assert.equal(liveTimers.size, 0, `${what}: no interval left (${liveTimers.size})`);
+};
+const fresh = () => {
+  sent = [];
+  nodes = [];
+  tracks = [];
+  ctxs = [];
+};
+const startOk = async (id, extra = {}) => {
+  const r = await rpc({ type: 'start', streamId: 's', settings: { ...gemini, ...extra }, meetingId: id });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  return r;
+};
+
+await test('addModule throws: the start fails, every track is stopped, the contexts closed, and the next start works', async () => {
+  settings = gemini;
+  fresh();
+  addModule = async () => {
+    throw new Error('worklet failed');
+  };
+  const r = await rpc({ type: 'start', streamId: 's', settings: { ...gemini, captureMic: true }, meetingId: 'f1' });
+  addModule = async () => {};
+  assert.equal(r.ok, false);
+  assert.match(r.error, /worklet failed/);
+  clean('failed start');
+  fresh();
+  await startOk('f2');
+  await rpc({ type: 'stop' });
+  clean('second recording');
+});
+
+await test('a failed start leaves no recording: the second start is not refused as "Already recording"', async () => {
+  fresh();
+  let n = 0;
+  getUserMedia = async (c) => {
+    if (c.video === false && n++ === 0) throw new Error('permission');
+    return fakeStream();
+  };
+  const r = await rpc({ type: 'start', streamId: 's', settings: gemini, meetingId: 'f3' });
+  getUserMedia = async () => fakeStream();
+  assert.equal(r.ok, false);
+  await startOk('f4');
+  await rpc({ type: 'stop' });
+});
+
+await test('the tap throwing after the recording exists is undone the same way', async () => {
+  fresh();
+  const real = globalThis.AudioWorkletNode;
+  globalThis.AudioWorkletNode = class {
+    constructor() {
+      throw new Error('no worklet node');
+    }
+  };
+  const r = await rpc({ type: 'start', streamId: 's', settings: { ...gemini, captureMic: true }, meetingId: 'f5' });
+  globalThis.AudioWorkletNode = real;
+  assert.equal(r.ok, false);
+  clean('tap failed');
+  fresh();
+  await startOk('f6');
+  await rpc({ type: 'stop' });
+});
+
+await test('after stop the late audio blocks are ignored by the microphone tap (it used to throw on every block)', async () => {
+  fresh();
+  await startOk('f7', { captureMic: true });
+  const [tab, mic] = nodes;
+  await rpc({ type: 'stop' });
+  assert.doesNotThrow(() => feed(mic, 0.5, 0.1));
+  assert.doesNotThrow(() => feed(tab, 0.5, 0.1));
+});
+
+// MediaRecorder fake for the kept-recording path
+class FakeRecorder {
+  static isTypeSupported() {
+    return true;
+  }
+  constructor() {
+    FakeRecorder.made++;
+    if (FakeRecorder.failFrom != null && FakeRecorder.made > FakeRecorder.failFrom) throw new Error('stream is dead');
+  }
+  start() {}
+  stop() {
+    setTimeout(() => this.onstop?.(), 0);
+  }
+}
+FakeRecorder.made = 0;
+
+await test('stop() while the kept recording is still starting: no exception, no timer left, and a second start works', async () => {
+  fresh();
+  globalThis.MediaRecorder = FakeRecorder;
+  const gate = {};
+  const slow = new Promise((r) => (gate.open = r));
+  const realIdb = globalThis.indexedDB;
+  // listSegs (the first await inside startKeeping) waits until we say so
+  globalThis.indexedDB = { open: () => { const q = {}; slow.then(() => q.onerror?.()); Object.defineProperty(q, 'error', { value: new Error('idb') }); return q; } };
+  const started = rpc({ type: 'start', streamId: 's', settings: { ...gemini, keepAudio: true }, meetingId: 'k1' });
+  await new Promise((r) => setTimeout(r, 20));
+  await rpc({ type: 'stop' });
+  gate.open();
+  const r = await started;
+  globalThis.indexedDB = realIdb;
+  assert.equal(r.ok, false);
+  assert.match(r.error, /stopped while it was starting/);
+  clean('stop during setupKeep');
+  fresh();
+  await startOk('k2');
+  await rpc({ type: 'stop' });
+  clean('after');
+});
+
+await test('stop() while the voice model loads: no exception, the worker is closed, no timer is left, and a second start works', async () => {
+  fresh();
+  voice.closed = 0;
+  let release;
+  voice.gate = new Promise((r) => (release = r));
+  const started = rpc({ type: 'start', streamId: 's', settings: { ...gemini, voiceLearn: true }, meetingId: 'v1' });
+  await new Promise((r) => setTimeout(r, 30));
+  await rpc({ type: 'stop' });
+  release();
+  const r = await started;
+  voice.gate = null;
+  assert.equal(r.ok, false);
+  assert.match(r.error, /stopped while it was starting/);
+  assert.ok(voice.closed >= 1, 'the voice client was closed');
+  clean('stop during startVoice');
+  fresh();
+  await startOk('v2');
+  await rpc({ type: 'stop' });
+});
+
+await test('a voice model that cannot load closes its client and the recording goes on without voices', async () => {
+  fresh();
+  voice.closed = 0;
+  voice.mode = 'fail';
+  await startOk('v3', { voiceLearn: true });
+  voice.mode = 'ok';
+  assert.equal(voice.closed, 1);
+  await rpc({ type: 'stop' });
+  clean('voice failed');
+});
+
+await test('a content script cannot message the offscreen document; the service worker and extension pages can', async () => {
+  const send = (msg, sender) => new Promise((resolve) => {
+    const r = onMessage({ target: 'offscreen', ...msg }, sender, resolve);
+    if (r !== true) setTimeout(() => resolve('ignored'), 30);
+  });
+  assert.equal(await send({ type: 'job-count' }, { tab: { id: 3 }, url: 'https://meet.google.com/abc-defg-hij' }), 'ignored');
+  assert.equal(await send({ type: 'stop' }, { tab: { id: 3 }, url: 'https://evil.example/' }), 'ignored');
+  assert.deepEqual(await send({ type: 'job-count' }, {}), { ok: true, count: 0 });
+  assert.deepEqual(await send({ type: 'job-count' }, { tab: { id: 4 }, url: 'chrome-extension://debrief/minutes.html' }), { ok: true, count: 0 });
+});
+
+await test('resuming after a pause when the kept recorder cannot restart: the handler still answers, the failure is reported once, keeping stops, the recording goes on', async () => {
+  fresh();
+  FakeRecorder.made = 0;
+  FakeRecorder.failFrom = null;
+  globalThis.MediaRecorder = FakeRecorder;
+  await startOk('p1', { keepAudio: true });
+  FakeRecorder.failFrom = FakeRecorder.made; // every recorder made from now on throws
+  const answered = (msg) => Promise.race([rpc(msg), new Promise((r) => setTimeout(() => r('NO REPLY'), 500))]);
+  assert.deepEqual(await answered({ type: 'pause', on: true }), { ok: true, paused: true });
+  assert.deepEqual(await answered({ type: 'pause', on: false }), { ok: true, paused: false });
+  assert.deepEqual(await answered({ type: 'pause', on: true }), { ok: true, paused: true });
+  assert.deepEqual(await answered({ type: 'pause', on: false }), { ok: true, paused: false });
+  const notes = sent.filter((m) => m.type === 'dbg' && /kept recording stopped/.test(m.note));
+  assert.equal(notes.length, 1, JSON.stringify(notes));
+  await rpc({ type: 'stop' });
+  FakeRecorder.failFrom = null;
+  clean('pause failure');
 });
 
 settings = gemini;

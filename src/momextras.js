@@ -2,7 +2,7 @@
 // again, tick off actions, notes about the shared screen, the share confirmation, the .json download.
 // Everything built from meeting, settings or model text uses textContent or DOM methods, never an HTML string.
 // The pure parts (matching, ranges, file names) are in actionslogic.js.
-import { listSegs, segAt, segRange, pcm16kFrom } from './audiokeep.js';
+import { listSegs, segAt, segRange, pcm16kRange } from './audiokeep.js';
 import { transcribeDetailed } from './stt.js';
 import { encodeWav } from './wav.js';
 import { exportMeeting } from './backup.js';
@@ -235,13 +235,22 @@ export function closePlayer(refocus) {
 
 // the transcript line that is playing
 function markRow(sec, follow = false) {
-  const rows = [...document.querySelectorAll('#transcript .seg[data-play]')];
-  if (sec == null || !rows.length) {
+  if (sec == null) {
     markedRow?.removeAttribute('aria-current');
     markedRow = null;
     return;
   }
-  if (!rowTimes || rowTimes.rows.length !== rows.length || rowTimes.rows[0] !== rows[0]) rowTimes = { rows, times: rows.map((r) => Number(r.dataset.t)) };
+  // the rows are looked up once per render (transcriptRendered() clears this), not on every timeupdate
+  if (!rowTimes || !rowTimes.rows[0]?.isConnected) {
+    const found = [...document.querySelectorAll('#transcript .seg[data-play]')];
+    rowTimes = { rows: found, times: found.map((r) => Number(r.dataset.t)) };
+  }
+  const rows = rowTimes.rows;
+  if (!rows.length) {
+    markedRow?.removeAttribute('aria-current');
+    markedRow = null;
+    return;
+  }
   const i = L.rowIndexAt(rowTimes.times, sec);
   const row = i >= 0 ? rows[i] : null;
   if (row === markedRow) return;
@@ -439,18 +448,19 @@ function openReread([from, to], trigger) {
 async function readAgain(from, to, settings, progress, stopped) {
   const blobs = await segRange(ctx.id, from, to);
   if (!blobs.length) throw new Error(MISSING);
-  const pcm = await pcm16kFrom(blobs, { AudioContextCtor: window.AudioContext, OfflineCtor: window.OfflineAudioContext });
-  if (!pcm) throw new Error('The recording could not be read in this browser.');
   const SR = 16000;
   const base = blobs[0].t0;
   const real = Math.max(from, base);
+  // on the recording's timeline: a stretch that was not kept (a pause) is silence, so every time below is the real one
+  const pcm = await pcm16kRange(blobs, real, to, { AudioContextCtor: window.AudioContext, OfflineCtor: window.OfflineAudioContext });
+  if (!pcm) throw new Error('The recording could not be read in this browser.');
   const spans = L.splitSpan(real, to);
   const parts = [];
   for (let i = 0; i < spans.length; i++) {
     if (stopped()) return {};
     progress(i + 1, spans.length);
     const [a, b] = spans[i];
-    const slice = pcm.subarray(Math.max(0, Math.round((a - base) * SR)), Math.min(pcm.length, Math.round((b - base) * SR)));
+    const slice = pcm.subarray(Math.max(0, Math.round((a - real) * SR)), Math.min(pcm.length, Math.round((b - real) * SR)));
     if (slice.length < SR * 0.5) continue;
     parts.push({ at: a, end: b, result: await transcribeDetailed(encodeWav(slice, SR), settings) });
   }

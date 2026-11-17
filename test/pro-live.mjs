@@ -168,4 +168,34 @@ await test('summary label and clock', () => {
   assert.match(L.provisionalLabel('12:30'), /^Provisional — written at 12:30 from what was said so far\. The final minutes are written when the meeting ends\.$/);
 });
 
+await test('a broadcast line is counted as seen, so the next poll does not read the whole meeting again for it', () => {
+  const s = new L.LiveStore();
+  s.add('segment', [a, b]);
+  s.markRead({ segments: [a, b], screens: [] });
+  assert.deepEqual(s.seen, { segments: 2, screens: 0 });
+  assert.equal(L.needsReread({ segments: 2, screens: 0 }, s.seen), false);
+  s.addBroadcast('segment', [c]); // the background stored it (count 3) and broadcast it
+  assert.equal(s.seen.segments, 3);
+  assert.equal(L.needsReread({ segments: 3, screens: 0 }, s.seen), false, 'nothing new to read');
+  s.addBroadcast('segment', [c]); // the same line twice is counted once
+  assert.equal(s.seen.segments, 3);
+  s.addBroadcast('screen', [{ t: 50, text: 'Slide: budget', presenter: 'Priya' }]);
+  assert.deepEqual(s.seen, { segments: 3, screens: 1 });
+  assert.equal(L.needsReread({ segments: 4, screens: 1 }, s.seen), true, 'a line that came some other way is read');
+  // a line cleaned away (the model thinking aloud) is still stored, so it still counts
+  s.addBroadcast('segment', [{ t: 99, src: 'others', text: 'Silent audio track (only noise).\n- Output: Nothing' }]);
+  assert.equal(s.seen.segments, 4);
+});
+
+await test('the poll is over once the meeting has ended; messages from a web page\'s content script are ignored', () => {
+  assert.equal(L.pollOver({ phase: 'ended' }), true);
+  assert.equal(L.pollOver({ phase: 'recording' }), false);
+  assert.equal(L.pollOver(null), false);
+  const base = 'chrome-extension://abc/';
+  assert.equal(L.fromContentScript({ tab: { id: 1 }, url: 'https://meet.google.com/x' }, base), true);
+  assert.equal(L.fromContentScript({}, base), false, 'the service worker has no tab');
+  assert.equal(L.fromContentScript({ tab: { id: 1 }, url: `${base}live.html?id=m` }, base), false, 'our own page in a tab');
+  assert.equal(L.fromContentScript(undefined, base), false);
+});
+
 console.log(`\n${passed} passed`);

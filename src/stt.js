@@ -80,8 +80,11 @@ async function deepgram(wav, s) {
   return { text, utterances };
 }
 
-// Base URLs whose server refused response_format=verbose_json (it then gets plain json straight away).
-const NO_VERBOSE = new Set();
+// Base URLs whose server refused response_format=verbose_json (it then gets plain json straight away), with when that is
+// forgotten: one transient 400 must not cost a server its segments for good.
+const NO_VERBOSE = new Map();
+const NO_VERBOSE_MS = 30 * 60 * 1000;
+const refusesVerbose = (e) => e.status === 415 || e.status === 422 || (e.status === 400 && /response_format|verbose|format/i.test(e.message || ''));
 export const _resetVerbose = () => NO_VERBOSE.clear();
 
 // OpenAI-compatible /audio/transcriptions: OpenAI, Groq, or a local Whisper server. verbose_json also carries the
@@ -102,7 +105,8 @@ async function openaiCompat(wav, s) {
     const res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: s.sttKey ? { Authorization: `Bearer ${s.sttKey}` } : {}, body: fd });
     return check(res, 'Transcription');
   };
-  if (!NO_VERBOSE.has(base)) {
+  let refused = null;
+  if (!(NO_VERBOSE.get(base) > Date.now())) {
     try {
       const j = await call('verbose_json');
       if (typeof j.text === 'string') {
@@ -111,10 +115,12 @@ async function openaiCompat(wav, s) {
       }
     } catch (e) {
       if (![400, 415, 422].includes(e.status)) throw e;
+      refused = e;
     }
-    NO_VERBOSE.add(base);
   }
-  return (await call('json')).text || '';
+  const plain = (await call('json')).text || '';
+  if (refused && refusesVerbose(refused)) NO_VERBOSE.set(base, Date.now() + NO_VERBOSE_MS); // remembered only once plain json works
+  return plain;
 }
 
 async function toBase64(blob) {
@@ -181,7 +187,7 @@ async function geminiCall(wav, s, model) {
     .filter((p) => p.text && !p.thought)
     .map((p) => p.text)
     .join('');
-  return cleanTranscript(text, sttTerms(s)).text; // thinking that leaked into the answer, repeats and made-up speaker labels are removed
+  return cleanTranscript(text, sttTerms(s), null, { thinking: !/transcribe/.test(model) }).text; // (only a general model thinks aloud) thinking that leaked into the answer, repeats and made-up speaker labels are removed
 }
 
 // A passage of the dedicated model that is all Malayalam/Hindi letters, in a meeting that mixes English in, is read once by a
@@ -253,7 +259,7 @@ function tidyUtterances(list, text, dur, terms) {
   const clamp = (x) => Math.min(dur, Math.max(0, Number(x) || 0));
   const out = [];
   for (const u of list) {
-    const t = cleanTranscript(stripTimestamps(u?.text), terms).text.trim();
+    const t = cleanTranscript(stripTimestamps(u?.text), terms, null, { thinking: false }).text.trim(); // Deepgram and Whisper never think aloud
     if (!t || isLoopNoise(t)) continue;
     const t0 = clamp(u.t0);
     const o = { t0, t1: Math.max(t0, clamp(u.t1)), text: t };

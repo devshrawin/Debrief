@@ -36,8 +36,19 @@ export function groupLines(rows) {
   return groups;
 }
 
+// A message sent by a web page's content script (it has a tab, and an address that is not ours) is not for this page.
+// The service worker has no tab; Debrief's own pages have one only when opened in a tab, on an extension address.
+export const fromContentScript = (sender, extensionBase) => !!sender?.tab && !String(sender.url || '').startsWith(extensionBase);
+
+// Does the stored meeting hold more than what this page already has? counts: { segments, screens } from the meeting's metadata.
+export const needsReread = (counts, seen) => (counts?.segments || 0) > seen.segments || (counts?.screens || 0) > seen.screens;
+
+// The poll is over once the meeting has ended (after one last read of what is stored).
+export const pollOver = (state) => state?.phase === 'ended';
+
 export class LiveStore {
   constructor({ myName = '', room = false } = {}) {
+    this.seen = { segments: 0, screens: 0 }; // how many items of each kind this page holds, for needsReread
     this.opts = { myName, room };
     this.rows = []; // sorted by t; equal times keep arrival order
     this.keys = new Set();
@@ -55,7 +66,7 @@ export class LiveStore {
       if (this.keys.has(key)) continue;
       this.keys.add(key);
       const isScreen = kind === 'screen';
-      const text = isScreen ? it.text.trim() : cleanTranscript(it.text, [], this.dd).text;
+      const text = isScreen ? it.text.trim() : cleanTranscript(it.text, [], this.dd, { thinking: false }).text;
       if (!text) continue; // cleaned away (a repeat, or the model thinking aloud); kept in `keys` so it is not retried
       const row = { key, kind: isScreen ? 'screen' : 'line', t: it.t, src: it.src || '', who: isScreen ? '' : whoOf(it, this.opts), text, presenter: isScreen ? String(it.presenter || '') : '' };
       let i = this.rows.length;
@@ -64,6 +75,21 @@ export class LiveStore {
       fresh.push({ index: i, row });
     }
     return fresh;
+  }
+
+  // A line that came by broadcast is also in storage: counting it keeps the next poll from reading the whole meeting again for
+  // nothing. (A new key counts, also when its text was cleaned away: storage holds it too.)
+  addBroadcast(kind, items) {
+    const before = this.keys.size;
+    const fresh = this.add(kind, items);
+    this.seen[kind === 'screen' ? 'screens' : 'segments'] += this.keys.size - before;
+    return fresh;
+  }
+
+  // after a full read of the stored meeting
+  markRead(m) {
+    this.seen.segments = (m?.segments || []).length;
+    this.seen.screens = (m?.screens || []).length;
   }
 
   get lastT() {

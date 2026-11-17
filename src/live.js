@@ -9,7 +9,7 @@ import { generateWithRetry } from './jobs.js';
 import { parseStructured, renderMinutes } from './structured.js';
 import { renderMd, decorateMinutes } from './md.js';
 import { mountAsk } from './askui.js';
-import { LiveStore, POLL_MS, continues, reduceState, chipText, latencyNote, atBottom, summaryPrompt, summaryAt, provisionalLabel } from './livelogic.js';
+import { LiveStore, POLL_MS, fromContentScript, needsReread, pollOver, continues, reduceState, chipText, latencyNote, atBottom, summaryPrompt, summaryAt, provisionalLabel } from './livelogic.js';
 
 const $ = (id) => document.getElementById(id);
 const BATCH = 150; // rows drawn per step when a long meeting is first opened
@@ -28,7 +28,8 @@ let state = { phase: 'unknown', startedAt: null };
 let broadcast = null; // the last 'state' message
 let rec = null; // the background's own answer
 let meta = null;
-const seen = { segments: 0, screens: 0 }; // how many items the last read of storage held
+let pollTimer = null;
+let finished = false; // the meeting ended and its last read is done
 
 // ---- the transcript on screen ----
 const log = $('log');
@@ -102,8 +103,7 @@ $('newLines').onclick = () => {
 function take(m) {
   if (!m) return;
   show([...store.add('segment', m.segments), ...store.add('screen', m.screens)]);
-  seen.segments = (m.segments || []).length;
-  seen.screens = (m.screens || []).length;
+  store.markRead(m);
 }
 
 // ---- header: title, state chip ----
@@ -155,25 +155,32 @@ async function pull() {
     $('mtitle').textContent = meta.title || 'Untitled meeting';
     document.title = `Live · ${meta.title || 'Meeting'} · Debrief`;
     // more stored than the last read held: read it again and merge (the merge drops what the broadcast already showed)
-    if (meta.counts.segments > seen.segments || meta.counts.screens > seen.screens) take(await getMeeting(id));
+    if (needsReread(meta.counts, store.seen)) take(await getMeeting(id));
     if (!store.rows.length) setEmpty('Waiting for the first piece of speech…');
     const r = await liveState();
     if (r) rec = r.rec || null;
     setState();
+    // the meeting is over: one last read of what is stored (the last pieces may have been written after the last look), then no more polling
+    if (pollOver(state) && !finished) {
+      finished = true;
+      clearInterval(pollTimer);
+      take(await getMeeting(id));
+    }
   } finally {
     pulling = false;
   }
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (fromContentScript(sender, chrome.runtime.getURL(''))) return; // a web page's script must not feed this page
   if (msg?.target !== 'live' || msg.type !== 'live') return;
   if (!id && msg.meetingId) {
     location.replace(`live.html?id=${encodeURIComponent(msg.meetingId)}`);
     return;
   }
   if (msg.meetingId !== id || !msg.item) return;
-  if (msg.kind === 'segment') show(store.add('segment', [msg.item]));
-  else if (msg.kind === 'screen') show(store.add('screen', [msg.item]));
+  if (msg.kind === 'segment') show(store.addBroadcast('segment', [msg.item]));
+  else if (msg.kind === 'screen') show(store.addBroadcast('screen', [msg.item]));
   else if (msg.kind === 'state') {
     broadcast = msg.item;
     setState();
@@ -299,7 +306,7 @@ async function start() {
   });
 
   await pull();
-  setInterval(() => {
+  pollTimer = setInterval(() => {
     if (!document.hidden) pull();
   }, POLL_MS);
   setInterval(() => {

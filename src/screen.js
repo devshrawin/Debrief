@@ -4,14 +4,16 @@
 //
 // COST, for the settings text: every described frame is ONE extra model request on the minutes provider.
 // A one-hour meeting with a slide change every 2 minutes is about 60 / 2 = 30 requests (plus a few for frames
-// that turn out to be just people on camera). The hard ceiling is MAX_FRAMES = 120 per recording.
+// that turn out to be just people on camera). The hard ceiling is MAX_FRAMES = 60 per recording: these requests share the
+// minutes model's daily quota, and the minutes must still be writable afterwards.
 
 export const CHANGE_MIN = 12; // of 256 bits: how different from the last described picture counts as "changed"
 export const STABLE_MAX = 4; // of 256: two samples this close are "the same picture, held still"
 export const BIG_CHANGE = 64; // leaves the back-off
-export const MAX_FRAMES = 120; // described frames per recording
+export const MAX_FRAMES = 60; // described frames per recording
 export const NONE_LIMIT = 3; // NONE answers in a row (presenter unknown) before backing off
 export const BACKOFF_SEC = 300;
+export const RETRY_SEC = [30, 60, 120, 300]; // wait after a failed request: doubles, at most 5 minutes
 const SIDE = 16;
 
 // RGBA (w*h*4) -> 16x16 greys by block averaging. A canvas that is already 16x16 passes straight through.
@@ -101,8 +103,24 @@ export class ScreenGate {
   }
 }
 
+// How long to wait after the n-th failure in a row (n from 1)
+export const retryDelay = (n) => RETRY_SEC[Math.min(RETRY_SEC.length, Math.max(1, n)) - 1];
+
+// What onFrame answered -> { kind: 'text' | 'none' | 'error' | 'unknown', ... }. A bare string is the old form ('' = none).
+export function verdict(r) {
+  if (typeof r === 'string') return { kind: r ? 'text' : 'none' };
+  if (r && typeof r === 'object') {
+    if (r.error != null) return { kind: 'error', retryable: r.retryable !== false };
+    if (r.none) return { kind: 'none' };
+    if (typeof r.text === 'string') return { kind: r.text ? 'text' : 'none' };
+  }
+  return { kind: 'unknown' };
+}
+
 // Draws the video, samples it every everySec seconds, emits a JPEG when the gate says so.
-// onFrame(blob, tSec) may return a promise of the note text ('' for NONE), which feeds the back-off.
+// onFrame(blob, tSec) returns (a promise of) describeScreen's answer: { text } | { none: true } | { error, retryable }. Only
+// text or none counts as a described frame; an error leaves the picture unseen so the same one is tried again at a later look,
+// after a wait that doubles (30 s ... 5 min) and does not count toward any cut-off.
 export class ScreenWatcher {
   constructor({ video, everySec = 30, onFrame, now = Date.now, budgetOk = async () => true, makeCanvas, setTimer = setInterval, clearTimer = clearInterval, gate = new ScreenGate() }) {
     Object.assign(this, { video, onFrame, now, budgetOk, setTimer, clearTimer, gate });
@@ -112,6 +130,8 @@ export class ScreenWatcher {
     this.busy = false;
     this.startedAt = now();
     this.timer = null;
+    this.errRun = 0; // failed requests in a row
+    this.retryAt = -Infinity; // seconds since the start: no request before then
   }
 
   start() {
@@ -147,14 +167,25 @@ export class ScreenWatcher {
       const sig = signature(small.ctx.getImageData(0, 0, SIDE, SIDE).data, SIDE, SIDE);
       const nowSec = (this.now() - this.startedAt) / 1000;
       const d = this.gate.sample(sig, nowSec, { paused: this.paused });
-      if (!d.emit) return false;
+      if (!d.emit || nowSec < this.retryAt) return false;
       if (!(await this.budgetOk())) return false; // nothing is recorded, so the same picture is tried again next tick
       if (this.stopped) return false;
       const blob = await big.toBlob('image/jpeg', 0.6);
       if (!blob) return false;
+      let answer;
+      try {
+        answer = await this.onFrame(blob, Math.round(nowSec));
+      } catch (e) {
+        answer = { error: e?.message || 'failed', retryable: true }; // a throwing describe is a failed one
+      }
+      const v = verdict(answer);
+      if (v.kind === 'error') {
+        this.retryAt = nowSec + retryDelay(++this.errRun); // not committed: this picture is still undescribed
+        return false;
+      }
+      this.errRun = 0;
       this.gate.commit(sig, nowSec, d);
-      const text = await this.onFrame(blob, Math.round(nowSec));
-      if (typeof text === 'string') this.gate.result(text === '');
+      if (v.kind !== 'unknown') this.gate.result(v.kind === 'none');
       return true;
     } catch {
       return false; // a failed describe must never reach the recording

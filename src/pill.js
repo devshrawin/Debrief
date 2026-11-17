@@ -144,7 +144,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   };
 
   // null = could not tell. The page readers live in adapters/ (Meet has its own, other sites share a generic one).
-  const meetMuted = () => (app.id === 'generic' && !app.inCall(document) ? null : app.micButton(document)?.muted ?? null);
+  const meetMuted = (call) => (app.id === 'generic' && !call ? null : app.micButton(document)?.muted ?? null);
 
   let myTab = null;
   let S = { rec: { recording: false }, levels: null, counts: { segs: 0, errs: 0 }, follow: true };
@@ -553,12 +553,12 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     if (keep) panel.querySelector(`[data-k="${keep}"]`)?.focus();
   }
 
-  function reportMute() {
+  function reportMute(call) {
     if (!S.rec.recording || S.rec.tabId !== myTab) {
       lastSentMute = undefined;
       return;
     }
-    const m = meetMuted();
+    const m = meetMuted(call);
     if (m !== lastSentMute) {
       lastSentMute = m;
       send({ type: 'meet-mute', muted: m });
@@ -613,10 +613,10 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   }
 
   // The recording notice in the meeting chat (Google Meet only, if switched on). The rules are in adapters/pillrules.js.
-  async function maybeNotice() {
+  async function maybeNotice(call) {
     const rec = S.rec;
     const mine = rec.recording && !rec.stopping && rec.tabId === myTab;
-    const go = noticeCtl.begin({ now: Date.now(), recKey: mine ? rec.meetingId : null, adapterId: app.id, room: !!rec.room, paused: !!rec.paused, inCall: !!app.inCall(document), notice: S.notice });
+    const go = noticeCtl.begin({ now: Date.now(), recKey: mine ? rec.meetingId : null, adapterId: app.id, room: !!rec.room, paused: !!rec.paused, inCall: call, notice: S.notice });
     if (!go) return;
     let r;
     try {
@@ -632,27 +632,54 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     }
   }
 
-  // Tells the recorder when someone starts or stops presenting (so it can describe the shared screen).
-  function reportPresenting() {
+  // Tells the recorder when someone starts or stops presenting (so it can describe the shared screen). Reading the page for it is
+  // the costliest check the pill makes, so it is done every 5 s, and only while this tab is recording with screen notes on
+  // (S.screenNotes; a reply without that field is read as "on" while recording).
+  const PRESENT_EVERY_MS = 5000;
+  let lastPresAt = 0;
+  let lastPres = null;
+  let lastPresKey = null;
+  function reportPresenting(call) {
     const mine = S.rec.recording && !S.rec.stopping && S.rec.tabId === myTab;
-    const out = presentingRep.step(mine ? S.rec.meetingId : null, mine && app.presenting ? app.presenting(document) : null);
+    const key = mine ? S.rec.meetingId : null;
+    const wanted = mine && !!app.presenting && S.screenNotes !== false;
+    const now = Date.now();
+    if (key !== lastPresKey) {
+      lastPresKey = key;
+      lastPresAt = 0; // a new recording is looked at straight away
+      lastPres = null;
+    }
+    if (wanted && now - lastPresAt >= PRESENT_EVERY_MS) {
+      lastPresAt = now;
+      lastPres = app.presenting(document, call);
+    }
+    const out = presentingRep.step(key, wanted ? lastPres : null);
     if (out) send({ type: 'presenting', ...out });
   }
 
   // "Record this meeting?": asked when a call matches one of the user's meeting types. It only asks: Chrome allows a tab
   // recording to start only from the extension button or its shortcut.
   let cardNudge = null;
-  function maybeNudge() {
+  let nudgeShownThisCall = false;
+  let nudgePeople = []; // the last reading: kept while the card is up, the card does not need a fresh one
+  function maybeNudge(call) {
+    if (!call) {
+      nudgeShownThisCall = false;
+      nudgePeople = [];
+    }
+    // who is in the call matters only for deciding whether to ask: not while recording, with reminders off, or once it was asked
+    if (call && S.nudge?.on && !S.rec.recording && !nudgeShownThisCall && app.hasPeople) nudgePeople = app.readParticipants(document);
     const n = nudgeCtl.step({
       now: Date.now(),
       recording: !!S.rec.recording,
-      inCall: !!app.inCall(document),
+      inCall: call,
       cfg: S.nudge,
       title: document.title,
       url: location.href,
-      participants: app.hasPeople ? app.readParticipants(document) : [],
+      participants: nudgePeople,
       shortcut: S.shortcut,
     });
+    if (n) nudgeShownThisCall = true;
     cardNudge = n;
     // a tab nobody is looking at also gets one system notification per call (the background keeps count)
     if (n && document.hidden && !notified.has(n.key)) {
@@ -674,8 +701,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
 
   // Tells the extension when this tab has a live call, so its icon can glow amber as a reminder to record.
   let lastInCall;
-  function reportCall() {
-    const on = !!app.inCall(document);
+  function reportCall(on) {
     if (on !== lastInCall) {
       lastInCall = on;
       send({ type: 'in-call', on, site: app.name });
@@ -688,13 +714,14 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     render();
     // Other meeting apps can be switched off in Settings; Google Meet always works.
     if (app.id === 'generic' && S.otherSites === false) return;
-    reportMute();
+    const call = !!app.inCall(document); // asked once per tick and handed down: it reads a lot of the page
+    reportMute(call);
     checkEnded();
     sampleMeeting();
-    reportCall();
-    maybeNotice();
-    reportPresenting();
-    maybeNudge();
+    reportCall(call);
+    maybeNotice(call);
+    reportPresenting(call);
+    maybeNudge(call);
   }
 
   async function init() {

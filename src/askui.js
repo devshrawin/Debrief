@@ -238,12 +238,15 @@ export function mountAsk(root, opts) {
       queued = false;
       if (abort) aEl.innerHTML = renderMd(buf);
     };
-    const gen = async (system, user, onText) => {
+    const gen = async (system, user, onText, { retries = 2, signal: own } = {}) => {
+      const mine = abort;
+      // the Stop button and, for the query expansion, its own timeout both cancel the request
+      const signal = own ? (AbortSignal.any ? AbortSignal.any([mine.signal, own]) : own) : mine.signal;
       for (let i = 0; ; i++) {
         try {
-          return await generate({ settings, system, user, signal: abort.signal, onText: onText || (() => {}) });
+          return await generate({ settings, system, user, signal, onText: onText || (() => {}) });
         } catch (e) {
-          if (i >= 2 || !isRetryable(e)) throw e;
+          if (i >= retries || signal.aborted || !isRetryable(e)) throw e;
           setBusy(`Busy (${e.message.slice(0, 60)}). Trying again…`);
           await sleep([4000, 12000][i]);
         }

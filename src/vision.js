@@ -7,14 +7,13 @@ import { record } from './usage.js';
 const MAX_CHARS = 600;
 const NO_VISION = new Set([400, 404, 415, 422]);
 
-// Remembered for the rest of a recording (offscreen calls resetVision() at its start).
+// Remembered for the rest of a recording (offscreen calls resetVision() at its start). Only a definite "this model cannot see
+// pictures" is remembered: a 429, a server error or a dropped connection is a bad moment, not a verdict (the watcher backs off).
 let noVision = false;
-let fails = 0;
 let noted = new Set();
 export const visionUnavailable = () => noVision;
 export function resetVision() {
   noVision = false;
-  fails = 0;
   noted = new Set();
 }
 
@@ -125,33 +124,32 @@ async function viaOpenAI({ settings, system, text, data }) {
 
 const PROVIDERS = { gemini: viaGemini, anthropic: viaAnthropic, openai: viaOpenAI };
 
-// -> the note text, or '' for NONE / nothing usable / a model that cannot see images. Never throws.
+// Never throws. -> { text } a note | { none: true } nothing to describe (people on camera, a waiting screen) |
+// { error, retryable } the request did not give an answer: retryable (429, 5xx, no connection) means ask again later, the
+// frame was not described; not retryable (a rejected key, a model that cannot see pictures) will not get better by asking again.
 // onNote(text): where one-off breadcrumbs go (the recorder's debug log).
 export async function describeScreen(blob, settings, { prev = '', onNote = () => {} } = {}) {
-  if (noVision) return '';
+  if (noVision) return { error: 'the chosen model does not accept pictures', retryable: false, noVision: true };
   const say = (key, msg) => {
     if (noted.has(key)) return;
     noted.add(key);
     onNote(msg);
   };
   const fn = PROVIDERS[settings.llmProvider];
-  if (!fn) return '';
+  if (!fn) return { error: `no picture support for ${settings.llmProvider}`, retryable: false };
   try {
     const out = await fn({ settings, system: visionSystem(settings.momLanguage), text: userText(prev), data: await b64(blob) });
-    fails = 0;
-    return cleanNote(out);
+    const text = cleanNote(out);
+    return text ? { text } : { none: true };
   } catch (e) {
     // local and small models often cannot see images: remember it and stop asking
     if (settings.llmProvider === 'openai' && NO_VISION.has(e.status)) {
       noVision = true;
       say('novision', `screen notes: the chosen model does not accept pictures (HTTP ${e.status}); skipping them for this recording`);
-      return '';
+      return { error: e.message, retryable: false, noVision: true };
     }
-    // a key that is rejected or a provider that is down: a few tries, then stop for this recording
-    if (++fails >= 3) {
-      noVision = true;
-      say('giveup', `screen notes: stopped after 3 failed requests (${e.message})`);
-    } else say(`fail${e.status}`, `screen notes: request failed (${e.message})`);
-    return '';
+    const retryable = !e.status || e.status === 429 || e.status >= 500;
+    say(`fail${e.status || 'net'}`, `screen notes: request failed (${e.message}); ${retryable ? 'trying the same picture again later' : 'the picture was not described'}`);
+    return { error: e.message, retryable };
   }
 }

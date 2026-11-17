@@ -277,24 +277,29 @@ export function buildAskPrompt({ question, meetings, ctx = {}, history = [], lim
 
 export const EXPAND_SYSTEM = 'Rewrite this question as search words. Output one line of 6-20 words: the key terms, each also written in the other scripts/languages the meetings use (English, Hindi in Devanagari, romanised Hindi, Malayalam), plus obvious synonyms. No sentences, no answer.';
 
-// One cheap model call; null when it fails, is slow, or returns something that is not a short word list.
+// One cheap model call; null when it fails, is slow, or returns something that is not a short word list. It has its own
+// AbortController: on the timeout the request is cancelled (and, with retries: 0, not repeated behind our back, as a retrying
+// gen would do for another 16 s while the real answer waits for its turn).
 async function expandQuestion(question, gen, timeoutMs) {
   let timer;
+  const ctl = new AbortController();
   try {
-    const call = Promise.resolve().then(() => gen(EXPAND_SYSTEM, question));
+    const call = Promise.resolve().then(() => gen(EXPAND_SYSTEM, question, undefined, { retries: 0, signal: ctl.signal }));
     call.catch(() => {}); // a late failure after the timeout must not surface
-    const text = await Promise.race([call, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error('slow')), timeoutMs)))]);
+    const text = await Promise.race([call, new Promise((_, rej) => (timer = setTimeout(() => (ctl.abort(), rej(new Error('slow'))), timeoutMs)))]);
     const line = String(text || '').replace(/\s+/g, ' ').trim();
     const n = line ? line.split(' ').length : 0;
     return n && n <= 40 && line.length <= 400 ? line : null;
   } catch {
+    ctl.abort();
     return null;
   } finally {
     clearTimeout(timer);
   }
 }
 
-// Runs the question. gen(system, user, onText) is one model call.
+// Runs the question. gen(system, user, onText, { retries, signal }) is one model call; the last argument is given only for the
+// query expansion (no retries, its own abort signal), so a gen that takes three arguments keeps working.
 export async function askMeetings({ question, meetings, ctx, history, gen, onText, limit, fullBudget, expand = true, expandTimeoutMs = 6000 }) {
   if (!String(question || '').trim()) throw new Error('Type a question first.');
   if (!meetings.length) return { answer: 'There are no meetings to search yet.', sources: [] };
