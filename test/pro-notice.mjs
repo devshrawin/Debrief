@@ -22,6 +22,8 @@ const { shouldNudge, nudgeText } = await import('../src/nudge.js');
 const fast = { wait: async () => {} };
 const MSG = 'Debrief is recording this call to write the minutes.';
 
+// a chat message: plain text (sender unknown), or { from, at, text, self } in Meet's grouping (sender and time, then the text)
+const msgHtml = (h) => (typeof h === 'string' ? `<div>${h}</div>` : `<div class="grp"${h.self != null ? ` data-is-self="${h.self}"` : ''}>${h.from ? `<div><span>${h.from}</span><span>${h.at || '10:31'}</span></div>` : ''}<div><div>${h.text}</div></div></div>`);
 // opts: closed (panel hidden until the button is clicked), kind 'textarea'|'ce', send (button), off, draft, history, decoys
 function fake(o = {}) {
   const { kind = 'textarea', send = true, closed = true } = o;
@@ -44,7 +46,7 @@ function fake(o = {}) {
     else box.textContent = '';
   };
   const build = () => {
-    doc.getElementById('slot').innerHTML = `<div role="complementary" aria-label="In-call messages"><div id="log">${(o.history || []).map((h) => `<div>${h}</div>`).join('')}</div>
+    doc.getElementById('slot').innerHTML = `<div role="complementary" aria-label="In-call messages"><div id="log">${(o.history || []).map(msgHtml).join('')}</div>
       ${o.off ? '<div>Chat is turned off by the host</div>' : kind === 'textarea' ? '<textarea aria-label="Send a message"></textarea>' : '<div contenteditable="true" aria-label="Send a message"></div>'}
       ${send && !o.off ? '<button aria-label="Send a message" disabled></button>' : ''}</div>`;
     const box = doc.querySelector('[aria-label="Send a message"]:not(button)');
@@ -98,11 +100,34 @@ await test('notice: chat turned off -> refuses and restores the panel', async ()
   assert.equal(f.isOpen(), false);
 });
 
-await test('notice: already posted is not posted twice', async () => {
-  const f = fake({ history: [MSG], closed: false });
-  assert.equal(chat.alreadyPosted(f.doc, MSG), true);
-  assert.deepEqual(await chat.postNotice(f.doc, MSG, fast), { ok: true, posted: false, why: 'already there' });
-  assert.deepEqual(f.sent, []);
+await test('notice: already posted by me is not posted twice', async () => {
+  for (const mine of [{ from: 'You', at: '10:31', text: MSG }, { from: 'You', at: '10:31 AM', text: MSG }, { self: true, text: MSG }]) {
+    const f = fake({ history: [{ from: 'Ravi', at: '10:30', text: 'hello' }, mine], closed: false });
+    assert.equal(chat.alreadyPosted(f.doc, MSG), true, JSON.stringify(mine));
+    assert.deepEqual(await chat.postNotice(f.doc, MSG, fast), { ok: true, posted: false, why: 'already there' });
+    assert.deepEqual(f.sent, []);
+  }
+});
+
+await test('notice L5: the same words pasted by someone else, or anywhere outside the chat, never hold back my notice', async () => {
+  const cases = [
+    [MSG], // sender unknown
+    [{ from: 'Mallory', at: '10:29', text: MSG }],
+    [{ from: 'Mallory', at: '10:29', text: 'You' }, { text: MSG }], // a message "You" is not a sender
+    [{ from: 'Mallory', at: '10:29', text: MSG, self: false }],
+    [{ from: 'You', at: '10:29', text: 'hi' }, { from: 'Mallory', at: '10:30', text: MSG }],
+  ];
+  for (const history of cases) {
+    const f = fake({ history, closed: false });
+    assert.equal(chat.alreadyPosted(f.doc, MSG), false, JSON.stringify(history));
+    assert.deepEqual(await chat.postNotice(f.doc, MSG, fast), { ok: true, posted: true }, JSON.stringify(history));
+    assert.deepEqual(f.sent, [MSG]);
+  }
+  // the words on the page outside the chat panel (a participant tile, a caption): the panel is what counts
+  const f = fake();
+  f.doc.body.insertAdjacentHTML('beforeend', `<div class="grp"><div><span>You</span><span>10:31</span></div><div><div>${MSG}</div></div></div>`);
+  assert.equal(chat.alreadyPosted(f.doc, MSG), false, 'no chat panel: never the whole page');
+  assert.equal((await chat.postNotice(f.doc, MSG, fast)).posted, true);
 });
 
 await test('notice: message that never sends -> fails and leaves no text behind', async () => {

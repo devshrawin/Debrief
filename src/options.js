@@ -17,7 +17,7 @@ import { mountMeetingTypes } from './typesui.js';
 import { NUMERIC, DEPENDENTS, clampNum, backupFileName, formatMB, plural, describeBackup, webhookTestBody, originPattern, guardCannotTell, modelFieldFor } from './settingslogic.js';
 import { validWebhook } from './webhook.js';
 import { checkConfigured, summary as modelSummary } from './models.js';
-import { exportAll, importAll } from './backup.js';
+import { exportAll, importAll, previewImport } from './backup.js';
 import { totalKept, deleteAudio, purgeOld } from './audiokeep.js';
 
 const $ = (id) => document.getElementById(id);
@@ -607,9 +607,10 @@ $('save').onclick = async () => {
     showFlash('bad', 'The address for sending minutes is not valid', 7000);
     return;
   }
-  const asked = hook && hook !== loaded.webhookUrl ? chrome.permissions.request({ origins: [originPattern(hook)] }).catch(() => false) : null;
+  const asked = hook && (hook !== loaded.webhookUrl || hookAskPending) ? chrome.permissions.request({ origins: [originPattern(hook)] }).catch(() => false) : null;
   try {
     await save();
+    if (asked) hookAskPending = !(await asked);
     showFlash('saved', 'Saved ✓', 3000);
     updateGuide();
     if (asked && !(await asked)) webhookStatus(NO_HOOK_PERMISSION, 'warn');
@@ -934,6 +935,71 @@ $('backupDownload').onclick = async () => {
   }
 };
 $('backupRestore').onclick = () => $('backupFile').click();
+
+// The restore question. Like modal(), plus the settings that would change where data goes, each with its own box,
+// unticked. Resolves with { value: 'merge' | 'replace', accept: [keys] }, or null when cancelled. Text only, never HTML.
+function restoreDialog(text, routing) {
+  return new Promise((resolve) => {
+    const dlg = el('dialog', { className: 'dbmodal' });
+    dlg.setAttribute('aria-labelledby', 'restoreText');
+    const lead = el('div', { id: 'restoreText', textContent: text });
+    lead.style.cssText = 'white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)';
+    dlg.append(lead);
+    const boxes = [];
+    if (routing.length) {
+      const sec = el('div');
+      sec.setAttribute('role', 'group');
+      sec.setAttribute('aria-labelledby', 'restoreRouteHead');
+      sec.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid var(--separator)';
+      const head = el('p', { id: 'restoreRouteHead', textContent: 'This file also wants to change where your data goes:' });
+      head.style.cssText = 'margin:0;font-weight:600;font-size:14.5px;line-height:1.5';
+      const warn = el('p', { className: 'hint', textContent: 'Only tick these if you made this backup yourself.' });
+      warn.style.cssText = 'margin:4px 0 0';
+      const list = el('div');
+      list.style.cssText = 'margin-top:6px;max-height:min(40vh,320px);overflow:auto;overscroll-behavior:contain';
+      for (const r of routing) {
+        const cb = el('input', { type: 'checkbox', checked: false });
+        cb.dataset.key = r.key;
+        cb.style.cssText = 'margin:1px 0 0;flex:none';
+        const words = el('span', {}, el('b', { textContent: r.label }), document.createTextNode(`: ${r.from} → ${r.to}`));
+        words.style.cssText = 'min-width:0;overflow-wrap:anywhere;line-height:1.45';
+        const row = el('label', {}, cb, words);
+        row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;font-weight:400;font-size:13.5px;cursor:pointer';
+        list.append(row);
+        boxes.push(cb);
+      }
+      sec.append(head, warn, list);
+      dlg.append(sec);
+    }
+    const row = el('div', { className: 'dbbtns' });
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px';
+    const done = (value) => {
+      const out = value == null || value === 'no' ? null : { value, accept: boxes.filter((b) => b.checked).map((b) => b.dataset.key) };
+      dlg.close();
+      dlg.remove();
+      resolve(out);
+    };
+    for (const b of [{ label: 'Cancel', value: 'no' }, { label: 'Replace everything', value: 'replace', danger: true }, { label: 'Add to what is here', value: 'merge', primary: true }]) {
+      const btn = el('button', { type: 'button', className: `btn${b.primary ? ' primary' : ''}${b.danger ? ' danger' : ''}`, textContent: b.label });
+      btn.dataset.value = b.value;
+      btn.onclick = () => done(b.value);
+      row.append(btn);
+    }
+    dlg.append(row);
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      done(null);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+    row.querySelector('.primary').focus();
+  });
+}
+
+// Addresses taken from a backup that still need Chrome's permission: Save asks for them (the prompt needs a click).
+let hookAskPending = false;
+const ASK_KEYS = ['sttBase', 'oaBase', 'webhookUrl'];
+
 $('backupFile').onchange = async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -949,25 +1015,36 @@ $('backupFile').onchange = async (e) => {
   }
   const info = describeBackup(data);
   if (!info) return fail('That file is not a Debrief backup.');
-  const has = [plural(info.meetings, 'meeting'), info.settings ? 'settings' : 'no settings', plural(info.voices, 'voice')].join(', ');
-  const pick = await modal({
-    text: `This backup has ${has}.\n\nAdd to what is here keeps your current meetings and keys and adds what is new. Replace everything deletes your current meetings first.`,
-    buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Replace everything', value: 'replace', danger: true }, { label: 'Add to what is here', value: 'merge', primary: true }],
-  });
-  if (!pick || pick.value === 'no') return backupMsg('backupRestoreMsg', 'Nothing was restored.');
+  const preview = await previewImport(data);
+  if (!preview.ok) return fail(`Nothing was restored: ${preview.error}`);
+  const has = [plural(preview.meetings, 'meeting'), preview.hasSettings ? 'settings' : 'no settings', plural(preview.voices, 'voice')].join(', ');
+  const pick = await restoreDialog(`This backup has ${has}.\n\nAdd to what is here keeps your current meetings, keys and settings and adds what is new. Replace everything deletes your current meetings first.`, preview.routing);
+  if (!pick) return backupMsg('backupRestoreMsg', 'Nothing was restored.');
   if (pick.value === 'replace') {
     const here = (await listMeetingMetas({ counts: [] })).length;
     const sure = await modal({ text: `Replace everything? This deletes the ${plural(here, 'meeting')} here now, with their transcripts and minutes, and puts the backup in their place. It cannot be undone.`, buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Delete and replace', value: 'yes', danger: true }] });
     if (sure?.value !== 'yes') return backupMsg('backupRestoreMsg', 'Nothing was restored.');
   }
+  // Chrome's permission for a server or webhook address the person ticked: asked now, while the click still counts
+  const origins = [...new Set(preview.routing.filter((r) => pick.accept.includes(r.key) && ASK_KEYS.includes(r.key) && r.origin).map((r) => r.origin))];
+  const asked = origins.length ? chrome.permissions.request({ origins }).catch(() => false) : null;
   backupMsg('backupRestoreMsg', 'Restoring…');
   try {
-    const r = await importAll(data, { mode: pick.value });
+    const r = await importAll(data, { mode: pick.value, acceptRouting: pick.accept });
     const bits = [`${plural(r.meetings.added, 'meeting')} added`];
     if (r.meetings.skipped) bits.push(`${r.meetings.skipped} already here`);
     bits.push(r.settingsApplied ? 'settings restored' : 'no settings');
     bits.push(plural(r.voices, 'voice') + ' added');
-    backupMsg('backupRestoreMsg', `Restored: ${bits.join(', ')}.`, 'ok');
+    if (r.routingApplied.length) bits.push(`${plural(r.routingApplied.length, 'setting')} about where data goes changed as you chose`);
+    let kind = 'ok';
+    let tail = '';
+    const granted = asked ? await asked : true;
+    if (!granted && r.origins.length) {
+      kind = 'warn';
+      tail = ` Chrome did not give Debrief permission for ${r.origins.map((o) => o.replace(/\/\*$/, '')).join(', ')} yet: press Save to be asked again.`;
+      if (r.routingApplied.includes('webhookUrl')) hookAskPending = true;
+    }
+    backupMsg('backupRestoreMsg', `Restored: ${bits.join(', ')}.${tail}`, kind);
     $('backupWarnings').replaceChildren(...r.warnings.slice(0, 8).map((w) => el('li', { textContent: w })));
     $('backupWarnings').hidden = !r.warnings.length;
     const fresh = await getSettings();

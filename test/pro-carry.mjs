@@ -177,4 +177,104 @@ await test('actions across meetings and setActionDone: a META patch of items onl
   assert.equal(await setActionDone('zzz', 'a1x', true), false);
 });
 
+// ---- the webhook (security review M1, L4) ----
+const W = await import('../src/webhook.js');
+const { renderMinutes } = await import('../src/structured.js');
+const HOOK = { webhookUrl: 'https://attacker.example/hook' };
+const HOOK_MEETING = { id: 'm1', title: 'Sync', startedAt: NOW - 3600000, endedAt: NOW, mom: '# Sync\n\n## Decisions\n- Ship on Friday. [12:40] "kal tak ship kar denge"', items: { decisions: [{ text: 'Ship on Friday', at: '12:40' }], actions: [act('a1', 'Send the deck', { quote: 'main deck bhej dunga kal' })] } };
+// a fake chrome for one test: the offscreen document has runtime (with messaging) and no permissions API
+async function withChrome(extra, fn) {
+  const keep = { runtime: globalThis.chrome.runtime, permissions: globalThis.chrome.permissions };
+  Object.assign(globalThis.chrome, extra);
+  try {
+    return await fn();
+  } finally {
+    Object.assign(globalThis.chrome, keep);
+    for (const k of Object.keys(keep)) if (keep[k] === undefined) delete globalThis.chrome[k];
+  }
+}
+
+await test('webhook M1: in the offscreen document the worker is asked by meeting id only, and nothing is fetched there', async () => {
+  const asked = [];
+  const fetched = [];
+  const patches = [];
+  const r = await withChrome({ runtime: { sendMessage: async (m) => (asked.push(m), { ok: false, status: 0, error: W.NO_PERMISSION }) } }, () =>
+    W.runWebhook(HOOK_MEETING, HOOK, async (p) => patches.push(p), { fetch: async (u) => (fetched.push(u), { status: 200 }) })
+  );
+  assert.deepEqual(asked, [{ target: 'bg', type: 'webhook-post', meetingId: 'm1' }], 'no address and no minutes in the message');
+  assert.deepEqual(fetched, []);
+  assert.deepEqual(r, { ok: false, status: 0, error: W.NO_PERMISSION });
+  assert.deepEqual(patches, [{ webhookError: W.NO_PERMISSION }]);
+  // the worker said yes and posted: the time is written; a worker that is gone or answers nonsense is an error
+  const p2 = [];
+  await withChrome({ runtime: { sendMessage: async () => ({ ok: true, status: 204 }) } }, () => W.runWebhook(HOOK_MEETING, HOOK, async (p) => p2.push(p)));
+  assert.ok(p2[0].webhookAt && p2[0].webhookError === null);
+  for (const answer of [() => Promise.reject(new Error('Receiving end does not exist')), async () => undefined, async () => ({ ok: 'yes' })]) {
+    const p3 = [];
+    const r3 = await withChrome({ runtime: { sendMessage: answer } }, () => W.runWebhook(HOOK_MEETING, HOOK, async (p) => p3.push(p), { fetch: async (u) => (fetched.push(u), { status: 200 }) }));
+    assert.equal(r3.ok, false);
+    assert.match(p3[0].webhookError, /background worker/);
+  }
+  assert.deepEqual(fetched, []);
+});
+
+await test('webhook M1: the review proof — runtime without messaging and no permissions API sends nothing', async () => {
+  let called = null;
+  const r = await withChrome({ runtime: {} }, () => W.runWebhook(HOOK_MEETING, HOOK, async () => {}, { fetch: async (u) => ((called = u), { status: 200 }) }));
+  assert.equal(called, null);
+  assert.equal(r.error, W.NO_PERMISSION);
+});
+
+await test('webhook M1: where permissions can be checked, only a clear yes sends', async () => {
+  const fetched = [];
+  const f = async (u) => (fetched.push(u), { status: 200 });
+  for (const contains of [async () => false, async () => { throw new Error('x'); }, async () => 'yes', undefined]) {
+    const r = await W.postIfPermitted(HOOK_MEETING, HOOK, { fetch: f, contains: contains || null });
+    assert.deepEqual(r, { ok: false, status: 0, error: W.NO_PERMISSION });
+  }
+  assert.deepEqual(fetched, []);
+  const asked = [];
+  assert.equal((await W.postIfPermitted(HOOK_MEETING, HOOK, { fetch: f, contains: async (q) => (asked.push(q), true) })).ok, true);
+  assert.deepEqual(asked, [{ origins: ['https://attacker.example/*'] }]);
+  assert.deepEqual(fetched, ['https://attacker.example/hook']);
+  // with chrome.permissions present (the service worker, an own page) runWebhook checks it itself
+  const p = [];
+  await withChrome({ permissions: { contains: async () => false }, runtime: { sendMessage: async () => assert.fail('must not delegate') } }, () => W.runWebhook(HOOK_MEETING, HOOK, async (x) => p.push(x), { fetch: f }));
+  assert.deepEqual(p, [{ webhookError: W.NO_PERMISSION }]);
+  assert.equal(fetched.length, 1);
+  const local = await W.postIfPermitted(HOOK_MEETING, { webhookUrl: 'http://127.0.0.1:8123/h' }, { fetch: f, contains: async (q) => q.origins[0] === 'http://127.0.0.1:8123/*' });
+  assert.equal(local.ok, true, 'an address on this computer needs (and gets) its own permission check');
+});
+
+await test('webhook L4: the minutes sent carry no transcript quotes, in either table layout, and email addresses stay hidden', async () => {
+  const md = [
+    '# Sync', '', '## Decisions', '- Ship on Friday. [12:40] "kal tak ship kar denge"', '- Hire two people [1:02:03] “do log chahiye”', '- No stamp, "a title in quotes" stays', '',
+    '## Action Items', '| # | Action | Owner | Due | Source |', '|---|--------|-------|-----|--------|',
+    '| 1 | Send the deck | Amal (amal@x.com) | Friday | [12:40] "main deck bhej \\| dunga" |', '| 2 | Book a room | Not stated | Not stated | "quote only" |', '| 3 | Call Ravi | Ravi | Monday | — |', '',
+    '## Updates by person', '| Name | Update |', '|---|---|', '| Amal | "Done" with the API [3:00] |', '',
+    'Source | Action | Owner', '--- | --- | ---', '[0:10] "secret words here" | Check logs | Bina',
+  ].join('\n');
+  const out = W.withoutQuotes(md);
+  assert.ok(!/kal tak|do log|main deck|quote only|secret words/.test(out), out);
+  assert.match(out, /- Ship on Friday\. \[12:40\]\n/);
+  assert.match(out, /- Hire two people \[1:02:03\]\n/);
+  assert.match(out, /No stamp, "a title in quotes" stays/);
+  assert.match(out, /\| 1 \| Send the deck \| Amal \(amal@x\.com\) \| Friday \| \[12:40\] \|/);
+  assert.match(out, /\| 2 \| Book a room \| Not stated \| Not stated \| — \|/);
+  assert.match(out, /\| 3 \| Call Ravi \| Ravi \| Monday \| — \|/);
+  assert.match(out, /\| Amal \| "Done" with the API \[3:00\] \|/, 'a table without a Source column is left as it is');
+  assert.match(out, /\n \[0:10\] \| Check logs \| Bina$/, 'a table without the outer pipes too');
+  assert.equal(W.withoutQuotes(out), out, 'running it twice changes nothing');
+  // the payload: stored minutes (any sections, the person's edits) without quotes; items only -> rendered without Source
+  const withEvidence = renderMinutes(HOOK_MEETING.items, { meeting: HOOK_MEETING });
+  assert.match(withEvidence, /main deck bhej dunga kal/, 'the page keeps its sources');
+  for (const m of [{ ...HOOK_MEETING, mom: withEvidence }, { ...HOOK_MEETING, mom: '' }, { ...HOOK_MEETING, mom: md }]) {
+    const body = W.webhookPayload(m);
+    assert.ok(!/main deck|kal tak|do log|quote only|secret words/.test(JSON.stringify(body)), JSON.stringify(body).slice(0, 400));
+    assert.ok(!/amal@x\.com/.test(JSON.stringify(body)));
+    assert.match(body.minutesMarkdown, /Send the deck|Ship on Friday/);
+  }
+  assert.doesNotMatch(W.webhookPayload({ ...HOOK_MEETING, mom: '' }).minutesMarkdown, /Source/);
+});
+
 console.log(`\n${passed} passed`);

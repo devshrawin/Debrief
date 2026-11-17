@@ -1,5 +1,11 @@
 // Optional webhook: when the minutes are written, the structured minutes are POSTed to the address the person gave.
-// What leaves the browser is the minutes only: no transcript, no email addresses, no voice data, no keys.
+// What leaves the browser is the minutes only: no transcript (not even the short quotes the minutes page shows as
+// sources), no email addresses, no voice data, no keys.
+//
+// Whether the address may be called is decided where chrome.permissions exists: the service worker or Debrief's own
+// pages. The offscreen document that runs the minutes job has no permissions API, so it asks the service worker
+// ('webhook-post' with the meeting id only) and the worker loads the meeting and the settings itself.
+import { renderMinutes } from './structured.js';
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 // "Amal (amal@x.com)" -> "Amal"; a bare address -> a placeholder
@@ -29,8 +35,73 @@ export function webhookPayload(meeting, { settings } = {}) {
       format: m.format || 'standard',
     },
     items: m.items ? cleanItems(m.items) : null,
-    minutesMarkdown: scrub(m.mom || ''),
+    minutesMarkdown: scrub(minutesForHook(m)),
   };
+}
+
+// ---- the minutes without the transcript quotes ----
+const STAMP = /\[(?:\d+:)?\d{1,2}:\d{2}\]/g;
+const SOURCE_HEAD = /^(source|sources|evidence|quote|quotes|source quote)$/i;
+// one Markdown table row as raw cells (an escaped \| stays inside its cell)
+function rawCells(line) {
+  const out = [];
+  let cur = '';
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '\\' && line[i + 1] === '|') {
+      cur += '\\|';
+      i++;
+    } else if (line[i] === '|') {
+      out.push(cur);
+      cur = '';
+    } else cur += line[i];
+  }
+  out.push(cur);
+  return out;
+}
+const isSep = (l) => /^\s*\|?[\s:|-]+\|?\s*$/.test(l) && l.includes('-');
+// "[12:40] \"we will ship\"" or "[12:40] — “we will ship”" -> "[12:40]"
+const QUOTE_AFTER_STAMP = /(\[(?:\d+:)?\d{1,2}:\d{2}\])\s*[-–—:]?\s*(?:"[^"\n]*"|“[^”\n]*”|«[^»\n]*»)/g;
+
+// The stored minutes with the transcript quotes taken out: in a table with a Source column only the [mm:ss] stamps of
+// that column stay (or a dash), and a quote right after a stamp (the Decisions list) goes. Everything else is kept.
+export function withoutQuotes(md) {
+  const lines = String(md || '').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i];
+    if (!head.includes('|') || !isSep(lines[i + 1] || '')) {
+      lines[i] = head.replace(QUOTE_AFTER_STAMP, '$1');
+      continue;
+    }
+    const col = rawCells(head).findIndex((c) => SOURCE_HEAD.test(c.replace(/[*_`]/g, '').trim()));
+    let j = i + 2;
+    for (; j < lines.length && lines[j].includes('|') && lines[j].trim(); j++) {
+      if (col < 0) {
+        lines[j] = lines[j].replace(QUOTE_AFTER_STAMP, '$1');
+        continue;
+      }
+      const cells = rawCells(lines[j]);
+      if (col >= cells.length) continue;
+      const stamps = cells[col].match(STAMP);
+      cells[col] = ` ${stamps ? stamps.join(' ') : '—'} `;
+      lines[j] = cells.join('|');
+    }
+    i = j - 1;
+  }
+  return lines.join('\n');
+}
+
+// The Markdown that is sent: the stored minutes (they may carry sections the items do not, and the person's edits)
+// without quotes; minutes that exist only as items are rendered without the Source column.
+function minutesForHook(m) {
+  if (String(m.mom || '').trim()) return withoutQuotes(m.mom);
+  if (m.items && typeof m.items === 'object') {
+    try {
+      return renderMinutes(m.items, { meeting: m, evidence: false });
+    } catch {
+      return '';
+    }
+  }
+  return '';
 }
 
 // https only (http for a program on this computer), no user:password in the address, not absurdly long.
@@ -100,24 +171,56 @@ export async function postWebhook(meeting, settings, { fetch: f = globalThis.fet
 }
 
 export const NO_PERMISSION = 'Debrief has no permission for this address. Open Settings and save the webhook again.';
+const NO_WORKER = 'Debrief could not reach its background worker to send the minutes. Press Rewrite minutes to try again.';
 
-// The pipeline's step: permission check, post, and the result written on the meeting through patch (META only).
-// Never throws. The offscreen document has no chrome.permissions: then the fetch is simply tried.
+// True only when Chrome says yes. No permissions API, an error or anything but true means no.
+export async function hookPermitted(url, contains) {
+  let origin;
+  try {
+    origin = new URL(String(url).trim()).origin;
+  } catch {
+    return false;
+  }
+  if (typeof contains !== 'function') return false;
+  try {
+    return (await contains({ origins: [`${origin}/*`] })) === true;
+  } catch {
+    return false;
+  }
+}
+
+// Checks the address and Chrome's permission for it, then posts. For the service worker and Debrief's own pages
+// (opts.contains replaces chrome.permissions.contains in a test). Never throws.
+export async function postIfPermitted(meeting, settings, opts = {}) {
+  if (!validWebhook(settings?.webhookUrl)) return { ok: false, status: 0, error: 'The webhook address is not valid. Use an https:// address without a user name or password.' };
+  const p = globalThis.chrome?.permissions;
+  const contains = opts.contains || (typeof p?.contains === 'function' ? (q) => p.contains(q) : null);
+  if (!(await hookPermitted(settings.webhookUrl, contains))) return { ok: false, status: 0, error: NO_PERMISSION };
+  return postWebhook(meeting, settings, opts);
+}
+
+// What came back from the worker, in a known shape.
+const answerOf = (r) => (r && typeof r === 'object' && typeof r.ok === 'boolean' ? (r.ok ? { ok: true, status: Number(r.status) || 0 } : { ok: false, status: Number(r.status) || 0, error: String(r.error || NO_WORKER).slice(0, 300) }) : { ok: false, status: 0, error: NO_WORKER });
+
+// The pipeline's step: the post (decided where permissions can be checked) and the result written on the meeting
+// through patch (META only). Never throws.
+//  - chrome.permissions here (service worker, an own page) or opts.contains (a test): checked and posted here;
+//  - the offscreen document (no permissions API): the worker is asked to do it, by meeting id only;
+//  - no messaging either: nothing is sent, except outside the browser altogether (no chrome.runtime: unit tests).
 export async function runWebhook(meeting, settings, patch, opts = {}) {
   try {
     if (!validWebhook(settings?.webhookUrl)) return null;
-    const c = typeof chrome !== 'undefined' ? chrome.permissions : null;
-    if (c?.contains) {
-      let has = true;
+    const c = globalThis.chrome;
+    let r;
+    if (opts.contains || typeof c?.permissions?.contains === 'function') r = await postIfPermitted(meeting, settings, opts);
+    else if (typeof c?.runtime?.sendMessage === 'function' && typeof meeting?.id === 'string') {
+      let answer = null;
       try {
-        has = await c.contains({ origins: [`${new URL(String(settings.webhookUrl).trim()).origin}/*`] });
+        answer = await c.runtime.sendMessage({ target: 'bg', type: 'webhook-post', meetingId: meeting.id });
       } catch {}
-      if (!has) {
-        await patch({ webhookError: NO_PERMISSION });
-        return { ok: false, status: 0, error: NO_PERMISSION };
-      }
-    }
-    const r = await postWebhook(meeting, settings, opts);
+      r = answerOf(answer);
+    } else if (!c?.runtime) r = await postWebhook(meeting, settings, opts);
+    else r = { ok: false, status: 0, error: NO_PERMISSION };
     await patch(r.ok ? { webhookAt: Date.now(), webhookError: null } : { webhookError: r.error });
     return r;
   } catch (e) {

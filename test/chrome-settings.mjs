@@ -297,6 +297,47 @@ try {
   await sleep(300);
   check('cancelling the second question restores nothing', (await ev(`chrome.storage.local.get('meetingIds').then((r) => r.meetingIds)`)).includes(mid));
 
+  // a file that wants to change where data goes: listed in words, each unticked; nothing changes unless ticked (review H1)
+  await ev(`(async () => { const r = await chrome.storage.local.get('settings'); await chrome.storage.local.set({ settings: { ...r.settings, sttProvider: 'openai', sttKey: 'gsk_MINE', sttBase: 'https://api.groq.com/openai/v1' } }); })()`);
+  const evilBase = `http://127.0.0.1:${port}/v1`;
+  writeFileSync(file, JSON.stringify({ app: 'debrief', version: 1, schema: 3, meetings: [], voices: [], settings: { sttBase: evilBase, consentNotice: true, consentText: 'Join https://evil.example now', shareMode: 'auto', webhookUrl: 'https://evil.example/hook-TOKEN', keepAudioDays: 5 } }));
+  const routeDialog = async () => {
+    await send('DOM.setFileInputFiles', { files: [file], nodeId: n2.nodeId }, pg.sessionId);
+    await sleep(600);
+    return ev(`(() => { const d = document.querySelector('dialog.dbmodal'); return d && { text: d.textContent, boxes: [...d.querySelectorAll('input[type=checkbox]')].map((c) => ({ key: c.dataset.key, checked: c.checked, name: c.closest('label')?.textContent })), html: d.innerHTML.includes('<b>Join') }; })()`);
+  };
+  const pre = await saved();
+  let rd = await routeDialog();
+  check(
+    'restore lists the changes to where data goes, in words, each unticked, with the warning',
+    !!rd && /This file also wants to change where your data goes:/.test(rd.text) && /Only tick these if you made this backup yourself\./.test(rd.text) && ['sttBase', 'webhookUrl', 'shareMode', 'consentText'].every((k) => rd.boxes.some((b) => b.key === k)) && rd.boxes.every((b) => !b.checked) &&
+      rd.boxes.some((b) => b.name === `Speech-to-text server address: https://api.groq.com/openai/v1 → ${evilBase}`) && rd.boxes.some((b) => /^Notice posted in the meeting chat: .* → Join https:\/\/evil\.example now$/.test(b.name)) && !rd.text.includes('TOKEN'),
+    JSON.stringify(rd)
+  );
+  if (SHOTS) {
+    mkdirSync(SHOTS, { recursive: true });
+    for (const [scheme, w] of [['light', 1280], ['dark', 1280], ['light', 420], ['dark', 420]]) {
+      await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] }, pg.sessionId);
+      await send('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile: false }, pg.sessionId);
+      await sleep(350);
+      writeFileSync(path.join(SHOTS, `restore-${scheme}-${w}.png`), Buffer.from((await send('Page.captureScreenshot', { format: 'png' }, pg.sessionId)).data, 'base64'));
+    }
+    await send('Emulation.setEmulatedMedia', { features: [] }, pg.sessionId);
+    await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, pg.sessionId);
+  }
+  await ev(`document.querySelector('dialog.dbmodal button[data-value="merge"]').click()`);
+  await sleep(1200);
+  let rs = await saved();
+  const keys = ['sttBase', 'sttKey', 'consentNotice', 'consentText', 'shareMode', 'webhookUrl', 'keepAudioDays'];
+  check('nothing ticked: the servers, sharing, webhook and chat notice stay as they were; the key and settings set here stay', keys.every((k) => JSON.stringify(rs[k]) === JSON.stringify(pre[k])) && rs.sttKey === 'gsk_MINE', JSON.stringify(keys.map((k) => [k, pre[k], rs[k]])));
+  rd = await routeDialog();
+  await ev(`(() => { document.querySelector('dialog.dbmodal input[data-key="sttBase"]').click(); document.querySelector('dialog.dbmodal button[data-value="merge"]').click(); })()`);
+  await sleep(1200);
+  rs = await saved();
+  const rmsg = await get('#backupRestoreMsg', 'textContent');
+  const rwarn = await ev(`document.getElementById('backupWarnings').textContent`);
+  check('ticking one change takes only that one, and the key here is not sent to the new server', rs.sttBase === evilBase && rs.sttKey === '' && rs.consentText === pre.consentText && rs.shareMode === pre.shareMode && !rs.webhookUrl && /1 setting about where data goes changed/.test(rmsg) && /speech-to-text key was removed/.test(rwarn), JSON.stringify({ sttBase: rs.sttBase, key: rs.sttKey, rmsg, rwarn }));
+
   // ---- 6. model names (Gemini's list answered by the test, nothing leaves this computer) ----
   await ev(`chrome.storage.local.set({ settings: { llmProvider: 'gemini', sttProvider: 'gemini', geminiKey: 'AIzaTESTKEY0123456789012345', geminiModel: 'gemini-3.8-flash', sttGeminiModel: 'gemini-3.5-transcribe' }, modelLists: {} })`);
   await send('Page.reload', {}, pg.sessionId);

@@ -468,7 +468,7 @@
       <section class="card" aria-labelledby="hKeep">
         <h2 id="hKeep" class="lbl">Keep the recording</h2>
         <div class="rows">
-          <div class="trow"><div class="tx"><label for="keepAudio">Keep the recording on this computer</label><p class="hint" id="keepAudio-d">Lets you play back any line and read a stretch again with another model. About 11 MB per hour. It never leaves this computer.</p></div><input type="checkbox" class="sw" role="switch" id="keepAudio" aria-describedby="keepAudio-d"></div>
+          <div class="trow"><div class="tx"><label for="keepAudio">Keep the recording on this computer</label><p class="hint" id="keepAudio-d">Lets you play back any line and read a stretch again with another model. About 11 MB per hour. It stays on this computer, unless you use "Read this part again", which sends that stretch to your speech-to-text service. Recordings already kept stay until they expire or you delete them, even if you turn this off.</p></div><input type="checkbox" class="sw" role="switch" id="keepAudio" aria-describedby="keepAudio-d"></div>
           <div class="fld">
             <label for="keepAudioDays">Delete kept recordings after (days)</label>
             <input id="keepAudioDays" class="num-in" type="number" min="0" max="365" step="1" inputmode="numeric" aria-describedby="keepAudioDays-d">
@@ -484,7 +484,7 @@
       <section class="card" aria-labelledby="hScreen">
         <h2 id="hScreen" class="lbl">Shared screen</h2>
         <div class="rows">
-          <div class="trow"><div class="tx"><label for="screenNotes">Describe what is shown on the shared screen</label><p class="hint" id="screenNotes-d">Slides, numbers and documents reach the minutes. Each new slide is one extra request to your minutes model, about 30 for a one-hour meeting with a slide every two minutes. The picture goes to the same service that writes your minutes.</p></div><input type="checkbox" class="sw" role="switch" id="screenNotes" aria-describedby="screenNotes-d"></div>
+          <div class="trow"><div class="tx"><label for="screenNotes">Describe what is shown on the shared screen</label><p class="hint" id="screenNotes-d">Slides, numbers and documents reach the minutes. The picture is of the whole meeting tab as you see it: the shared screen, and anything else visible in the tab, such as participant tiles or the chat. It goes to the same service that writes your minutes. On Google Meet Debrief only looks while someone is presenting; on other meeting apps it cannot tell, so it looks whenever the picture changes. Each new picture is one extra request, about 30 for a one-hour meeting with a slide every two minutes.</p></div><input type="checkbox" class="sw" role="switch" id="screenNotes" aria-describedby="screenNotes-d"></div>
           <div class="fld">
             <label for="screenNotesEverySec">Look at the screen at most every (seconds)</label>
             <input id="screenNotesEverySec" class="num-in" type="number" min="10" max="300" step="1" inputmode="numeric" aria-describedby="screenNotesEverySec-d">
@@ -502,7 +502,7 @@
             <div class="btnrow"><button type="button" class="btn" id="backupDownload">Download a backup</button><span class="status" id="backupDownloadMsg" role="status"></span></div>
           </div>
           <div class="fld">
-            <p class="hint">Choose a file made by Debrief. You can add it to what is here, or replace everything.</p>
+            <p class="hint">Choose a file made by Debrief. You can add it to what is here, or replace everything. Your current settings are kept, and a file never changes where your data goes (servers, sharing, the webhook, the chat notice) unless you tick each change.</p>
             <div class="btnrow"><button type="button" class="btn" id="backupRestore">Restore from a backup…</button><input type="file" id="backupFile" accept=".json,application/json" aria-label="Backup file" hidden><span class="status" id="backupRestoreMsg" role="status"></span></div>
             <ul class="hint" id="backupWarnings" hidden></ul>
           </div>
@@ -729,7 +729,7 @@
         <div class="fld">
           <label for="webhookUrl">Address to send them to</label>
           <input id="webhookUrl" placeholder="https://hooks.example.com/…" autocomplete="off" spellcheck="false" inputmode="url" aria-describedby="webhookUrl-d webhookErr">
-          <p class="hint" id="webhookUrl-d">When minutes are written, Debrief posts them here as JSON: title, attendee names, decisions, actions and the minutes. Never the transcript or email addresses. Slack and Teams incoming-webhook addresses get a short text digest.</p>
+          <p class="hint" id="webhookUrl-d">When minutes are written, Debrief posts them here as JSON: title, attendee names, decisions, actions and the minutes. Never the transcript (not even the short quotes the minutes page shows as sources) or email addresses. Nothing is sent unless Chrome has given Debrief permission for this address. Slack and Teams incoming-webhook addresses get a short text digest.</p>
           <p class="field-err" id="webhookErr" role="alert" hidden></p>
         </div>
         <div class="btnrow"><button type="button" class="btn" id="webhookTest">Send a test</button><span class="status" id="webhookMsg" role="status"></span></div>

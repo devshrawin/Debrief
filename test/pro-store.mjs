@@ -411,7 +411,7 @@ await test('merge skips meetings already here and keeps the keys set here; repla
   assert.deepEqual(r.meetings, { added: 1, skipped: 2 });
   assert.equal(mem.settings.geminiKey, 'G-SECRET', 'a key set here wins in a merge');
   assert.equal(mem.settings.anthropicKey, 'A-SECRET', 'never an empty value over a set one');
-  assert.equal(mem.settings.momLanguage, 'English');
+  assert.equal(mem.settings.momLanguage, 'Hindi', 'a setting chosen here wins in a merge');
   assert.equal(mem.meetingIds[0], 'm1800000000000');
   assert.equal((await getMeeting('m1800000000000')).segments.length, 450);
   // replace: only the file's meetings remain, and nothing of the old ones
@@ -472,6 +472,165 @@ await test('old settings in a backup go through the same migration as stored one
   assert.deepEqual(mem.settings.geminiBackups, ['K2']);
   assert.equal(mem.settings.minutesFormat, 'template');
   assert.equal(mem.settings.meetingLanguage, undefined);
+});
+
+// ---- backups: a file can come from anyone (security review H1) ----
+const VICTIM = { myName: 'Asha', momLanguage: 'Hindi', sttProvider: 'openai', sttKey: 'gsk_VICTIM', llmProvider: 'openai', oaKey: 'sk-VICTIM', oaModel: 'gpt-x', emailWebhook: 'https://script.google.com/macros/s/MINE/exec', emailSecret: 'E-MINE' };
+const EVIL = () => ({
+  app: 'debrief', version: 1, schema: 3, meetings: [],
+  settings: {
+    sttBase: 'https://evil.example/v1', oaBase: 'https://evil.example/v1', sttProvider: 'openai', llmProvider: 'openai', oaModel: 'evil-model', sttModel: 'evil-whisper',
+    webhookUrl: 'https://evil.example/hook', emailWebhook: 'https://script.google.com/macros/s/EVIL/exec', emailTo: 'x@evil.example', emailAuto: true, emailTranscript: true,
+    consentNotice: true, consentText: 'Join https://evil.example now', shareMode: 'auto', shareList: 'x@evil.example', shareGroups: 'all | x@evil.example', shareHow: 'bcc', shareDomains: true,
+    shareExternalGuard: false, myOrgDomains: 'evil.example', calendarLookup: false, screenNotes: true, voiceModelUrl: 'https://evil.example/m.onnx',
+    keepAudioDays: 3, // not routing: fills a setting left at its default here
+    momLanguage: 'English', // not routing: set here, so kept in a merge
+  },
+});
+const routingSnapshot = () => Object.fromEntries(B.ROUTING_SETTINGS.map((k) => [k, mem.settings?.[k]]));
+
+await test('backup H1: every setting that decides where data goes is a routing setting, with a plain label', () => {
+  for (const k of ['sttBase', 'oaBase', 'llmProvider', 'sttProvider', 'oaModel', 'sttModel', 'webhookUrl', 'emailWebhook', 'emailTo', 'voiceModelUrl', 'shareMode', 'shareList', 'shareGroups', 'shareHow', 'shareDomains', 'shareExternalGuard', 'emailAuto', 'consentNotice', 'consentText', 'myOrgDomains', 'calendarLookup', 'emailTranscript', 'screenNotes'])
+    assert.ok(B.ROUTING_SETTINGS.includes(k), `${k} must be a routing setting`);
+  for (const k of B.ROUTING_SETTINGS) {
+    assert.ok(k in S.DEFAULTS, `${k} is a real setting`);
+    assert.match(B.ROUTING_LABELS[k], /^[A-Z][a-z' ]/, `${k} has a label in words`);
+  }
+  for (const k of Object.keys(S.DEFAULTS)) if (/base|url|share|email|consent|domains|provider/i.test(k) && !/^email(Secret|Pdf|Word|Md)$/.test(k)) assert.ok(B.ROUTING_SETTINGS.includes(k), `${k} looks like routing: classify it`);
+});
+
+for (const mode of ['merge', 'replace']) {
+  await test(`backup H1 (${mode}): a file never changes where data goes unless the person ticks it; keys here are never replaced or sent elsewhere`, async () => {
+    mem.schema = S.SCHEMA;
+    mem.settings = { ...VICTIM };
+    const before = routingSnapshot();
+    const r = await B.importAll(EVIL(), { mode });
+    assert.deepEqual(routingSnapshot(), before, 'no routing setting changed');
+    assert.deepEqual(r.routingApplied, []);
+    assert.deepEqual(r.origins, []);
+    assert.equal(mem.settings.sttKey, 'gsk_VICTIM');
+    assert.equal(mem.settings.oaKey, 'sk-VICTIM');
+    assert.equal(mem.settings.emailSecret, 'E-MINE');
+    assert.equal(mem.settings.keepAudioDays, 3, 'a default here is filled from the file');
+    assert.equal(mem.settings.momLanguage, mode === 'merge' ? 'Hindi' : 'English', 'merge: what is set here wins; replace: the file');
+    const s = await S.getSettings();
+    assert.equal(s.sttBase, S.DEFAULTS.sttBase);
+    assert.equal(s.consentNotice, false);
+    assert.equal(s.shareExternalGuard, true);
+    assert.equal(({}).polluted, undefined);
+  });
+}
+
+await test('backup H1: keys and the relay secret are never imported over the ones here, in either mode', async () => {
+  for (const mode of ['merge', 'replace']) {
+    mem.schema = S.SCHEMA;
+    mem.settings = { ...VICTIM, geminiKey: 'G-MINE' };
+    await B.importAll({ app: 'debrief', version: 1, settings: { geminiKey: 'G-FILE', sttKey: 'T-FILE', oaKey: 'O-FILE', emailSecret: 'E-FILE' } }, { mode });
+    assert.deepEqual([mem.settings.geminiKey, mem.settings.sttKey, mem.settings.oaKey, mem.settings.emailSecret], ['G-MINE', 'gsk_VICTIM', 'sk-VICTIM', 'E-MINE'], mode);
+  }
+  // nothing set here: the file's keys are taken (a restore on a new computer)
+  for (const k of Object.keys(mem)) delete mem[k];
+  mem.schema = S.SCHEMA;
+  await B.importAll({ app: 'debrief', version: 1, settings: { geminiKey: 'G-FILE', sttKey: 'T-FILE', emailSecret: 'E-FILE' } });
+  assert.deepEqual([mem.settings.geminiKey, mem.settings.sttKey, mem.settings.emailSecret], ['G-FILE', 'T-FILE', 'E-FILE']);
+});
+
+await test('backup H1: a ticked server address is taken, its key here is cleared (never sent to the new server) unless the file brings one, and its origin is returned', async () => {
+  mem.schema = S.SCHEMA;
+  mem.settings = { ...VICTIM };
+  const file = EVIL();
+  file.settings.oaKey = 'sk-FILE'; // the file brings a key for its own minutes server
+  const r = await B.importAll(file, { acceptRouting: ['sttBase', 'oaBase', 'emailWebhook', 'consentText', 'notASetting'] });
+  assert.deepEqual(r.routingApplied.sort(), ['consentText', 'emailWebhook', 'oaBase', 'sttBase']);
+  assert.equal(mem.settings.sttBase, 'https://evil.example/v1');
+  assert.equal(mem.settings.sttKey, '', 'the key for the old speech server is not sent to the new one');
+  assert.equal(mem.settings.oaKey, 'sk-FILE', "the file's own key goes with its address");
+  assert.equal(mem.settings.emailSecret, '', 'a new relay never gets the secret of the old one');
+  assert.equal(mem.settings.webhookUrl, undefined, 'not ticked: not taken');
+  assert.equal(mem.settings.consentNotice, undefined);
+  assert.ok(r.warnings.some((w) => /speech-to-text key was removed/.test(w)), JSON.stringify(r.warnings));
+  assert.ok(r.warnings.some((w) => /relay secret was removed/.test(w)));
+  assert.ok(!r.warnings.some((w) => /minutes model server .* key was removed/.test(w)));
+  assert.deepEqual(r.origins, ['https://evil.example/*']);
+});
+
+await test('backup H1: a ticked address that is not safe (http to another computer, a password in it) is left out', async () => {
+  mem.schema = S.SCHEMA;
+  mem.settings = { ...VICTIM };
+  const r = await B.importAll({ app: 'debrief', version: 1, settings: { sttBase: 'http://evil.example/v1', oaBase: 'https://u:p@evil.example/v1', webhookUrl: 'http://evil.example/h', voiceModelUrl: 'javascript:alert(1)' } }, { acceptRouting: ['sttBase', 'oaBase', 'webhookUrl', 'voiceModelUrl'] });
+  assert.deepEqual(r.routingApplied, []);
+  assert.equal(mem.settings.sttKey, 'gsk_VICTIM');
+  assert.equal(r.warnings.filter((w) => /not a safe address/.test(w)).length, 4);
+  const ok = await B.importAll({ app: 'debrief', version: 1, settings: { sttBase: 'http://localhost:8000/v1' } }, { acceptRouting: ['sttBase'] });
+  assert.deepEqual(ok.routingApplied, ['sttBase'], 'http to this computer is fine');
+});
+
+await test('backup H1: previewImport lists what would change where data goes, in words, secrets hidden, and writes nothing', async () => {
+  mem.schema = S.SCHEMA;
+  mem.settings = { ...VICTIM, webhookUrl: 'https://hooks.example.com/TOKEN-MINE', consentText: S.DEFAULTS.consentText };
+  const snap = JSON.stringify(mem);
+  const file = EVIL();
+  file.settings.llmProvider = 'openai'; // the same as here: not listed
+  file.settings.shareList = ''; // empty: never written over a set value; here it is unset, so nothing changes either
+  const p = await B.previewImport(file);
+  assert.equal(JSON.stringify(mem), snap, 'nothing written');
+  assert.equal(p.ok, true);
+  assert.equal(p.hasSettings, true);
+  assert.deepEqual([p.meetings, p.voices], [0, 0]);
+  const by = Object.fromEntries(p.routing.map((x) => [x.key, x]));
+  assert.ok(!by.llmProvider && !by.shareList && !by.sttProvider, 'only what differs');
+  assert.deepEqual(by.sttBase, { key: 'sttBase', label: 'Speech-to-text server address', from: 'https://api.groq.com/openai/v1', to: 'https://evil.example/v1', origin: 'https://evil.example/*' });
+  assert.equal(by.consentText.label, 'Notice posted in the meeting chat');
+  assert.equal(by.consentNotice.from, 'off');
+  assert.equal(by.consentNotice.to, 'on');
+  assert.equal(by.shareMode.label, 'Who gets the minutes automatically');
+  assert.equal(by.shareMode.to, 'me and the people listed');
+  assert.equal(by.webhookUrl.from, 'https://hooks.example.com/… (rest hidden)');
+  assert.ok(!JSON.stringify(p).includes('TOKEN-MINE') && !JSON.stringify(p).includes('MINE/exec'), 'secrets here are not shown');
+  assert.equal(by.emailWebhook.label, 'Email relay address');
+  assert.ok(!JSON.stringify(p).includes('VICTIM'));
+  const bad = await B.previewImport({ app: 'debrief', version: 99 });
+  assert.deepEqual([bad.ok, /newer version/.test(bad.error), bad.routing], [false, true, []]);
+  assert.equal((await B.previewImport({ app: 'debrief', version: 1, meetings: [{}, {}], voices: [{ id: 'v' }] })).routing.length, 0);
+});
+
+await test('backup: replace never deletes the meeting being recorded now, and says so', async () => {
+  await seedAll();
+  chrome.storage.session = { get: async () => ({ rec: { recording: true, meetingId: 'm1700000000001', tabId: 3 } }), set: async () => {} };
+  try {
+    const r = await B.importAll({ app: 'debrief', version: 1, meetings: [{ id: 'm1800000000000', title: 'New', startedAt: 1_800_000_000_000, segments: [seg(1)] }, { id: 'm1700000000001', title: 'Same id as the recording', segments: [] }] }, { mode: 'replace' });
+    assert.deepEqual(r.meetings, { added: 1, skipped: 1 });
+    assert.equal((await getMeeting('m1700000000001')).segments.length, 450, 'the recording is untouched');
+    assert.equal((await getMeeting('m1700000000001')).title, 'One');
+    assert.equal(await getMeeting('m1600000000000'), null, 'the other old meeting is replaced');
+    assert.deepEqual(mem.meetingIds, ['m1800000000000', 'm1700000000001']);
+    assert.ok(r.warnings.some((w) => /being recorded now was kept/.test(w)));
+  } finally {
+    delete chrome.storage.session;
+  }
+});
+
+await test('backup: an import cut off half way leaves every saved meeting listed, and replace has not deleted the old ones yet', async () => {
+  for (const mode of ['merge', 'replace']) {
+    for (const k of Object.keys(mem)) delete mem[k];
+    await seedAll();
+    const realSet = chrome.storage.local.set;
+    chrome.storage.local.set = async (o) => {
+      if (Object.keys(o).some((k) => k.includes('m1800000000002'))) throw new Error('tab closed');
+      return realSet(o);
+    };
+    try {
+      const meetings = [1, 2, 3].map((n) => ({ id: `m180000000000${n}`, title: `N${n}`, startedAt: 1_800_000_000_000 + n, segments: [seg(n)] }));
+      await assert.rejects(() => B.importAll({ app: 'debrief', version: 1, meetings }, { mode }), /tab closed/);
+    } finally {
+      chrome.storage.local.set = realSet;
+    }
+    const stored = [...new Set(Object.keys(mem).filter((k) => k.startsWith('meeting:')).map((k) => k.slice(8).split(/[:#/]/)[0]))];
+    for (const id of stored) assert.ok(mem.meetingIds.includes(id), `${mode}: ${id} is saved but not listed`);
+    assert.ok(stored.includes('m1800000000001'));
+    assert.ok((await getMeeting('m1700000000001'))?.segments.length === 450, `${mode}: the old meetings are still there`);
+    assert.ok((await listMeetingMetas({ counts: [] })).some((m) => m.id === 'm1800000000001'), `${mode}: the saved one shows`);
+  }
 });
 
 console.log(`\nmeasured: append #10 ${results.append10} B, #2000 ${results.append2000} B, #2010 ${results.append2010} B, largest append ${results.maxAppend} B; the old store wrote ${results.oldAppend2000} B for append #2000`);

@@ -154,6 +154,10 @@ flowchart LR
 | **Your keys** | Stay in this browser (Chrome extension storage, unencrypted, as on any extension). |
 | **Audio and text** | Go straight from Chrome to the provider you chose (Gemini by default; Sarvam, Deepgram, Claude, or models on your own computer). If you turn on email, minutes also pass through a script in your own Google account. |
 | **Voices** | Recognition runs on your computer with a bundled model. Only 256-number fingerprints are stored, plus optional short sample clips you can play back and delete. **Forget all voices** removes everything. |
+| **Kept recording** (off by default) | Stays on your computer for the days you choose, unless you use *Read this part again*, which sends that stretch to your speech-to-text provider. |
+| **Shared screen** (off by default) | A still picture of the whole meeting tab (shared screen, participant tiles, chat) goes to your minutes provider. On Meet only while someone presents; on other apps whenever the picture changes. |
+| **Webhook** (optional) | The minutes, never the transcript (not even source quotes) or email addresses, and only with Chrome's permission for that address. |
+| **Backups** | A restored file never changes where data goes (servers, sharing, webhook, relay, chat notice) unless you tick each change. |
 | **The local helpers** | The Whisper server only answers local requests from the Debrief extension. |
 
 Tell participants when you are recording; your workspace may also restrict extensions.

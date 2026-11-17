@@ -489,6 +489,7 @@ useStore({
   listMeetingMetas: (opts) => viaBg({ op: 'listMeetingMetas', opts }),
   getMeetingMeta: (id, opts) => viaBg({ op: 'getMeetingMeta', id, opts }),
   appendMeeting: (id, list, items) => viaBg({ op: 'appendMeeting', id, list, items }),
+  saveMinutes: (id, fields) => viaBg({ op: 'saveMinutes', id, fields }), // the minutes and the action ticks in one update, so a tick made meanwhile is kept
 });
 const jobs = createJobRunner({
   emit: (m) => chrome.runtime.sendMessage(m).catch(() => {}),

@@ -76,7 +76,7 @@ await test('captions: a scripted call gives exactly the lines the old whole-list
   assert.equal(ref.length, 6);
 });
 
-await test('captions: merging works inside the last chunk; a line whose earlier version is in an older chunk starts a new line; 4000 is the cap', async () => {
+await test('captions: merging works inside the last chunk; a line whose earlier version is in an older chunk grows where it is; 4000 is the cap', async () => {
   live();
   // 199 lines from others, then Amal starts speaking: his line is the 200th, the last of chunk 0
   const filler = Array.from({ length: 199 }, (_, i) => ({ name: `P${i % 5}`, text: `filler ${i}`, t: 100 + i * 20 }));
@@ -89,7 +89,7 @@ await test('captions: merging works inside the last chunk; a line whose earlier 
   await send({ type: 'meet-snap', t: 1, names: [], captions: [{ name: 'Ravi', text: 'Hi', t: 5002 }] }, MEET); // opens chunk 1
   await send({ type: 'meet-snap', t: 1, names: [], captions: [{ name: 'Ravi', text: 'Hi all', t: 5003 }, { name: 'Amal', text: 'One two three', t: 5003 }] }, MEET);
   caps = (await getMeeting('mt')).captions;
-  assert.deepEqual(caps.slice(-3).map((c) => c.text), ['One two', 'Hi all', 'One two three'], 'Ravi merged in chunk 1; Amal\'s earlier line is in chunk 0, so a new line');
+  assert.deepEqual(caps.slice(-2).map((c) => c.text), ['One two three', 'Hi all'], 'Ravi merged in chunk 1; Amal\'s line in chunk 0 grew there');
   assert.deepEqual(Object.keys(state.mem.local).filter((k) => k.startsWith('mp:mt:captions:')).sort(), ['mp:mt:captions:0', 'mp:mt:captions:1']);
   // the cap: older chunks go, whole
   for (let i = 0; i < 4200; i += 200) await send({ type: 'meet-snap', t: 1, names: [], captions: Array.from({ length: 200 }, (_, k) => ({ name: `Q${k}`, text: `line ${i + k}`, t: 10000 + (i + k) * 20 })) }, MEET);

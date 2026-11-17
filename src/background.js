@@ -7,6 +7,9 @@ import { MEET_CODE } from './meetend.js';
 import { addEntry } from './usage.js';
 import { cleanTitle } from './adapters/pillrules.js';
 import { stuckJobs } from './jobstate.js';
+import { postIfPermitted } from './webhook.js';
+import { purgeOld } from './audiokeep.js';
+import { keepStatuses } from './actions.js';
 import { SCHEMA, getSettings, setSetting, sttReady, getMeeting, getMeetingMeta, listMeetingMetas, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, CAPS, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -292,6 +295,18 @@ async function resumeJobs() {
 resumeJobs().catch(() => {});
 chrome.runtime.onStartup?.addListener(() => resumeJobs().catch(() => {}));
 
+// Kept recordings older than "Delete kept recordings after" go when the worker starts (a browser start, or the worker
+// waking for an event), at most every 6 hours, as well as when a recording starts. IndexedDB works here; no alarm needed.
+const PURGE_EVERY_MS = 6 * 3600 * 1000;
+export async function purgeKeptAudio(now = Date.now()) {
+  const { keptPurgedAt = 0 } = await chrome.storage.session.get('keptPurgedAt');
+  if (now - keptPurgedAt < PURGE_EVERY_MS) return null;
+  await chrome.storage.session.set({ keptPurgedAt: now });
+  const { keepAudioDays } = await getSettings();
+  return purgeOld(keepAudioDays, now);
+}
+purgeKeptAudio().catch(() => {});
+
 let starting = false;
 async function start(msg) {
   // The popup button and the keyboard shortcut can both fire while the microphone prompt is open.
@@ -516,12 +531,20 @@ async function autoStop(reason) {
 }
 
 // What a page script (running on a meeting site) may ask for. Everything else must come from Debrief's own pages.
-const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'notice-result', 'presenting', 'nudge-dismiss', 'set-nudge']);
+export const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'pause', 'notice-result', 'presenting', 'nudge-dismiss', 'set-nudge']);
+// ...and of those, the ones that change the recording: only from the tab being recorded (another meeting tab, or a
+// second meeting site open beside it, must not stop, discard or unmute it).
+export const RECORDED_TAB_ONLY = new Set(['mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'pause']);
+
+// Who sent a message. A content script has sender.tab and the URL of the page (or frame) it runs in. Debrief's own pages
+// have a chrome-extension:// URL of this extension: in a tab of their own, as the floating panel's frame inside a page
+// (sender.tab set too) or with no tab at all (the offscreen document, the popup). The URL is set by Chrome, not the page.
+export const isOwnPage = (sender, base = chrome.runtime.getURL('')) => !sender?.tab || String(sender?.url || '').startsWith(base);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.target !== 'bg') return;
   if (sender.id !== chrome.runtime.id) return;
-  const ownPage = !sender.tab || (sender.url || '').startsWith(chrome.runtime.getURL(''));
+  const ownPage = isOwnPage(sender);
   if (!ownPage && !PAGE_MAY.has(msg.type)) return;
   const handlers = {
     start: () => start(msg),
@@ -582,6 +605,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.op === 'saveMeeting') return (await saveMeeting(msg.meeting), { ok: true });
       if (msg.op === 'patchMeeting') return { ok: true, value: await patchMeeting(msg.id, msg.fields || {}) };
       if (msg.op === 'appendMeeting') return { ok: true, value: await appendMeeting(msg.id, msg.list, msg.items || []) };
+      // the minutes and the action ticks in one update under the lock, so a tick made while the model was writing is kept
+      if (msg.op === 'saveMinutes') return { ok: true, value: await updateMeetingMeta(msg.id, (m) => Object.assign(m, msg.fields?.items ? { ...msg.fields, items: keepStatuses(msg.fields.items, m.items) } : msg.fields || {})) };
+      // today's request counts and learned limits, so screen notes can leave room for the minutes
+      if (msg.op === 'usage') return { ok: true, value: await chrome.storage.local.get(['usage', 'learnedLimits']) };
       if (msg.op === 'mergeEmailNames') return { ok: true, value: await mergeEmailNames(msg.found) };
       if (msg.op === 'emailNames') return { ok: true, value: await getEmailNames() };
       return { ok: false };
@@ -708,7 +735,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               last.t2 = c.t;
             } else caps.push({ t: c.t, t2: c.t, name, text: c.text });
           }
-        }, { max: CAPS.captions });
+        }, { max: CAPS.captions, look: 40 }); // look: a line whose earlier version sits at the end of the previous chunk grows there
       return { ok: true };
     },
     // A page script saw a live call (or the call ended): glow the icon amber unless we are already recording it.
@@ -737,6 +764,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await setSetting({ followMeetMute: !!msg.on });
       return applyMic();
     },
+    // The minutes job (offscreen document, which has no permissions API) asks for the webhook post. Only the meeting id
+    // comes from the message: the address and the minutes are read here, and nothing is sent without Chrome's permission.
+    'webhook-post': async () => {
+      if (typeof msg.meetingId !== 'string' || !msg.meetingId) return { ok: false, status: 0, error: 'No meeting.' };
+      const [s, m] = await Promise.all([getSettings(), getMeeting(msg.meetingId)]);
+      if (!m) return { ok: false, status: 0, error: 'The meeting was not found.' };
+      return postIfPermitted(m, s);
+    },
     'pill-state': async () => {
       const s = await getSettings();
       const rec = await getState();
@@ -753,6 +788,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         counts: { segs: m?.counts.segments || 0, errs: m?.counts.errors || 0 },
         follow: s.followMeetMute !== false,
         showPill: s.pillOnPage === true,
+        screenNotes: s.screenNotes === true, // the page only looks for who is presenting when this is on
         captionMode: s.meetCaptions || 'read',
         otherSites: s.otherSites !== false,
         shortcut: await shortcutText(),
@@ -768,8 +804,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       };
     },
   };
-  const h = handlers[msg.type];
+  let h = handlers[msg.type];
   if (!h) return;
+  if (!ownPage && RECORDED_TAB_ONLY.has(msg.type)) {
+    const run = h;
+    h = async () => {
+      const st = await getState();
+      if (!st.recording || sender.tab?.id !== st.tabId) return { ok: false };
+      return run();
+    };
+  }
   h().then(
     (r) => sendResponse(r ?? { ok: true }),
     (e) => sendResponse({ ok: false, error: e.message })

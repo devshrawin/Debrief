@@ -560,7 +560,9 @@ function paintStream() {
 }
 
 // The background runner reports its progress as runtime messages; this page just listens.
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  // a meeting page's script can also send runtime messages: only Debrief's own pages and its background count
+  if (sender?.tab && !String(sender.url || '').startsWith(chrome.runtime.getURL(''))) return;
   if (msg?.type === 'job-progress') onJobEvent(msg);
 });
 

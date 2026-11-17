@@ -554,16 +554,170 @@ await test('the pill: presenting is reported when it changes and once after the 
   await wait(400);
   assert.deepEqual(pres(p), [{ target: 'bg', type: 'presenting', on: false, name: null }]);
   p.doc.getElementById('banner').innerHTML = '<div role="status">Priya Nair is presenting</div>';
-  await wait(1100);
+  await wait(5300); // the page is read for it every 5 s
   assert.deepEqual(pres(p).at(-1), { target: 'bg', type: 'presenting', on: true, name: 'Priya Nair' });
   await wait(1100);
   assert.equal(pres(p).length, 2, 'nothing more while nothing changes');
   p.doc.getElementById('banner').innerHTML = '';
-  await wait(1100);
+  await wait(5300);
   assert.deepEqual(pres(p).at(-1), { target: 'bg', type: 'presenting', on: false, name: null });
   assert.equal(pres(idle).length, 0);
   assert.equal(pres(other).length, 0);
   [p, idle, other].forEach((x) => x.close());
+});
+
+// how many times the pill reads the page for what, counted on the document's own query calls
+const countQueries = (doc, patterns) => {
+  const n = Object.fromEntries(Object.keys(patterns).map((k) => [k, 0]));
+  const real = doc.querySelectorAll.bind(doc);
+  doc.querySelectorAll = (sel) => {
+    for (const [k, re] of Object.entries(patterns)) if (re.test(sel)) n[k]++;
+    return real(sel);
+  };
+  return n;
+};
+const PATTERNS = { presenting: /^\[aria-label\], \[title\]$/, people: /role="list"/ };
+
+await test('the pill: the page is scanned for presenting only every 5 s and only while recording with screen notes on', async () => {
+  const rec = fakePage({ S: baseS({ rec: recState() }) });
+  const off = fakePage({ S: baseS({ rec: recState(), screenNotes: false }) });
+  const idle = fakePage({ S: baseS() });
+  const nRec = countQueries(rec.doc, PATTERNS);
+  const nOff = countQueries(off.doc, PATTERNS);
+  const nIdle = countQueries(idle.doc, PATTERNS);
+  await wait(6200); // about six ticks
+  assert.ok(nRec.presenting >= 1 && nRec.presenting <= 2, `recording: ${nRec.presenting} scans in 6 s (was one per tick)`);
+  assert.equal(nOff.presenting, 0, 'screen notes off: never');
+  assert.equal(nIdle.presenting, 0, 'not recording: never');
+  [rec, off, idle].forEach((x) => x.close());
+});
+
+await test('the pill: participants are read for the reminder only while it can still be asked: not switched off, and not again after it was shown', async () => {
+  const recording = fakePage({ S: baseS({ rec: recState() }) });
+  const off = fakePage({ S: baseS({ nudge: { on: false, skipOneOnOne: true, meetingTypes: types, dismissed: [] } }) });
+  const asked = fakePage({ S: baseS() });
+  const nOff = countQueries(off.doc, PATTERNS);
+  const nAsked = countQueries(asked.doc, PATTERNS);
+  await wait(300);
+  assert.ok(asked.card(), 'the reminder is up');
+  const atShown = nAsked.people;
+  await wait(3100);
+  assert.equal(nAsked.people, atShown, 'once it is up the people are not read again');
+  assert.equal(nOff.people, 0, 'reminders off');
+  [recording, off, asked].forEach((x) => x.close());
+});
+
+// ---------------------------------------------------------------- who may send what (security review L1, M1)
+import { readFileSync } from 'node:fs';
+const BG = await import('../src/background.js'); // the same module the harness loaded: its exports
+// Every handler of the worker, and whether a script on a meeting page may reach it. A new handler must be added here,
+// so it can never be opened to pages by accident.
+const EXPOSURE = {
+  start: false, stop: true, discard: true, 'window-fullscreen': true, mic: true, pause: true, 'mic-refresh': false, 'meet-mute': true, whoami: true, level: false,
+  'meet-ended': true, 'mic-silent': false, 'learn-voices': false, 'job-run': false, 'job-hold': false, 'job-abort': false, 'offscreen-idle': false, notify: false, store: false,
+  dbg: false, segment: false, 'screen-note': false, 'live-state': false, 'notice-result': true, presenting: true, 'nudge-dismiss': true, 'set-nudge': true, 'stt-error': false,
+  gap: false, silence: false, usage: false, 'meet-snap': true, 'in-call': true, 'voice-seg': false, 'dismiss-alert': true, 'set-follow': true, 'webhook-post': false, 'pill-state': true,
+};
+const handlerNames = () => {
+  const src = readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf('const handlers = {'), src.indexOf('let h = handlers[msg.type]'));
+  return [...block.matchAll(/^ {4}(?:'([a-z-]+)'|([a-z]+)):/gm)].map((m) => m[1] || m[2]);
+};
+const IFRAME_SCRIPT = { id: 'testid', tab: { id: 7 }, frameId: 4, url: 'https://evil.example/ad-frame.html' };
+const PANEL_FRAME = { id: 'testid', tab: { id: 99 }, frameId: 5, url: 'chrome-extension://testid/popup.html' };
+
+await test('exposure: every handler is in the table, and the table is exactly what a meeting page may reach', async () => {
+  const names = handlerNames();
+  assert.ok(names.length >= 38, `found ${names.length} handlers`);
+  assert.deepEqual([...names].sort(), Object.keys(EXPOSURE).sort(), 'a handler was added or removed: classify it in EXPOSURE');
+  assert.deepEqual([...BG.PAGE_MAY].sort(), Object.keys(EXPOSURE).filter((k) => EXPOSURE[k]).sort());
+  for (const [type, open] of Object.entries(EXPOSURE)) {
+    if (open) continue; // the open ones are sent below with a harmless state
+    for (const who of [page(7), IFRAME_SCRIPT, { id: 'testid', tab: { id: 7 }, url: 'https://chrome-extension.testid.evil/x' }, { id: 'testid', tab: { id: 7 } }])
+      assert.equal(await send({ type, meetingId: 'mt', id: 'mt', op: 'settings' }, who), 'NO-HANDLER', `${type} must not be reachable from ${who.url}`);
+  }
+  for (const type of Object.keys(EXPOSURE).filter((k) => EXPOSURE[k])) assert.notEqual(await send({ type }, page(7)), 'NO-HANDLER', `${type} is for the pill`);
+});
+
+await test('exposure: own pages are told apart by the URL Chrome sets, not by having a tab', () => {
+  assert.equal(BG.isOwnPage(OFFSCREEN), true);
+  assert.equal(BG.isOwnPage(PANEL_FRAME), true, 'the floating panel is our page inside a meeting tab');
+  assert.equal(BG.isOwnPage({ id: 'testid', tab: { id: 2 }, url: 'chrome-extension://testid/mom.html?id=m1' }), true);
+  assert.equal(BG.isOwnPage(page(7)), false);
+  assert.equal(BG.isOwnPage(IFRAME_SCRIPT), false);
+  assert.equal(BG.isOwnPage({ id: 'testid', tab: { id: 7 }, url: 'chrome-extension://testidx/popup.html' }), false, 'another id that starts the same');
+});
+
+await test('L1: stop, discard, mic, follow and dismiss from a script in another tab are refused; the recorded tab and own pages still work', async () => {
+  live({ alert: { kind: 'quota', at: 1, notifiedAt: 1 } });
+  state.mem.local.settings = { followMeetMute: true };
+  for (const type of ['stop', 'discard', 'mic', 'set-follow', 'dismiss-alert']) assert.deepEqual(await send({ type, on: false }, page(99)), { ok: false }, type);
+  assert.deepEqual(await send({ type: 'stop' }, IFRAME_SCRIPT.tab.id === 7 ? { ...IFRAME_SCRIPT, tab: { id: 98 } } : IFRAME_SCRIPT), { ok: false });
+  assert.equal(state.mem.session.rec.recording, true, 'still recording');
+  assert.equal(state.mem.session.rec.micWanted, true);
+  assert.ok(state.mem.session.rec.alert, 'alert still there');
+  assert.equal(state.mem.local.settings.followMeetMute, true);
+  assert.ok(state.mem.local['meeting:mt'], 'not discarded');
+  assert.equal((await send({ type: 'mic', on: false }, page(7))).ok, true, 'the recorded tab may');
+  assert.equal(state.mem.session.rec.micWanted, false);
+  await send({ type: 'dismiss-alert' }, PANEL_FRAME);
+  assert.equal(state.mem.session.rec.alert, null, 'the panel in any tab is an own page');
+  assert.deepEqual(await send({ type: 'set-follow', on: false }, page(7)), { ok: true, micOn: false, micWanted: false });
+  assert.equal(state.mem.local.settings.followMeetMute, false);
+  state.mem.session.rec.recording = false;
+  assert.deepEqual(await send({ type: 'stop' }, page(7)), { ok: false }, 'not recording: a page has nothing to stop');
+});
+
+await test('M1: webhook-post loads the meeting and settings itself, needs the permission, and takes no address from the message', async () => {
+  const fetched = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u, init) => (fetched.push([String(u), JSON.parse(init.body)]), { status: 200 });
+  const perms = [];
+  let allow = false;
+  chrome.permissions = { contains: async (q) => (perms.push(q), allow) };
+  try {
+    live();
+    state.mem.local['meeting:mt'].mom = '## Decisions\n- Ship. [0:10] "kal ship"';
+    state.mem.local.settings = { webhookUrl: 'https://hooks.example.com/abc' };
+    const msg = { type: 'webhook-post', meetingId: 'mt', url: 'https://attacker.example/x', meeting: { mom: 'forged' }, settings: { webhookUrl: 'https://attacker.example/x' } };
+    assert.deepEqual(await send(msg, OFFSCREEN), { ok: false, status: 0, error: 'Debrief has no permission for this address. Open Settings and save the webhook again.' });
+    assert.deepEqual(perms, [{ origins: ['https://hooks.example.com/*'] }]);
+    assert.deepEqual(fetched, []);
+    allow = true;
+    assert.deepEqual(await send(msg, OFFSCREEN), { ok: true, status: 200 });
+    assert.equal(fetched.length, 1);
+    assert.equal(fetched[0][0], 'https://hooks.example.com/abc');
+    assert.equal(fetched[0][1].meeting.id, 'mt');
+    assert.ok(!JSON.stringify(fetched[0][1]).includes('forged') && !JSON.stringify(fetched[0][1]).includes('kal ship'));
+    assert.equal(await send(msg, page(7)), 'NO-HANDLER', 'never from a meeting page');
+    assert.equal((await send({ type: 'webhook-post', meetingId: 'nope' }, OFFSCREEN)).ok, false);
+    assert.equal((await send({ type: 'webhook-post', meetingId: { id: 'mt' } }, OFFSCREEN)).ok, false);
+    delete chrome.permissions;
+    assert.equal((await send(msg, OFFSCREEN)).error, 'Debrief has no permission for this address. Open Settings and save the webhook again.', 'no permissions API: no');
+    assert.equal(fetched.length, 1);
+  } finally {
+    delete chrome.permissions;
+    globalThis.fetch = realFetch;
+  }
+});
+
+await test('L3: kept recordings past their days are deleted when the worker starts, at most every 6 hours', async () => {
+  const K = await import('../src/audiokeep.js');
+  const now = Date.now();
+  await K.putSeg({ meetingId: 'old', seq: 0, t0: 0, dur: 30, blob: null, savedAt: now - 20 * 86400000 });
+  await K.putSeg({ meetingId: 'new', seq: 0, t0: 0, dur: 30, blob: null, savedAt: now - 86400000 });
+  state.mem.local.settings = { keepAudioDays: 14 };
+  assert.equal(await BG.purgeKeptAudio(now), 1);
+  assert.deepEqual([(await K.listSegs('old')).length, (await K.listSegs('new')).length], [0, 1]);
+  await K.putSeg({ meetingId: 'old', seq: 1, t0: 0, dur: 30, blob: null, savedAt: now - 20 * 86400000 });
+  assert.equal(await BG.purgeKeptAudio(now + 3600000), null, 'not again within 6 hours');
+  assert.equal(await BG.purgeKeptAudio(now + 6 * 3600000 + 1), 1);
+  state.mem.local.settings = { keepAudioDays: 0 };
+  state.mem.session.keptPurgedAt = 0;
+  assert.equal(await BG.purgeKeptAudio(now), 0, '0 days: kept until the meeting is deleted');
+  assert.equal((await K.listSegs('new')).length, 1);
+  await K.deleteAudio('new');
+  assert.match(readFileSync(new URL('../src/background.js', import.meta.url), 'utf8'), /^purgeKeptAudio\(\)\.catch/m, 'run when the worker starts');
 });
 
 console.log(`\n${passed} passed`);

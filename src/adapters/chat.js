@@ -79,12 +79,34 @@ export function chatAllowed(doc) {
   return ![...scope.querySelectorAll('*')].some((n) => !n.children.length && n.textContent.length < 160 && TURNED_OFF.test(n.textContent));
 }
 
+// Is this chat message one the user sent? Meet groups messages under a header with the sender's name ("You" for your
+// own) and the time; some builds also mark the message itself. When it cannot be told, the answer is no: a second
+// notice is harmless, a notice held back because someone else pasted the same words is not.
+const SELF_ATTRS = ['data-is-self', 'data-self', 'data-is-own', 'data-from-me', 'data-sender-is-self', 'data-is-me'];
+const SELF_LABEL = /^(you|sent by you|message from you|your message)\b/i;
+const CLOCK = /^\d{1,2}[:.]\d{2}(\s?[ap]\.?m\.?)?$/i;
+const leaves = (el) => [...el.querySelectorAll('*')].filter((n) => !n.children.length && norm(n.textContent));
+function fromMe(node, panel) {
+  for (let up = node.parentElement, i = 0; up && up !== panel && i < 6; up = up.parentElement, i++) {
+    if (SELF_ATTRS.some((a) => up.getAttribute(a) === 'true')) return true;
+    if (SELF_ATTRS.some((a) => up.getAttribute(a) === 'false')) return false;
+    if (SELF_LABEL.test(up.getAttribute('aria-label') || '')) return true;
+    // the message group: the nearest box whose first lines are a sender and a time
+    const ls = leaves(up);
+    const head = ls.slice(0, 2).map((n) => norm(n.textContent));
+    if (ls[0] !== node && head.length === 2 && CLOCK.test(head[1])) return /^you$/i.test(head[0]) && ls[0].compareDocumentPosition(node) & 4;
+  }
+  return false;
+}
+
+// The notice is already in the chat, sent by the user (a reload, a second attempt). Only the chat panel counts, never
+// the rest of the page, and only the user's own message.
 export function alreadyPosted(doc, msg) {
   const want = norm(msg);
   if (!want) return false;
-  const input = chatInput(doc);
-  const scope = chatPanel(doc, input) || doc.body;
-  return [...scope.querySelectorAll('*')].some((n) => !n.children.length && !n.closest('textarea, [contenteditable="true"], [role="textbox"], button, [role="button"]') && norm(n.textContent) === want);
+  const panel = chatPanel(doc, chatInput(doc));
+  if (!panel) return false;
+  return [...panel.querySelectorAll('*')].some((n) => !n.children.length && !n.closest('textarea, [contenteditable="true"], [role="textbox"], button, [role="button"]') && norm(n.textContent) === want && !!fromMe(n, panel));
 }
 
 // ---- posting ------------------------------------------------------------------------------------
