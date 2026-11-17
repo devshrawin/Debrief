@@ -119,7 +119,7 @@ You need Chrome 116+ and Node.js (only to build).
 ```bash
 git clone https://github.com/devshrawin/Debrief.git
 cd Debrief
-git checkout fable-daddy
+git checkout pro
 npm install
 npm run build
 ```
