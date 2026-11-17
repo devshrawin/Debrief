@@ -13,7 +13,7 @@ Records your Google Meet tab, transcribes it as people actually talk (Hindi, Eng
 [![Languages](https://img.shields.io/badge/20%20languages-Hinglish%20ready-FF7A1A)](#languages)
 [![No backend](https://img.shields.io/badge/backend-none-10B981)](#privacy)
 [![Voices](https://img.shields.io/badge/voice%20recognition-on--device-3b2fa8)](#who-said-what)
-[![Tests](https://img.shields.io/badge/tests-243%20passing-10B981)](#develop)
+[![Tests](https://img.shields.io/badge/tests-713%20passing-10B981)](#develop)
 
 <br>
 
@@ -105,6 +105,11 @@ Meeting notes in India are in Hinglish: Hindi sentences with English words in th
 | **Names that are right** | A personal dictionary (`Amal \| Aman`) and a per-meeting attendee list fix misheard names; Debrief remembers fixes. |
 | **Fewer API requests** | With Gemini and your mic on, the call and your voice go in one request per piece. A "4 minute pieces" setting and a popup warning when a one-hour meeting won't fit today's free quota. |
 | **Local models** | One-click presets for Ollama and a local Whisper server. Audio and text never leave your computer. |
+| **Live transcript** | While recording, a Live page shows the text as each piece arrives, with a provisional summary and Ask about the meeting so far. Choose short pieces in Settings for a faster view. |
+| **Actions you can track** | Minutes are built from structured data: tick actions off, see every open action across meetings, and the next meeting of a series reviews the open ones. |
+| **Play it back** | Optional: keep the recording on your computer and play any line or timestamp, or read a stretch again. |
+| **Shared-screen notes** | Optional: a vision model describes each new slide so figures and titles reach the minutes. |
+| **Backup and export** | Back up and restore everything, download one meeting as JSON, or post the minutes to another tool with a webhook. |
 | **Never loses audio** | If a service is down or out of quota, the audio is kept and retried. Red alerts say which model ran out and when it resets. |
 
 ## Quick start
@@ -114,7 +119,7 @@ You need Chrome 116+ and Node.js (only to build).
 ```bash
 git clone https://github.com/devshrawin/Debrief.git
 cd Debrief
-git checkout pro
+git checkout fable-daddy
 npm install
 npm run build
 ```

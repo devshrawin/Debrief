@@ -103,3 +103,42 @@ Test status after this work: all 16 suites in `npm test` pass (243 checks), `tes
 - The quota warning with a real daily limit.
 - Speaker recognition accuracy (unchanged by this work).
 - Deploying the v8 relay script and sending a test email.
+
+## 9. Version 1.4.0, 2026-11-16 and 17
+
+Built in one pass from an audit against Claude Meetings (Anthropic's meeting feature) and of this codebase. "Tested (synthetic)" means automated tests on made-up data with fake providers; "Verified in Chrome" means seen working in headless Chrome with fake servers. **Nothing in this section has been tried on a live call, with a real provider key, or against the real Google Meet page.**
+
+Test status: `npm test` 45 suites, 713 checks, all pass. Real Chrome: chrome-job, chrome-minutes, chrome-meet, chrome-settings, chrome-live, chrome-panel, chrome-smoke, chrome-gaps, chrome-voices, chrome-glass all pass (one tour check in chrome-smoke is timing-sensitive and occasionally needs a rerun).
+
+| Change | State |
+|---|---|
+| Storage split (META + chunked lists), stale-copy protection for lists and META fields, locks across contexts | Tested (synthetic) incl. byte counts: an append writes about 1.4 KB instead of the whole meeting; a heartbeat on a two-hour meeting writes 2.3 KB instead of 5.3 MB. Verified in Chrome through the job and minutes suites. Not verified: a real three-hour recording, a real service-worker restart mid-call. |
+| Structured minutes with classic fallback, cut-off answer detection | Tested (synthetic) with fake models only. **No real model has produced these minutes yet**: quality against the classic pipeline is unknown until `npm run eval` is run on real meetings (docs/EVAL.md). |
+| Action tracking, carry-over between meetings of a series, Open actions page | Tested (synthetic); pages verified in Chrome. |
+| Real per-line times (Deepgram, Whisper-style) | Tested (synthetic) on the providers' documented response shapes. Not called against the live services. Gemini and Sarvam still estimate times inside a piece. |
+| Live transcript page | Verified in Chrome with fake broadcasts and seeded storage. Not verified on a real recording. |
+| Kept recording, play a line, read a stretch again | Verified in Chrome with one-second test tones. Not verified: seeking inside real 30 s segments, storage quota behaviour, long meetings. |
+| Shared-screen notes | Tested (synthetic). Not verified: real tab video capture next to audio capture, a real vision model, thresholds on real slides. |
+| Chat notice, record reminder, presenting detection | Tested on hand-made Meet markup only. **The selectors are educated guesses**: check "Check page detection" (chat and presenting lines) on a live call. |
+| Sharing guard, webhook, backup and restore, model-name check | Tested (synthetic); Settings flows verified in Chrome. Not verified: real Slack/Teams webhooks, real provider model lists, a real permission prompt. |
+| Lite package (speaker model downloaded on first use) | Packaging verified (4.2 MB against 28.9 MB). Download path tested (synthetic). Chrome Web Store acceptance unknown. |
+| Independent reviews | Three code reviews (storage and jobs; security and privacy; capture pipeline) found 2 + 1 + 1 high and about 20 lower findings; all fixed with regression tests, except the items under "Left as is". UI reviewed from screenshots by a separate model; see the final report of this work for the verdict. |
+
+### Left as is, on purpose
+- The floating panel and the popup both stay: the popup is the fallback on pages that cannot be scripted, so neither can be removed.
+- `third_party/libraries-dev` stays: the effects build imports it.
+- `popup.html` is still web-accessible (the floating panel needs it); a hostile page could frame it. Not changed here.
+- Automatic start of a recording is not possible: Chrome only allows tab capture after a click on the extension or its shortcut. The reminder can only ask.
+- Trims work in whole chunks (captions keep 4,000 to 4,199; voice pieces 12,000 to 12,399). Up to 15 s of "last seen" times can be lost if the service worker dies mid-call.
+
+### Still needs a live test by a person (adds to the list above)
+1. Record a real Meet call with **Short pieces** on and the Live page open: lines arrive, summary so far, Ask.
+2. With Deepgram or Groq Whisper: check a few line times against the kept recording.
+3. **Keep the recording** on: play lines from the transcript and from `[mm:ss]` in the minutes; "Read this part again" across a pause.
+4. **Shared screen** on while someone presents slides: notes appear as "On screen" rows and figures reach the minutes; watch the request count in Usage.
+5. **Recording notice** on: the line appears in Meet chat once; with chat disabled you are told.
+6. A meeting that matches a meeting type: the reminder card appears, not in a one-to-one.
+7. Two meetings of the same series: the second reviews the first one's open actions.
+8. Structured against Classic on the same real transcript (Settings → Minutes), and `npm run eval -- --live` on your own reference meetings.
+9. Back up, restore on another Chrome profile, confirm nothing changes where data goes unless ticked.
+10. Webhook to a real Slack or Teams address, allowing and then refusing the permission.
