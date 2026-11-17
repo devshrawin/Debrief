@@ -177,6 +177,16 @@ export async function deleteMeeting(id) {
   await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id), deleteAudio(id)]); // and the kept recording, if any
 }
 
+// Deleting from a page: the minutes job of this meeting is stopped first (the background runner), so nothing is emailed,
+// shared or posted for a meeting that is gone. The job also stops by itself when it finds the meeting missing; this just
+// saves its model calls. Quiet where there is no runtime (tests) or no runner.
+export async function deleteMeetingAndStop(id) {
+  try {
+    if (globalThis.chrome?.runtime?.sendMessage) await chrome.runtime.sendMessage({ target: 'bg', type: 'job-abort', id });
+  } catch {}
+  await deleteMeeting(id);
+}
+
 export async function getState() {
   const { rec } = await chrome.storage.session.get('rec');
   return rec || { recording: false };

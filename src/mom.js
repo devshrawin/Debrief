@@ -1,11 +1,11 @@
 import { renderMd, decorateMinutes } from './md.js';
-import { cleanTranscript, makeDeduper } from './sttclean.js';
+import { cleanTranscript, makeDeduper, isLegacyCapture } from './sttclean.js';
 import { renderMinutesHtml, isTemplateMd, setOrg, parseDirectory } from './orgtemplate.js';
 import { mountAsk } from './askui.js';
 import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
-import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, getMeetingMeta, saveMeeting, patchMeeting as patchStored, deleteMeeting, fmtTime, normalizeFormat } from './store.js';
+import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, getMeetingMeta, saveMeeting, patchMeeting as patchStored, deleteMeetingAndStop, fmtTime, normalizeFormat } from './store.js';
 import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, transcriptGaps } from './jobs.js';
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
@@ -329,8 +329,8 @@ function renderTranscript() {
     return { line, orig, own, who: own || orig, flag: own ? '' : flag };
   };
   const rows = shown
-    ? shown.map((l) => ({ t: l.t, ...pieceOf(l), src: l.src, ...named(l, l.label, l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown'), text: cleanTranscript(l.text, ctx.attendees || [], dd).text }))
-    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, c: s.c, dur: s.dur, src: s.src, ...named(s, s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', ''), text: cleanTranscript(s.text, ctx.attendees || [], dd).text }));
+    ? shown.map((l) => ({ t: l.t, ...pieceOf(l), src: l.src, ...named(l, l.label, l.source === 'conflict' ? 'conflict' : l.name ? '' : 'unknown'), text: cleanTranscript(l.text, ctx.attendees || [], dd, { thinking: isLegacyCapture(meeting) }).text }))
+    : [...meeting.segments].sort((a, b) => a.t - b.t).map((s) => ({ t: s.t, c: s.c, dur: s.dur, src: s.src, ...named(s, s.src === 'me' ? (meeting.room ? 'Room' : settings.myName || 'Me') : 'Others', ''), text: cleanTranscript(s.text, ctx.attendees || [], dd, { thinking: isLegacyCapture(meeting) }).text }));
   // a stretch with no text at all (the speech-to-text returned nothing for it) shows as a note too, so it is never mistaken for silence
   for (const g of transcriptGaps(meeting)) rows.push({ t: g.from, src: 'note', who: 'Gap', gap: g, text: `No transcript for ${gapLabel(g)}. If people spoke here, it was not captured.`, flag: '' });
   // pauses show as notes in their place, so a gap in the transcript is explained
@@ -512,10 +512,14 @@ function renderErrors() {
 // meeting's META record (src/meetingstore.js), not the transcript.
 // Changes are applied one after the other: two quick changes (a checkbox and a format) must not overwrite each other.
 let patchChain = Promise.resolve();
+function meetingGone() {
+  document.querySelector('main').innerHTML = '<p>Meeting not found.</p>';
+}
 function patchMeeting(fields) {
   const run = patchChain.then(async () => {
     Object.assign(meeting, fields);
-    if (!(await patchStored(id, fields))) await saveMeeting(meeting); // deleted meanwhile: this page's copy is all there is
+    // deleted meanwhile (another tab, the popup): never written back, which would leave a record no list shows
+    if (!(await patchStored(id, fields))) meetingGone();
   });
   patchChain = run.catch(() => {});
   return run;
@@ -940,13 +944,14 @@ $('dlJson').onclick = async () => {
 $('del').onclick = async () => {
   const ok = await modal({ title: 'Delete this meeting?', text: 'Its transcript and minutes are removed from this computer. This cannot be undone.', buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Delete meeting', value: 'yes', danger: true }] });
   if (ok?.value !== 'yes') return;
-  await deleteMeeting(id);
+  runner.abort(id); // a job running in this page (no background runner) stops too
+  await deleteMeetingAndStop(id);
   await deleteAllPending(id);
   window.close();
 };
 $('title').onchange = async () => {
-  meeting.title = $('title').value.trim() || 'Meeting';
-  await saveMeeting(meeting);
+  // just the title: this page's copy may be older than the minutes and the email the job wrote meanwhile
+  await patchMeeting({ title: $('title').value.trim() || 'Meeting' });
   renderMeta();
 };
 
@@ -986,7 +991,8 @@ async function fixName(wrong, right, remember) {
     $('fixMsg').textContent = 'Enter both names.';
     return;
   }
-  const latest = (await getMeeting(id)) || meeting;
+  const latest = await getMeeting(id);
+  if (!latest) return meetingGone(); // deleted in another tab: nothing to fix, and nothing is written back
   for (const seg of latest.segments) seg.text = replaceWord(seg.text, wrong, right);
   if (latest.mom) latest.mom = replaceWord(latest.mom, wrong, right);
   await saveMeeting(latest);
@@ -1042,10 +1048,7 @@ tabBtns.forEach((b, i) => {
   settings = await getSettings();
   setEmailNames(await getEmailNames().catch(() => ({})));
   meeting = await getMeeting(id);
-  if (!meeting) {
-    document.querySelector('main').innerHTML = '<p>Meeting not found.</p>';
-    return;
-  }
+  if (!meeting) return meetingGone();
   await initExtras({
     id,
     getMeeting: () => meeting,

@@ -21,13 +21,14 @@ import {
   sanitizeMinutes,
   buildTemplateSystemPrompt,
   buildTemplateUserPrompt,
+  wordsOf,
 } from './prompt.js';
 import { buildFacts, parseDirectory, parseModelOutput, guardProse, knownParties, composeMarkdown, fmtDate, setOrg, getOrg } from './orgtemplate.js';
 import { attendanceMarkdown } from './attendance.js';
 import { isLocalBase } from './local.js';
 import { languagesOf, joinNames } from './languages.js';
 import { gapLabel, gapMinutes } from './coverage.js';
-import { structuredSystem, structuredUser, structuredFixSystem, structuredFixUser, parseStructured, guardStructured, assignIds, renderMinutes, itemsFromMarkdown, itemsFromTemplate, countsOf, withCarry } from './structured.js';
+import { structuredSystem, structuredUser, structuredFixSystem, structuredFixUser, parseStructured, parseStructuredReply, guardStructured, assignIds, renderMinutes, itemsFromMarkdown, itemsFromTemplate, countsOf, withCarry } from './structured.js';
 import { normalizeReview, parseReview } from './actions.js';
 import { updatesSystem, updatesUser, parseUpdates, fillRoster, updatesMarkdown, insertUpdates, rosterOf } from './meetingtypes.js';
 
@@ -42,7 +43,10 @@ export function noInviteReason(meeting, settings) {
   return 'no calendar invite was found to compare with';
 }
 
-export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0, gaps = [] }) {
+export const CUT_OFF_WARNING = "The model's answer was cut off, so the end of the meeting may be missing from these minutes. Press Rewrite minutes, or choose a model with a longer answer limit.";
+
+// truncated: the minutes were made from a reply that stopped at the model's output limit.
+export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0, gaps = [], truncated = false }) {
   const parts = [];
   if (pendingCount > 0) {
     parts.push(`**Coverage warning:** about ${Math.max(1, Math.round(pendingSec / 60))} min of audio (${pendingCount} piece${pendingCount > 1 ? 's' : ''}) could not be transcribed, so some points may be missing from these minutes.`);
@@ -51,6 +55,7 @@ export function coverageMarkdown({ pendingCount = 0, pendingSec = 0, errors = 0,
     const shown = gaps.slice(0, 6).map(gapLabel).join(', ');
     parts.push(`${pendingCount > 0 ? 'Also, no' : '**Coverage warning:** no'} transcript was produced for ${shown}${gaps.length > 6 ? ` and ${gaps.length - 6} more` : ''} (about ${gapMinutes(gaps)} min in all). If people spoke then, those points may be missing from these minutes.`);
   }
+  if (truncated) parts.push(`${parts.length ? '' : '**Coverage warning:** '}${CUT_OFF_WARNING}`);
   if (parts.length) return parts.join(' ');
   if (errors > 0) return `Note: ${errors} transcription problem${errors > 1 ? 's' : ''} occurred during the recording; the audio was retried and recovered where possible.`;
   return '';
@@ -69,6 +74,34 @@ export function textKey(text) {
   return `${text.length}.${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}`;
 }
 
+// A transcript this long is the likely reason a one-call answer was cut off: it is then written the classic way, in windows.
+export const LONG_WORDS = 3000;
+
+const completenessSection = (points) => `## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${points.map((m) => `- ${m}`).join('\n')}`;
+
+// Missed points ("[12:40] Rahul to run the load test") the edited minutes still do not hold: none of the entries the edit
+// added (not in `before`) is dated within 5 s of the point's time or shares most of the point's words.
+export function stillMissing(missing, items, before = null) {
+  const secs = (t) => {
+    const m = /(?:(\d+):)?(\d{1,2}):(\d{2})/.exec(String(t || ''));
+    return m ? (+(m[1] || 0)) * 3600 + +m[2] * 60 + +m[3] : null;
+  };
+  const LISTS = ['decisions', 'actions', 'risks', 'questions', 'next'];
+  const key = (t) => wordsOf(t || '').join(' ');
+  const textsOf = (it) => [...(it?.summary || []), ...(it?.topics || []).flatMap((t) => [t.title, ...(t.points || [])])];
+  const had = new Set([...textsOf(before), ...LISTS.flatMap((k) => (before?.[k] || []).map((x) => x.text))].map(key));
+  const added = LISTS.flatMap((k) => items?.[k] || []).filter((x) => !had.has(key(x.text)));
+  const dated = added.map((x) => secs(x.at)).filter((x) => x != null);
+  const texts = [...textsOf(items).filter((t) => !had.has(key(t))), ...added.map((x) => x.text)].map((t) => new Set(wordsOf(t || '')));
+  return missing.filter((point) => {
+    const at = secs((/^\[?((?:\d+:)?\d{1,2}:\d{2})/.exec(point) || [])[1]);
+    if (at != null && dated.some((x) => Math.abs(x - at) <= 5)) return false;
+    const words = [...new Set(wordsOf(point.replace(/^\[?[\d:]+\]?\s*/, '')))].filter((w) => w.length > 2);
+    if (!words.length) return true;
+    return !texts.some((t) => words.filter((w) => t.has(w)).length / words.length >= 0.6);
+  });
+}
+
 // Temperatures: extraction and the check are made as repeatable as the model allows (0); the writing keeps a little
 // freedom (0.2) so the prose reads naturally.
 export const TEMPERATURE = { extract: 0, write: 0.2, check: 0 };
@@ -79,12 +112,15 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   const words = wordCount(transcript);
   // Small local models read less at a time: use smaller windows and skip the whole-transcript audit for long meetings.
   const local = settings.llmProvider === 'openai' && isLocalBase(settings.oaBase);
-  const thorough = settings.minutesMode !== 'quick' && words >= 400;
+  let thorough = settings.minutesMode !== 'quick' && words >= 400;
   const engine = settings.minutesEngine === 'classic' ? 'classic' : 'structured';
   const wantTemplate = settings.minutesFormat !== 'standard';
   const stats = { extractWindows: 0, extractFailed: 0, items: 0, missed: 0, calls: 0, engine };
   const carry = ctx.carry?.open?.length ? ctx.carry : null; // open action items of the previous meeting in the series
   const languages = joinNames(languagesOf(settings));
+  // Did the reply the minutes are made from stop at the model's output limit? (The provider says so through onMeta.)
+  let cutOff = false;
+  const metaOf = (flag) => ({ onMeta: (m) => m?.truncated && (flag.cut = true) });
 
   let checklist = '';
   let extract = null;
@@ -143,17 +179,19 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     onStatus('Writing the minutes in the official format…');
     stats.calls++;
     const people = [...new Set([...facts.known.people, ...(meeting.invited || []).map((p) => p.name).filter(Boolean)])];
+    const tflag = {};
     const raw = sanitizeMinutes(
       await gen(
         buildTemplateSystemPrompt(settings.momLanguage, { languages, org: getOrg().name }),
         buildTemplateUserPrompt(meeting, settings, notes, { ...ctx, checklist }, { people, orgs: known.orgs, dateText: fmtDate(meeting.startedAt) }),
         onText,
-        { temperature: TEMPERATURE.write }
+        { temperature: TEMPERATURE.write, ...metaOf(tflag) }
       )
     );
     wasEmpty = !raw;
     const prose = raw ? parseModelOutput(raw) : null;
     if (prose) {
+      if (tflag.cut) cutOff = true;
       tpl = { facts, prose: guardProse(prose, known) };
       mom = composeMarkdown(tpl);
       stats.engine = 'template';
@@ -165,21 +203,28 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
   }
 
   const durationSec = meeting.endedAt ? (meeting.endedAt - meeting.startedAt) / 1000 : 0;
-  const guardOpts = { transcript, attendees: roster, absent: ctx.absent || [], known: [settings.myName, ...(meeting.invited || []).map((p) => p.name)].filter(Boolean), durationSec };
+  const guardOpts = { transcript, attendees: roster, absent: ctx.absent || [], known: [settings.myName, ...(meeting.invited || []).map((p) => p.name)].filter(Boolean), entries: ctx.entries || [], learned: ctx.learned || [], durationSec };
 
-  // The structured call: one JSON document for the whole transcript. null when the model failed or the reply is unusable.
+  // The structured call: one JSON document for the whole transcript. null when the model failed or the reply is unusable;
+  // { cut: true } when the reply was cut off and a long transcript is better written part by part.
   async function structuredWrite() {
     onStatus('Writing the minutes…');
     let raw;
+    const flag = {};
     try {
       stats.calls++;
-      raw = await gen(structuredSystem(settings.momLanguage, { languages }), structuredUser(meeting, settings, notes, { ...ctx, checklist, carry }), onText, { temperature: TEMPERATURE.write, json: true });
+      raw = await gen(structuredSystem(settings.momLanguage, { languages }), structuredUser(meeting, settings, notes, { ...ctx, checklist, carry }), onText, { temperature: TEMPERATURE.write, json: true, ...metaOf(flag) });
     } catch (e) {
       if (e?.name === 'AbortError') throw e;
       return null;
     }
-    const parsed = parseStructured(raw);
+    const { items: parsed, truncated } = parseStructuredReply(raw);
+    const cut = truncated || !!flag.cut;
+    if (cut) stats.truncated = true;
+    // a cut-off answer on a long meeting (the likely cause): not accepted, the classic way reads it window by window
+    if (cut && words >= LONG_WORDS) return { cut: true };
     if (!parsed) return null;
+    if (cut) cutOff = true; // short meeting: what came back whole is kept, with the warning
     const { previous, ...doc } = guardStructured(parsed, guardOpts);
     return { items: assignIds(doc, meeting.items), review: carry ? normalizeReview(previous, carry.open) : null };
   }
@@ -187,13 +232,24 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
 
   if (!mom && !wasEmpty) {
     let done = null;
+    let cutLong = false;
     if (engine === 'structured') done = await structuredWrite();
+    if (done?.cut) {
+      cutLong = true;
+      done = null;
+    }
     if (done) {
       ({ items, review } = done);
       viaStructured = true;
       mom = renderStructured();
     } else {
-      if (engine === 'structured') {
+      if (cutLong) {
+        // the item extraction reads a long meeting in windows, so nothing at the end is lost to the answer limit
+        stats.fellBack = 'classic';
+        stats.engine = 'classic';
+        thorough = true;
+        onStatus('The answer was cut off before the end of this long meeting. Writing the minutes the classic way, part by part…');
+      } else if (engine === 'structured') {
         // a model that cannot produce JSON still gets its minutes, the classic way
         stats.fellBack = stats.fellBack || 'classic';
         stats.engine = 'classic';
@@ -201,7 +257,9 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
       } else if (!tpl) onStatus('Writing the minutes…');
       await ensureExtract();
       stats.calls++;
-      mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages }), withCarry(buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), carry, 'classic'), onText, { temperature: TEMPERATURE.write }));
+      const flag = {};
+      mom = sanitizeMinutes(await gen(buildSystemPrompt(settings.momLanguage, { evidence: true, languages }), withCarry(buildUserPrompt(meeting, settings, notes, { ...ctx, checklist }), carry, 'classic'), onText, { temperature: TEMPERATURE.write, ...metaOf(flag) }));
+      if (flag.cut) cutOff = true;
     }
   }
   if (!mom) throw new Error('The model returned an empty reply. Try again, or choose another model in Settings.');
@@ -216,14 +274,16 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
       const missing = sanitizeMinutes(out).split(/\r?\n/).map((l) => l.replace(/^[-*\s]+/, '').trim()).filter((l) => /^\[?\d{1,2}:\d{2}/.test(l)); // only real findings: a timestamp first; chatter like "Nothing is missing" is dropped
       stats.missed = missing.length;
       if (missing.length) {
-        completeness = `## Added by the completeness check\n_These points were in the transcript but missing from the minutes above. Please review them._\n\n${missing.map((m) => `- ${m}`).join('\n')}`;
+        completeness = completenessSection(missing);
         if (viaStructured) {
           // the same JSON comes back with the missing points added; it is accepted only when nothing was lost and something was gained
           let fixed = null;
           try {
             onStatus('Adding the points that were missed…');
             stats.calls++;
-            const p = parseStructured(await gen(structuredFixSystem(settings.momLanguage, { languages }), structuredFixUser(items, missing), undefined, { temperature: TEMPERATURE.check, json: true }));
+            const flag = {};
+            const reply = parseStructuredReply(await gen(structuredFixSystem(settings.momLanguage, { languages }), structuredFixUser(items, missing), undefined, { temperature: TEMPERATURE.check, json: true, ...metaOf(flag) }));
+            const p = reply.truncated || flag.cut ? null : reply.items; // a cut-off edit would lose the end of the minutes
             if (p) {
               const { previous: _p, ...doc } = guardStructured(p, guardOpts);
               const next = assignIds({ ...doc, title: doc.title || items.title, overview: doc.overview || items.overview }, items);
@@ -234,10 +294,15 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
             if (e?.name === 'AbortError') throw e;
           }
           if (fixed) {
+            const before = items;
             items = fixed;
             mom = renderStructured();
             stats.merged = true;
-            completeness = '';
+            // the edit may have added only some of them: the rest are still listed for review
+            const still = stillMissing(missing, fixed, before);
+            stats.missedLeft = still.length;
+            completeness = still.length ? completenessSection(still) : '';
+            if (completeness) mom += `\n\n${completeness}`;
           } else mom += `\n\n${completeness}`;
         } else if (!tpl) {
           // fold the missing points into the right sections; if the model returns something that is not the full minutes, list them at the end instead
@@ -245,7 +310,9 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
           try {
             onStatus('Adding the points that were missed…');
             stats.calls++;
-            merged = sanitizeMinutes(await gen(MERGE_SYSTEM, buildMergePrompt(mom, missing), undefined, { temperature: TEMPERATURE.check }));
+            const flag = {};
+            merged = sanitizeMinutes(await gen(MERGE_SYSTEM, buildMergePrompt(mom, missing), undefined, { temperature: TEMPERATURE.check, ...metaOf(flag) }));
+            if (flag.cut) merged = ''; // a cut-off rewrite would lose the end of the minutes
           } catch (e) {
             if (e?.name === 'AbortError') throw e;
           }
@@ -288,7 +355,7 @@ export async function writeMinutes({ meeting, settings, notes, ctx = {}, gen, on
     }
   }
 
-  const cov = coverageMarkdown(coverage);
+  const cov = coverageMarkdown({ ...coverage, truncated: cutOff });
   let how = 'a single pass';
   if (viaStructured) {
     if (stats.calls > 1) how = `${stats.calls} model calls (${[stats.items || stats.extractWindows ? 'item extraction' : '', 'structured writing', thorough ? 'completeness check' : ''].filter(Boolean).join(', ')}${stats.extractFailed ? `; ${stats.extractFailed} extraction part(s) failed` : ''})`;

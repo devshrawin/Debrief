@@ -2,7 +2,7 @@ import { nearLimit, parseLimits, quotaCheck, nextQuotaReset, istClock } from './
 import { isMeetingSite, platformHint } from './adapters/index.js';
 import { roomFor, modeHint, isMeetingUrl } from './room.js';
 import { allOpenActions } from './actions.js';
-import { getSettings, setSetting, sttReady, llmReady, getState, getMeetingMeta, listMeetingMetas, deleteMeeting, fmtTime } from './store.js';
+import { getSettings, setSetting, sttReady, llmReady, getState, getMeetingMeta, listMeetingMetas, deleteMeetingAndStop, fmtTime } from './store.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -229,7 +229,7 @@ async function drawList() {
             return;
           }
           armed = null;
-          await deleteMeeting(m.id);
+          await deleteMeetingAndStop(m.id);
           await renderRecent();
           $('q').focus();
         };
@@ -275,7 +275,7 @@ $('clearAll').onclick = async () => {
     return;
   }
   const st = await getState();
-  for (const m of await listMeetingMetas({ counts: [] })) if (!(st.recording && st.meetingId === m.id)) await deleteMeeting(m.id);
+  for (const m of await listMeetingMetas({ counts: [] })) if (!(st.recording && st.meetingId === m.id)) await deleteMeetingAndStop(m.id);
   b.dataset.armed = '';
   b.classList.remove('armed');
   b.textContent = 'Clear all';

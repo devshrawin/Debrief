@@ -36,6 +36,11 @@ export function plain(v) {
 const STAMP = Symbol.for('debrief.loaded');
 const PRESENT = Symbol.for('debrief.lists');
 const WIRE = '__loaded';
+// What each small (META) field held when read: { field: fingerprint }. An enumerable symbol, so it rides along with
+// { ...m } and Object.assign like the list marks do (those sit on the shared arrays), and is still dropped by JSON and messages.
+const META = Symbol.for('debrief.meta');
+const META_WIRE = '@meta'; // its name inside `__loaded` (never a list name)
+const NOT_META = new Set(['id', 'parts', 'counts', WIRE]);
 
 // Length plus a 32-bit FNV-1a hash of the JSON text: any change to any item (an edited word, a removed line) changes it.
 export function hashList(arr) {
@@ -50,6 +55,19 @@ export function hashList(arr) {
 
 const hide = (o, k, value) => Object.defineProperty(o, k, { value, enumerable: false, configurable: true, writable: true });
 
+// Length plus FNV-1a of one field's JSON: enough to tell "this copy changed it" from "this copy only read it".
+function fingerprint(v) {
+  const s = JSON.stringify(v) ?? '';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${s.length}:${(h >>> 0).toString(36)}`;
+}
+const metaKeys = (m) => Object.keys(m).filter((k) => !isList(k) && !NOT_META.has(k) && m[k] !== undefined);
+const metaMarks = (m) => Object.fromEntries(metaKeys(m).map((k) => [k, fingerprint(m[k])]));
+
 // Marks every list of `m` with what it holds now. Used on every copy getMeeting returns, and on copies that arrived by message.
 export function stampLoaded(m) {
   if (!m || typeof m !== 'object') return m;
@@ -61,6 +79,7 @@ export function stampLoaded(m) {
   }
   hide(m, PRESENT, present);
   if (WIRE in m) delete m[WIRE];
+  m[META] = metaMarks(m);
   return m;
 }
 
@@ -69,7 +88,8 @@ export function withWireStamps(m) {
   if (!m || typeof m !== 'object') return m;
   const marks = {};
   for (const l of LISTS) if (Array.isArray(m[l]) && m[l][STAMP]) marks[l] = m[l][STAMP];
-  return m[PRESENT] ? { ...m, [WIRE]: marks } : { ...m };
+  if (m[META]) marks[META_WIRE] = m[META];
+  return m[PRESENT] || m[META] ? { ...m, [WIRE]: marks } : { ...m };
 }
 
 const wireStamp = (s) => (s && Number.isInteger(s.n) && typeof s.h === 'string' ? s : null);
@@ -315,13 +335,39 @@ export function appendMeeting(id, list, items, { max, limit } = {}) {
 
 // Lets fn change the last chunk of a list in place (captions: a caption that grows replaces its earlier, shorter version).
 // fn(tail) may edit items and push new ones, and returns false when it changed nothing. max as in appendMeeting.
-export function editMeetingTail(id, list, fn, { max } = {}) {
+// look = n: fn sees at least the last n items. A tail chunk that was just opened holds few, so fn would not find the
+// caption it should extend (it is in the chunk before) and would add it again: then the last items of the previous chunk
+// come first in what fn gets, and an edit to them is written back there.
+export function editMeetingTail(id, list, fn, { max, look = 0 } = {}) {
   checkList(list);
   return locked(id, async () => {
     const tx = await begin(id);
     if (!tx) return false;
-    await editTail(tx, list, fn);
+    const p = tx.meta.parts[list];
+    let lead = null;
+    if (p?.chunks > 1) {
+      const tail = await readChunk(tx, ckey(id, list, p.first + p.chunks - 1));
+      const k = Math.max(0, look - tail.length);
+      if (k) {
+        const key = ckey(id, list, p.first + p.chunks - 2);
+        const prev = await readChunk(tx, key);
+        const items = plain(prev.slice(Math.max(0, prev.length - k)));
+        lead = { key, prev, items, was: JSON.stringify(items) };
+      }
+    }
+    if (!lead) await editTail(tx, list, fn);
+    else
+      await editTail(tx, list, (tail) => {
+        const all = [...lead.items, ...tail];
+        const r = fn(all);
+        const n = lead.items.length;
+        tail.splice(0, tail.length, ...all.slice(n));
+        const now = all.slice(0, n);
+        if (JSON.stringify(now) !== lead.was) tx.set[lead.key] = [...lead.prev.slice(0, lead.prev.length - n), ...now];
+        return r;
+      });
     if (max >= 0) await trimTx(tx, list, max);
+    if (lead && tx.drop.has(lead.key)) delete tx.set[lead.key]; // trimmed away: not written back
     await commit(tx);
     return true;
   });
@@ -376,7 +422,8 @@ export function updateMeetingMeta(id, fn) {
   });
 }
 
-// Saves a whole record. META is written from the record. Each list is written only if this copy changed it:
+// Saves a whole record. META: a copy read with getMeeting (marked) writes only the small fields it changed, over what is
+// stored now; an unmarked copy (a new record, a backup) is written as it is. Each list is written only if this copy changed it:
 //  - not marked (a new record, or an array the caller built): it is written as it is;
 //  - unchanged since it was read: left alone, even if it grew in storage meanwhile (a page saving an old copy
 //    must not drop lines the recorder appended after the page read it);
@@ -388,7 +435,8 @@ export function saveMeeting(m) {
   return locked(m.id, async () => {
     const tx = (await begin(m.id)) || fresh(m.id);
     const wire = m[WIRE] && typeof m[WIRE] === 'object' ? m[WIRE] : null;
-    const present = m[PRESENT] || (wire ? new Set(Object.keys(wire)) : null);
+    const present = m[PRESENT] || (wire ? new Set(Object.keys(wire).filter(isList)) : null);
+    const metaMark = m[META] || (wire?.[META_WIRE] && typeof wire[META_WIRE] === 'object' ? wire[META_WIRE] : null);
     for (const l of LISTS) {
       const c = m[l];
       if (c == null) {
@@ -423,10 +471,18 @@ export function saveMeeting(m) {
       } else writeList(tx, l, c);
     }
     const parts = tx.meta.parts;
-    tx.meta = { ...metaOnly(m), id: m.id, parts };
-    delete tx.meta[WIRE];
-    delete tx.meta.counts;
-    tx.metaDirty = true;
+    if (!metaMark || tx.isNew) {
+      tx.meta = { ...metaOnly(m), id: m.id, parts };
+      delete tx.meta[WIRE];
+      delete tx.meta.counts;
+      tx.metaDirty = true;
+    } else {
+      // Only the fields this copy changed since it was read (added, changed or removed) go onto the META stored now:
+      // a page's old copy saving a title must not take back the minutes, items or emailedAt the job wrote meanwhile.
+      const mine = metaOnly(m);
+      for (const k of metaKeys(mine)) if (metaMark[k] !== fingerprint(mine[k])) applyField(tx, k, mine[k]);
+      for (const k of Object.keys(metaMark)) if (!isList(k) && !NOT_META.has(k) && mine[k] === undefined && k in tx.meta) applyField(tx, k, undefined);
+    }
     await commit(tx);
     // the copy now matches storage for what it wrote: mark it again, so saving it twice does not append twice
     stampLoaded(m);
@@ -449,23 +505,27 @@ export function removeMeetingRecords(id) {
 }
 
 // Strips the voice fingerprints (and the model name) from every meeting, in either shape. Only META rows are read; the
-// fingerprint chunks are removed without being read. Returns how many meetings changed.
+// fingerprint chunks are removed without being read. Each meeting under its lock, so a write landing meanwhile (the job's
+// minutes, a heartbeat) is not overwritten with the META read before it. Returns how many meetings changed.
 export async function stripVoicesFromAll() {
-  const ids = await allIds();
-  const rows = await storedRows(ids);
-  const set = {};
-  const drop = [];
-  for (const r of rows) {
-    if (!(r.voiceSegs || r.voiceModel || r.parts?.voiceSegs)) continue;
-    const { voiceSegs, voiceModel, ...rest } = r;
-    if (r.parts?.voiceSegs) {
-      drop.push(...keysOf(r.id, 'voiceSegs', r.parts.voiceSegs));
-      rest.parts = { ...r.parts };
-      delete rest.parts.voiceSegs;
-    }
-    set[mkey(r.id)] = rest;
+  let changed = 0;
+  for (const id of await allIds()) {
+    const did = await locked(id, async () => {
+      const k = mkey(id);
+      const r = (await local().get(k))[k];
+      if (!r || !(r.voiceSegs || r.voiceModel || r.parts?.voiceSegs)) return false;
+      const { voiceSegs: _v, voiceModel: _m, ...rest } = r;
+      const drop = [];
+      if (r.parts?.voiceSegs) {
+        drop.push(...keysOf(id, 'voiceSegs', r.parts.voiceSegs));
+        rest.parts = { ...r.parts };
+        delete rest.parts.voiceSegs;
+      }
+      await local().set({ [k]: rest });
+      if (drop.length) await local().remove(drop);
+      return true;
+    });
+    if (did) changed++;
   }
-  if (Object.keys(set).length) await local().set(set);
-  if (drop.length) await local().remove(drop);
-  return Object.keys(set).length;
+  return changed;
 }

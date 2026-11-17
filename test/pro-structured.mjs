@@ -66,18 +66,22 @@ await test('parse: trailing commas, raw line breaks in strings, smart-quoted key
   assert.match(S.parseStructured(stray).overview, /ship it/);
 });
 
-await test('parse: a reply cut off mid-way keeps what was written (open string, list and object are closed)', () => {
+await test('parse: a reply cut off mid-way keeps what was written whole and drops the half-written last item', () => {
   const full = J(GOOD);
   const cutInString = full.slice(0, full.indexOf('"Run the load') + 12); // ... "Run the l
   const p = S.parseStructured(cutInString);
   assert.equal(p.overview, 'The team reviewed the migration.');
   assert.equal(p.decisions.length, 1);
-  assert.match(p.actions[0].text, /^Run the l/);
+  assert.equal(p.actions.length, 0, 'an action cut mid-string is not kept as "Run the l"');
+  assert.equal(S.parseStructuredReply(cutInString).truncated, true);
+  assert.equal(S.parseStructuredReply(full).truncated, false);
   const cutAfterKey = full.slice(0, full.indexOf('"risks"') + 8); // ..."risks":
   assert.equal(S.parseStructured(cutAfterKey).actions.length, 1);
   const cutAtKey = full.slice(0, full.indexOf('"questions"') + 11); // a key with no colon
   assert.equal(S.parseStructured(cutAtKey).risks.length, 1);
-  assert.equal(S.parseStructured('{"overview": "ok", "actions": [{"text": "a", "owner": "Am').actions[0].owner, 'Am');
+  const half = S.parseStructured('{"overview": "ok", "actions": [{"text": "a", "owner": "Am');
+  assert.equal(half.overview, 'ok');
+  assert.equal(half.actions.length, 0);
 });
 
 await test('parse: key variants, numeric seconds and empty owners are normalised', () => {

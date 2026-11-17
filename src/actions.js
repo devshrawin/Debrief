@@ -173,3 +173,16 @@ export function setActionStatus(items, id, status, now = Date.now()) {
     }),
   };
 }
+
+// Ticks made while the model was writing win over the copy read when the job started (matched by action id).
+export function keepStatuses(items, current) {
+  if (!items?.actions || !current?.actions?.length) return items;
+  const now = new Map(current.actions.filter((a) => a?.id).map((a) => [a.id, a]));
+  const actions = items.actions.map((a) => {
+    const c = now.get(a.id);
+    if (!c) return a;
+    const { status: _s, doneAt: _a, doneBy: _b, ...rest } = a;
+    return { ...rest, status: c.status || 'open', ...(c.doneAt != null ? { doneAt: c.doneAt } : {}), ...(c.doneBy != null ? { doneBy: c.doneBy } : {}) };
+  });
+  return { ...items, actions };
+}

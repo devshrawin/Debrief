@@ -6,7 +6,7 @@
 //   queued -> transcribing-retry -> writing -> emailing -> done | failed
 // "held" = the person touched the minutes page during the countdown, so nothing starts until they press Write minutes.
 
-import { getMeeting, getMeetingMeta, saveMeeting, patchMeeting, appendMeeting, listMeetingMetas, getSettings, llmReady, mergeEmailNames, stampLoaded, withWireStamps } from './store.js';
+import { getMeeting, getMeetingMeta, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, listMeetingMetas, getSettings, llmReady, mergeEmailNames, stampLoaded, withWireStamps } from './store.js';
 import { parseDictionary } from './dictionary.js';
 import { writeMinutes } from './minutes.js';
 import { pickType } from './meetingtypes.js';
@@ -23,22 +23,25 @@ import { renderMd } from './md.js';
 import { attributeMixed } from './mixer.js';
 import { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs } from './jobstate.js';
 import { findGaps, mergeGaps } from './coverage.js';
-import { previousInSeries, openActions, applyReview, allOpenActions, setActionStatus } from './actions.js';
+import { previousInSeries, openActions, applyReview, allOpenActions, setActionStatus, keepStatuses } from './actions.js';
 import { guardAutoShare, splitRecipients, shareWarning, heldStatus } from './guard.js';
 import { runWebhook, validWebhook } from './webhook.js';
 
-export { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs, shareWarning };
+export { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs, shareWarning, keepStatuses };
 
 // The offscreen document has no chrome.storage: there, the store calls are sent to the service worker (see useStore).
 // listMeetingMetas / getMeetingMeta are only used for carrying actions: where they are missing or fail, there is no carry.
-let IO = { getMeeting, getMeetingMeta, saveMeeting, patchMeeting, appendMeeting, listMeetingMetas, getSettings, mergeEmailNames };
+// updateMeetingMeta takes a function, which cannot travel by message: a store given without it has none (see writeAndStore).
+let IO = { getMeeting, getMeetingMeta, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, listMeetingMetas, getSettings, mergeEmailNames };
 export function useStore(io) {
   const next = { ...IO, ...io };
+  if (io.patchMeeting && !io.updateMeetingMeta) next.updateMeetingMeta = null;
   // A copy that came by message has lost the hidden marks saveMeeting uses to see what this side changed (see
   // meetingstore.js). They are a function of the content, so they are put back on arrival and sent along on the way back.
   if (io.getMeeting) next.getMeeting = async (id) => stampLoaded(await io.getMeeting(id));
   if (io.saveMeeting) next.saveMeeting = (m) => io.saveMeeting(withWireStamps(m));
-  // Appending where only get and save were given (the offscreen document): read, push, save; the save writes only the new items.
+  // Appending where only get and save were given: read, push, save; the save writes only the new items (and no META).
+  // The offscreen document should be given the service worker's appendMeeting, which sends just the items.
   if (io.saveMeeting && !io.appendMeeting)
     next.appendMeeting = async (id, list, items) => {
       const m = await next.getMeeting(id);
@@ -147,18 +150,21 @@ export async function retryPendingAudio({ id, meeting, settings, onProgress = ()
 
 // Emails the minutes to the person themselves. The automatic send happens at most once: a lock per meeting, a check of
 // emailedAt inside it, and a "sending" mark written before the request leaves (so a crash in between never means a second email).
+const GONE = { status: 'This meeting was deleted.', deleted: true };
+
 export async function emailMinutes({ meeting, settings, auto, patch, getLatest, ctxFor, notify = () => {}, note = '' }) {
   if (!meeting.mom?.trim()) return { status: 'No minutes to email yet.' };
   if (!mailReady(settings)) return { status: 'Email is not set up. Add the Apps Script URL in Settings.' };
   const run = async () => {
     if (auto) {
       const latest = await getLatest();
-      if (latest?.emailedAt) {
+      if (!latest) return GONE; // deleted while the minutes were written: nothing is sent
+      if (latest.emailedAt) {
         Object.assign(meeting, { emailedAt: latest.emailedAt, emailedTo: latest.emailedTo });
         return { status: `Emailed to ${latest.emailedTo || 'you'} ✓`, sent: false };
       }
-      if (latest?.emailSending) return { status: 'The email may already have been sent. Check your inbox; press Email to send it again.', unsure: true };
-      await patch({ emailSending: Date.now() });
+      if (latest.emailSending) return { status: 'The email may already have been sent. Check your inbox; press Email to send it again.', unsure: true };
+      if ((await patch({ emailSending: Date.now() })) === null) return GONE;
     }
     const withTr = wantTranscript(meeting, settings, false);
     const mail = buildEmail(meeting, { ...settings, emailTranscript: withTr }, renderMd, withTr ? formatTranscript(meeting, settings.myName, ctxFor()) : '');
@@ -211,10 +217,12 @@ const sleep = (ms, signal) =>
   });
 
 // One generate call with retry-on-rate-limit.
-export async function generateWithRetry({ generate = realGenerate, settings, system, user, signal, onText, temperature, json, onRetry = () => {}, wait = [5, 15, 30] }) {
+// onMeta hears { truncated: true } from the provider (see llm.js). A stopped job makes no further call.
+export async function generateWithRetry({ generate = realGenerate, settings, system, user, signal, onText, onMeta, temperature, json, onRetry = () => {}, wait = [5, 15, 30] }) {
   for (let i = 0; ; i++) {
+    if (signal?.aborted) throw Object.assign(new Error('Stopped'), { name: 'AbortError' });
     try {
-      return await generate({ settings, system, user, signal, onText: onText || (() => {}), temperature, ...(json ? { json: true } : {}) });
+      return await generate({ settings, system, user, signal, onText: onText || (() => {}), temperature, ...(json ? { json: true } : {}), ...(onMeta ? { onMeta } : {}) });
     } catch (e) {
       if (i >= 3 || !isRetryable(e)) throw e;
       onRetry(i + 1, e, wait[i]);
@@ -278,6 +286,36 @@ export async function setActionDone(meetingId, actionId, done) {
   return true;
 }
 
+// The minutes are stored with the action statuses as they are NOW: merged and written as one META update where the store
+// can do that (the service worker, a page; io.saveMinutes: the same done by the service worker for the offscreen document),
+// else from a fresh read just before the patch. false when the meeting no longer exists (nothing is written or re-created).
+async function storeMinutes(id, meeting, fields, patch, io) {
+  if (typeof io.saveMinutes === 'function') {
+    const r = await io.saveMinutes(id, fields);
+    if (r === null) return false;
+    Object.assign(meeting, fields, r?.items ? { items: r.items } : {});
+    return true;
+  }
+  if (typeof io.updateMeetingMeta === 'function') {
+    let merged = fields;
+    const r = await io.updateMeetingMeta(id, (m) => {
+      merged = fields.items ? { ...fields, items: keepStatuses(fields.items, m.items) } : fields;
+      Object.assign(m, merged);
+    });
+    if (r === null) return false;
+    Object.assign(meeting, merged);
+    return true;
+  }
+  if (fields.items) {
+    try {
+      const cur = await (io.getMeetingMeta ? io.getMeetingMeta(id, { counts: [] }) : io.getMeeting(id));
+      if (cur === null) return false;
+      fields = { ...fields, items: keepStatuses(fields.items, cur?.items) };
+    } catch {}
+  }
+  return (await patch(fields)) !== null;
+}
+
 // The whole write: the model calls, saving the minutes, the pending-audio count for the coverage note.
 // `ui` has onStatus(text) and onText(delta). Returns { text, stats }.
 export async function writeAndStore({ id, meeting, settings, reread = false, signal, ui, patch, cache, generate, io }) {
@@ -297,11 +335,13 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
     settings: { ...settings, minutesFormat: meeting.format || settings.minutesFormat },
     notes: meeting.notes,
     ctx: { ...ctx, absent, captions: meeting.captions, reread, meetingType, extraInstructions: meetingType?.extra || '', ...(prep ? { carry: prep.carry } : {}) },
-    gen: (system, user, onText, opts) =>
-      generateWithRetry({
-        generate, settings, system, user, signal, onText: onText && !opts?.json && ui.onText, temperature: opts?.temperature, json: !!opts?.json,
+    gen: async (system, user, onText, opts) => {
+      await ui.ready?.(); // the status just written may have found the meeting deleted: then no call is made
+      return generateWithRetry({
+        generate, settings, system, user, signal, onText: onText && !opts?.json && ui.onText, onMeta: opts?.onMeta, temperature: opts?.temperature, json: !!opts?.json,
         onRetry: (n, e, wait) => ui.onStatus(`Attempt ${n} failed (${e.message.slice(0, 80)}). Retrying in ${wait} s…`, { keep: true }),
-      }),
+      });
+    },
     onText: () => {},
     onStatus: (t) => ui.onStatus(t),
     coverage: { pendingCount: pending.length, pendingSec: pending.reduce((a, p) => a + (p.wav.size - 44) / 32000, 0), errors: (meeting.errors || []).length, gaps: transcriptGaps(meeting) },
@@ -311,7 +351,8 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
   // only these names, so nothing unexpected (and never a transcript list) is written by accident
   const keep = Object.fromEntries(SAVED_WITH_MINUTES.filter((k) => written[k] !== undefined && written[k] !== null).map((k) => [k, written[k]]));
   const carriedFrom = prep ? { carriedFrom: { id: prep.prev.id, title: prep.prev.title || '', at: prep.prev.startedAt } } : {};
-  await patch({ mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...keep, ...carriedFrom });
+  const fields = { mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...keep, ...carriedFrom };
+  if (!(await storeMinutes(id, meeting, fields, patch, io))) return { text, stats, deleted: true }; // deleted meanwhile: the earlier meeting is left alone too
   if (prep && written.review?.length) {
     try {
       await applyCarry(meeting, prep, written.review, io);
@@ -339,16 +380,29 @@ export function createJobRunner(deps = {}) {
 
   async function pipeline(id, job, { force, reread, resume }) {
     let chain = Promise.resolve();
+    // The meeting was deleted while the job ran (a patch finds no record): the job stops where it is. No model call, email,
+    // share or webhook follows, and nothing is written (a patch never re-creates a record).
+    let gone = false;
+    const lost = () => {
+      gone = true;
+      job.ctl.abort();
+    };
     const patch = (fields) => {
       // a small update of just these fields (the heartbeat and the status are written every few seconds)
       const run = chain.then(async () => {
+        if (gone) return null;
         if (meeting) Object.assign(meeting, fields);
-        await d.patchMeeting(id, fields);
+        const r = await d.patchMeeting(id, fields);
+        if (r === null) lost();
+        return r;
       });
       chain = run.catch(() => {});
       return run;
     };
+    const exists = async () => !gone && (await patch({})) !== null;
     const cache = new Map();
+    // what writeAndStore stores the minutes with; a test's own patchMeeting comes without the store's updateMeetingMeta
+    const storeIo = deps.patchMeeting ? { patchMeeting: d.patchMeeting, getMeeting: d.getMeeting, getMeetingMeta: deps.getMeetingMeta, updateMeetingMeta: deps.updateMeetingMeta || null } : { patchMeeting: d.patchMeeting, getMeeting: d.getMeeting };
     let meeting = await d.getMeeting(id);
     if (!meeting) return;
     const settings = await d.getSettings();
@@ -364,6 +418,7 @@ export function createJobRunner(deps = {}) {
     let buf = '';
     let lastEmit = 0;
     const ui = {
+      ready: () => chain,
       onStatus: (t, o) => {
         if (!o?.keep) buf = '';
         emit({ type: 'job-progress', id, status: t, keep: !!o?.keep });
@@ -410,19 +465,23 @@ export function createJobRunner(deps = {}) {
         if (job.held) return await setJob({ state: 'queued', held: true, countdownEnd: null });
       }
 
-      await patch({ decided: true });
+      if ((await patch({ decided: true })) === null) return;
       let result = { stats: meeting.job?.stats };
       if (!skipWrite) {
         await setJob({ state: 'writing', status: null, countdownEnd: null, held: false });
         try {
-          result = await writeAndStore({ id, meeting, settings, reread, signal: job.ctl.signal, ui, patch, cache, generate: d.generate, io: { patchMeeting: d.patchMeeting } });
+          result = await writeAndStore({ id, meeting, settings, reread, signal: job.ctl.signal, ui, patch, cache, generate: d.generate, io: storeIo });
         } catch (e) {
+          if (gone) return;
           const stopped = job.ctl.signal.aborted;
           return await setJob({ state: 'failed', error: stopped ? 'Stopped.' : e.message, aborted: stopped });
         }
+        if (result.deleted) lost();
+        if (gone || !(await exists())) return;
         // first write and rewrites alike (not a resume after the email): a failing webhook never fails the job
         if (validWebhook(settings.webhookUrl)) hook = runWebhook(meeting, settings, patch, d.webhook);
       }
+      if (gone || !(await exists())) return;
 
       // first time only: regenerating or editing never re-sends by itself
       if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) {
@@ -433,17 +492,18 @@ export function createJobRunner(deps = {}) {
         const plan = guardAutoShare(shareList, settings);
         const note = plan.held.length ? `${plan.reason.charAt(0).toUpperCase()}${plan.reason.slice(1)} were not sent a copy automatically.` : '';
         const r = await emailMinutes({ meeting, settings, auto: true, patch, getLatest: () => d.getMeeting(id), ctxFor: () => nameCtxFor(meeting, settings, cache), notify: d.notify, note });
+        if (r.deleted || gone) return lost();
         if (r.failed || r.unsure) await setJob({ state: 'failed', error: r.status, stats: result.stats });
         else {
           if (r.sent && auto) {
             if (plan.held.length) await patch({ shareHeld: plan.held, shareStatus: heldStatus(plan.held) }).catch(() => {});
-            if (plan.send.length) await shareMinutes({ meeting, settings, list: plan.send, how: settings.shareHow || 'to', patch, ctxFor: () => nameCtxFor(meeting, settings, cache) }).catch(() => {});
+            if (plan.send.length && !gone && (await exists())) await shareMinutes({ meeting, settings, list: plan.send, how: settings.shareHow || 'to', patch, ctxFor: () => nameCtxFor(meeting, settings, cache) }).catch(() => {});
           }
           await setJob({ state: 'done', error: null, stats: result.stats });
         }
       } else await setJob({ state: 'done', error: null, stats: result.stats });
     } catch (e) {
-      await setJob({ state: 'failed', error: e.message }).catch(() => {});
+      if (!gone) await setJob({ state: 'failed', error: e.message }).catch(() => {});
     } finally {
       clearInterval(beat);
       if (hook) await hook; // never rejects

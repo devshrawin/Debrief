@@ -19,6 +19,7 @@
 import { TRANSCRIPT_NOTES, INJECTION_GUARD, NAMES_RULES, COMPLETENESS_RULES, OWNER_DUE_RULES, buildUserPrompt, wordsOf } from './prompt.js';
 import { nameMatch, splitRow, TBD, PH } from './orgtemplate.js';
 import { carryText, reviewSection } from './actions.js';
+import { foldToken } from './ask.js';
 
 const LISTS = ['decisions', 'actions', 'risks', 'questions', 'next'];
 const MAX_TEXT = 600;
@@ -187,9 +188,43 @@ function closeUp(s) {
   return out + stack.reverse().map((c) => (c === '{' ? '}' : ']')).join('');
 }
 
-// Best effort: close the tail as it is; if that does not parse (a key without a value, half a number), cut back to the
-// previous comma or bracket and close again.
+// Where the last element of the innermost open list ends, when the text stops inside that list: everything after it is a
+// half-written element (an action cut mid-string would otherwise come back as "Send"). -1 when no list is open.
+function lastWhole(s) {
+  const stack = []; // { ch, end }: end = index after the last element of a list that was finished
+  let inStr = false;
+  let esc = false;
+  let strDepth = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') {
+        inStr = false;
+        if (stack.at(-1)?.ch === '[' && strDepth === stack.length) stack.at(-1).end = i + 1; // a string element of the list
+      }
+    } else if (ch === '"') {
+      inStr = true;
+      strDepth = stack.length;
+    } else if (ch === '{' || ch === '[') stack.push({ ch, end: i + 1 });
+    else if (ch === '}' || ch === ']') {
+      stack.pop();
+      if (stack.at(-1)?.ch === '[') stack.at(-1).end = i + 1;
+    }
+  }
+  for (let k = stack.length - 1; k >= 0; k--) if (stack[k].ch === '[') return stack[k].end;
+  return -1;
+}
+
+// Best effort: drop a half-written last element and close what is left; else close the tail as it is; if that does not
+// parse (a key without a value, half a number), cut back to the previous comma or bracket and close again.
 function parseTruncated(s) {
+  const end = lastWhole(s);
+  if (end > 0) {
+    const whole = tryParse(closeUp(s.slice(0, end)));
+    if (whole !== undefined) return whole;
+  }
   const first = tryParse(closeUp(s));
   if (first !== undefined) return first;
   const marks = [];
@@ -232,18 +267,38 @@ function objectText(text) {
   }
   return t.slice(start); // never closed: the reply was cut off
 }
+const objectClosed = (raw) => {
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (const ch of raw) {
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return true;
+  }
+  return false;
+};
 
 const smartKeys = (s) => s.replace(/[“”„]([A-Za-z_][\w ]{0,30})[“”„]\s*:/g, '"$1":');
 const smartValues = (s) => s.replace(/([:[,]\s*)[“”„]([^“”„\n]*)[“”„](\s*[,\]}])/g, '$1"$2"$3');
 
+// The note llm.js used to append to a reply that hit the length limit (and older stored replies still carry).
+const CUT_NOTE = /\s*_\(Output hit the length limit and was cut off\.\)_\s*$/;
+
+// { value, truncated }: truncated when the object never closed (the reply was cut off), whatever the provider said.
 function parseLoose(text) {
-  const raw = objectText(text);
-  if (!raw) return undefined;
-  for (const attempt of [raw, tidy(raw), tidy(smartKeys(raw)), tidy(smartValues(smartKeys(raw)), { quotes: true })]) {
+  const raw = objectText(String(text || '').replace(CUT_NOTE, ''));
+  if (!raw) return { value: undefined, truncated: false };
+  const truncated = !objectClosed(raw);
+  for (const attempt of truncated ? [] : [raw, tidy(raw), tidy(smartKeys(raw)), tidy(smartValues(smartKeys(raw)), { quotes: true })]) {
     const v = tryParse(attempt);
-    if (v !== undefined) return v;
+    if (v !== undefined) return { value: v, truncated };
   }
-  return parseTruncated(tidy(smartKeys(raw))) ?? parseTruncated(tidy(smartValues(smartKeys(raw)), { quotes: true }));
+  return { value: parseTruncated(tidy(smartKeys(raw))) ?? parseTruncated(tidy(smartValues(smartKeys(raw)), { quotes: true })), truncated };
 }
 
 const keyOf = (k) => String(k).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -369,8 +424,13 @@ export function normalizeStructured(value) {
 
 // The model's reply -> items, or null when there is no usable object (the caller then writes the classic way).
 export function parseStructured(text) {
-  const v = parseLoose(text);
-  return v === undefined ? null : normalizeStructured(v);
+  return parseStructuredReply(text).items;
+}
+
+// The same, saying whether the reply was cut off: { items, truncated }. A cut-off reply loses its half-written last item.
+export function parseStructuredReply(text) {
+  const { value, truncated } = parseLoose(text);
+  return { items: value === undefined ? null : normalizeStructured(value), truncated };
 }
 
 // ---- guards ---------------------------------------------------------------------------------------------------
@@ -398,7 +458,14 @@ function rosterName(part, roster) {
   return new Set(top.map((h) => normName(h.n))).size === 1 ? top[0].n : null;
 }
 
-export function guardStructured(items, { transcript = '', attendees = [], absent = [], known = [], durationSec } = {}) {
+const NON_LATIN = /(?![A-Za-z\u00C0-\u024F])\p{L}/u;
+// "Rahul" and "राहुल" share a skeleton (src/ask.js): the same name said in another script. Very short skeletons match too much.
+const skeleton = (w) => {
+  const f = foldToken(w);
+  return f.length >= 3 ? f : '';
+};
+
+export function guardStructured(items, { transcript = '', attendees = [], absent = [], known = [], entries = [], learned = [], durationSec } = {}) {
   const lines = String(transcript).split('\n');
   const lineSec = lines.map((l) => {
     const m = /^\s*\[([\d:]+)\]/.exec(l);
@@ -409,7 +476,9 @@ export function guardStructured(items, { transcript = '', attendees = [], absent
   const lower = String(transcript).toLowerCase();
   const lastStamp = Math.max(0, ...lineSec.filter((x) => x != null));
   const bound = Math.max(durationSec || 0, lastStamp) > 0 ? Math.max(durationSec || 0, lastStamp) + 90 : Infinity;
-  const roster = rosterOf({ attendees, absent, known });
+  // the known roster: attendees, absent invitees, known names, the dictionary's names and the names learned from meetings
+  const roster = rosterOf({ attendees, absent, known: [...(Array.isArray(known) ? known : known?.names || []), ...(entries || []).map((e) => e?.name), ...(learned || [])] });
+  const skel = (hay) => new Set(hay.split(' ').map(skeleton).filter(Boolean));
   const absentNames = absent.map((n) => normName(n));
 
   const inTranscript = (u) => lower.includes(u.toLowerCase().replace(/[.,;:!?]+$/, ''));
@@ -439,6 +508,13 @@ export function guardStructured(items, { transcript = '', attendees = [], absent
     for (const i of idx) for (const j of [i - 1, i, i + 1]) if (j >= 0 && j < lines.length) near.add(j);
     return [...near].map((j) => lineWords[j]).join(' ');
   };
+  // a wider stretch for telling whether the item was said in another script: its time ±60 s, else the quote's lines
+  const scriptWindowOf = (it, win) => {
+    const s = parseAt(it.at);
+    if (s == null) return win;
+    const near = lineWords.filter((_, i) => lineSec[i] != null && Math.abs(lineSec[i] - s) <= 60);
+    return near.length ? `${near.join(' ')} ${win || ''}` : win;
+  };
 
   // An owner must be an attendee or known name, or be said in the transcript next to the item. Otherwise it becomes
   // "Not stated" and the model's wording is kept in ownerDropped: the item itself is never thrown away.
@@ -446,6 +522,7 @@ export function guardStructured(items, { transcript = '', attendees = [], absent
     const owner = it.owner;
     if (!owner || owner === NOT_STATED || owner === 'Team') return it;
     const win = windowOf(it);
+    const wide = scriptWindowOf(it, win);
     const keep = [];
     let dropped = false;
     for (const part of owner.split(/\s*(?:,|;|&|\/|\band\b|\+)\s*/i).map((p) => p.trim()).filter(Boolean)) {
@@ -468,7 +545,10 @@ export function guardStructured(items, { transcript = '', attendees = [], absent
         continue;
       }
       const hay = win ?? all; // the item could not be located: the name must at least be said somewhere
-      const ok = hay.includes(` ${first} `) || (LATIN.test(first) && !LATIN.test(hay)); // a Latin name cannot be compared with Devanagari or Malayalam text
+      // a Latin name cannot be compared with Devanagari or Malayalam text: kept when the item's stretch has any (a mixed
+      // line "राहुल, तुम staging पर…"), or, for an item that could not be located, when the whole transcript has no Latin
+      const otherScript = LATIN.test(first) && (wide ? NON_LATIN.test(wide) : !LATIN.test(all));
+      const ok = hay.includes(` ${first} `) || otherScript || (skeleton(first) && skel(hay).has(skeleton(first)));
       if (ok) keep.push(part);
       else dropped = true;
     }
@@ -565,7 +645,7 @@ const similarity = (a, b) => {
 };
 
 // Each action gets a short id (a hash of its text and time) and a status. A rewrite of the same minutes keeps the ids,
-// and the status/doneAt of the previous structured object of the SAME meeting is carried over (also when the model
+// and the status/doneAt/doneBy of the previous structured object of the SAME meeting is carried over (also when the model
 // reworded an action a little: the same time with similar words, or nearly the same words).
 export function assignIds(items, prev) {
   const before = (prev?.actions || []).filter((a) => a.id);
@@ -603,9 +683,10 @@ export function assignIds(items, prev) {
     if (!p) for (let n = 2; ids.has(id) && !(a.id && a.id === id); n++) id = `${actionHash(a)}${n}`;
     ids.add(id);
     const status = p?.status || a.status || 'open';
-    const { doneAt: _d, ...rest } = a;
+    const { doneAt: _d, doneBy: _b, ...rest } = a;
     const doneAt = status === 'done' ? p?.doneAt ?? a.doneAt : undefined;
-    return { ...rest, id, status, ...(doneAt != null ? { doneAt } : {}) };
+    const doneBy = status === 'done' ? (p ? p.doneBy : a.doneBy) : undefined; // closed by a later meeting: still is after a rewrite
+    return { ...rest, id, status, ...(doneAt != null ? { doneAt } : {}), ...(doneBy != null ? { doneBy } : {}) };
   });
   return { ...items, actions: out };
 }

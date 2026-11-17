@@ -1,4 +1,5 @@
 // LLM providers. generate() streams text deltas to onText and resolves with the full text.
+// onMeta (optional) hears { truncated: true } when the reply stopped at the model's output limit (it is then incomplete).
 import { geminiChainFetch, modelChain } from './gemini.js';
 import { errorDetail } from './store.js';
 import { record } from './usage.js';
@@ -8,7 +9,7 @@ const MODERN_CLAUDE = /^claude-(opus-5|fable-5|sonnet-5-5)/;
 
 // Claude through the Messages API with plain fetch (the official SDK added about 500 KB to every page).
 // json: true asks for one JSON document. Claude has no switch for it (the prompt does the work), so it is ignored here.
-async function anthropic({ settings, system, user, onText, signal, temperature }) {
+async function anthropic({ settings, system, user, onText, signal, temperature, json, onMeta }) {
   const model = settings.anthropicModel;
   const modern = MODERN_CLAUDE.test(model);
   const headers = {
@@ -52,7 +53,11 @@ async function anthropic({ settings, system, user, onText, signal, temperature }
   });
   record({ provider: 'anthropic', model, kind: 'llm', req: 1, tin, tout });
   if (stop === 'refusal') throw new Error(`Claude declined this request${category ? ` (${category})` : ''}.`);
-  if (stop === 'max_tokens') return `${text}\n\n_(Output hit the length limit and was cut off.)_`;
+  if (stop === 'max_tokens') {
+    onMeta?.({ truncated: true });
+    // a caller that hears it says so itself, and a note inside JSON would end up in the last item
+    if (!onMeta && !json) return `${text}\n\n_(Output hit the length limit and was cut off.)_`;
+  }
   return text;
 }
 
@@ -94,7 +99,7 @@ export function isRetryable(e) {
 }
 
 // OpenAI Chat Completions shape: OpenAI, Groq, OpenRouter, Ollama, LM Studio, etc.
-async function openaiCompat({ settings, system, user, onText, signal, temperature, json }) {
+async function openaiCompat({ settings, system, user, onText, signal, temperature, json, onMeta }) {
   const headers = { 'Content-Type': 'application/json' };
   if (settings.oaKey) headers.Authorization = `Bearer ${settings.oaKey}`;
   const post = (withJson) =>
@@ -122,17 +127,20 @@ async function openaiCompat({ settings, system, user, onText, signal, temperatur
   record({ provider: 'openai', model: settings.oaModel, kind: 'llm', req: 1, fail: !res.ok, rl: res.status === 429 });
   if (!res.ok) throw await httpError(res, 'LLM');
   let text = '';
+  let cut = false;
   await readSse(res, (ev) => {
     const d = ev.choices?.[0]?.delta?.content;
     if (d) {
       text += d;
       onText(d);
     }
+    if (ev.choices?.[0]?.finish_reason === 'length') cut = true;
   });
+  if (cut) onMeta?.({ truncated: true });
   return text;
 }
 
-async function gemini({ settings, system, user, onText, signal, temperature, json }) {
+async function gemini({ settings, system, user, onText, signal, temperature, json, onMeta }) {
   const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
   const send = (withJson) => {
     const generationConfig = { ...(temperature != null ? { temperature } : {}), ...(withJson ? { responseMimeType: 'application/json' } : {}) };
@@ -154,8 +162,10 @@ async function gemini({ settings, system, user, onText, signal, temperature, jso
   if (!res.ok) throw await httpError(res, 'Gemini');
   let text = '';
   let usage = null;
+  let cut = false;
   await readSse(res, (ev) => {
     if (ev.usageMetadata) usage = ev.usageMetadata;
+    if (ev.candidates?.[0]?.finishReason === 'MAX_TOKENS') cut = true;
     for (const p of ev.candidates?.[0]?.content?.parts || []) {
       if (p.text && !p.thought) {
         text += p.text;
@@ -164,6 +174,7 @@ async function gemini({ settings, system, user, onText, signal, temperature, jso
     }
   });
   if (usage) record({ provider: 'gemini', model, kind: 'llm', tin: usage.promptTokenCount, tout: (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0) });
+  if (cut) onMeta?.({ truncated: true });
   return text;
 }
 
