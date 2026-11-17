@@ -64,6 +64,7 @@ Older pages and generated markup still use the previous variable names (`--accen
 | Thin | `--mat-thin` (58%) | 20 px / 170% | Sidebar, bottom toolbars, minutes header |
 | Regular | `--mat-regular` (72%) | 28 px / 180% | Cards, popup hero, job card, Ask box, details panels |
 | Thick | `--mat-thick` (86%) | 36 px / 180% | Dialogs, toasts, the pill's panel |
+| Bar | `--mat-bar` (94%) | 36 px / 180% | Floating bars that content scrolls under: the Settings save bar, the tour's Back / Next. Solid when transparency is reduced |
 
 - Every tier carries `--edge` (a 1 px inner highlight) and a layered shadow that grows with depth.
 - **Depth order:** ambient background < content (regular) < toolbar (thin, sticky) < popover < modal (thick).
@@ -85,12 +86,12 @@ Older pages and generated markup still use the previous variable names (`--accen
 - **Switch:** any `input[type=checkbox][role=switch]` or `.toggle input`; iOS proportions at 44×26.
 - **Segmented control:** `.segmented` / `.seg` containing buttons with `.active`. `fx/goo.js` adds the liquid thumb.
 - **Chips and badges:** `.chip`, `.chipbtn`, `.badge.{ok,warn,rec,tint}`, and `.metal-badge` (metal rim with a tinted fallback).
-- **Callouts and alerts:** `.warn`, `.callout`, `.callout.warnc`; popup `.alert` (red), `.alert.key` (orange).
+- **Callouts and alerts:** `.warn`, `.callout`, `.callout.warnc`; popup `.alert` (red), `.alert.key` (orange). They fill with the opaque tiers `--tier-orange`, `--tier-red`, `--tier-tint`, `--tier-green` (a tint mixed into `--surface-read`), so a warning is one colour whatever the ambient room is doing behind it.
 - **App shell:** `.shell`, `.side > .side-panel`, `.navlist`, `.content`, `.card`, `.row2`, `.toggle`, `.btnrow`, `.status`, `.toolbar-bottom`.
 - **Lists:** `.steps`, `ol.how`, `.checklist`, `.mini`, `.grid2`.
 - **Disclosure:** `details > summary` with a rotating chevron.
-- **Dialog:** `dialog` and `.dbmodal` in thick glass with a dim backdrop.
-- **Progress:** `<db-orb state size>` next to the status text, which is announced politely.
+- **Dialog:** `dialog` and `.dbmodal` in thick glass with a dim backdrop. A dialog opens with a title (`h2`), e.g. "Restore from a backup".
+- **Progress:** `<db-orb state size>` next to the status text, which is announced politely. An orb has a solid tinted resting frame (`db-orb.status-orb`), so a still picture of it is never a bare ring of dots. One status at a time: while a card shows the status (the countdown card before minutes are written, the skeleton while they are written), the toolbar's own button and status are hidden.
 
 ## Effects layer (`extension/fx/`)
 Built by `npm run build:fx` from `fx/src/` and `third_party/libraries-dev/`.

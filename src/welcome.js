@@ -110,7 +110,7 @@ const ALL = [
         show.setAttribute('aria-pressed', String(on));
         show.textContent = on ? 'Hide' : 'Show';
       } }, 'Show');
-      const test = h('button', { type: 'button', class: 'btn primary', onclick: async () => {
+      const test = h('button', { type: 'button', class: 'btn tinted', onclick: async () => {
         const key = input.value.trim();
         if (!key) return say(st, 'Paste your key first.', 'bad', 'No key');
         test.disabled = true;
@@ -162,7 +162,7 @@ const ALL = [
       else say(st, '', 'warn', 'Not allowed yet');
       return [
         card('',
-          h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn primary', onclick: async () => {
+          h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn tinted', onclick: async () => {
             try {
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
               stream.getTracks().forEach((t) => t.stop());
@@ -531,6 +531,7 @@ function render() {
   $('back').style.visibility = tour.step === 0 ? 'hidden' : 'visible';
   $('skip').style.display = tour.step < last ? '' : 'none';
   $('next').textContent = tour.step === last ? 'Finish' : 'Next';
+  $('skipAll').hidden = tour.step === last; // nothing left to skip on the last step
   document.title = `${st.title} · Debrief`;
 }
 

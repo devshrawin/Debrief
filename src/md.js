@@ -39,7 +39,7 @@ function labelCells(t) {
     (t.parentElement.classList.contains('tablewrap') ? t.parentElement : t).replaceWith(p);
     return;
   }
-  if (!isActions) return;
+  if (!isActions && !/^person$/i.test(heads[0])) return; // actions and attendance stack their rows on a narrow screen
   t.dataset.stack = '1';
   for (const tr of body) {
     [...tr.cells].forEach((td, i) => {

@@ -349,23 +349,25 @@ async function renderUsage() {
     ['Service and model', ''],
     ['Used for', ''],
     ['Requests', 'num'],
-    ['Failed (rate limit)', 'num'],
+    ['Failed', 'num'],
     ['Tokens in / out', 'num'],
     ['Audio', 'num'],
     ['Cost if paid', 'num'],
     [usageDays === 1 ? 'Left today' : '', ''],
   ].forEach(([h, cls]) => head.append(Object.assign(document.createElement('th'), { textContent: h, className: cls })));
+  const labels = ['', 'Used for', 'Requests', 'Failed', 'Tokens in / out', 'Audio', 'Cost if paid', 'Left today']; // a narrow row stacks, and each value names its column
   const body = table.createTBody();
   if (!rows.length) {
     const r = body.insertRow();
     const c = r.insertCell();
     c.colSpan = 8;
     c.textContent = 'Nothing yet. Counts start with your next recording.';
-    c.style.color = 'var(--muted)';
+    c.className = 'muted';
   }
   for (const r of rows) {
     const tr = body.insertRow();
-    const cell = (t, cls) => Object.assign(tr.insertCell(), { textContent: t, className: cls || '' });
+    let col = 0;
+    const cell = (t, cls) => { const c = Object.assign(tr.insertCell(), { textContent: t, className: cls || '' }); c.dataset.label = labels[++col]; return c; };
     const svc = tr.insertCell();
     svc.append(el('span', { className: 'svc', textContent: r.provider }));
     if (r.model && r.model !== '-') svc.append(el('span', { className: 'sr-only', textContent: ' · ' }), el('div', { className: 'hint', textContent: r.model }));
@@ -378,6 +380,7 @@ async function renderUsage() {
     cell(paid.usd == null ? '—' : r.fail && !r.tin && !r.tout ? rupees(0, $('usdInr').value) : `${paid.assumed ? '~' : ''}${rupees(paid.usd, $('usdInr').value)}`, 'num cost');
     const left = tr.insertCell();
     left.className = 'usage-left';
+    if (usageDays === 1) left.dataset.label = labels[7];
     const limit = limits[r.model];
     if (usageDays === 1 && limit) {
       const used = today.filter((x) => x.model === r.model).reduce((a, x) => a + x.req, 0);
@@ -390,7 +393,7 @@ async function renderUsage() {
       meter.setAttribute('aria-valuemax', '100');
       meter.setAttribute('aria-valuenow', String(pct));
       meter.setAttribute('aria-label', `${r.model} left today`);
-      left.append(meter, el('div', { className: `hint${pct <= 20 ? ' low' : ''}`, textContent: `${remaining} of ${limit} left` }));
+      left.append(el('div', { className: 'left-line' }, meter, el('span', { className: `hint${pct <= 20 ? ' low' : ''}`, textContent: `${remaining} of ${limit} left` })));
     } else if (usageDays === 1) left.append(el('span', { className: 'hint', textContent: 'No daily limit' }));
   }
   const reqs = rows.reduce((a, r) => a + r.req, 0);
@@ -405,7 +408,7 @@ async function renderUsage() {
     el('span', { textContent: `${Math.round(audio / 60)} min of audio transcribed` }),
     ...(cost != null ? [el('span', { textContent: `about ${rupees(cost, $('usdInr').value)} at your prices` })] : []),
     el('span', { className: 'paid', textContent: `If this were paid: about ${rupees(paid.usd, $('usdInr').value)}${paid.assumed ? ' (Gemini Flash list prices assumed where you set none)' : ''}${paid.unknown ? `, ${paid.unknown} line(s) unpriced` : ''}` }),
-    el('span', { className: 'hint', style: 'margin-left:auto', textContent: `Daily quota resets at ${istClock(nextQuotaReset())} (midnight Pacific)` })
+    el('span', { className: 'hint quota-note', textContent: `Daily quota resets at ${istClock(nextQuotaReset())} (midnight Pacific)` })
   );
 }
 
@@ -948,7 +951,9 @@ $('backupRestore').onclick = () => $('backupFile').click();
 function restoreDialog(text, routing) {
   return new Promise((resolve) => {
     const dlg = el('dialog', { className: 'dbmodal' });
-    dlg.setAttribute('aria-labelledby', 'restoreText');
+    dlg.setAttribute('aria-labelledby', 'restoreTitle');
+    dlg.setAttribute('aria-describedby', 'restoreText');
+    dlg.append(el('h2', { id: 'restoreTitle', textContent: 'Restore from a backup' }));
     const lead = el('div', { id: 'restoreText', textContent: text });
     lead.style.cssText = 'white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)';
     dlg.append(lead);

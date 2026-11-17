@@ -64,9 +64,27 @@ function syncState() {
 }
 
 function showSkeleton() {
-  $('mom').innerHTML = '<div class="skel" aria-hidden="true"><div class="busy"><span class="spin"></span>Writing the minutes…</div><div class="sk h"></div><div class="sk" style="width:96%"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:92%"></div><div class="sk h"></div><div class="sk" style="width:70%"></div><div class="sk" style="width:82%"></div></div>';
+  $('mom').innerHTML = '<div class="skel" aria-hidden="true"><div class="busy"><span class="spin"></span><span class="skel-t">Writing the minutes…</span></div><div class="sk h"></div><div class="sk w96"></div><div class="sk w88"></div><div class="sk w92"></div><div class="sk h"></div><div class="sk w70"></div><div class="sk w82"></div></div>';
+  mirrorStatus();
   $('mom').hidden = false;
 }
+// The document card carries the one visible status while it shows the skeleton: the stage the job reports (the toolbar's own is hidden then).
+function mirrorStatus() {
+  const t = document.querySelector('#mom .skel-t');
+  const say = $('genStatus').textContent.trim();
+  if (t && say && t.textContent !== say) t.textContent = say;
+}
+new MutationObserver(mirrorStatus).observe($('genStatus'), { childList: true, characterData: true, subtree: true });
+
+// The title box wraps a long title. Chrome sizes it by itself (field-sizing); this is for a browser that does not.
+function fitTitle() {
+  const t = $('title');
+  if (CSS.supports('field-sizing', 'content')) return;
+  t.style.height = 'auto';
+  t.style.height = `${t.scrollHeight + 2}px`;
+}
+$('title').addEventListener('input', fitTitle);
+addEventListener('resize', fitTitle);
 
 function renderMeta() {
   const start = new Date(meeting.startedAt);
@@ -76,6 +94,7 @@ function renderMeta() {
   $('meta').replaceChildren(...bits.map((b, i) => Object.assign(document.createElement('span'), { textContent: b, className: i === 2 ? 'who-list' : '' })));
   renderChips();
   $('title').value = meeting.title;
+  fitTitle();
   document.title = `${meeting.title} · Debrief`;
   paintCarried(meeting);
 }
@@ -163,7 +182,7 @@ async function renderNameBox() {
           await playing.play();
         } catch {}
       };
-      const save = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: 'Save name' });
+      const save = Object.assign(document.createElement('button'), { type: 'button', className: 'tinted', textContent: 'Save name' });
       save.onclick = async () => {
         const clean = input.value.trim().replace(/\s+/g, ' ').slice(0, 60);
         const all = await getVoices();
@@ -549,6 +568,7 @@ function setBusy(on) {
   $('reread').disabled = on;
   $('abort').classList.toggle('hidden', !on);
   $('genStatus').classList.toggle('busy', on);
+  if (on) $('genStatus').classList.remove('bad');
   syncState();
 }
 
@@ -593,7 +613,7 @@ function applyJob(job) {
   if (job.state === 'queued') {
     setBusy(false);
     showStartCard(job);
-    if (!job.countdownEnd && !job.held) $('genStatus').textContent = 'Getting ready…';
+    if (!job.countdownEnd && !job.held) $('genStatus').textContent = ''; // the card below says "Getting ready…" itself: one status at a time
     return;
   }
   if (ACTIVE.includes(job.state)) {
@@ -629,6 +649,7 @@ async function finishJob() {
   renderChips();
   renderTranscript();
   $('genStatus').classList.remove('busy');
+  $('genStatus').classList.toggle('bad', job.state === 'failed' && !job.aborted);
   if (job.state === 'failed') $('genStatus').textContent = job.aborted ? 'Stopped.' : `Failed: ${job.error}`;
   else if (job.state === 'done') {
     const stats = job.stats || {};
@@ -640,7 +661,7 @@ async function finishJob() {
     paintMailButton();
   }
   $('reread').classList.toggle('hidden', !meeting.extract);
-  $('gen').textContent = 'Rewrite minutes';
+  $('gen').textContent = meeting.mom ? 'Rewrite minutes' : 'Write minutes';
 }
 
 // Keeps an eye on a job that runs elsewhere: shows its stage, notices when it ends, and takes over here if its runner died.
@@ -952,9 +973,10 @@ $('del').onclick = async () => {
   await deleteAllPending(id);
   window.close();
 };
+$('title').addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), e.target.blur())); // a title is one line of text, however long
 $('title').onchange = async () => {
   // just the title: this page's copy may be older than the minutes and the email the job wrote meanwhile
-  await patchMeeting({ title: $('title').value.trim() || 'Meeting' });
+  await patchMeeting({ title: $('title').value.replace(/\s*[\r\n]+\s*/g, ' ').trim() || 'Meeting' });
   renderMeta();
 };
 

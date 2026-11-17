@@ -55,7 +55,8 @@
     header.recbar::after, header.recbar::before { box-shadow: none; }
     .lv { }
     /* the three quiet buttons while recording are one size; Stop is the only bigger one */
-    #pause, #fullscreen, #liveLink { width: 100%; min-height: 44px; padding-block: 8px; font-size: 14.5px; border-radius: 12px; }
+    #pause, #fullscreen, #liveLink { width: 100%; min-height: 40px; padding-block: 6px; font-size: 14px; border-radius: 12px; }
+    #recView .stack { gap: 10px; }
     /* the beam is the card's outline while it runs: no second border inside it */
     html:not(.fx-off):not(.solid) header.recbar[data-active] { border-color: transparent; }
     .big.stopbtn { background: var(--rec); border-color: var(--rec); color: var(--on-rec); font-weight: 700; gap: 10px; }
@@ -67,12 +68,13 @@
     .box .meta .sp { flex: 1; }
     .box a.btn { min-height: 32px; padding: 4px 8px; }
 
-    .linkrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .linkrow { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 0 20px; } /* every quiet link on one rhythm: they flow left to right and wrap evenly */
+    .btn2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .linkrow a { font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
     #diagnose { min-height: 36px; padding: 4px 6px; font: var(--t-subheadline); font-weight: 600; color: var(--tint); text-decoration: underline; }
     #diagnose:hover:not(:disabled) { background: transparent; }
-    #diagnose[aria-expanded="true"]::after { content: "\2191"; }
-    #diagnose[aria-expanded="false"]::after { content: "\2193"; }
+    #diagnose::after { content: ""; width: 6px; height: 6px; margin-inline-start: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform var(--d-base) var(--spring); } /* a chevron, not an arrow that reads as a download */
+    #diagnose[aria-expanded="true"]::after { transform: translateY(1px) rotate(-135deg); }
     #diagResult { border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; align-items: center; }
     #diagResult .full { grid-column: 1 / -1; }
     #diagResult .chip { white-space: normal; text-align: right; }
@@ -197,10 +199,11 @@
 
       <div class="linkrow">
         <a href="#" id="askHome"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>Ask a question</a>
+        <a href="#" id="openActions" class="hidden">Open actions <span class="badge tint" id="actionsN"></span></a>
+        <a href="#" id="openTour">Take the tour</a>
         <button id="diagnose" class="btn ghost" aria-expanded="false" aria-controls="diagResult">Check page detection</button>
       </div>
       <div id="diagResult" role="region" aria-label="What Debrief can read from this page" aria-live="polite" class="hidden"></div>
-      <p class="foot-links two"><a href="#" id="openTour">Take the tour</a><a href="#" id="openActions" class="hidden">Open actions <span class="badge tint" id="actionsN"></span></a></p>
     </div>
 
     <div class="stack" id="paneMeet" role="tabpanel" aria-labelledby="tabMeet" hidden style="gap:8px">
@@ -239,8 +242,10 @@
         <p class="hint counts" id="segInfo"></p>
       </div>
       <button id="pause" class="btn big" aria-pressed="false">Pause recording</button>
-      <button id="fullscreen" class="btn" title="Make this browser window full screen, or bring it back (Alt+Shift+F)">Full screen</button>
-      <button id="liveLink" class="btn" title="Watch the transcript as it arrives, and ask questions during the meeting">Live transcript</button>
+      <div class="btn2">
+        <button id="fullscreen" class="btn" title="Make this browser window full screen, or bring it back (Alt+Shift+F)">Full screen</button>
+        <button id="liveLink" class="btn" title="Watch the transcript as it arrives, and ask questions during the meeting">Live transcript</button>
+      </div>
       <button id="stop" class="btn big stopbtn">
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="currentColor"></rect></svg>Stop and write minutes
       </button>

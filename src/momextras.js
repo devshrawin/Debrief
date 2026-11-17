@@ -95,9 +95,12 @@ function ensureBar() {
   const close = el('button', { type: 'button', className: 'pb-close' });
   close.append(icon(['path', { d: 'M6 6l12 12M18 6L6 18', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round', fill: 'none' }]));
   close.setAttribute('aria-label', 'Close the player');
+  const fill = el('i', { className: 'pb-fill' });
+  const track = el('span', { className: 'pb-grow pb-track' }, fill); // a thin, read-only progress track for the piece that is playing
+  track.setAttribute('aria-hidden', 'true');
   const msg = el('span', { className: 'pb-msg' });
   msg.setAttribute('role', 'status');
-  bar = el('div', { className: 'playbar no-print', hidden: true }, play, time, el('span', { className: 'pb-grow' }), back, again, close, msg, audio);
+  bar = el('div', { className: 'playbar no-print', hidden: true }, play, time, track, back, again, close, msg, audio);
   bar.setAttribute('role', 'region');
   bar.setAttribute('aria-label', 'Recording player');
   bar.id = 'playBar';
@@ -114,6 +117,7 @@ function ensureBar() {
     if (!cur) return;
     absNow = cur.t0 + audio.currentTime;
     time.textContent = fmtTime(absNow);
+    fill.style.width = `${Math.max(0, Math.min(100, (audio.currentTime / (audio.duration || cur.dur || 1)) * 100))}%`;
     markRow(absNow, true);
   });
   audio.addEventListener('ended', () => advance());
@@ -160,6 +164,7 @@ async function start(sec) {
   const mine = ++token;
   absNow = sec;
   bar.querySelector('.pb-time').textContent = fmtTime(sec);
+  bar.querySelector('.pb-fill').style.width = '0';
   markRow(sec, false);
   let seg = null;
   try {
@@ -189,6 +194,7 @@ function load(seg, offset) {
   cur = { seq: seg.seq, t0: seg.t0, dur: seg.dur };
   Object.assign(audio.dataset, { seq: seg.seq, t0: seg.t0, offset });
   say('');
+  bar.querySelector('.pb-fill').style.width = '0';
   audio.src = objUrl;
   audio.addEventListener(
     'loadedmetadata',
@@ -516,6 +522,12 @@ export function decorateActions(root) {
     cell.classList.add('act-cell');
     const text = el('span', { className: 'act-text' });
     text.append(...cell.childNodes);
+    // the minutes text says "(done)" after a finished action: the tick and the strike-through already show it, so on screen only a screen reader hears it
+    const tail = text.lastChild;
+    if (tail?.nodeType === 3 && /\s*\(done\)\s*$/i.test(tail.textContent)) {
+      tail.textContent = tail.textContent.replace(/\s*\(done\)\s*$/i, '');
+      text.append(el('span', { className: 'act-doneword', textContent: ' (done)' }));
+    }
     const cb = el('input', { type: 'checkbox' });
     const name = el('span', { className: 'sr-only', textContent: `Mark done: ${actions[i].text}` });
     const label = el('label', { className: 'act-tick no-print' }, cb, name);

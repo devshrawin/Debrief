@@ -13,7 +13,7 @@
     .crumb { display: flex; align-items: center; gap: 10px; }
     .crumb img { width: 26px; height: 26px; border-radius: 7px; }
     .crumb b { font-weight: 700; }
-    #title { font-size: 30px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; border: 1px solid transparent; border-radius: 10px; padding: 4px 8px; margin: 0 -8px; background: transparent; width: calc(100% + 16px); min-height: 0; }
+    #title { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; border: 1px solid transparent; border-radius: 10px; padding: 4px 8px; margin: 0 -8px; background: transparent; width: calc(100% + 16px); min-height: 0; resize: none; overflow: hidden; field-sizing: content; overflow-wrap: anywhere; } /* a long title wraps instead of being cut: the box grows with its text */
     #title:hover { border-color: var(--line); }
     #title:focus { border-color: var(--brand); background: var(--card); }
     header { display: flex; flex-direction: column; gap: 10px; }
@@ -80,6 +80,16 @@
     .toolbar .stat { display: inline-flex; gap: 8px; align-items: center; min-width: 0; overflow-wrap: anywhere; margin: 0; }
     .toolbar .stat:empty { display: none; }
     .toolbar .stat.busy::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--brand); border-right-color: transparent; animation: sp 0.8s linear infinite; flex: none; }
+    /* One primary and one status at a time. While the "Before the minutes are written" card shows, it owns both (its own Write
+       minutes button and its countdown), so the toolbar's are hidden; while the skeleton shows, the document card owns the status. */
+    #momTab:has(#startCard:not(.hidden)) .toolbar > #gen,
+    #momTab:has(#startCard:not(.hidden)) .toolbar > #genStatus,
+    #momTab:has(#startCard:not(.hidden)) .toolbar > db-orb.status-orb { display: none; }
+    #momTab:has(#emptyBox:not(.hidden)) .toolbar > #gen { display: none; } /* the "No minutes yet" card has the one Write minutes button */
+    #momTab:has(#mom .skel) .toolbar > db-orb.status-orb { display: none; }
+    #momTab:has(#mom .skel) .toolbar > #genStatus { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* still announced, not drawn twice */
+    .toolbar .stat.bad { padding: 6px 12px; border-radius: var(--r-sm); background: var(--tier-red); box-shadow: inset 0 0 0 1px var(--rec-line); color: var(--label); font: var(--t-subheadline); }
+    #momTab:has(#failBox:not(.hidden)) .toolbar > #genStatus.bad { display: none; } /* the red box under the toolbar already says it */
     .acts { align-items: center; }
     .acts button { font-size: 13.5px; padding: 6px 12px; }
     /* the email button and its option are one group, set apart from the buttons before it */
@@ -101,8 +111,8 @@
     .state { padding: 16px 18px; border-radius: 14px; display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
     .state > div { flex: 1 1 300px; min-width: 0; }
     .state p { margin: 2px 0 0; }
-    .state.fail { background: var(--rec-bg); border: 1px solid var(--rec-line); color: var(--rec-ink); }
-    .state.warnc { background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); }
+    .state.fail { background: var(--tier-red); border: 1px solid var(--rec-line); color: var(--rec-ink); }
+    .state.warnc { background: var(--tier-orange); border: 1px solid var(--amber-line); color: var(--amber-ink); }
     .state.none { flex-direction: column; align-items: center; text-align: center; padding: 48px 24px; gap: 8px; }
     .state.none > div { flex: none; }
     .state.none strong { font-size: 16px; }
@@ -129,6 +139,8 @@
     #mom td, #mom th { overflow-wrap: normal; }
     #mom td:first-child, #mom th:first-child { overflow-wrap: anywhere; min-width: 140px; }
     #mom table { min-width: 560px; }
+    #mom td[data-label^="Owner"], #mom td[data-label^="Due"] { white-space: nowrap; }
+    #mom table[data-stack] td[data-label^="Action"] { min-width: 260px; }
     #mom hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
     #mom blockquote { margin: 8px 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--line-strong); color: var(--muted); }
     #mom code { font: 13px ui-monospace, Consolas, monospace; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
@@ -140,10 +152,23 @@
     #mom p.foot, #mom p.foot em { margin-top: 18px; font-size: 12.5px; color: var(--muted); font-style: normal; }
     /* the official sheet fills its card with the same space on every side */
     @media screen { #mom:has(> .amx) { padding: 20px; } #mom:has(> .amx) > .amx { max-width: none !important; margin: 0 !important; border-radius: var(--r-sm); } #mom:has(> .amx) > :first-child { margin-top: 0; } }
+    /* the official sheet on a narrow screen: its tables reflow (cells wrap, the fixed column widths give way) instead of running past the card. Screen only: print, Word and email use the markup as it is. */
+    @media screen and (max-width: 600px) {
+      #mom:has(> .amx) { padding: 8px; }
+      #mom .amx { padding: 8px 4px !important; }
+      #mom .amx table { min-width: 0; }
+      #mom .amx { overflow-x: auto; }
+      #mom .amx th, #mom .amx td { width: auto !important; min-width: 0 !important; padding: 3px 4px !important; font-size: 9pt !important; overflow-wrap: break-word; hyphens: auto; }
+      #mom .amx th { font-size: 8.5pt !important; }
+      #mom .amx td p, #mom .amx td li { font-size: 9pt; line-height: 1.35; }
+      #mom .amx th[width="56"], #mom .amx td[width="56"] { width: 34px !important; padding-inline: 2px !important; }
+      #mom .amx .amx-h1 { font-size: 24pt !important; }
+    }
     #mom.streaming > :last-child::after { content: ""; display: inline-block; width: 8px; height: 18px; margin-left: 3px; background: var(--brand); vertical-align: text-bottom; animation: bl 1s steps(2) infinite; }
     @keyframes bl { 50% { opacity: 0; } }
     #mom .skel { display: flex; flex-direction: column; gap: 10px; padding-top: 24px; }
     #mom .skel .sk { height: 14px; }
+    #mom .skel .sk.w96 { width: 96%; } #mom .skel .sk.w92 { width: 92%; } #mom .skel .sk.w88 { width: 88%; } #mom .skel .sk.w82 { width: 82%; } #mom .skel .sk.w70 { width: 70%; }
     #mom .skel .sk.h { height: 12px; width: 120px; margin-top: 14px; }
     #mom .skel .busy { display: flex; gap: 10px; align-items: center; color: var(--brand); font-weight: 600; }
     #mdEdit { min-height: 480px; font: 13px/1.6 ui-monospace, Consolas, monospace; }
@@ -229,7 +254,7 @@
 <main>
   <header>
     <div class="crumb no-print"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint">/ Minutes</span></div>
-    <input id="title" aria-label="Meeting title">
+    <textarea id="title" rows="1" aria-label="Meeting title" spellcheck="false"></textarea>
     <div class="meta" id="meta"></div>
     <p class="carried hint no-print hidden" id="carried"></p>
     <div class="chips no-print" id="chips"></div>
@@ -279,7 +304,7 @@
     <section class="startcard no-print hidden" id="startCard" aria-labelledby="hStart">
       <h2 id="hStart">Before the minutes are written</h2>
       <p class="startrow"><span class="lab">Format:</span> <strong id="fmtText"></strong> · <a href="#" id="fmtChange">change</a></p>
-      <p class="hint">The format switch is next to the Write minutes button. Whether the transcript is attached is set next to "Email me" and in the Share box; the defaults are in Settings → Email → Attachments.</p>
+      <p class="hint">The format switch is just below this card. Whether the transcript is attached is set next to "Email me" and in the Share box; the defaults are in Settings → Email → Attachments.</p>
       <div class="row"><button id="startNow" class="primary">Write minutes</button><span id="startCount" class="hint" role="status"></span></div>
     </section>
 

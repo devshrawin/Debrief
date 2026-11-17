@@ -72,7 +72,7 @@ function rowEl(a, mode) {
 
 function render(focusAt) {
   const counts = L.countActions(state.open);
-  $('counts').textContent = state.loaded ? (counts.open ? `${counts.open} open${counts.overdue ? ` · ${counts.overdue} overdue` : ''}` : state.hasItems ? 'No open actions.' : '') : '';
+  $('counts').textContent = state.loaded ? (counts.open ? `${counts.open} open${counts.overdue ? ` · ${counts.overdue} overdue` : ''}` : '') : '';
   $('tools').classList.toggle('hidden', !state.hasItems);
   for (const b of $('modes').querySelectorAll('button')) {
     const on = b.dataset.mode === state.mode;
@@ -86,7 +86,7 @@ function render(focusAt) {
     return;
   }
   if (!list.length) {
-    box.replaceChildren(emptyCard(state.q.trim() ? 'No actions match' : 'No open actions.', state.q.trim() ? 'Try another name or word.' : ''));
+    box.replaceChildren(emptyCard(state.q.trim() ? 'No actions match' : 'No open actions.', state.q.trim() ? 'Try another name or word.' : 'Every action from your meetings is done. Switch on Show done to look back, or write the minutes of a new meeting.'));
     return;
   }
   const groups = L.groupActions(list, state.mode);

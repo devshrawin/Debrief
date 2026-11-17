@@ -344,7 +344,8 @@ await test('render: every cell carries its own border (Word and the PDF converte
   assert.match(body, /color:#ffffff/);
   assert.ok(/<tr style="page-break-inside:avoid">/.test(body), 'rows do not split across pages');
   assert.ok((body.match(/<thead>/g) || []).length >= 6, 'header rows are real thead rows (they repeat)');
-  assert.match(body, /<ul style="margin:0;padding:0 0 0 18px"><li[^>]*>Submit the revised budget by 16-Oct-26\.<\/li><\/ul>/);
+  assert.match(body, /<td[^>]*>Submit the revised budget by 16-Oct-26\.<\/td>/, 'an action row is plain text: the Sr. column already numbers it, so no bullet');
+  assert.ok(!/<li[^>]*>Submit the revised budget/.test(body));
   assert.match(body, /Attendees — Kochi Metro \/ Client Side/);
   assert.match(body, /Attendees — System Integrator \(Amnex Infotechnologies\)/);
   assert.match(body, /Meeting<br>Minutes/);

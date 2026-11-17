@@ -9,7 +9,7 @@
   <script src="fx/theme.js"></script>
   <style>
     /* Settings shell. Tokens, buttons, fields, chips, meters, tables and dialogs all come from style.css. */
-    .shell { display: flex; align-items: flex-start; max-width: 1240px; margin: 0 auto; min-height: 100vh; }
+    .shell { display: flex; flex-wrap: nowrap; align-items: flex-start; max-width: 1240px; margin: 0 auto; min-height: 100vh; }
 
     /* ---- sidebar ---- */
     .side { position: sticky; top: 16px; flex: 0 0 248px; height: calc(100vh - 32px); margin: 16px 0 16px 16px; overflow-y: auto; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; border-radius: var(--r-lg); background: var(--mat-thin); -webkit-backdrop-filter: var(--blur-thin); backdrop-filter: var(--blur-thin); box-shadow: var(--edge), var(--shadow-2); }
@@ -31,7 +31,6 @@
     .content { flex: 1 1 0; min-width: 0; min-height: 100vh; padding: 36px 32px 0; display: flex; flex-direction: column; }
     .page { display: none; width: 100%; max-width: 900px; }
     .page.active { display: flex; flex-direction: column; gap: 20px; }
-    #page-usage { max-width: 1000px; }
     .page > header h1 { margin: 0; font-size: 28px; letter-spacing: -0.015em; }
     .page > header .lede { margin: 4px 0 0; color: var(--muted); font-size: 15px; max-width: 70ch; }
     .page > header.split { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
@@ -39,7 +38,7 @@
     .page > .card > h2, .page > .grid2 > .card > h2 { margin: 0; }
     .card h3 { margin: 0; font-size: 16px; }
     .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 20px; }
-    .card.danger-zone { border-color: var(--rec-line); flex-direction: row; align-items: center; flex-wrap: wrap; }
+    .card.danger-zone { border-color: var(--rec-line); align-items: flex-start; }
     .card.danger-zone .lbl { color: var(--rec-ink); }
     .card p { overflow-wrap: anywhere; }
     .card .hint code, .card p code { font: 12px ui-monospace, Consolas, monospace; background: var(--sunk); border-radius: 4px; padding: 0 4px; }
@@ -68,8 +67,7 @@
     .strong-ink { color: var(--label); }
     .fgrid.align-end { align-items: end; }
     .hint.inline { display: inline; }
-    .forget-text { flex: 1 1 300px; }
-    .trow label { text-wrap: balance; }
+    .trow label { text-wrap: pretty; }
     .page .seg-ctl > button { min-height: 34px; }
     .hexval { font: 500 13px var(--font-mono); color: var(--label-2); background: none; padding: 0; }
     .fld .opt { font-weight: 400; color: var(--muted); font-size: 12.5px; }
@@ -162,28 +160,48 @@
     .prow .who { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 
     /* Usage */
-    .page > .card.usage-card { padding: 6px 0 0; gap: 0; }
+    .page > .card.usage-card { padding: 0; gap: 0; }
+    .usage-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 22px 12px; }
     .usage-scroll { overflow-x: auto; }
     #usageTable { min-width: 0; width: 100%; border-collapse: collapse; }
-    #usageTable th, #usageTable td { padding: 12px 10px; text-align: left; vertical-align: top; }
-    #usageTable thead th { white-space: normal; font-size: 12px; vertical-align: bottom; border-bottom: 1px solid var(--separator); }
+    #usageTable th, #usageTable td { padding: 12px 8px; text-align: left; vertical-align: top; }
+    #usageTable thead th { white-space: nowrap; font-size: 12px; vertical-align: bottom; border-top: 1px solid var(--separator); border-bottom: 1px solid var(--separator); }
     #usageTable tbody td { border-top: 1px solid var(--separator); }
     #usageTable tbody tr:first-child td { border-top: 0; }
     #usageTable td:nth-child(2) { white-space: nowrap; }
     #usageTable th:first-child, #usageTable td:first-child { min-width: 150px; padding-left: 22px; }
     #usageTable td:first-child .hint, #usageTable td:first-child small, #usageTable td:first-child code { white-space: nowrap; font-size: 12px; }
-    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; width: 120px; }
+    #usageTable th:last-child, #usageTable td:last-child { padding-right: 22px; }
     #usageTable .svc { font-weight: 700; text-transform: capitalize; }
     #usageTable .hint { margin: 0; }
     #usageTable .fail { color: var(--amber-ink); }
     #usageTable .cost { font-weight: 600; white-space: nowrap; }
     #usageTable td.num, #usageTable th.num { white-space: nowrap; }
-    #page-usage .grid2 { align-items: start; }
-    #usageLimits, #usagePrices { resize: none; }
+    #usageTable td.usage-left { white-space: nowrap; }
+    .left-line { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .left-line .meter { flex: none; width: 48px; }
+    .left-line .hint { margin: 0 !important; }
+    /* below the width where eight columns fit, each row stacks into a small card (same pattern as the action tables in the minutes) */
+    @container tw (max-width: 860px) {
+      #usageTable[data-stack] { min-width: 0 !important; display: block; }
+      #usageTable[data-stack] thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      #usageTable[data-stack] tbody { display: block; }
+      #usageTable[data-stack] tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--separator); }
+      #usageTable[data-stack] tbody tr:last-child { border-bottom: 0; }
+      #usageTable[data-stack] td, #usageTable[data-stack] td:first-child, #usageTable[data-stack] td:last-child { display: block; width: auto !important; min-width: 0 !important; padding: 1px 22px !important; border: 0 !important; white-space: normal; }
+      #usageTable[data-stack] td[data-label]::before { content: attr(data-label) ": "; font: var(--t-caption); color: var(--label-2); }
+      #usageTable[data-stack] td.usage-left .left-line { display: inline-flex; vertical-align: middle; }
+      #usageTable[data-stack] td:first-child { padding-bottom: 3px !important; }
+    }
+    @container tw (min-width: 460px) and (max-width: 860px) {
+      #usageTable[data-stack] tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+      #usageTable[data-stack] td:first-child, #usageTable[data-stack] td.usage-left { grid-column: 1 / -1; }
+    }
     .tilde-note { display: flex; gap: 8px; align-items: center; }
     .usage-left .hint { margin-top: 4px; }
     .usage-left .hint.low { color: var(--amber-ink); }
     #usageTotals { display: flex; gap: 8px 24px; flex-wrap: wrap; align-items: baseline; padding: 14px 22px; background: var(--sunk); border-radius: 0 0 14px 14px; }
+    #usageTotals .quota-note { margin-left: auto; }
     #usageTotals .paid { font-weight: 400; flex-basis: 100%; }
     .tilde { display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 6px; background: var(--tint-soft); color: var(--tint); font-weight: 800; flex: none; }
 
@@ -282,7 +300,7 @@
 
     /* ---- sticky save bar ---- */
     /* a floating glass capsule, not a strip: nothing is cut off at the sidebar edge and the page keeps its width */
-    .savebar { position: sticky; bottom: 16px; z-index: 10; margin: auto 0 16px auto; width: fit-content; max-width: 100%; padding: 8px 8px 8px 18px; border-radius: var(--r-pill); background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3); display: flex; align-items: center; gap: 12px; }
+    .savebar { position: sticky; bottom: 16px; z-index: 10; margin: auto 0 16px auto; width: fit-content; max-width: 100%; padding: 8px 8px 8px 18px; border-radius: var(--r-pill); background: var(--mat-bar); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3); display: flex; align-items: center; gap: 12px; }
     .content > .page + .savebar, .content > .page.active ~ .savebar { margin-top: auto; }
     .page.active { margin-bottom: 96px; }
     .savebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
@@ -571,7 +589,8 @@
         <div class="stack" data-stt="gemini">
           <div class="fld">
             <label for="sttGeminiModel">Model</label>
-            <select id="sttGeminiModel" data-models="gemini-3.5-transcribe|Gemini 3.5 Transcribe (made for speech, default);gemini-3.8-flash|Gemini 3.8 Flash;gemini-3.7-flash|Gemini 3.7 Flash;gemini-3.6-flash|Gemini 3.6 Flash;gemini-3.5-flash|Gemini 3.5 Flash;gemini-3.5-flash-lite|Gemini 3.5 Flash Lite"></select>
+            <select id="sttGeminiModel" data-models="gemini-3.5-transcribe|Gemini 3.5 Transcribe (default);gemini-3.8-flash|Gemini 3.8 Flash;gemini-3.7-flash|Gemini 3.7 Flash;gemini-3.6-flash|Gemini 3.6 Flash;gemini-3.5-flash|Gemini 3.5 Flash;gemini-3.5-flash-lite|Gemini 3.5 Flash Lite"></select>
+            <p class="hint">Gemini 3.5 Transcribe is the model made for speech.</p>
             <label for="sttGeminiChunk" class="gap-top">Piece length</label>
             <select id="sttGeminiChunk">
               <option value="short">Short (about 40 seconds)</option>
@@ -739,7 +758,7 @@
           </div>
           <div class="fld">
             <label for="orgAccent">Accent colour</label>
-            <div class="btnrow tight"><input id="orgAccent" type="color" value="#334155" aria-describedby="orgAccentHex"><code id="orgAccentHex" class="hexval">#334155</code></div>
+            <div class="btnrow"><input id="orgAccent" type="color" value="#334155" aria-describedby="orgAccentHex"><code id="orgAccentHex" class="hexval">#334155</code></div>
             <p class="hint">The table headers and rules.</p>
           </div>
         </div>
@@ -967,17 +986,19 @@
 
     <!-- ============ Usage ============ -->
     <section class="page" id="page-usage">
-      <header class="split">
+      <header>
         <div><h1>Usage</h1><p class="lede">What Debrief asked each service for, and what it would cost on a paid plan. Counted in this browser: Google does not report your remaining free quota, so "left today" is an estimate against the limits below. Days roll over at midnight Pacific time, when Gemini's daily quota resets.</p></div>
+      </header>
+
+      <section class="card usage-card" aria-label="Usage by service">
+        <div class="usage-bar"><h2 class="lbl">By service</h2>
         <div class="seg-ctl" id="usageRange" role="tablist" aria-label="Time range">
           <button type="button" role="tab" data-days="1" class="active" aria-selected="true">Today</button>
           <button type="button" role="tab" data-days="7" aria-selected="false">7 days</button>
           <button type="button" role="tab" data-days="30" aria-selected="false">30 days</button>
         </div>
-      </header>
-
-      <section class="card usage-card" aria-label="Usage by service">
-        <div class="usage-scroll"><table class="data" id="usageTable"></table></div>
+        </div>
+        <div class="usage-scroll tablewrap"><table class="data" id="usageTable" data-stack="usage"></table></div>
         <div id="usageTotals"></div>
       </section>
       <p class="hint tilde-note" id="tildeNote"><span class="tilde" aria-hidden="true">~</span><span>"~" means an estimate from token and minute counts at the prices below. It is not a bill; your provider's console is the source of truth. Costs are shown in rupees at the rate below.</span></p>
@@ -998,7 +1019,10 @@
           <p class="hint">Used only to show the estimate in rupees. Update it when the rate moves.</p>
         </section>
       </div>
-      <div class="btnrow"><button type="button" id="usageReset" class="btn danger">Reset counters…</button><span class="hint">Clears these numbers only. Meetings and settings are kept.</span></div>
+      <section class="card danger-zone" aria-labelledby="hReset">
+        <div><h2 id="hReset" class="lbl">Reset</h2><p class="hint tight-top">Clears these numbers only. Meetings and settings are kept.</p></div>
+        <button type="button" id="usageReset" class="btn danger">Reset counters…</button>
+      </section>
     </section>
 
     <section class="page" id="page-appearance">

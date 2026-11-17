@@ -102,11 +102,11 @@ try {
   })()`);
   check('popup: liquid tabs and mode switch; the search glows with the border beam only while focused', pp.goo && pp.mode && pp.beamOn && pp.beamOff, JSON.stringify(pp));
 
-  // 3. the minutes page while a job writes: an orb for the wait, the toolbar glows
+  // 3. the minutes page while a job writes: an orb for the wait, the document card glows
   const mom = await openPage(`chrome-extension://${id}/mom.html?id=g1`);
   await sleep(2000);
-  const mm = await mom.evaluate(`({ orb: document.querySelectorAll('db-orb').length, beam: document.querySelector('.toolbar')?.hasAttribute('data-beam'), spin: document.querySelectorAll('.spin:not([data-orbed])').length, status: document.getElementById('genStatus').textContent })`);
-  check('minutes page: writing shows a thinking orb and the toolbar beam, no plain spinner', mm.orb >= 1 && mm.beam && mm.spin === 0, JSON.stringify(mm));
+  const mm = await mom.evaluate(`({ orb: document.querySelectorAll('db-orb').length, beam: document.getElementById('mom')?.hasAttribute('data-beam'), spin: document.querySelectorAll('.spin:not([data-orbed])').length, status: document.getElementById('genStatus').textContent })`);
+  check('minutes page: writing shows a thinking orb and the beam on the document card, no plain spinner', mm.orb >= 1 && mm.beam && mm.spin === 0, JSON.stringify(mm));
 
   // 4. any spinner the pages add later becomes an orb
   const sp = await mom.evaluate(`(async () => {
@@ -135,8 +135,8 @@ try {
   // a popup opened as a page cannot record its own tab, so the mode box is hidden; show it to measure how it is laid out
   await pop.evaluate(`document.getElementById('tabHome').click(); const mb = document.getElementById('modeBox'); mb.hidden = false; mb.classList.remove('hidden'); mb.style.display = 'block'; document.getElementById('paneRec').hidden = false; const st = document.createElement('style'); st.textContent = '#modeBox, #paneRec { display: block !important; visibility: visible !important; }'; document.head.append(st);`);
   await sleep(300);
-  const mode = await pop.evaluate(`({ h: document.querySelector('#modeSeg > button').getBoundingClientRect().height, w: document.getElementById('modeSeg').getBoundingClientRect().width, gear: !!document.querySelector('#openSettings svg'), tour: document.querySelector('.foot-links #openTour')?.textContent })`);
-  check('popup: mode switch is one line at full width, Settings is the gear, the tour link is at the bottom', mode.h < 44 && mode.w > 300 && mode.gear && /tour/i.test(mode.tour || ''), JSON.stringify(mode));
+  const mode = await pop.evaluate(`({ h: document.querySelector('#modeSeg > button').getBoundingClientRect().height, w: document.getElementById('modeSeg').getBoundingClientRect().width, gear: !!document.querySelector('#openSettings svg'), tour: document.querySelector('.linkrow #openTour')?.textContent })`);
+  check('popup: mode switch is one line at full width, Settings is the gear, the tour link sits with the other quiet links', mode.h < 44 && mode.w > 300 && mode.gear && /tour/i.test(mode.tour || ''), JSON.stringify(mode));
 
   // 5c. Settings: the Save bar is a floating capsule, not a strip cut off at the sidebar
   const opt2 = await openPage(`chrome-extension://${id}/options.html`);

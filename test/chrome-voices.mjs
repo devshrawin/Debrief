@@ -144,7 +144,7 @@ try {
   await sleep(1500);
   const n0 = await mp.evaluate(`document.querySelectorAll('#nameList .namerow').length`);
   check('the minutes page offers the unnamed voice to name', n0 === 1, String(n0));
-  await mp.evaluate(`(() => { const r = document.querySelector('#nameList .namerow'); const i = r.querySelector('input'); i.value = 'Priya Nair'; r.querySelector('button.primary').click(); })()`);
+  await mp.evaluate(`(() => { const r = document.querySelector('#nameList .namerow'); const i = r.querySelector('input'); i.value = 'Priya Nair'; r.querySelector('button.tinted').click(); })()`);
   await sleep(700);
   const askShown = await mp.evaluate(`!!document.querySelector('dialog.dbmodal') && /already has a voice/.test(document.querySelector('dialog.dbmodal').textContent)`);
   check('a name that already has a voice asks whether it is the same person (it used to just refuse)', askShown);

@@ -1,6 +1,6 @@
 // Minutes page enhancer: liquid Minutes/Transcript tabs and format switch, an orb for every wait (writing, reading,
-// transcribing, emailing, looking for voices), the beam on the toolbar while minutes are written, and on the Ask box.
-import { beam, gooSegmented, orbForStatus, orbifySpinners, searchBeam, withMetal, ready } from '../common.js';
+// transcribing, emailing, looking for voices), the beam on the document card while minutes are written, and on the Ask box.
+import { beam, gooSegmented, orbForStatus, orbifySpinners, orbStateFor, searchBeam, withMetal, ready } from '../common.js';
 
 ready(() => {
   const $ = (id) => document.getElementById(id);
@@ -26,11 +26,18 @@ ready(() => {
   gooSegmented($('edTabs'));
   orbifySpinners();
 
-  // while minutes are written (or anything else runs) the toolbar glows and the status shows an orb
-  const bar = document.querySelector('.toolbar');
-  const write = beam(bar, 'db-write', { strength: 0.9 });
+  // while minutes are written (or anything else runs) the document card glows and the status shows an orb
+  const card = $('mom'); // the glow goes round the document card, where the skeleton and the status are, not round the toolbar
+  const write = beam(card, 'db-write', { strength: 0.9 });
   orbForStatus($('genStatus'), { onChange: (s) => write(!!s && s !== 'breathing') });
   for (const id of ['pendingText', 'shareStatus', 'mailStatus', 'nameWhy', 'startCount']) orbForStatus($(id));
+
+  // the orb on the document card's skeleton follows the stage the job reports (the page script mirrors the text into it)
+  new MutationObserver(() => {
+    const o = document.querySelector('#mom .skel db-orb');
+    const st = orbStateFor($('genStatus').textContent);
+    if (o && st && o.getAttribute('state') !== st) o.setAttribute('state', st);
+  }).observe($('genStatus'), { childList: true, characterData: true, subtree: true });
 
   // the Ask box (built by the page script into #askBox)
   const askBox = $('askBox');

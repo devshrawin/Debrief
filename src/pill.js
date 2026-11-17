@@ -15,7 +15,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, "Nirmala UI", sans-serif; }
   /* Dark glass that reads over any video: a scrim plus blur, hairline edge, layered shadow */
   .wrap { --ink:#f5f5f7; --dim:#c7c7d1; --line:rgba(255,255,255,.14); --ok:#30d158; --warn:#ffb340; --bad:#ff6961; --tint:#a9a6ff;
-    --glass: rgba(24,24,30,.72); --glass-thick: rgba(24,24,30,.86);
+    --glass: rgba(24,24,30,.86); --glass-thick: rgba(24,24,30,.95);
     display:flex; flex-direction:column; align-items:flex-end; gap:8px; color:var(--ink); -webkit-font-smoothing:antialiased;
     pointer-events:none; } /* the host and wrapper let clicks through to the page; only the pill and panel catch them */
   .wrap > * { pointer-events:auto; }

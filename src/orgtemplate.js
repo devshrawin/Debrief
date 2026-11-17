@@ -699,7 +699,7 @@ export function renderDocBody(doc) {
     table(
       `<thead>${tr(navy('Sr.', { w: 56 }) + navy('Action Item') + navy('Responsibility', { w: 130 }))}</thead><tbody>${
         doc.actions.length
-          ? doc.actions.map((a, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(ul([a.text]), { z: i % 2 === 1 }) + plain(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join('')
+          ? doc.actions.map((a, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(a.text), { z: i % 2 === 1 }) + plain(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join('')
           : tr(plain('None recorded.', { colspan: 3 }))
       }</tbody>`
     ),

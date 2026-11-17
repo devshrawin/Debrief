@@ -294,6 +294,11 @@ async function start() {
   $('latencyHint').classList.toggle('hidden', !lat.hint);
   const head = document.querySelector('.lv-head');
   if (head && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--lv-head', `${head.offsetHeight}px`)).observe(head);
+  const side = document.querySelector('.lv-side');
+  const fitSide = () => side?.classList.toggle('flow', !!head && side.offsetHeight > innerHeight - head.offsetHeight - 32);
+  if (side && window.ResizeObserver) new ResizeObserver(fitSide).observe(side);
+  addEventListener('resize', fitSide);
+  fitSide();
   store = new LiveStore({ myName: settings.myName });
   if (llmReady(settings)) $('privacy').textContent = `Your question and the transcript so far go to ${modelLabel(settings)}, the model you chose for the minutes. No audio is sent. Answers can be wrong.`;
 

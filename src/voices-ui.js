@@ -79,7 +79,7 @@ function badgeOf(p) {
   if (!p.auto) return ['Recorded', 'brand'];
   if (isAnon(p)) return ['Unnamed voice', ''];
   if (p.confirmed) return ['Named by you, in use', 'ok'];
-  return p.ready ? ['Learned, in use', 'ok'] : ['Learned, still learning', 'warn'];
+  return p.ready ? ['Learned, in use', 'ok'] : ['Still learning', 'tint'];
 }
 
 // One "More" menu open at a time: Export, Merge, Delete.
@@ -145,14 +145,19 @@ function renderList() {
       const langs = (p.langs || [p.lang || 'en']).map((l) => LANG_NAME[l] || l).join(' + ');
       const n = p.meetings || 1;
       const meta = p.auto
-        ? `${anon ? 'Heard in your meetings, not named yet' : 'Learned from your meetings'} · ${n} meeting${n === 1 ? '' : 's'} · ${p.secs || 0} s of clean speech${p.ready || p.confirmed ? '' : ` · not used yet, needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings, or give it a name`}${anon && !samplesOn ? ' · no audio clip (switch on “Keep a short sample” before the next meeting). Meanwhile open that meeting’s Transcript: this voice’s lines are labelled with this name, so you can name it by reading what it said.' : ''}`
+        ? `${anon ? 'Heard, not named yet' : 'Learned from meetings'} · ${n} meeting${n === 1 ? '' : 's'} · ${p.secs || 0} s of speech`
         : `${langs} · ${p.secs || '?'} s of speech · added ${fmtDate(p.created)}`;
+      // what is still missing, as lines of their own so no line wraps to one or two stray words
+      const notes = p.auto ? [
+        ...(p.ready || p.confirmed ? [] : [`Not used yet: needs ${LEARN.readySecs} s from ${LEARN.readyMeetings} meetings, or give it a name.`]),
+        ...(anon && !samplesOn ? ['No audio clip: switch on “Keep a short sample” before the next meeting. Meanwhile open that meeting’s Transcript, where this voice’s lines carry this name, and name it by reading what it said.'] : []),
+      ] : [];
       const prof = anon ? null : profileOf(p.name);
       const row = el('li', { className: 'voice-row' });
       const initial = anon ? '?' : (Array.from(p.name.trim())[0] || '?').toUpperCase();
       const avatar = el('span', { className: `avatar${anon ? ' anon' : ''}`, textContent: initial });
       avatar.setAttribute('aria-hidden', 'true');
-      const who = el('div', { className: 'vwho' }, el('div', { className: 'vtop' }, el('strong', { className: 'vn', textContent: p.name }), el('span', { className: `chip ${cls}`.trim(), textContent: badge })), el('p', { className: 'hint vm', textContent: meta }));
+      const who = el('div', { className: 'vwho' }, el('div', { className: 'vtop' }, el('strong', { className: 'vn', textContent: p.name }), el('span', { className: `chip ${cls}`.trim(), textContent: badge })), el('p', { className: 'hint vm', textContent: meta }), ...notes.map((t) => el('p', { className: 'hint vm', textContent: t })));
       const btn = (label, fn) => el('button', { type: 'button', className: 'btn sm', textContent: label, onclick: fn });
       const items = [{ label: 'Export this voice', fn: () => download(exportVoices(people, [p.id]), `debrief-voice-${p.name.replace(/[^\w-]+/g, '_')}.json`) }];
       if (p.auto && people.length > 1) items.push({ label: 'Merge into…', fn: () => mergeInto(p) });
