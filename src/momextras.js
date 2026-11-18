@@ -117,7 +117,7 @@ function ensureBar() {
     if (!cur) return;
     absNow = cur.t0 + audio.currentTime;
     time.textContent = fmtTime(absNow);
-    fill.style.width = `${Math.max(0, Math.min(100, (audio.currentTime / (audio.duration || cur.dur || 1)) * 100))}%`;
+    fill.style.width = `${Math.max(0, Math.min(100, (audio.currentTime / (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : cur.dur || 1)) * 100))}%`;
     markRow(absNow, true);
   });
   audio.addEventListener('ended', () => advance());
@@ -276,7 +276,8 @@ function markRow(sec, follow = false) {
 
 // "[12:40]" inside the rendered minutes becomes a button that plays from there (only when a recording was kept)
 export function decorateTimes(root) {
-  if (!hasAudio() || !root) return;
+  if (!root) return;
+  const playable = hasAudio(); // without a kept recording the time is the same chip, just not a button
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => (n.parentElement?.closest('button, a, code, pre, .act-tick') || !L.timeTokens(n.nodeValue).length ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
   });
@@ -288,7 +289,7 @@ export function decorateTimes(root) {
     let at = 0;
     for (const t of L.timeTokens(text)) {
       if (t.index > at) frag.append(text.slice(at, t.index));
-      frag.append(timeButton(t.sec, t.label, 'timebtn', `[${t.label}]`));
+      frag.append(playable ? timeButton(t.sec, t.label, 'timebtn', `[${t.label}]`) : el('span', { className: 'timebtn', textContent: `[${t.label}]` }));
       at = t.index + t.length;
     }
     if (at < text.length) frag.append(text.slice(at));
@@ -357,8 +358,11 @@ export function transcriptShown() {
 
 let rereadBusy = false;
 
-function openReread([from, to], trigger) {
+function openReread([from, rawTo], trigger) {
   if (rereadBusy) return;
+  // one request per minute of audio: a long stretch is read in its first MAX_PARTS minutes only, and says how many requests it sends
+  const to = Math.min(rawTo, from + L.MAX_REREAD_PARTS * 60);
+  const requests = L.splitSpan(from, to).length;
   const m = ctx.getMeeting();
   const settings = ctx.getSettings();
   const old = L.linesInSpan(m.segments, from, to).sort((a, b) => a.t - b.t);
@@ -366,7 +370,7 @@ function openReread([from, to], trigger) {
   const dlg = el('dialog', { className: 'dbmodal rr-dialog' });
   dlg.setAttribute('aria-labelledby', 'rrTitle');
   const title = el('h2', { id: 'rrTitle', textContent: 'Read this part again' });
-  const sub = el('p', { className: 'hint', textContent: `From ${fmtTime(from)} to ${fmtTime(to)}. The recording of this part is sent to your speech-to-text service again.` });
+  const sub = el('p', { className: 'hint', textContent: L.rereadNote(from, to, rawTo, requests, fmtTime) });
   const colNow = el('div', { className: 'rr-col' }, el('h3', { textContent: 'Now' }), el('div', { className: 'rr-text', textContent: nowText, tabIndex: 0 }));
   const outText = el('div', { className: 'rr-text', textContent: 'Reading the recording…', tabIndex: 0 });
   outText.setAttribute('role', 'status');
@@ -376,7 +380,8 @@ function openReread([from, to], trigger) {
   const err = el('p', { className: 'rr-err hidden' });
   err.setAttribute('role', 'alert');
   const keep = el('button', { type: 'button', textContent: 'Keep what I have' });
-  const retry = el('button', { type: 'button', textContent: 'Try again', hidden: true });
+  const many = requests > 1; // a long stretch waits for a press: it sends one request per minute
+  const retry = el('button', { type: 'button', textContent: 'Read it again', hidden: !many });
   const replace = el('button', { type: 'button', className: 'primary', textContent: 'Replace these lines', disabled: true });
   const btns = el('div', { className: 'dbbtns rr-btns' }, keep, retry, replace);
   dlg.append(title, sub, el('div', { className: 'rr-cols' }, colNow, colNew), err, btns);
@@ -386,9 +391,16 @@ function openReread([from, to], trigger) {
   let fresh = null;
   const done = () => {
     cancelled = true;
+    release();
     dlg.close();
     dlg.remove();
     if (trigger && document.contains(trigger) && !trigger.disabled) trigger.focus();
+  };
+  // the trigger is enabled again before focus returns to it (a disabled button cannot take focus)
+  const release = () => {
+    rereadBusy = false;
+    trigger.disabled = false;
+    trigger.removeAttribute('aria-busy');
   };
   keep.onclick = done;
   dlg.addEventListener('cancel', (e) => {
@@ -399,6 +411,7 @@ function openReread([from, to], trigger) {
   const run = async () => {
     cancelled = false;
     fresh = null;
+    retry.textContent = 'Try again';
     err.classList.add('hidden');
     retry.hidden = true;
     replace.disabled = true;
@@ -421,9 +434,7 @@ function openReread([from, to], trigger) {
       retry.hidden = false;
       retry.focus();
     } finally {
-      rereadBusy = false;
-      trigger.disabled = false;
-      trigger.removeAttribute('aria-busy');
+      if (!cancelled) release();
     }
   };
   retry.onclick = run;
@@ -448,6 +459,11 @@ function openReread([from, to], trigger) {
     err.classList.remove('hidden');
     return;
   }
+  if (many) {
+    outText.textContent = 'Not started yet. Press Read it again to send the recording.';
+    retry.focus();
+    return;
+  }
   run();
 }
 
@@ -463,13 +479,17 @@ async function readAgain(from, to, settings, progress, stopped) {
   if (!pcm) throw new Error('The recording could not be read in this browser.');
   const spans = L.splitSpan(real, to);
   const parts = [];
+  let stopWatch = 0;
   for (let i = 0; i < spans.length; i++) {
     if (stopped()) return {};
     progress(i + 1, spans.length);
     const [a, b] = spans[i];
     const slice = pcm.subarray(Math.max(0, Math.round((a - real) * SR)), Math.min(pcm.length, Math.round((b - real) * SR)));
     if (slice.length < SR * 0.5) continue;
-    parts.push({ at: a, end: b, result: await transcribeDetailed(encodeWav(slice, SR), settings) });
+    // Cancel does not wait for a slow request (its retries cannot be stopped from here, but nothing more is sent after it)
+    const got = await Promise.race([transcribeDetailed(encodeWav(slice, SR), settings), new Promise((res) => (stopWatch = setInterval(() => stopped() && res(null), 300)))]).finally(() => clearInterval(stopWatch));
+    if (!got || stopped()) return {};
+    parts.push({ at: a, end: b, result: got });
   }
   const utterances = L.mergeParts(parts, real, (p) => p.end);
   return { utterances, from: real };
@@ -533,6 +553,10 @@ export function decorateActions(root) {
     const label = el('label', { className: 'act-tick no-print' }, cb, name);
     const status = el('span', { className: 'sr-only act-status' });
     cell.append(label, text, status);
+    // while the tick is being saved it is aria-disabled, not disabled: a disabled checkbox would drop the keyboard focus
+    cb.onclick = (e) => {
+      if (cb.getAttribute('aria-disabled') === 'true') e.preventDefault();
+    };
     cb.onchange = () => toggle(id, cb);
     actionBox.rows.push({ tr, cb, status, id, text });
   });
@@ -567,7 +591,7 @@ async function toggle(id, cb) {
   const want = cb.checked;
   const m = ctx.getMeeting();
   const a = (m.items?.actions || []).find((x) => x.id === id);
-  cb.disabled = true;
+  cb.setAttribute('aria-disabled', 'true');
   try {
     if (!(await setActionDone(m.id, id, want))) throw new Error('this action is no longer in the meeting');
     // take what is stored (doneAt and the like) so a later save of this page's copy keeps the tick
@@ -580,7 +604,7 @@ async function toggle(id, cb) {
     cb.checked = !want;
     actionBox.live.textContent = `Could not save the change: ${e.message}`;
   } finally {
-    cb.disabled = false;
+    cb.removeAttribute('aria-disabled');
   }
 }
 

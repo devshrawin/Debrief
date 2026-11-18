@@ -29,7 +29,7 @@ function announce(text, undo) {
   const b = $('undo');
   b.classList.toggle('hidden', !undo);
   b.onclick = undo || null;
-  if (text) undoTimer = setTimeout(() => announce(''), undo ? 8000 : 6000);
+  if (text) undoTimer = setTimeout(() => announce(''), undo ? 15000 : 6000);
 }
 
 async function load(focusAt) {
@@ -66,13 +66,25 @@ function rowEl(a, mode) {
   if (where.childNodes.length) bit(where);
   const li = el('li', { className: `ac-row${done ? ' is-done' : ''}` }, label, el('div', { className: 'ac-body' }, el('div', { className: 'ac-text', textContent: text }), meta));
   li.dataset.key = `${a.meetingId}/${a.id}`;
+  cb.onclick = (e) => {
+    if (cb.getAttribute('aria-disabled') === 'true') e.preventDefault(); // saving: ignored, but the box keeps the keyboard focus
+  };
   cb.onchange = () => tick(a, cb, li);
   return li;
 }
 
-function render(focusAt) {
+let countsTimer = null;
+function paintCounts() {
+  clearTimeout(countsTimer);
+  countsTimer = null;
   const counts = L.countActions(state.open);
-  $('counts').textContent = state.loaded ? (counts.open ? `${counts.open} open${counts.overdue ? ` · ${counts.overdue} overdue` : ''}` : '') : '';
+  const n = shown().length;
+  if (state.q.trim()) $('counts').textContent = `${n} match${n === 1 ? '' : 'es'} for “${state.q.trim()}”`;
+  else $('counts').textContent = state.loaded ? (counts.open ? `${counts.open} open${counts.overdue ? ` · ${counts.overdue} overdue` : ''}` : '') : '';
+}
+
+function render(focusAt, { counts: paintC = true } = {}) {
+  if (paintC) paintCounts();
   $('tools').classList.toggle('hidden', !state.hasItems);
   for (const b of $('modes').querySelectorAll('button')) {
     const on = b.dataset.mode === state.mode;
@@ -118,12 +130,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function tick(a, cb, li) {
   const want = cb.checked;
-  cb.disabled = true;
+  cb.setAttribute('aria-disabled', 'true'); // not `disabled`: that would drop the keyboard focus
   try {
     if (!(await setActionDone(a.meetingId, a.id, want))) throw new Error('this action is no longer in its meeting');
   } catch (e) {
     cb.checked = !want;
-    cb.disabled = false;
+    cb.removeAttribute('aria-disabled');
     announce(`Could not save the change: ${e.message}`);
     return;
   }
@@ -158,9 +170,10 @@ for (const b of $('modes').querySelectorAll('button')) {
 }
 $('q').oninput = () => {
   state.q = $('q').value;
-  render();
-  const n = shown().length;
-  if (state.q.trim()) $('counts').textContent = `${n} match${n === 1 ? '' : 'es'} for “${state.q.trim()}”`;
+  render(undefined, { counts: false });
+  // the count is a live region: it is read out once typing pauses, not on every key
+  clearTimeout(countsTimer);
+  countsTimer = setTimeout(paintCounts, 500);
 };
 $('showDone').onchange = () => {
   state.showDone = $('showDone').checked;

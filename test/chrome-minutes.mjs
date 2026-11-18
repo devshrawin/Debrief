@@ -202,6 +202,8 @@ try {
   check('with a kept recording no "turn it on" tip is shown', !v1.keepHint);
 
   if (haveAudio) {
+    // a recorded WebM often reports an infinite duration until it has been played to the end: make every element report that
+    await p1.evaluate(`Object.defineProperty(HTMLMediaElement.prototype, 'duration', { get: () => Infinity, configurable: true }); 0`);
     // play Row B (1.5 s): the stored segment seq 1 (starts at 1 s), offset 0.5 s
     await p1.evaluate(`document.querySelectorAll('#transcript .seg-play')[2].click()`, true);
     const bar = await p1.waitFor(`!document.getElementById('playBar').hidden && document.getElementById('momAudio').dataset.seq`);
@@ -209,6 +211,14 @@ try {
     check('the player bar opens on the right stored segment at the right offset (1.5 s is 0.5 s into the segment that starts at 1 s)', bar && a1.seq === '1' && a1.off === '0.5' && a1.t0 === '1', JSON.stringify(a1));
     check('the playing line is marked with aria-current', a1.cur.length === 1 && /Row B/.test(a1.cur[0]), JSON.stringify(a1.cur));
     await p1.shot('minutes-player-light-1280');
+    const fillW = await p1.waitFor(`parseFloat(document.querySelector('.pb-fill').style.width) > 0 && document.querySelector('.pb-fill').style.width`, 3000);
+    check('C12 the progress bar fills although a WebM recording reports an infinite duration', !!fillW, String(fillW));
+    await p1.resize(360);
+    await sleep(300);
+    const trackW = await p1.evaluate(`document.querySelector('.pb-track').getBoundingClientRect().width`);
+    check('U1 at 360 px the player\'s progress track keeps real width (it wraps to its own row)', trackW >= 200, String(trackW));
+    await p1.shot('minutes-player-light-360');
+    await p1.resize(1280);
     const adv = await p1.waitFor(`document.getElementById('momAudio').dataset.seq === '2'`, 6000);
     check('it carries on into the next stored segment by itself', !!adv, await p1.evaluate(`JSON.stringify({ seq: document.getElementById('momAudio').dataset.seq, err: document.getElementById('momAudio').error?.message, paused: document.getElementById('momAudio').paused, t: document.getElementById('momAudio').currentTime })`));
     // a stretch with no recording
@@ -247,6 +257,11 @@ try {
   check('the row is struck through, says "(done)" to a screen reader, and the count and live line update', after.row === 'Run the load test' && after.sr === ' (done)' && /1 open · 2 done/.test(after.summary) && /Marked done: Run the load test/.test(after.live), JSON.stringify(after));
   await p1.evaluate(`document.querySelector('#mom td.act-cell input').click()`);
   await sleep(700);
+  const tickFocus = await p1.evaluate(`(() => { const cb = document.querySelector('#mom td.act-cell input'); cb.focus(); cb.click(); return { disabled: cb.disabled, aria: cb.getAttribute('aria-disabled'), focused: document.activeElement === cb }; })()`);
+  await sleep(700);
+  await p1.evaluate(`document.querySelector('#mom td.act-cell input').click()`);
+  await sleep(700);
+  check('C10 a tick box being saved keeps the keyboard focus (aria-disabled, not disabled)', !tickFocus.disabled && tickFocus.aria === 'true' && tickFocus.focused, JSON.stringify(tickFocus));
   check('unticking puts it back', (await p1.evaluate(`chrome.storage.local.get('meeting:mn1').then((r) => r['meeting:mn1'].items.actions[0].status)`)) === 'open');
   await p1.evaluate(`document.querySelector('#mom td.act-cell input').click()`);
   await sleep(500);
@@ -270,6 +285,7 @@ try {
   await sleep(300);
   await p1.evaluate(`document.getElementById('shareSend').click()`);
   const dlg = await p1.waitFor(`document.querySelector('dialog.dbmodal')?.textContent`);
+  check('U3 the outside-the-organisation question has a title', (await p1.evaluate(`document.querySelector('dialog.dbmodal h2')?.textContent`)) === 'Send outside your organisation?' && (await p1.evaluate(`document.querySelector('dialog.dbmodal').getAttribute('aria-labelledby') === document.querySelector('dialog.dbmodal h2').id`)));
   check('sharing outside the organisation asks first, and says the transcript goes too', /ravi@outside\.org is outside your organisation\. Send anyway\? The transcript will be attached\./.test(dlg || ''), String(dlg));
   await p1.shot('minutes-share-confirm-light-1280');
   await p1.evaluate(`[...document.querySelectorAll('dialog.dbmodal button')].find((b) => b.textContent === 'Cancel').click()`);
@@ -395,9 +411,11 @@ try {
   await opts.evaluate(`localStorage.removeItem('db.mom.keepHint')`);
   const p2 = await openPage(`chrome-extension://${id}/mom.html?id=mn2`);
   await p2.evaluate(`document.getElementById('tabTr').click()`);
-  const v2 = await p2.evaluate(`(() => ({ btn: document.querySelectorAll('.seg-play, .timebtn, .rr-gap').length, bar: !!document.getElementById('playBar'), cbs: document.querySelectorAll('#mom input[type=checkbox]').length, summary: !!document.querySelector('#mom .act-summary'), hint: document.getElementById('keepHint').classList.contains('hidden') ? '' : document.getElementById('keepHint').textContent, w: document.querySelector('#transcript .seg').children[0].getBoundingClientRect().width, tt: document.querySelector('#transcript .seg').children[0].textContent }))()`);
+  const v2 = await p2.evaluate(`(() => ({ btn: document.querySelectorAll('.seg-play, button.timebtn, .rr-gap').length, bar: !!document.getElementById('playBar'), cbs: document.querySelectorAll('#mom input[type=checkbox]').length, summary: !!document.querySelector('#mom .act-summary'), hint: document.getElementById('keepHint').classList.contains('hidden') ? '' : document.getElementById('keepHint').textContent, w: document.querySelector('#transcript .seg').children[0].getBoundingClientRect().width, tt: document.querySelector('#transcript .seg').children[0].textContent }))()`);
   check('without a kept recording the page has no play buttons and no player', v2.btn === 0 && !v2.bar, JSON.stringify(v2));
   check('minutes edited by hand (rows no longer match the items) get no tick boxes at all', v2.cbs === 0 && !v2.summary, JSON.stringify(v2));
+  const chips2 = await p2.evaluate(`(() => { document.getElementById('tabMom').click(); const c = [...document.querySelectorAll('#mom span.timebtn')]; return { n: c.length, text: c.map((x) => x.textContent), buttons: document.querySelectorAll('#mom button.timebtn').length, bg: c[0] && getComputedStyle(c[0]).backgroundColor, tag: c[0]?.tagName }; })()`);
+  check('U5 without a kept recording a time in the minutes is still a chip (a span, not a button), like with one', chips2.n >= 1 && chips2.buttons === 0 && chips2.text.every((t) => /^\[\d\d:\d\d\]$/.test(t)) && chips2.bg !== 'rgba(0, 0, 0, 0)', JSON.stringify(chips2));
   check('one quiet line says how to get playback; the time column is the same width as with buttons', /Turn on Keep the recording in Settings to play lines back\./.test(v2.hint) && v2.w === speech[0] && true || v2.w > 0, JSON.stringify(v2));
   await p2.shot('minutes-nokeep-light-1280');
   await p2.evaluate(`document.getElementById('keepHintX').click()`);
@@ -406,6 +424,90 @@ try {
   check('once dismissed (or seen) the tip does not come back', await p2b.evaluate(`document.getElementById('keepHint').classList.contains('hidden')`));
   await p2.close();
   await p2b.close();
+
+  // ===== 3b. audit round 2: the toolbar with and without minutes, rewriting over hand edits, an editor open while a job finishes =====
+  const mnEdit = { ...meetings.mn2, id: 'mn9', title: 'Hand edited', editedAt: NOW - 1000 };
+  const mnNone = { ...base, id: 'mn8', title: 'Not written yet', segments: segs1, mom: '', format: 'standard', job: { state: 'queued', countdownEnd: NOW + 90000, beat: NOW } };
+  await seed({ ...meetings, mn9: mnEdit, mn8: mnNone });
+  const send3 = (p, msg) => p.evaluate(`chrome.runtime.sendMessage(${JSON.stringify(msg)}).catch(() => null)`);
+  const p8 = await openPage(`chrome-extension://${id}/mom.html?id=mn8`);
+  const t8 = await p8.evaluate(`(() => {
+    const vis = (e) => !!e && e.getClientRects().length > 0;
+    return {
+      off: ['copy', 'dlMd', 'dlWord', 'print', 'edit', 'mail'].map((b) => b === 'dlWord' ? 'dlDoc' : b).map((b) => [b, document.getElementById(b).disabled]),
+      writeButtons: [...document.querySelectorAll('button')].filter((b) => vis(b) && b.textContent.trim() === 'Write minutes').length,
+      emptyHidden: document.getElementById('emptyBox').classList.contains('hidden'),
+      startShown: !document.getElementById('startCard').classList.contains('hidden'),
+      checked: [...document.querySelectorAll('#fmtSwitch button')].filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.textContent),
+      momShown: vis(document.getElementById('mom')),
+    };
+  })()`);
+  check('C3 with no minutes Copy, .md, Word, Print, Edit and Email me are all disabled', t8.off.length === 6 && t8.off.every(([, d]) => d), JSON.stringify(t8.off));
+  check('C4 while the start card counts down there is one Write minutes button, and no second "No minutes yet" card', t8.startShown && t8.emptyHidden && t8.writeButtons === 1 && !t8.momShown, JSON.stringify(t8));
+  check('U2 the format switch already shows its active segment, and no stray "No minutes yet." line is drawn in the document card', t8.checked.length === 1 && t8.checked[0] === 'Standard', JSON.stringify(t8.checked));
+  await p8.evaluate(`document.getElementById('dlMd').click(); document.getElementById('copy').click()`);
+  check('C3 a disabled .md button does not download "undefined"', (await p8.evaluate(`window.__files.length`)) === 0);
+  await p8.close();
+
+  const p9 = await openPage(`chrome-extension://${id}/mom.html?id=mn9`);
+  check('C3 with minutes those buttons are enabled', await p9.evaluate(`['copy', 'dlMd', 'dlDoc', 'print', 'edit', 'mail'].every((b) => !document.getElementById(b).disabled)`));
+  // C2: the format switch asks before rewriting minutes that were corrected by hand, and "Keep my edits" leaves everything as it was
+  await p9.evaluate(`document.querySelector('#fmtSwitch [data-v=template]').click()`);
+  const rw = await p9.waitFor(`document.querySelector('dialog.dbmodal h2')?.textContent`);
+  check('C2 switching the format asks "Rewrite the minutes?" first when the minutes were edited by hand', rw === 'Rewrite the minutes?', String(rw));
+  await p9.evaluate(`[...document.querySelectorAll('dialog.dbmodal button')].find((b) => b.textContent === 'Keep my edits').click()`);
+  await sleep(600);
+  const kept = await p9.evaluate(`(async () => { const m = (await chrome.storage.local.get('meeting:mn9'))['meeting:mn9']; return { format: m.format, job: m.job?.state || '', mom: m.mom === ${JSON.stringify(mom2)}, checked: [...document.querySelectorAll('#fmtSwitch button')].find((b) => b.getAttribute('aria-checked') === 'true')?.textContent }; })()`);
+  check('C2 "Keep my edits" changes neither the format nor the minutes and starts no job', kept.format === 'standard' && kept.job === '' && kept.mom && kept.checked === 'Standard', JSON.stringify(kept));
+  await p9.evaluate(`document.getElementById('gen').click()`);
+  check('C2 the Rewrite button asks as well', (await p9.waitFor(`document.querySelector('dialog.dbmodal h2')?.textContent`)) === 'Rewrite the minutes?');
+  await p9.evaluate(`[...document.querySelectorAll('dialog.dbmodal button')].find((b) => b.textContent === 'Keep my edits').click()`);
+  await sleep(300);
+
+  // C1: an editor still open when new minutes arrive never writes its older text over them
+  await p9.evaluate(`document.getElementById('edit').click()`);
+  await p9.evaluate(`document.querySelector('#edTabs [data-v=text]').click(); const t = document.getElementById('mdEdit'); t.value = '# STALE EDITOR TEXT'; t.dispatchEvent(new Event('input', { bubbles: true }))`);
+  await opts.evaluate(`(async () => { const all = await chrome.storage.local.get('meeting:mn9'); const m = all['meeting:mn9']; m.mom = '# FRESH MINUTES'; delete m.editedAt; await chrome.storage.local.set({ 'meeting:mn9': m }); })()`);
+  await send3(opts, { type: 'job-progress', id: 'mn9', finished: true, job: { state: 'done' } });
+  await sleep(1400);
+  const stale = await p9.evaluate(`(async () => { const m = (await chrome.storage.local.get('meeting:mn9'))['meeting:mn9']; return { mom: m.mom, edited: !!m.editedAt, editorShown: !document.getElementById('editor').classList.contains('hidden'), shown: document.getElementById('mom').textContent, status: document.getElementById('mailStatus').textContent }; })()`);
+  check('C1 the stored minutes are the fresh ones, not the open editor\'s older text, and the editor is closed with a note', stale.mom === '# FRESH MINUTES' && !stale.edited && !stale.editorShown && /FRESH MINUTES/.test(stale.shown) && /not saved/.test(stale.status), JSON.stringify(stale));
+  await p9.close();
+
+  const p9b = await openPage(`chrome-extension://${id}/mom.html?id=mn9`);
+  await p9b.evaluate(`document.getElementById('edit').click()`);
+  check('C1 (setup) the editor opens when nothing is being written', await p9b.evaluate(`!document.getElementById('editor').classList.contains('hidden')`));
+  await send3(opts, { type: 'job-progress', id: 'mn9', status: 'Writing…', job: { state: 'writing', beat: Date.now(), status: 'Writing…' } });
+  await sleep(500);
+  const busy9 = await p9b.evaluate(`({ editor: !document.getElementById('editor').classList.contains('hidden'), btns: ['copy', 'dlMd', 'dlDoc', 'print', 'edit', 'mail'].map((b) => document.getElementById(b).disabled) })`);
+  check('C1 when a job starts the editor closes, and Edit and every export are disabled while the minutes are written', !busy9.editor && busy9.btns.every(Boolean), JSON.stringify(busy9));
+  await send3(opts, { type: 'job-progress', id: 'mn9', finished: true, job: { state: 'done' } });
+  await sleep(900);
+  check('C1 when it is done they are enabled again', await p9b.evaluate(`['copy', 'dlMd', 'dlDoc', 'print', 'edit', 'mail'].every((b) => !document.getElementById(b).disabled)`));
+  await p9b.close();
+
+  // C13: a long stretch says how many requests it sends, waits for a press, and a very long one is capped
+  if (haveAudio) {
+    const longGap = (dur) => ({ ...meetings.mn1, id: 'mn4', title: 'Long gap', items: undefined, gaps: [{ t: 10, dur, voicedSec: dur, chars: 0 }] });
+    await opts.evaluate(`(async () => { const db = await new Promise((res, rej) => { const r = indexedDB.open('debrief-audio', 1); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); const all = await new Promise((res) => { const q = db.transaction('seg').objectStore('seg').getAll(); q.onsuccess = () => res(q.result); }); for (const s of all.filter((x) => x.meetingId === 'mn1')) await new Promise((res) => { const t = db.transaction('seg', 'readwrite'); t.objectStore('seg').put({ ...s, meetingId: 'mn4' }); t.oncomplete = res; }); db.close(); })()`);
+    for (const [dur, want, capped] of [[300, 5, false], [4000, 30, true]]) {
+      await seed({ ...meetings, mn4: longGap(dur) });
+      const callsBefore = sttCalls;
+      const p4 = await openPage(`chrome-extension://${id}/mom.html?id=mn4`);
+      await p4.evaluate(`document.getElementById('tabTr').click()`);
+      await p4.evaluate(`document.querySelector('#transcript .rr-gap').click()`, true);
+      const note = await p4.waitFor(`document.querySelector('.rr-dialog .hint')?.textContent`);
+      await sleep(500);
+      const st = await p4.evaluate(`({ out: document.querySelectorAll('.rr-dialog .rr-text')[1].textContent, start: [...document.querySelectorAll('.rr-dialog button')].find((b) => b.textContent === 'Read it again' && !b.hidden) ? true : false })`);
+      check(`C13 a ${dur} s stretch says "about ${want} requests"${capped ? ' and that only the first 30 minutes are read' : ''}, and sends nothing until pressed`, new RegExp(`about ${want} requests`).test(note || '') && (capped ? /only the first 30 minutes/.test(note) : !/first 30 minutes/.test(note)) && st.start && sttCalls === callsBefore, `${note} ${JSON.stringify(st)} ${sttCalls - callsBefore}`);
+      if (!capped) {
+        await p4.evaluate(`[...document.querySelectorAll('.rr-dialog button')].find((b) => b.textContent === 'Keep what I have').click()`);
+        await sleep(200);
+        check('C10 after Cancel the button that opened the dialog is enabled and has the focus', await p4.evaluate(`!document.querySelector('.rr-gap').disabled && document.activeElement === document.querySelector('.rr-gap')`));
+      }
+      await p4.close();
+    }
+  }
 
   // ===== 4. the Open actions page =====
   await seed(forActions);

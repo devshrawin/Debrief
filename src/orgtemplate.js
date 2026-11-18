@@ -688,7 +688,7 @@ export function renderDocBody(doc) {
     const cols = doc.updates.columns;
     out.push(
       table(
-        `<thead>${tr(navy('SR No.', { w: 56 }) + navy('Name', { w: 120 }) + cols.map((c) => navy(c)).join(''))}</thead><tbody>${doc.updates.rows
+        `<thead>${tr(navy('SR No.', { w: 56 }) + navy('Name', { w: 120 }) + cols.map((c) => navy(e(c))).join(''))}</thead><tbody>${doc.updates.rows
           .map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(r.name), { w: 120, bold: true, z: i % 2 === 1 }) + r.cells.map((c) => plain(e(c), { z: i % 2 === 1 })).join('')))
           .join('')}</tbody>`
       ),
@@ -731,7 +731,7 @@ export const printCss = (confidential = 'Confidential') => `/* Debrief: official
   margin: 22.5mm 12.7mm 25mm 19mm; /* the template: 2.25 cm top, 1.27 cm right, 2.5 cm bottom, 1.9 cm left */
   @bottom-left { content: ""; width: 42mm; border-top: 0.5pt solid ${ORG.accent}; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); width: 42mm; font: 700 12pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: right; vertical-align: top; padding-top: 1mm; white-space: nowrap; border-top: 0.5pt solid ${ORG.accent}; }
-  @bottom-center { content: "${String(confidential).replace(/["\\\n]/g, " ")}"; font: 9pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.5pt solid ${ORG.accent}; }
+  @bottom-center { content: "${String(confidential).replace(/["\\\n<>]/g, " ")}"; font: 9pt Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; text-align: center; vertical-align: top; padding-top: 2mm; border-top: 0.5pt solid ${ORG.accent}; }
 }
 .amx { page: amx; }
 .amx, .amx * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

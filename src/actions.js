@@ -33,13 +33,15 @@ export function previousInSeries(meeting, metas, typeOf = () => null) {
   const key = seriesKey(meeting, typeOf(meeting));
   if (!key || !Number.isFinite(meeting?.startedAt)) return null;
   let best = null;
+  let bestWithActions = null; // an earlier meeting with no actions has nothing to carry: the newest one that has some is preferred
   for (const m of metas || []) {
     if (!m || m.id === meeting.id || !Number.isFinite(m.startedAt) || m.startedAt >= meeting.startedAt) continue;
     if (meeting.startedAt - m.startedAt > SERIES_WINDOW_DAYS * DAY) continue;
     if (seriesKey(m, typeOf(m)) !== key) continue;
     if (!best || m.startedAt > best.startedAt) best = m;
+    if (m.items?.actions?.length && (!bestWithActions || m.startedAt > bestWithActions.startedAt)) bestWithActions = m;
   }
-  return best;
+  return bestWithActions || best;
 }
 
 export const openActions = (items) => (Array.isArray(items?.actions) ? items.actions : []).filter((a) => a && a.status !== 'done');
@@ -66,7 +68,8 @@ export function carryText(prevMeeting, open) {
 // "Done" | "Open" | "Not mentioned" in any wording a model might use -> 'done' | 'open' | 'not mentioned'
 export function normStatus(s) {
   const t = String(s || '').toLowerCase();
-  if (/not\s+(yet\s+)?(done|complete|finished|closed)/.test(t)) return 'open';
+  // the open and negative wordings first: "Incomplete" and "Partially done" contain "complete" and "done"
+  if (/\b(un(resolved|finished|done)|incomplete|not\s+(yet\s+)?(done|complete|completed|finished|closed)|partial(ly)?|pending|to\s+be\s+(done|completed|finished)|open|in\s+progress|ongoing)\b/.test(t)) return 'open';
   if (/not\s+mention|no\s+mention|not\s+discussed|not\s+raised|unmention/.test(t)) return 'not mentioned';
   if (/done|complete|finished|closed|resolved/.test(t)) return 'done';
   if (/open|pending|progress|still|ongoing|blocked|delayed/.test(t)) return 'open';
@@ -185,4 +188,21 @@ export function keepStatuses(items, current) {
     return { ...rest, status: c.status || 'open', ...(c.doneAt != null ? { doneAt: c.doneAt } : {}), ...(c.doneBy != null ? { doneBy: c.doneBy } : {}) };
   });
   return { ...items, actions };
+}
+
+// The items after a review: actions reported done become done (doneBy = the meeting that closed them). null = nothing changes.
+export function reviewItems(items, done, byId) {
+  const before = items?.actions || [];
+  const next = applyReview(items, done);
+  const was = new Map(before.map((a) => [a.id, a.status]));
+  next.actions = next.actions.map((a) => (a.status === 'done' && was.get(a.id) !== 'done' ? { ...a, doneBy: byId } : a));
+  return next.actions.some((a, i) => a.status !== before[i]?.status) ? next : null;
+}
+
+// The items after one action is ticked or reopened (a person reopening it is no longer "closed by a meeting"). null = no such action.
+export function tickItems(items, actionId, done) {
+  if (!items?.actions?.some((a) => a.id === actionId)) return null;
+  const next = setActionStatus(items, actionId, done ? 'done' : 'open');
+  if (!done) next.actions = next.actions.map((a) => { if (a.id !== actionId) return a; const { doneBy: _b, ...rest } = a; return rest; });
+  return next;
 }

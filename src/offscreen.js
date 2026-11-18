@@ -167,6 +167,7 @@ function setupScreen({ videoStream, settings, meetingId, getRec, dbgNote }) {
   const watcher = new ScreenWatcher({
     video,
     everySec: settings.screenNotesEverySec,
+    onGiveUp: (why) => dbgNote(`screen notes: stopped for this recording because the request cannot succeed (${why}); no more pictures are sent`),
     // nothing is asked while every general Gemini model is over its limit, once the model has shown it cannot see pictures, or
     // when asking would eat into what the minutes need (see visionBudget)
     budgetOk: async () => {
@@ -377,28 +378,30 @@ async function startInner(r, gone, { streamId, settings, meetingId }) {
     r.mixer = new Mixer((blk, meta) => mixChunker.push(blk, meta));
   }
   r.chunkers.others = mixed ? new Meter() : new Chunker('others', onChunk, chunkSize(settings, onSkip));
+  // The callbacks hold THIS recording, not the global: a new recording that starts while this one is still being torn down
+  // must not be fed this one's last blocks.
   await tap(ctx, tabStream, (b) => {
+    if (rec !== r) return;
     // Paused: the clock keeps running (so times stay right) but only silence goes on, and silence is never sent anywhere.
-    const blk = rec?.paused ? new Float32Array(b.length) : b;
-    rec?.chunkers.others.push(blk);
-    rec?.mixer?.pushTab(blk);
-    rec?.voice?.tracker.push(blk);
+    const blk = r.paused ? new Float32Array(b.length) : b;
+    r.chunkers.others.push(blk);
+    r.mixer?.pushTab(blk);
+    r.voice?.tracker.push(blk);
   });
   await gone();
   if (micStream) {
     r.chunkers.me = mixed ? new Meter() : new Chunker('me', onChunk, chunkSize(settings, onSkip));
     // While the mic is paused, feed silence so timestamps stay aligned.
     await tap(ctx, micStream, (b) => {
-      if (rec) {
-        let pk = 0;
-        for (let i = 0; i < b.length; i += 8) pk = Math.max(pk, Math.abs(b[i]));
-        rec.micRawPeak = Math.max(rec.micRawPeak || 0, pk);
-        rec.micRawBlocks = (rec.micRawBlocks || 0) + 1;
-      }
-      const blk = rec?.micOn && !rec.paused ? b : new Float32Array(b.length);
-      rec?.chunkers.me?.push(blk);
-      rec?.mixer?.pushMic(blk);
-      rec?.voice?.trackerMic?.push(blk);
+      if (rec !== r) return;
+      let pk = 0;
+      for (let i = 0; i < b.length; i += 8) pk = Math.max(pk, Math.abs(b[i]));
+      r.micRawPeak = Math.max(r.micRawPeak || 0, pk);
+      r.micRawBlocks = (r.micRawBlocks || 0) + 1;
+      const blk = r.micOn && !r.paused ? b : new Float32Array(b.length);
+      r.chunkers.me?.push(blk);
+      r.mixer?.pushMic(blk);
+      r.voice?.trackerMic?.push(blk);
     });
     await gone();
   }
@@ -438,6 +441,15 @@ async function startInner(r, gone, { streamId, settings, meetingId }) {
   // Live input levels for the popup meter (0 = dead/silent source).
   r.levelTimer = setInterval(() => {
     if (!rec) return;
+    // Chrome can suspend an audio context mid-meeting (it is reported): a suspended one records nothing. Try once, and say what came of it.
+    if (!rec.resumeTried && (rec.ctx.state === 'suspended' || rec.playCtx.state === 'suspended')) {
+      rec.resumeTried = true;
+      const was = `ctx=${rec.ctx.state} play=${rec.playCtx.state}`;
+      Promise.all([rec.ctx.resume(), rec.playCtx.resume()]).then(
+        () => dbgNote(`audio was suspended mid-meeting (${was}); resume() -> ctx=${rec?.ctx.state} play=${rec?.playCtx.state}`),
+        (e) => dbgNote(`audio was suspended mid-meeting (${was}); resume() failed: ${e?.message || e}`)
+      );
+    }
     chrome.runtime.sendMessage({
       target: 'bg',
       type: 'level',
@@ -489,6 +501,8 @@ useStore({
   listMeetingMetas: (opts) => viaBg({ op: 'listMeetingMetas', opts }),
   getMeetingMeta: (id, opts) => viaBg({ op: 'getMeetingMeta', id, opts }),
   appendMeeting: (id, list, items) => viaBg({ op: 'appendMeeting', id, list, items }),
+  setActionStatus: (id, actionId, status) => viaBg({ op: 'setActionStatus', id, actionId, status }), // a tick is read and written under the meeting's lock
+  applyReview: (id, done, by) => viaBg({ op: 'applyReview', id, done, by }),
   saveMinutes: (id, fields) => viaBg({ op: 'saveMinutes', id, fields }), // the minutes and the action ticks in one update, so a tick made meanwhile is kept
 });
 const jobs = createJobRunner({

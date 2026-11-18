@@ -7,7 +7,15 @@ export function modal({ title = '', text = '', input = null, select = null, butt
     dlg.className = 'dbmodal';
     const h = document.createElement('div');
     h.style.cssText = 'white-space:pre-wrap;line-height:1.6;font-size:14.5px;color:var(--text)';
-    h.textContent = [title, text].filter(Boolean).join('\n\n');
+    h.textContent = text;
+    // a dialog opens with its title as a heading (and is named by it); one without a title is named by its text
+    if (title) {
+      const t = document.createElement('h2');
+      t.textContent = title;
+      t.id = `dbmTitle${Math.random().toString(36).slice(2, 8)}`;
+      dlg.setAttribute('aria-labelledby', t.id);
+      dlg.append(t);
+    }
     dlg.append(h);
     let inp = null;
     let sel = null;

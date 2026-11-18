@@ -9,7 +9,8 @@ import { cleanTitle } from './adapters/pillrules.js';
 import { stuckJobs } from './jobstate.js';
 import { postIfPermitted } from './webhook.js';
 import { purgeOld } from './audiokeep.js';
-import { keepStatuses } from './actions.js';
+import { purgePendingOld } from './audiostore.js';
+import { keepStatuses, tickItems, reviewItems } from './actions.js';
 import { SCHEMA, getSettings, setSetting, sttReady, getMeeting, getMeetingMeta, listMeetingMetas, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, CAPS, deleteMeeting, addMeetingId, getState, setState, saveVoices, plain, findTyped, getBlockedVoices, getEmailNames, mergeEmailNames } from './store.js';
 
 // First install: show the guided tour. (Updates stay quiet; the popup has a Take the tour link.)
@@ -179,11 +180,13 @@ async function shortcutText() {
 // service-worker restart it is read back from the meeting, so at most the last 15 s of sightings can be lost.
 const SCREEN_NOTES_MAX = 400; // screen notes kept per meeting
 const PRESENCE_EVERY_MS = 15000;
+const NAMES_MAX = 300; // names kept per meeting from the page's participant list
+const NAME_MAX = 60;
 let pres = null; // { id, map, dirty, at, timer, ready }
 async function presenceFor(id) {
   if (pres?.id !== id) {
-    const p = { id, map: {}, dirty: false, at: 0, timer: null };
-    p.ready = getMeetingMeta(id, { counts: [] }).then((m) => (p.map = { ...(m?.presence || {}) }), () => {});
+    const p = { id, map: Object.create(null), dirty: false, at: 0, timer: null }; // no prototype: a participant can be named __proto__ or constructor
+    p.ready = getMeetingMeta(id, { counts: [] }).then((m) => (p.map = Object.assign(Object.create(null), m?.presence || {})), () => {});
     if (pres) flushPresence(pres).catch(() => {});
     pres = p;
   }
@@ -298,13 +301,22 @@ chrome.runtime.onStartup?.addListener(() => resumeJobs().catch(() => {}));
 // Kept recordings older than "Delete kept recordings after" go when the worker starts (a browser start, or the worker
 // waking for an event), at most every 6 hours, as well as when a recording starts. IndexedDB works here; no alarm needed.
 const PURGE_EVERY_MS = 6 * 3600 * 1000;
-export async function purgeKeptAudio(now = Date.now()) {
+export const PENDING_KEEP_DAYS = 30; // audio pieces that failed to transcribe are dropped after this long
+export async function purgeKeptAudio(now = Date.now(), { force = false } = {}) {
   const { keptPurgedAt = 0 } = await chrome.storage.session.get('keptPurgedAt');
-  if (now - keptPurgedAt < PURGE_EVERY_MS) return null;
-  await chrome.storage.session.set({ keptPurgedAt: now });
+  if (!force && now - keptPurgedAt < PURGE_EVERY_MS) return null;
   const { keepAudioDays } = await getSettings();
-  return purgeOld(keepAudioDays, now);
+  const n = await purgeOld(keepAudioDays, now);
+  await purgePendingOld(PENDING_KEEP_DAYS, now).catch(() => {});
+  await chrome.storage.session.set({ keptPurgedAt: now }); // only after the purge worked: a failed one is tried again at the next wake
+  return n;
 }
+// Shortening "Delete kept recordings after" takes effect now, not at the next 6-hour slot.
+try {
+  chrome.storage.onChanged?.addListener((c, area) => {
+    if (area === 'local' && c.settings && c.settings.newValue?.keepAudioDays !== c.settings.oldValue?.keepAudioDays) purgeKeptAudio(Date.now(), { force: true }).catch(() => {});
+  });
+} catch {}
 purgeKeptAudio().catch(() => {});
 
 let starting = false;
@@ -326,6 +338,7 @@ async function startInner(msg) {
   // Online meeting or a room: the user's choice in the popup, else decided by the link of the tab.
   const room = roomFor(msg.url, msg.room);
   const id = `m${Date.now()}`;
+  await addMeetingId(id); // listed before the record is written: a record nobody lists would be invisible and never resumed
   await saveMeeting({
     id,
     room,
@@ -338,7 +351,6 @@ async function startInner(msg) {
     mom: '',
     stt: settings.sttProvider,
   });
-  await addMeetingId(id);
 
   await ensureOffscreen();
   const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'start', streamId: msg.streamId, settings: { ...settings, roomMode: room, captureMic: settings.captureMic || room }, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
@@ -534,7 +546,7 @@ async function autoStop(reason) {
 export const PAGE_MAY = new Set(['window-fullscreen', 'whoami', 'meet-mute', 'meet-ended', 'meet-snap', 'in-call', 'pill-state', 'mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'pause', 'notice-result', 'presenting', 'nudge-dismiss', 'set-nudge']);
 // ...and of those, the ones that change the recording: only from the tab being recorded (another meeting tab, or a
 // second meeting site open beside it, must not stop, discard or unmute it).
-export const RECORDED_TAB_ONLY = new Set(['mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'pause']);
+export const RECORDED_TAB_ONLY = new Set(['mic', 'stop', 'discard', 'set-follow', 'dismiss-alert', 'pause', 'meet-mute']);
 
 // Who sent a message. A content script has sender.tab and the URL of the page (or frame) it runs in. Debrief's own pages
 // have a chrome-extension:// URL of this extension: in a tab of their own, as the floating panel's frame inside a page
@@ -557,7 +569,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     mic: () => applyMic({ micWanted: !!msg.on }),
     pause: () => setPaused(typeof msg.on === 'boolean' ? msg.on : undefined),
     'mic-refresh': () => applyMic(),
-    'meet-mute': () => applyMic({ meetMuted: msg.muted }),
+    'meet-mute': () => (typeof msg.muted === 'boolean' || msg.muted === null ? applyMic({ meetMuted: msg.muted }) : Promise.resolve({ ok: false })),
     whoami: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
     level: async () => {
       await chrome.storage.session.set({ levels: { tab: msg.tab, mic: msg.mic, ctx: msg.ctx, at: Date.now() } });
@@ -607,6 +619,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.op === 'appendMeeting') return { ok: true, value: await appendMeeting(msg.id, msg.list, msg.items || []) };
       // the minutes and the action ticks in one update under the lock, so a tick made while the model was writing is kept
       if (msg.op === 'saveMinutes') return { ok: true, value: await updateMeetingMeta(msg.id, (m) => Object.assign(m, msg.fields?.items ? { ...msg.fields, items: keepStatuses(msg.fields.items, m.items) } : msg.fields || {})) };
+      // an action ticked, or a carried action closed by a later meeting: read and write under the meeting's lock
+      if (msg.op === 'setActionStatus') {
+        let found = false;
+        const r = await updateMeetingMeta(msg.id, (m) => {
+          const next = tickItems(m.items, msg.actionId, msg.status === 'done');
+          if (next) [found, m.items] = [true, next];
+        });
+        return { ok: true, value: r !== null && found };
+      }
+      if (msg.op === 'applyReview')
+        return {
+          ok: true,
+          value: await updateMeetingMeta(msg.id, (m) => {
+            const next = reviewItems(m.items, Array.isArray(msg.done) ? msg.done : [], msg.by);
+            if (next) m.items = next;
+          }),
+        };
       // today's request counts and learned limits, so screen notes can leave room for the minutes
       if (msg.op === 'usage') return { ok: true, value: await chrome.storage.local.get(['usage', 'learnedLimits']) };
       if (msg.op === 'mergeEmailNames') return { ok: true, value: await mergeEmailNames(msg.found) };
@@ -703,14 +732,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const st = await getState();
       if (!st.recording || sender.tab?.id !== st.tabId) return { ok: false };
       const me = (await getSettings()).myName;
-      const who = (n) => (/^you$/i.test(n) && me ? me : n);
-      const names = (msg.names || []).filter((x) => !isIconText(x) && !isMenuText(x));
+      // names come from the page: text only, short, and few
+      const who = (n) => String(/^you$/i.test(n) && me ? me : n ?? '').slice(0, NAME_MAX);
+      const names = (Array.isArray(msg.names) ? msg.names : []).filter((x) => typeof x === 'string' && !isIconText(x) && !isMenuText(x)).slice(0, NAMES_MAX);
       if (names.length) {
         // Someone absent from this sample may just be off-screen, so only the last time seen of those present is extended.
         const p = await presenceFor(st.meetingId);
         for (const n of names) {
           const k = who(n);
+          if (!k) continue;
           const v = p.map[k];
+          if (!v && Object.keys(p.map).length >= NAMES_MAX) continue;
           if (v) {
             v[1] = msg.t;
             v[2] = (v[2] || 0) + 1;
@@ -718,7 +750,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         await presenceChanged(p);
       }
-      const incoming = (msg.captions || []).filter((c) => c && typeof c.text === 'string');
+      const incoming = (Array.isArray(msg.captions) ? msg.captions : []).filter((c) => c && typeof c.text === 'string');
       // A caption that grows (Meet rewrites the current sentence as it is heard) replaces its earlier version when that is
       // among the last 40 lines of the newest chunk; otherwise it is a new line. Only that chunk is rewritten.
       if (incoming.length)

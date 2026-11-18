@@ -40,8 +40,10 @@ async function anthropic({ settings, system, user, onText, signal, temperature, 
   let tout = 0;
   let stop = '';
   let category = '';
+  let stopped = false;
   await readSse(res, (ev) => {
-    if (ev.type === 'message_start') tin = ev.message?.usage?.input_tokens || 0;
+    if (ev.type === 'message_stop') stopped = true;
+    else if (ev.type === 'message_start') tin = ev.message?.usage?.input_tokens || 0;
     else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta' && ev.delta.text) {
       text += ev.delta.text;
       onText(ev.delta.text);
@@ -53,6 +55,11 @@ async function anthropic({ settings, system, user, onText, signal, temperature, 
   });
   record({ provider: 'anthropic', model, kind: 'llm', req: 1, tin, tout });
   if (stop === 'refusal') throw new Error(`Claude declined this request${category ? ` (${category})` : ''}.`);
+  if (!stopped && stop !== 'max_tokens') {
+    // the stream ended without message_stop: the reply is incomplete
+    onMeta?.({ truncated: true });
+    if (!onMeta && !json) return `${text}\n\n_(The reply ended early and may be incomplete.)_`;
+  }
   if (stop === 'max_tokens') {
     onMeta?.({ truncated: true });
     // a caller that hears it says so itself, and a note inside JSON would end up in the last item
@@ -75,10 +82,14 @@ async function readSse(res, onEvent) {
       buf = buf.slice(i + 1);
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
-      if (data === '[DONE]') return;
+      if (data === '[DONE]') return true;
+      let ev;
       try {
-        onEvent(JSON.parse(data));
-      } catch {}
+        ev = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      onEvent(ev); // outside the try: an error event's throw must reach the caller
     }
   }
 }
@@ -128,14 +139,17 @@ async function openaiCompat({ settings, system, user, onText, signal, temperatur
   if (!res.ok) throw await httpError(res, 'LLM');
   let text = '';
   let cut = false;
-  await readSse(res, (ev) => {
+  let finished = false;
+  const done = await readSse(res, (ev) => {
     const d = ev.choices?.[0]?.delta?.content;
     if (d) {
       text += d;
       onText(d);
     }
+    if (ev.choices?.[0]?.finish_reason) finished = true;
     if (ev.choices?.[0]?.finish_reason === 'length') cut = true;
   });
+  if (!finished && !done && text) cut = true; // OpenAI-style servers end a whole reply with a finish reason or [DONE]
   if (cut) onMeta?.({ truncated: true });
   return text;
 }
@@ -163,8 +177,10 @@ async function gemini({ settings, system, user, onText, signal, temperature, jso
   let text = '';
   let usage = null;
   let cut = false;
+  let finished = false;
   await readSse(res, (ev) => {
     if (ev.usageMetadata) usage = ev.usageMetadata;
+    if (ev.candidates?.[0]?.finishReason) finished = true;
     if (ev.candidates?.[0]?.finishReason === 'MAX_TOKENS') cut = true;
     for (const p of ev.candidates?.[0]?.content?.parts || []) {
       if (p.text && !p.thought) {
@@ -174,6 +190,7 @@ async function gemini({ settings, system, user, onText, signal, temperature, jso
     }
   });
   if (usage) record({ provider: 'gemini', model, kind: 'llm', tin: usage.promptTokenCount, tout: (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0) });
+  if (!finished && text) cut = true;
   if (cut) onMeta?.({ truncated: true });
   return text;
 }

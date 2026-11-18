@@ -5,8 +5,15 @@ import { chunkSecs } from './chunker.js';
 
 const FIELDS = ['req', 'fail', 'rl', 'tin', 'tout', 'audioSec'];
 
+// One formatter for every call: building one per call made nextQuotaReset create about 1500 of them.
+const PACIFIC_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' });
 export function dayKey(date = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(date);
+  return PACIFIC_DAY.format(date);
+}
+// The calendar day `n` days from a "YYYY-MM-DD" key, by calendar arithmetic (a day is not always 24 hours across a clock change).
+export function shiftDay(key, n) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
 const rowKey = (e) => `${e.provider}|${e.model || '-'}|${e.kind}`;
@@ -35,8 +42,9 @@ export function addEntry(usage, e, now = new Date()) {
 // Totals per provider/model/kind over the last `days` days (1 = today).
 export function summarize(usage, days = 1, now = new Date()) {
   const out = {};
-  for (let i = 0; i < days; i++) {
-    const rows = (usage || {})[dayKey(new Date(now.getTime() - i * 86400000))] || {};
+  let key = dayKey(now);
+  for (let i = 0; i < days; i++, key = shiftDay(key, -1)) {
+    const rows = (usage || {})[key] || {};
     for (const [key, r] of Object.entries(rows)) {
       const [provider, model, kind] = key.split('|');
       const t = (out[key] ||= { provider, model, kind, req: 0, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0 });
@@ -177,7 +185,11 @@ export function rupees(usd, usdInr = DEFAULT_USD_INR) {
 // When the daily quota resets: midnight Pacific. Returns the moment as milliseconds.
 export function nextQuotaReset(now = Date.now()) {
   const today = dayKey(new Date(now));
-  for (let t = now + 60000; t < now + 26 * 3600000; t += 60000) if (dayKey(new Date(t)) !== today) return t;
+  // by the hour to the first hour that is another day, then by the minute inside it
+  for (let h = now + 3600000; h < now + 27 * 3600000; h += 3600000) {
+    if (dayKey(new Date(h)) === today) continue;
+    for (let t = h - 3600000 + 60000; t <= h; t += 60000) if (dayKey(new Date(t)) !== today) return t;
+  }
   return now + 12 * 3600000;
 }
 

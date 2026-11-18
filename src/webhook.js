@@ -128,7 +128,20 @@ const isChatHook = (url) => {
   }
 };
 
-const line = (s) => scrub(s).replace(/\s+/g, ' ').trim();
+// One line of a Slack/Teams digest. The text comes from a meeting, so it must not be able to ping a channel, make a
+// link that says one thing and goes elsewhere, or be read as chat markup: mentions and <...> tokens are dropped
+// (Slack's <url|label> keeps its label), Markdown links keep only their visible text, and & < > are entities.
+const line = (s) =>
+  scrub(s)
+    .replace(/<![^>]*>/g, '')
+    .replace(/<[^<>|\s]+\|([^<>]*)>/g, '$1')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(^|[^\w])@(?:channel|here|everyone)\b/gi, '$1')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\s+/g, ' ')
+    .trim();
 const CAP = 3500;
 
 // Slack and Teams incoming webhooks take { text }: a short plain-text digest of the minutes.

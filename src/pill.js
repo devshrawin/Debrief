@@ -57,7 +57,9 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .mic svg { width:14px; height:14px; flex:none; }
   .mic.on { background:#30d158; color:#05210f; }
   .mic.off { background:rgba(255,255,255,.10); border-color:var(--line); color:var(--dim); }
-  .mic.paused { background:#ffb340; color:#241500; }
+  .mic.paused, .mic.muted { background:#ffb340; color:#241500; } /* mic held by the call mute: saffron, like the paused state */
+  .toggle { display:flex; align-items:center; gap:10px; min-height:32px; margin:0; padding:0; border:0; border-radius:999px; background:none; color:inherit; font:inherit; line-height:1; cursor:inherit; white-space:nowrap; }
+  .toggle:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
 
   .panel { width:288px; padding:14px 16px 16px; border-radius:20px; color:var(--ink);
     background:var(--glass-thick); -webkit-backdrop-filter:blur(36px) saturate(180%); backdrop-filter:blur(36px) saturate(180%);
@@ -181,6 +183,9 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   let expanded = false;
   let lastSentMute;
   let panelSig = '';
+  let toggle; // the button inside the capsule that opens the details
+  let discardArmed = false; // "Tap again" stays armed across rebuilds of the panel
+  let discardTimer = 0;
   let lastStatus = '';
   let card; // the small card for the record reminder and for a recording notice that could not be posted
   let cardSig = '';
@@ -243,11 +248,13 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'Recording details');
     panel.tabIndex = -1;
+    // The capsule is a draggable box that holds two real buttons side by side: the one that opens the details, and the mic
+    // switch. (The box itself is not a button: a button must not contain another.)
     pill = el('div', 'pill');
-    pill.setAttribute('role', 'button');
-    pill.tabIndex = 0;
-    pill.setAttribute('aria-expanded', 'false');
-    pill.setAttribute('aria-controls', 'dbPanel');
+    toggle = el('button', 'toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', 'dbPanel');
     status = el('span', 'sr');
     status.setAttribute('role', 'status');
     const dot = el('span', 'rd');
@@ -260,7 +267,8 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     warnChip = el('span', 'warn-chip');
     micBtn = el('button', 'mic');
     micBtn.type = 'button';
-    pill.append(dot, eq, silentMsg, timeEl, warnChip, micBtn);
+    toggle.append(dot, eq, silentMsg, timeEl, warnChip);
+    pill.append(toggle, micBtn);
     wrap.append(status, card, panel, pill);
     root.append(style, wrap);
     document.documentElement.appendChild(host);
@@ -272,12 +280,9 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
       await load();
       render();
     });
-    pill.addEventListener('keydown', (e) => {
-      if (e.target !== pill) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        setExpanded(!expanded);
-      }
+    // a mouse press is handled by the drag code on the capsule; only a keyboard press (click with no pointer: detail 0) toggles here
+    toggle.addEventListener('click', (e) => {
+      if (e.detail === 0) setExpanded(!expanded);
     });
     drag(pill);
     // The panel belongs to a click: a click elsewhere on the page, or Escape, closes it again.
@@ -287,7 +292,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     document.addEventListener('keydown', (e) => {
       if (expanded && e.key === 'Escape') {
         setExpanded(false);
-        pill.focus();
+        toggle.focus();
       }
     }, true);
     // Full screen: the pill follows the page into it (an element outside the full-screen element is not drawn),
@@ -345,23 +350,30 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   }
 
   const label = (v) => (v == null ? 'Off' : v < 0.003 ? 'Silent' : v < 0.012 ? 'Quiet' : 'Good');
+  // Draws one level into a meter that already exists (the meters are updated in place, so the panel is not rebuilt for them).
+  function paintMeter(box, v, text) {
+    const word = text || label(v);
+    const pct = v == null ? 0 : Math.min(100, Math.round(Math.sqrt(v) * 160));
+    const b = box.querySelector('.m');
+    const f = b.querySelector('i');
+    box.querySelector('.w').textContent = word;
+    b.setAttribute('aria-valuenow', String(pct));
+    b.setAttribute('aria-valuetext', word);
+    f.className = v != null && v < 0.012 ? 'q' : '';
+    f.style.width = pct + '%';
+  }
   function meter(name, v, text) {
     const box = el('div', 'meter');
     const top = el('div', 'top');
-    const word = text || label(v);
-    top.append(el('span', null, name), el('span', 'w', word));
+    top.append(el('span', null, name), el('span', 'w'));
     const b = el('div', 'm');
-    const pct = v == null ? 0 : Math.min(100, Math.round(Math.sqrt(v) * 160));
     b.setAttribute('role', 'meter');
     b.setAttribute('aria-label', name);
     b.setAttribute('aria-valuemin', '0');
     b.setAttribute('aria-valuemax', '100');
-    b.setAttribute('aria-valuenow', String(pct));
-    b.setAttribute('aria-valuetext', word);
-    const f = el('i', v != null && v < 0.012 ? 'q' : '');
-    f.style.width = pct + '%';
-    b.append(f);
+    b.append(el('i'));
     box.append(top, b);
+    paintMeter(box, v, text);
     return box;
   }
 
@@ -464,9 +476,9 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     micBtn.title = micTitle;
     micBtn.setAttribute('aria-label', 'Microphone: ' + micBtn.textContent.trim() + '. ' + (rec.mic ? 'Click to change' : 'Not available'));
 
-    pill.setAttribute('aria-expanded', String(expanded));
+    toggle.setAttribute('aria-expanded', String(expanded));
     pill.classList.toggle('open', expanded);
-    pill.setAttribute('aria-label', `Debrief recording, ${timeEl.textContent}. ${expanded ? 'Hide' : 'Show'} details`);
+    toggle.setAttribute('aria-label', `Debrief recording, ${timeEl.textContent}. ${expanded ? 'Hide' : 'Show'} details`);
     // Announce only changes of state, never the ticking timer.
     const say = alert ? alert.title : isPaused ? 'Recording is paused' : !fresh ? 'No audio is arriving' : 'Debrief is recording';
     if (say !== lastStatus) {
@@ -481,8 +493,14 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
       return;
     }
     // Rebuild the card only when something visible changed, so clicks are never swallowed.
-    const sig = JSON.stringify([peak > 0 ? Math.round(lv.tab * 1000) : 0, fresh && rec.micOn ? Math.round((lv.mic || 0) * 1000) : -1, S.counts, alert?.at, !!fresh, !!rec.mic, !!wanted, !!paused, isPaused]);
-    if (sig === panelSig) return;
+    // (the level meters are not part of it: they change every second while someone speaks, and are updated in place)
+    const sig = JSON.stringify([S.counts, alert?.at, !!fresh, !!rec.mic, !!wanted, !!paused, isPaused]);
+    if (sig === panelSig) {
+      const ms = panel.querySelectorAll('.meter');
+      if (ms[0]) paintMeter(ms[0], fresh ? lv.tab : null);
+      if (ms[1] && rec.mic && wanted && !paused) paintMeter(ms[1], fresh ? lv.mic : null);
+      return;
+    }
     panelSig = sig;
     const active = panel.getRootNode().activeElement;
     const keep = active && panel.contains(active) ? active.dataset.k : null;
@@ -558,15 +576,23 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     const discard = el('button', 'stop');
     discard.type = 'button';
     discard.dataset.k = 'discard';
-    discard.textContent = 'Started by mistake? Discard';
+    discard.textContent = discardArmed ? 'Tap again to delete it' : 'Started by mistake? Discard';
     discard.style.cssText = 'background:none;box-shadow:none;color:var(--dim);font-size:12px;text-decoration:underline;min-height:28px;opacity:.85';
     discard.onclick = () => {
-      if (discard.dataset.sure !== '1') {
-        discard.dataset.sure = '1';
+      if (!discardArmed) {
+        // the armed state lives here, not on the button: the panel is rebuilt whenever something visible changes
+        discardArmed = true;
         discard.textContent = 'Tap again to delete it';
-        setTimeout(() => { discard.dataset.sure = ''; discard.textContent = 'Started by mistake? Discard'; }, 5000);
+        clearTimeout(discardTimer);
+        discardTimer = setTimeout(() => {
+          discardArmed = false;
+          const b = panel.querySelector('[data-k="discard"]');
+          if (b) b.textContent = 'Started by mistake? Discard';
+        }, 5000);
         return;
       }
+      discardArmed = false;
+      clearTimeout(discardTimer);
       send({ type: 'discard' });
     };
     panel.append(discard);

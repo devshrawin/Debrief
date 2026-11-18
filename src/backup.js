@@ -4,9 +4,8 @@
 //
 // Audio is not part of a backup: pieces that failed to transcribe and kept voice clips are in IndexedDB on this computer.
 
-import { DEFAULTS, SCHEMA, ensureMigrated, migrateSettings, migrateSettings3, deleteMeeting, getState } from './store.js';
+import { DEFAULTS, SCHEMA, ensureMigrated, migrateSettings, migrateSettings3, deleteMeetingAndStop, editMeetingIds, getState } from './store.js';
 import { LISTS, CAPS, plain, getMeeting, listMeetings, listMeetingMetas, saveMeeting } from './meetingstore.js';
-import { isActive } from './jobstate.js';
 import { validWebhook } from './webhook.js';
 
 export const BACKUP_VERSION = 1;
@@ -40,10 +39,25 @@ export const ROUTING_LABELS = {
   consentText: 'Notice posted in the meeting chat',
   screenNotes: 'Send pictures of the shared screen to the minutes service',
   voiceModelUrl: 'Speaker model download address',
+  // what is kept or captured on this computer
+  keepAudio: 'Keep recordings on this computer',
+  keepAudioDays: 'Keep recordings for (days)',
+  voiceLearn: 'Learn voices on its own',
+  voiceSamples: 'Keep a short clip of each unnamed voice',
+  voiceOn: 'Recognise who is speaking',
+  autoStop: 'Stop recording by itself when the meeting is over',
+  autoStopQuietMin: 'Stop recording after this many silent minutes',
+  meetCaptions: "Read speaker names from Meet's captions",
+  captureMic: 'Record your own microphone',
+  recordNudge: 'Remind me to record when a call matches a meeting type',
+  // not a setting: the keys in a file. Audio and text would go to whoever owns them.
+  apiKeys: 'Use the API keys from this file',
 };
 export const ROUTING_SETTINGS = Object.keys(ROUTING_LABELS);
 // A server address and the key that is sent to it: a new address from a file never gets the key that is here.
 const KEY_FOR = { sttBase: 'sttKey', oaBase: 'oaKey', emailWebhook: 'emailSecret' };
+// Keys that are only taken from a file when the person ticks 'apiKeys' (the ones tied to a server address included).
+const FILE_KEYS = ['geminiKey', 'geminiBackups', 'sarvamKey', 'deepgramKey', 'anthropicKey', 'oaKey', 'sttKey', 'emailSecret'];
 const URL_SETTINGS = ['sttBase', 'oaBase', 'webhookUrl', 'emailWebhook', 'voiceModelUrl'];
 export const UI_PREFS = ['uiTheme', 'uiMotion', 'uiSolid', 'uiEffects', 'uiPanel'];
 export const LIMITS = { meetings: 5000, string: 20 * 1024 * 1024, voices: 1000 };
@@ -157,9 +171,11 @@ function cleanMeeting(raw, warnings) {
   m.errors ||= [];
   if (typeof m.title !== 'string') m.title = 'Meeting';
   if (!Number.isFinite(m.startedAt)) m.startedAt = 0;
-  // a job that was running when the backup was made has no runner here: never resume it (and never send its email)
-  if (isActive(m)) m.job = { ...(isObj(m.job) ? m.job : {}), state: m.mom ? 'done' : 'failed', error: m.mom ? null : 'Imported from a backup before the minutes were written.', beat: 0 };
-  delete m.emailSending;
+  // who gets mail is decided here, never by a file: the sharing and sending fields are dropped
+  for (const k of ['shareTo', 'shareHeld', 'shareStatus', 'sharedTo', 'sharedAt', 'transcriptShare', 'transcriptMine', 'emailedTo', 'emailedAt', 'emailSending', 'webhookAt', 'webhookError']) delete m[k];
+  // nothing runs or sends by itself after a restore: no job is resumed or started when the meeting is opened
+  m.decided = true;
+  m.job = typeof m.mom === 'string' && m.mom.trim() ? { state: 'done' } : { state: 'failed', error: 'Imported from a backup: press Write minutes to write them.' };
   return m;
 }
 
@@ -214,6 +230,8 @@ export async function previewImport(data) {
     }
     routing.push({ key, label: ROUTING_LABELS[key], from: shown(key, here[key]), to: shown(key, to), origin: URL_SETTINGS.includes(key) && !isEmpty(to) ? originOf(to) : null });
   }
+  const newKeys = settings ? FILE_KEYS.filter((k) => !isEmpty(settings[k]) && isEmpty(here[k])) : [];
+  if (newKeys.length) routing.push({ key: 'apiKeys', label: ROUTING_LABELS.apiKeys, from: '(not set)', to: `${newKeys.length} key${newKeys.length === 1 ? '' : 's'} (hidden)`, origin: null });
   return {
     ok: true,
     meetings: Array.isArray(data.meetings) ? data.meetings.length : 0,
@@ -247,6 +265,7 @@ function mergeSettings(here, settings, { mode, accept, warnings }) {
       continue;
     }
     if (SECRET_SETTINGS.includes(k) && !isEmpty(here[k])) continue; // keys set here win, in both modes
+    if (FILE_KEYS.includes(k) && !accept.has('apiKeys')) continue; // a key from a file only when ticked
     if (mode === 'merge' && k in here && !same(here[k], DEFAULTS[k])) continue; // what is set here wins in a merge
     out[k] = v;
   }
@@ -254,9 +273,9 @@ function mergeSettings(here, settings, { mode, accept, warnings }) {
     const fileKey = settings[key];
     if (accepted.includes(base)) {
       // the address changed: the file's own key for it, else none
-      out[key] = isEmpty(fileKey) ? '' : fileKey;
-      if (isEmpty(fileKey) && !isEmpty(here[key])) warnings.push(KEY_CLEARED[base]);
-    } else if (!isEmpty(fileKey) && isEmpty(here[key])) out[key] = fileKey; // nothing set here: the file's key for the address that stays
+      out[key] = isEmpty(fileKey) || !accept.has('apiKeys') ? '' : fileKey;
+      if ((isEmpty(fileKey) || !accept.has('apiKeys')) && !isEmpty(here[key])) warnings.push(KEY_CLEARED[base]);
+    } else if (!isEmpty(fileKey) && isEmpty(here[key]) && accept.has('apiKeys')) out[key] = fileKey; // nothing set here: the file's key for the address that stays
   }
   return { settings: out, accepted };
 }
@@ -323,24 +342,23 @@ export async function importAll(data, { mode = 'merge', acceptRouting = [] } = {
 
   // ---- write ----
   await ensureMigrated();
-  const ids = async () => (await chrome.storage.local.get('meetingIds')).meetingIds || [];
   const incomingIds = new Set(incoming.map((m) => m.id));
   // replace: an old meeting with the id of a new one goes first (its records are rewritten); the others only after the new ones are saved
   const old = mode === 'replace' ? before.filter((m) => m.id !== live) : [];
-  for (const m of old) if (incomingIds.has(m.id)) await deleteMeeting(m.id);
+  for (const m of old) if (incomingIds.has(m.id)) await deleteMeetingAndStop(m.id);
   // every new id is listed before its record is written: a record that is not listed would be invisible
-  const listed = await ids();
-  await chrome.storage.local.set({ meetingIds: [...incoming.map((m) => m.id).filter((id) => !listed.includes(id)), ...listed] });
+  await editMeetingIds((listed) => [...incoming.map((m) => m.id).filter((id) => !listed.includes(id)), ...listed]);
   for (const m of incoming) await saveMeeting(m); // a new record: every list is written
-  for (const m of old) if (!incomingIds.has(m.id)) await deleteMeeting(m.id);
+  for (const m of old) if (!incomingIds.has(m.id)) await deleteMeetingAndStop(m.id);
   if (mode === 'replace' && live && before.some((m) => m.id === live)) warnings.push('The meeting being recorded now was kept.');
   // the list of meetings, newest first (the service worker looks at the newest ones for unfinished jobs); an id that was
   // added while this ran (a recording that started) stays, first
   const when = new Map([...before, ...incoming].map((m) => [m.id, m.startedAt || 0]));
-  const now = await ids();
-  const unknown = now.filter((id) => !when.has(id));
-  const known = [...new Set(now.filter((id) => when.has(id)))].sort((a, b) => when.get(b) - when.get(a));
-  await chrome.storage.local.set({ meetingIds: [...unknown, ...known] });
+  await editMeetingIds((now) => {
+    const unknown = now.filter((id) => !when.has(id));
+    const known = [...new Set(now.filter((id) => when.has(id)))].sort((a, b) => when.get(b) - when.get(a));
+    return [...unknown, ...known];
+  });
 
   const cur = await chrome.storage.local.get(['settings', 'voices', 'voiceBlock', 'emailNames', 'learned', 'usage', 'learnedLimits', ...UI_PREFS]);
   const out = {};

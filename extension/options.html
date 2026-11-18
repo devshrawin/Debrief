@@ -160,7 +160,7 @@
     .prow .who { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 
     /* Usage */
-    .page > .card.usage-card { padding: 0; gap: 0; }
+    .page > .card.usage-card { padding: 0; gap: 0; background: var(--surface-read); -webkit-backdrop-filter: none; backdrop-filter: none; } /* a table reads on an opaque surface */
     .usage-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 22px 12px; }
     .usage-scroll { overflow-x: auto; }
     #usageTable { min-width: 0; width: 100%; border-collapse: collapse; }
@@ -307,7 +307,7 @@
     .savebar.dirty .dot { background: var(--amber); }
     .savebar.saved .dot { background: var(--ok); }
     .savebar.bad .dot { background: var(--rec); }
-    .savebar #save[aria-disabled="true"] { background: var(--fill); color: var(--label-2); box-shadow: none; cursor: default; }
+    .savebar #save[aria-disabled="true"], .savebar #save:disabled { background: var(--fill); color: var(--label-2); box-shadow: none; cursor: default; opacity: 1; }
     #msg { flex: 0 1 auto; font-weight: 600; min-width: 0; white-space: nowrap; margin-right: 6px; }
     .savebar #save { flex: none; white-space: nowrap; min-height: 40px; padding: 0 22px; border-radius: var(--r-pill); }
     .savebar:not(.dirty):not(.saved):not(.bad) #msg { font-weight: 400; color: var(--muted); }
@@ -1068,7 +1068,7 @@
       <span class="dot" aria-hidden="true"></span>
       <span id="msg" role="status" aria-live="polite">All changes saved</span>
       <button type="button" id="undo" class="btn plain" hidden>Undo</button>
-      <button type="button" id="save" class="btn primary" aria-disabled="true">Save changes</button>
+      <button type="button" id="save" class="btn primary" disabled>Save changes</button>
     </div>
   </main>
 </div>

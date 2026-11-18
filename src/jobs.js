@@ -23,7 +23,7 @@ import { renderMd } from './md.js';
 import { attributeMixed } from './mixer.js';
 import { ACTIVE, isActive, STALE_MS, COUNTDOWN_MS, stuckJobs } from './jobstate.js';
 import { findGaps, mergeGaps } from './coverage.js';
-import { previousInSeries, openActions, applyReview, allOpenActions, setActionStatus, keepStatuses } from './actions.js';
+import { previousInSeries, openActions, applyReview, allOpenActions, setActionStatus, keepStatuses, reviewItems, tickItems } from './actions.js';
 import { guardAutoShare, splitRecipients, shareWarning, heldStatus } from './guard.js';
 import { runWebhook, validWebhook } from './webhook.js';
 
@@ -155,6 +155,7 @@ const GONE = { status: 'This meeting was deleted.', deleted: true };
 export async function emailMinutes({ meeting, settings, auto, patch, getLatest, ctxFor, notify = () => {}, note = '' }) {
   if (!meeting.mom?.trim()) return { status: 'No minutes to email yet.' };
   if (!mailReady(settings)) return { status: 'Email is not set up. Add the Apps Script URL in Settings.' };
+  let unsure = false; // the request may have been sent: emailSending stays set (see the catch)
   const run = async () => {
     if (auto) {
       const latest = await getLatest();
@@ -168,15 +169,24 @@ export async function emailMinutes({ meeting, settings, auto, patch, getLatest, 
     }
     const withTr = wantTranscript(meeting, settings, false);
     const mail = buildEmail(meeting, { ...settings, emailTranscript: withTr }, renderMd, withTr ? formatTranscript(meeting, settings.myName, ctxFor()) : '');
-    const r = await sendMail(mail, settings);
-    await patch({ emailedAt: Date.now(), emailedTo: r.to, emailSending: null });
+    unsure = true;
+    let r;
+    try {
+      r = await sendMail(mail, settings);
+    } catch (e) {
+      if (!e.unsure) unsure = false; // the relay answered "no" (or never got it): nothing went out
+      throw e;
+    }
+    await patch({ emailedAt: Date.now(), emailedTo: r.to, emailSending: null }); // if this fails the mail did go: emailSending stays
+    unsure = false;
     notify({ id: `debrief-mail-${meeting.id}`, title: 'Debrief: minutes emailed', message: `The minutes were sent.${note ? ` ${note}` : ''}` });
     return { status: `Emailed to ${r.to} ✓`, sent: true, to: r.to };
   };
   try {
     return typeof navigator !== 'undefined' && navigator.locks ? await navigator.locks.request(`debrief-email-${meeting.id}`, run) : await run();
   } catch (e) {
-    if (auto) await patch({ emailSending: null }).catch(() => {});
+    if (auto && !unsure) await patch({ emailSending: null }).catch(() => {});
+    if (unsure) return { status: `Email failed: ${e.message}. It may already have been sent. Check your inbox; press Email to send it again.`, failed: true, unsure: true };
     return { status: `Email failed: ${e.message}`, failed: true };
   }
 }
@@ -259,15 +269,21 @@ async function applyCarry(meeting, prep, review, io) {
   const ids = new Set(prep.carry.open.map((a) => a.id));
   const done = (review || []).filter((r) => ids.has(r.id));
   if (!done.length) return;
+  // read, change and write as one step where the store can (so a tick made meanwhile is not overwritten)
+  if (typeof io.updateMeetingMeta === 'function') {
+    await io.updateMeetingMeta(prep.prev.id, (m) => {
+      const next = reviewItems(m.items, done, meeting.id);
+      if (next) m.items = next;
+    });
+    return;
+  }
+  if (typeof io.applyReview === 'function') return void (await io.applyReview(prep.prev.id, done, meeting.id));
   let fresh = prep.prev;
   try {
     fresh = (await io.getMeetingMeta?.(prep.prev.id, { counts: [] })) || prep.prev; // the person may have changed it meanwhile
   } catch {}
-  const before = fresh.items?.actions || [];
-  const next = applyReview(fresh.items, done);
-  const was = new Map(before.map((a) => [a.id, a.status]));
-  next.actions = next.actions.map((a) => (a.status === 'done' && was.get(a.id) !== 'done' ? { ...a, doneBy: meeting.id } : a));
-  if (next.actions.some((a, i) => a.status !== before[i]?.status)) await io.patchMeeting(prep.prev.id, { items: next });
+  const next = reviewItems(fresh.items, done, meeting.id);
+  if (next) await io.patchMeeting(prep.prev.id, { items: next });
 }
 
 // Every open action of every meeting, for a list that spans meetings. [] when the store cannot list them.
@@ -278,10 +294,21 @@ export async function openActionsAcrossMeetings(opts) {
 
 // Marks one action done (or open again). Only the previous meeting's META changes.
 export async function setActionDone(meetingId, actionId, done) {
+  if (typeof IO.updateMeetingMeta === 'function') {
+    let found = false;
+    const r = await IO.updateMeetingMeta(meetingId, (m) => {
+      const next = tickItems(m.items, actionId, done);
+      if (next) {
+        m.items = next;
+        found = true;
+      }
+    });
+    return r !== null && found;
+  }
+  if (typeof IO.setActionStatus === 'function') return !!(await IO.setActionStatus(meetingId, actionId, done ? 'done' : 'open'));
   const m = await (IO.getMeetingMeta ? IO.getMeetingMeta(meetingId, { counts: [] }) : IO.getMeeting(meetingId));
-  if (!m?.items?.actions?.some((a) => a.id === actionId)) return false;
-  const next = setActionStatus(m.items, actionId, done ? 'done' : 'open');
-  if (!done) next.actions = next.actions.map((a) => { if (a.id !== actionId) return a; const { doneBy: _b, ...rest } = a; return rest; }); // a person reopening it: no longer "closed by a meeting"
+  const next = tickItems(m?.items, actionId, done);
+  if (!next) return false;
   await IO.patchMeeting(meetingId, { items: next });
   return true;
 }
@@ -320,6 +347,8 @@ async function storeMinutes(id, meeting, fields, patch, io) {
 // `ui` has onStatus(text) and onText(delta). Returns { text, stats }.
 export async function writeAndStore({ id, meeting, settings, reread = false, signal, ui, patch, cache, generate, io }) {
   io = { ...IO, ...io };
+  const notes0 = JSON.stringify(meeting.notes ?? null);
+  const attendees0 = JSON.stringify(meeting.attendees ?? null);
   const pending = await listPending(id);
   const ctx = nameCtxFor(meeting, settings, cache);
   const absent = matchPeople(meeting.invited, { ...(ctx.voicePresence || {}), ...(meeting.presence || {}) }, { entries: ctx.entries, myName: settings.myName }).rows.filter((r) => !r.present).map((r) => r.name); // names only: no addresses go to the model
@@ -351,7 +380,10 @@ export async function writeAndStore({ id, meeting, settings, reread = false, sig
   // only these names, so nothing unexpected (and never a transcript list) is written by accident
   const keep = Object.fromEntries(SAVED_WITH_MINUTES.filter((k) => written[k] !== undefined && written[k] !== null).map((k) => [k, written[k]]));
   const carriedFrom = prep ? { carriedFrom: { id: prep.prev.id, title: prep.prev.title || '', at: prep.prev.startedAt } } : {};
-  const fields = { mom: text, editedAt: null, model: modelLabel(settings), notes: meeting.notes, attendees: meeting.attendees, ...keep, ...carriedFrom };
+  const fields = { mom: text, editedAt: null, model: modelLabel(settings), ...keep, ...carriedFrom };
+  // notes and attendees go back only if this job changed them: an edit made while the minutes were written is not overwritten with the copy read at the start
+  if (JSON.stringify(meeting.notes ?? null) !== notes0) fields.notes = meeting.notes;
+  if (JSON.stringify(meeting.attendees ?? null) !== attendees0) fields.attendees = meeting.attendees;
   if (!(await storeMinutes(id, meeting, fields, patch, io))) return { text, stats, deleted: true }; // deleted meanwhile: the earlier meeting is left alone too
   if (prep && written.review?.length) {
     try {

@@ -189,6 +189,17 @@ export function rereadSpan(row) {
   return [Math.max(0, r1(t - 5)), r1(t + 40)];
 }
 
+// A long stretch is read again in at most this many one-minute requests (the first 30 minutes of it).
+export const MAX_REREAD_PARTS = 30;
+// What the "Read this part again" dialog says before anything is sent. `to` is the end that will be read, `rawTo` the end asked for.
+export function rereadNote(from, to, rawTo, requests, fmt = String) {
+  const n = Math.max(1, requests);
+  const base = `From ${fmt(from)} to ${fmt(to)}. The recording of this part is sent to your speech-to-text service again`;
+  const sends = n === 1 ? ' (one request).' : ` (about ${n} requests, one for each minute).`;
+  const cut = rawTo > to + 0.5 ? ` This part is longer than ${MAX_REREAD_PARTS} minutes, so only the first ${MAX_REREAD_PARTS} minutes are read.` : '';
+  return `${base}${sends}${cut}`;
+}
+
 // [from, to] -> parts of at most partSec seconds, so one request never carries more than a speech service takes.
 export function splitSpan(from, to, partSec = 60) {
   const out = [];

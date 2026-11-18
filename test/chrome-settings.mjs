@@ -382,6 +382,63 @@ try {
   const kept = await ev(`document.getElementById('keptNow').textContent`);
   check('Kept now shows a count and a size', /^Kept now: 0 meetings, 0 MB$/.test(kept) && (await get('#keptDelete', 'disabled')), kept);
 
+  // ---- 8b. audit round 2: the Save button, Test buttons that do not save, the usage table, the segmented controls, a double-pressed Record ----
+  await send('Page.reload', {}, pg.sessionId);
+  await sleep(1500);
+  check('C9 with nothing changed Save is really disabled (not just styled), and pressing it writes nothing', (await get('#save', 'disabled')) === true && (await ev(`document.getElementById('save').getAttribute('aria-disabled')`)) === null);
+  const stored0 = JSON.stringify(await saved());
+  await ev(`document.getElementById('save').click()`);
+  await sleep(300);
+  check('C9 a click on the disabled Save changes nothing', JSON.stringify(await saved()) === stored0);
+  await tab('general');
+  await setVal('#myName', 'Typed But Not Saved');
+  check('C9 once something is typed Save is enabled', (await get('#save', 'disabled')) === false);
+  const note = await ev(`(() => { document.getElementById('testLlm').click(); const a = document.getElementById('llmStatus').textContent; document.getElementById('testMail').click(); return { llm: a, mail: document.getElementById('mailMsg').textContent }; })()`);
+  await sleep(1500);
+  check('C9 Test connection and Send test email say they use the values on the page, and do not save them', /not saved yet/.test(note.llm) && /not saved yet/.test(note.mail) && (await saved()).myName !== 'Typed But Not Saved', JSON.stringify(note) + (await saved()).myName);
+  check('C9 the typed value is still waiting to be saved', (await get('#myName')) === 'Typed But Not Saved' && (await get('#save', 'disabled')) === false);
+  await save();
+  check('C9 Save then writes it', (await saved()).myName === 'Typed But Not Saved' && (await get('#save', 'disabled')) === false);
+  // after the flash passes the Save button is disabled again and the keyboard focus is not lost to the page body
+  await ev(`document.getElementById('save').focus()`);
+  await sleep(3400);
+  check('C9 a Save button that disables itself hands the focus on instead of dropping it', (await get('#save', 'disabled')) === true && (await ev(`document.activeElement && document.activeElement !== document.body`)), await ev(`document.activeElement?.tagName + '#' + document.activeElement?.id + ' ' + document.getElementById('save').disabled + ' ' + document.getElementById('msg').textContent`));
+  // the usage table: "—" for an empty value, on an opaque card
+  const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  await ev(`chrome.storage.local.set({ usage: { ${JSON.stringify(day)}: { 'gemini|gemini-3.8-flash|llm': { req: 3, fail: 0, rl: 0, tin: 0, tout: 0, audioSec: 0 } } } })`);
+  await send('Page.reload', {}, pg.sessionId);
+  await sleep(1500);
+  await tab('usage');
+  const us = await ev(`(() => { const card = document.querySelector('.usage-card'); const cells = [...document.querySelectorAll('#usageTable td.num')].map((c) => c.textContent.trim()); return { cells, bg: getComputedStyle(card).backgroundColor, blur: getComputedStyle(card).backdropFilter }; })()`);
+  check('U10 usage: an empty value is "—", never a hyphen, and the "By service" card is opaque', us.cells.includes('—') && !us.cells.includes('-') && /^rgb\(/.test(us.bg) && us.blur === 'none', JSON.stringify(us));
+  await tab('general');
+  const hintWrap = await ev(`getComputedStyle(document.getElementById('otherSites-d')).textWrap`);
+  check('U9 hints use text-wrap: pretty (no uneven breaks, no forced <br>)', /pretty/.test(hintWrap) && (await ev(`document.querySelectorAll('.card .hint br').length`)) === 0, hintWrap);
+  await tab('voices');
+  const sc = await ev(`(() => { const b = [...document.querySelectorAll('#enrolLang button')]; const cs = b.map((x) => getComputedStyle(x)); return { n: b.length, raw: cs.map((c) => [c.display, c.alignItems, c.justifyContent].join('/')), flex: cs.every((c) => /^(inline-)?flex$/.test(c.display) && c.alignItems === 'center' && c.justifyContent === 'center'), lh: [...new Set(cs.map((c) => c.lineHeight))], h: [...new Set(b.map((x) => Math.round(x.getBoundingClientRect().height)))] }; })()`);
+  check('U9 the Voices language segments centre their label the same way (one line height, one box height)', sc.n >= 3 && sc.flex && sc.lh.length === 1 && sc.h.length === 1, JSON.stringify(sc));
+  // C7: pressing Record twice opens the microphone once, and everything is closed again afterwards
+  await ev(`(() => { window.__streams = []; navigator.mediaDevices.getUserMedia = async () => { await new Promise((r) => setTimeout(r, 200)); const s = new AudioContext().createMediaStreamDestination().stream; window.__streams.push(s); return s; }; 0; })()`);
+  await ev(`(() => { const n = document.getElementById('enrolName'); n.value = 'Double Click'; n.dispatchEvent(new Event('input', { bubbles: true })); const r = document.getElementById('enrolRec'); r.click(); r.click(); 0; })()`);
+  await sleep(1200);
+  const opened = await ev(`window.__streams.length`);
+  await ev(`document.getElementById('enrolStop').click(); 0`);
+  await sleep(500);
+  const live = await ev(`window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length`);
+  check('C7 pressing Record twice opens the microphone once and leaves no live track after Stop', opened === 1 && live === 0, JSON.stringify({ opened, live }));
+  await ev(`document.getElementById('enrolCancel').click(); 0`);
+
+  // U10: the tour draws a shortcut like the popup does, one keycap per key joined by "+"
+  const wp = await openPage(`chrome-extension://${id}/welcome.html`);
+  let caps = { n: 0, texts: [] };
+  for (let i = 0; i < 9 && !caps.n; i++) {
+    await wp.ev(`document.getElementById('next')?.click(); 0`);
+    await sleep(500);
+    caps = await wp.ev(`(() => { const k = [...document.querySelectorAll('kbd')]; return { n: k.length, texts: k.map((x) => x.textContent), joined: k.length ? k[0].parentElement.textContent : '' }; })()`);
+  }
+  check('U10 the tour draws "Alt+Shift+M" as separate keycaps, not one wide one', caps.n >= 3 && caps.texts.every((t) => !t.includes('+')) && /Alt\+Shift\+M|Alt\+Shift\+K/.test(caps.joined), JSON.stringify(caps));
+  await send('Target.closeTarget', { targetId: wp.targetId });
+
   // ---- 9. no page scrolls sideways, none logs an error ----
   for (const w of [1280, 900, 420]) {
     await send('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile: false }, pg.sessionId);

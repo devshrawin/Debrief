@@ -28,7 +28,12 @@ function h(tag, attrs = {}, ...kids) {
 const card = (title, ...kids) => h('div', { class: 'card' }, title ? h('h2', { class: 'lbl' }, title) : null, ...kids);
 const tight = (...kids) => h('div', { class: 'card tight' }, ...kids);
 const p = (text, cls) => h('p', { class: cls || '' }, text);
-const kbd = (t) => h('kbd', {}, t);
+// A shortcut is one keycap per key, joined by "+" (the popup draws it the same way): Alt + Shift + M, not one wide "Alt+Shift+M".
+const kbd = (t) => {
+  const f = document.createDocumentFragment();
+  String(t).split('+').forEach((k, i) => f.append(...(i ? ['+'] : []), h('kbd', {}, k.trim())));
+  return f;
+};
 const steps = (...items) => h('ol', { class: 'steps' }, ...items.map((i) => h('li', {}, i)));
 // Static inline icons only (never user text).
 const svg = (inner, size = 20, attrs = '') => h('span', { html: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${attrs}>${inner}</svg>` }).firstChild;

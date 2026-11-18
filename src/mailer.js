@@ -122,18 +122,16 @@ export async function callRelay(payload, settings) {
       body: JSON.stringify({ ...payload, secret }),
     });
   } catch (e) {
-    throw new Error(e.name === 'TimeoutError' ? 'The mail relay did not answer in 60 s.' : `Could not reach the mail relay (${e.message}).`);
+    // unsure: the request may have reached the relay and the mail may have gone out (an abort, a dropped connection)
+    throw Object.assign(new Error(e.name === 'TimeoutError' ? 'The mail relay did not answer in 60 s.' : `Could not reach the mail relay (${e.message}).`), { unsure: true });
   }
   const raw = await res.text();
   let j;
   try {
     j = JSON.parse(raw);
   } catch {
-    throw new Error(
-      /<html|accounts\.google\.com|Sign in/i.test(raw)
-        ? 'The relay asked for a Google sign-in. Redeploy the web app with "Who has access: Anyone".'
-        : `Unexpected reply from the mail relay (HTTP ${res.status}).`
-    );
+    const signIn = /<html|accounts\.google\.com|Sign in/i.test(raw);
+    throw Object.assign(new Error(signIn ? 'The relay asked for a Google sign-in. Redeploy the web app with "Who has access: Anyone".' : `Unexpected reply from the mail relay (HTTP ${res.status}).`), { unsure: !signIn && res.ok });
   }
   if (!j.ok) throw new Error(j.error || 'The mail relay refused the request.');
   return j;

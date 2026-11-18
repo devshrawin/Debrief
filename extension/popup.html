@@ -72,6 +72,7 @@
     .btn2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .linkrow a { font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
     #diagnose { min-height: 36px; padding: 4px 6px; font: var(--t-subheadline); font-weight: 600; color: var(--tint); text-decoration: underline; }
+    #diagnose { padding-inline: 0; } /* starts where the links above it start */
     #diagnose:hover:not(:disabled) { background: transparent; }
     #diagnose::after { content: ""; width: 6px; height: 6px; margin-inline-start: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform var(--d-base) var(--spring); } /* a chevron, not an arrow that reads as a download */
     #diagnose[aria-expanded="true"]::after { transform: translateY(1px) rotate(-135deg); }

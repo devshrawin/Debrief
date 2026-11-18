@@ -251,7 +251,7 @@ await test('truncated: every provider reports hitting the answer limit through o
   const cases = [
     [{ llmProvider: 'gemini', geminiKey: 'g', geminiModel: 'gem' }, ['data: {"candidates":[{"content":{"parts":[{"text":"{\\"a\\":"}]},"finishReason":"MAX_TOKENS"}]}\r\n\r\n'], ['data: {"candidates":[{"content":{"parts":[{"text":"{}"}]},"finishReason":"STOP"}]}\r\n\r\n']],
     [{ llmProvider: 'openai', oaBase: 'http://localhost:1/v1', oaModel: 'm' }, ['data: {"choices":[{"delta":{"content":"{\\"a\\":"},"finish_reason":"length"}]}\n\n', 'data: [DONE]\n\n'], ['data: {"choices":[{"delta":{"content":"{}"},"finish_reason":"stop"}]}\n\n', 'data: [DONE]\n\n']],
-    [{ llmProvider: 'anthropic', anthropicKey: 'k', anthropicModel: 'claude-sonnet-4-5' }, ['data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"{\\"a\\":"}}\n\n', 'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}\n\n'], ['data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"{}"}}\n\n', 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n']],
+    [{ llmProvider: 'anthropic', anthropicKey: 'k', anthropicModel: 'claude-sonnet-4-5' }, ['data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"{\\"a\\":"}}\n\n', 'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}\n\n'], ['data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"{}"}}\n\n', 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n', 'data: {"type":"message_stop"}\n\n']],
   ];
   try {
     for (const [s, cut, whole] of cases) {

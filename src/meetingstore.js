@@ -307,9 +307,19 @@ export async function listMeetingMetas({ counts = LISTS, ids } = {}) {
   return (await withCounts(await storedRows(ids || (await allIds())), counts)).sort(newestFirst);
 }
 
-export async function addMeetingId(id) {
-  const meetingIds = await allIds();
-  await local().set({ meetingIds: [id, ...meetingIds] });
+// The list of meeting ids changes only through here: read, change and write under one lock, so a delete that races a
+// new recording cannot write back a list without the new id. fn(copy of list) returns the new list, or null for no change.
+const IDS_LOCK = '\u0000meetingIds';
+export function editMeetingIds(fn) {
+  return locked(IDS_LOCK, async () => {
+    const next = fn([...(await allIds())]);
+    if (Array.isArray(next)) await local().set({ meetingIds: next });
+    return next;
+  });
+}
+
+export function addMeetingId(id) {
+  return editMeetingIds((ids) => (ids.includes(id) ? null : [id, ...ids])).then(() => {});
 }
 
 // ---- writing ----
@@ -433,7 +443,10 @@ export function updateMeetingMeta(id, fn) {
 // A list missing from the record is removed only if the copy had it when it was read (it was deleted on purpose).
 export function saveMeeting(m) {
   return locked(m.id, async () => {
-    const tx = (await begin(m.id)) || fresh(m.id);
+    const found = await begin(m.id);
+    // a copy that was read from storage (it carries marks) but whose meeting is gone was deleted meanwhile: it is not written back
+    if (!found && (m[PRESENT] || m[META] || (m[WIRE] && typeof m[WIRE] === 'object'))) return null;
+    const tx = found || fresh(m.id);
     const wire = m[WIRE] && typeof m[WIRE] === 'object' ? m[WIRE] : null;
     const present = m[PRESENT] || (wire ? new Set(Object.keys(wire).filter(isList)) : null);
     const metaMark = m[META] || (wire?.[META_WIRE] && typeof wire[META_WIRE] === 'object' ? wire[META_WIRE] : null);

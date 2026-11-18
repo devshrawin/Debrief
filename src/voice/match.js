@@ -241,15 +241,15 @@ export function clusterVoices(segs, { threshold = 0.55 } = {}) {
 // People heard speaking, as { name: [firstSeenSec, lastSeenSec, count] }: the same shape as the participant
 // list, so attendance can treat "heard in the meeting" as evidence of presence.
 export function voicePresence(lines) {
-  const out = {};
+  const out = new Map(); // names can come from the page ("__proto__", "constructor"): not a plain object keyed by them
   for (const l of lines || []) {
     if (!l.name || l.source === 'mic') continue;
     const end = l.t + Math.max(3, Math.min(30, l.text.length / 14));
-    const p = out[l.name];
+    const p = out.get(l.name);
     if (p) {
       p[1] = Math.max(p[1], end);
       p[2]++;
-    } else out[l.name] = [l.t, end, 1];
+    } else out.set(l.name, [l.t, end, 1]);
   }
-  return out;
+  return Object.fromEntries(out);
 }

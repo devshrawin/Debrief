@@ -417,9 +417,13 @@ $('fullscreen').onclick = async () => {
 };
 
 $('pause').onclick = async () => {
-  $('pause').disabled = true;
-  await send({ type: 'pause' });
-  $('pause').disabled = false;
+  if ($('pause').getAttribute('aria-disabled') === 'true') return; // a disabled button would drop the keyboard focus
+  $('pause').setAttribute('aria-disabled', 'true');
+  try {
+    await send({ type: 'pause' });
+  } finally {
+    $('pause').removeAttribute('aria-disabled');
+  }
   refresh();
 };
 

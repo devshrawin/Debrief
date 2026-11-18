@@ -101,7 +101,7 @@ await test('notice: chat turned off -> refuses and restores the panel', async ()
 });
 
 await test('notice: already posted by me is not posted twice', async () => {
-  for (const mine of [{ from: 'You', at: '10:31', text: MSG }, { from: 'You', at: '10:31 AM', text: MSG }, { self: true, text: MSG }]) {
+  for (const mine of [{ self: true, text: MSG }]) {
     const f = fake({ history: [{ from: 'Ravi', at: '10:30', text: 'hello' }, mine], closed: false });
     assert.equal(chat.alreadyPosted(f.doc, MSG), true, JSON.stringify(mine));
     assert.deepEqual(await chat.postNotice(f.doc, MSG, fast), { ok: true, posted: false, why: 'already there' });
@@ -115,6 +115,8 @@ await test('notice L5: the same words pasted by someone else, or anywhere outsid
     [{ from: 'Mallory', at: '10:29', text: MSG }],
     [{ from: 'Mallory', at: '10:29', text: 'You' }, { text: MSG }], // a message "You" is not a sender
     [{ from: 'Mallory', at: '10:29', text: MSG, self: false }],
+    [{ from: 'You', at: '10:31', text: MSG }], // a visible "You" label is only a display name
+    [{ from: 'You', at: '10:31 AM', text: MSG }],
     [{ from: 'You', at: '10:29', text: 'hi' }, { from: 'Mallory', at: '10:30', text: MSG }],
   ];
   for (const history of cases) {

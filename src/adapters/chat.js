@@ -83,7 +83,9 @@ export function chatAllowed(doc) {
 // own) and the time; some builds also mark the message itself. When it cannot be told, the answer is no: a second
 // notice is harmless, a notice held back because someone else pasted the same words is not.
 const SELF_ATTRS = ['data-is-self', 'data-self', 'data-is-own', 'data-from-me', 'data-sender-is-self', 'data-is-me'];
-const SELF_LABEL = /^(you|sent by you|message from you|your message)\b/i;
+// aria text that Meet itself writes for the local user's own message. A visible sender label ("You") is NOT evidence:
+// any participant can set that as their display name.
+const SELF_LABEL = /^(sent by you|message from you|your message)\b/i;
 const CLOCK = /^\d{1,2}[:.]\d{2}(\s?[ap]\.?m\.?)?$/i;
 const leaves = (el) => [...el.querySelectorAll('*')].filter((n) => !n.children.length && norm(n.textContent));
 function fromMe(node, panel) {
@@ -91,10 +93,11 @@ function fromMe(node, panel) {
     if (SELF_ATTRS.some((a) => up.getAttribute(a) === 'true')) return true;
     if (SELF_ATTRS.some((a) => up.getAttribute(a) === 'false')) return false;
     if (SELF_LABEL.test(up.getAttribute('aria-label') || '')) return true;
-    // the message group: the nearest box whose first lines are a sender and a time
+    // the message group: the nearest box whose first lines are a sender and a time. Its visible sender text proves
+    // nothing about who sent it (a participant can be named "You"), so the answer there is no.
     const ls = leaves(up);
     const head = ls.slice(0, 2).map((n) => norm(n.textContent));
-    if (ls[0] !== node && head.length === 2 && CLOCK.test(head[1])) return /^you$/i.test(head[0]) && ls[0].compareDocumentPosition(node) & 4;
+    if (ls[0] !== node && head.length === 2 && CLOCK.test(head[1])) return false;
   }
   return false;
 }

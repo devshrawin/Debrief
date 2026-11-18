@@ -27,7 +27,7 @@ export const renderMd = (md) => marked.parse(md || '');
 // A table of actions (it has an Action, Owner or Due column) can stack its rows on a narrow screen: each cell gets its column's
 // name as a small label (data-label, set as an attribute from the header's text; no HTML is built). A table whose only row says
 // "None recorded." is just that line. Wide tables of another kind (attendance, updates by person) keep scrolling sideways.
-function labelCells(t) {
+function labelCells(t, refMs) {
   const heads = [...(t.tHead?.rows[0]?.cells || t.rows[0]?.cells || [])].map((c) => c.textContent.trim());
   const isActions = heads.some((h) => /^(action|owner|due)/i.test(h));
   const body = [...t.querySelectorAll('tbody tr')];
@@ -46,12 +46,12 @@ function labelCells(t) {
       if (!heads[i]) return;
       td.setAttribute('data-label', heads[i]);
       // a due date that can be read as a date is shown as "16 Nov 2026" like everywhere else on screen; other text stays as written
-      if (/^due/i.test(heads[i]) && !td.children.length) td.textContent = fmtDue(td.textContent.trim());
+      if (/^due/i.test(heads[i]) && !td.children.length) td.textContent = fmtDue(td.textContent.trim(), refMs);
     });
   }
 }
 
-export function decorateMinutes(root) {
+export function decorateMinutes(root, refMs) {
   for (const t of root.querySelectorAll('table')) {
     if (t.parentElement.classList.contains('tablewrap')) continue;
     const w = document.createElement('div');
@@ -59,7 +59,7 @@ export function decorateMinutes(root) {
     t.replaceWith(w);
     w.append(t);
   }
-  for (const t of root.querySelectorAll('table')) labelCells(t);
+  for (const t of root.querySelectorAll('table')) labelCells(t, refMs);
   for (const td of root.querySelectorAll('td')) {
     const v = td.textContent.trim();
     if (/^(absent|yes)$/i.test(v)) {

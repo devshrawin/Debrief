@@ -23,13 +23,13 @@ export const personOfTile = (s) => String(s || '').replace(/[’']s presentation
 // One person is one entry, however many ways Meet wrote the name: the times are merged (earliest first seen, latest last
 // seen, samples added up).
 export function cleanPresence(presence) {
-  const out = {};
+  const out = new Map(); // a name from the page can be __proto__ or constructor: never a plain object keyed by it
   for (const [raw, v] of Object.entries(presence || {})) {
-    if (isIconText(raw)) continue;
+    if (!Array.isArray(v) || isIconText(raw)) continue;
     const name = personOfTile(raw);
     if (!name || isIconText(name) || isMenuText(name)) continue;
-    const cur = out[name];
-    out[name] = cur ? [Math.min(cur[0], v[0]), Math.max(cur[1], v[1]), (cur[2] || 1) + (v[2] || 1)] : [v[0], v[1], v[2] || 1];
+    const cur = out.get(name);
+    out.set(name, cur ? [Math.min(cur[0], v[0]), Math.max(cur[1], v[1]), (cur[2] || 1) + (v[2] || 1)] : [v[0], v[1], v[2] || 1]);
   }
-  return out;
+  return Object.fromEntries(out);
 }

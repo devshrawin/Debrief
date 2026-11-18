@@ -405,6 +405,7 @@ input[role=switch]:focus-visible, .toggle input[type=checkbox]:focus-visible { b
   box-shadow: inset 0 0 0 1px var(--separator);
 }
 .chip:hover, .chipbtn:hover:not(:disabled) { background: var(--fill); }
+.chipbtn { border-radius: 16px; text-align: start; line-height: 1.35; } /* a suggestion that wraps stays a rounded chip with its text at the start, not a tall pill with centred text */
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--r-pill); font: var(--t-caption); background: var(--fill); color: var(--label-2); }
 .badge.ok { background: var(--green-soft); color: var(--green); }
 .badge.warn { background: var(--orange-soft); color: var(--orange); }
@@ -621,7 +622,7 @@ body.popup { --fx-blur: 40px; }
 
 /* Segmented control used across the pages (button groups with aria-checked), same look as .segmented */
 .seg-ctl { position: relative; display: inline-flex; max-width: 100%; padding: 2px; gap: 2px; border-radius: var(--r-sm); background: var(--fill); isolation: isolate; }
-.seg-ctl > button { position: relative; z-index: 1; flex: 1; min-height: 32px; padding: 4px 14px; border-radius: 8px; font: var(--t-headline); font-size: 13px; white-space: nowrap; background: transparent; color: var(--label-2); box-shadow: none; }
+.seg-ctl > button { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; flex: 1; min-height: 32px; padding: 4px 14px; border-radius: 8px; font: var(--t-headline); font-size: 13px; line-height: 1; white-space: nowrap; background: transparent; color: var(--label-2); box-shadow: none; }
 .seg-ctl:not(.has-goo) > button { transition: color var(--d-fast) ease; } /* without the liquid thumb the raised segment changes at once: it is never seen half-way, with two segments lit */
 .seg-ctl > button:hover:not(:disabled) { background: transparent; color: var(--label); }
 .seg-ctl > button[aria-checked="true"], .seg-ctl > button.active, .seg-ctl > button[aria-selected="true"] { color: var(--label); }
@@ -700,7 +701,7 @@ input[type="checkbox"]:not([role="switch"]):not(.sw):checked::after { content: "
 input[type="checkbox"]:not([role="switch"]):not(.sw):focus-visible { box-shadow: var(--focus); }
 /* chips inside a table cell sit on the text line */
 td .chip, td .badge { vertical-align: middle; position: relative; top: -1px; }
-button:disabled, .btn:disabled, .seg-ctl:has(> button:disabled) { opacity: .5; cursor: not-allowed; }
+button:disabled, .btn:disabled, button[aria-disabled="true"], .seg-ctl:has(> button:disabled) { opacity: .5; cursor: not-allowed; }
 .chip, .btn { white-space: nowrap; }
 
 /* ---------- 9. Polish from the v1 review ---------- */
@@ -769,7 +770,7 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
 .lv-side.flow { position: static; } /* taller than the window: it flows with the page, so it has no scrollbar of its own (live.js sets .flow) */
 .lv-h { font: var(--t-headline); margin: var(--s3) 0 0; }
 .lv-h:first-child { margin-top: 0; }
-.lv-panel { padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); }
+.lv-panel { padding: 12px; background: var(--surface-read); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); }
 .lv-status { display: flex; align-items: center; gap: var(--s2); margin: var(--s2) 0 0; }
 .lv-status:empty { display: none; }
 .lv-sum { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--separator); }
@@ -814,7 +815,7 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
   table[data-stack] tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--separator); }
   table[data-stack] tbody tr:last-child { border-bottom: 0; }
   table[data-stack] td { display: block; width: auto !important; min-width: 0 !important; padding: 1px 0 !important; border: 0 !important; overflow-wrap: anywhere; }
-  table[data-stack] td[data-label="#"] { display: none; }
+  table[data-stack] td[data-label="#"], table[data-stack] td:empty { display: none; } /* an empty cell has no label line either ("Note:" with nothing after it) */
   table[data-stack] td[data-label]:not(.act-cell)::before { content: attr(data-label) ": "; font: var(--t-caption); letter-spacing: .02em; color: var(--label-2); }
   table[data-stack] td[data-label^="Action"]:not(.act-cell)::before, table[data-stack] td[data-label^="Item"]:not(.act-cell)::before, table[data-stack] td[data-label="Person"]:not(.act-cell)::before { content: none; }
   table[data-stack] td[data-label^="Action"], table[data-stack] td[data-label="Person"] { font-weight: 600; padding-bottom: 3px !important; }
@@ -868,6 +869,8 @@ ul.hint[hidden] { display: none; }
 /* a time inside the minutes ([12:40]) plays from there */
 .timebtn { display: inline; min-height: 0; padding: 0 5px; margin: 0 1px; border-radius: var(--r-xs); background: var(--tint-soft); color: var(--tint); font: inherit; font-family: var(--font-mono); font-size: .9em; font-weight: 600; font-variant-numeric: tabular-nums; line-height: inherit; }
 .timebtn:hover:not(:disabled) { background: var(--tint-soft-strong); color: var(--tint); }
+span.timebtn { cursor: default; } /* no recording was kept: the same chip, just not a button */
+span.timebtn:hover { background: var(--tint-soft); }
 
 /* the one player bar */
 .playbar { position: fixed; z-index: 50; inset-inline: 16px; bottom: 16px; margin-inline: auto; width: min(620px, calc(100vw - 32px)); box-sizing: border-box; display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); padding: 6px 8px; border-radius: var(--r-lg); background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-3); color: var(--label); }
@@ -910,7 +913,10 @@ body.has-playbar main { padding-bottom: 128px; }
   .playbar { bottom: 8px; gap: var(--s1); padding: 6px; }
   .pb-play { width: 40px; height: 40px; }
   .pb-back, .pb-again { padding: 4px 8px; }
-  .pb-close { width: 36px; height: 36px; }
+  .pb-close { width: 36px; height: 36px; margin-inline-start: auto; }
+  /* the controls on one row, the progress track full width on the next: it never shrinks to a stub */
+  .pb-track { order: 5; flex: 1 1 100%; margin: 2px 6px 4px; }
+  .pb-msg { order: 6; }
 }
 
 /* popup: two quiet links on one line */
@@ -949,6 +955,7 @@ body.has-playbar main { padding-bottom: 128px; }
 .ac-due .chip:not(label):not(button):not(a) { min-height: 20px; height: 20px; padding: 0 8px; margin: 0; top: 0; line-height: 20px; }
 .ac-at { display: inline; padding: 0 5px; margin: 0 1px; border-radius: var(--r-xs); background: var(--tint-soft); color: var(--tint); font-family: var(--font-mono); font-size: .9em; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; } /* the same time chip as the minutes and the live page */
 .ac-where { min-width: 0; }
+.ac-where .ac-src + .ac-at, .ac-where .ac-src + * + .ac-at { margin-inline-start: 14px; } /* the same gap as between the other items of the row */
 .ac-empty { display: flex; flex-direction: column; align-items: center; gap: var(--s1); padding: 48px 24px; text-align: center; border-radius: var(--r-md); background: var(--surface-read); box-shadow: inset 0 0 0 1px var(--separator), var(--shadow-1); }
 .ac-empty strong { font: var(--t-title-3); }
 .ac-empty .hint { margin: 0; max-width: 46ch; text-wrap: balance; }

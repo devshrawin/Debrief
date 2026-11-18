@@ -97,6 +97,7 @@ try {
     document.getElementById('sttProvider').value = 'gemini';
     document.getElementById('llmProvider').value = 'gemini';
     document.getElementById('geminiKey').value = 'AIzaDummyKeyForTest';
+    for (const id of ['myName', 'sttProvider', 'llmProvider', 'geminiKey']) { document.getElementById(id).dispatchEvent(new Event('input', { bubbles: true })); document.getElementById(id).dispatchEvent(new Event('change', { bubbles: true })); }
     const { settings: before } = await chrome.storage.local.get('settings');
     return true;
   })()`);

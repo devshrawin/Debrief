@@ -34,3 +34,24 @@ export const deletePending = (id) => run('readwrite', (s) => s.delete(id));
 export async function deleteAllPending(meetingId) {
   for (const p of await listPending(meetingId)) await deletePending(p.id);
 }
+
+// Pieces that never transcribed are not kept for ever: the ones saved more than `days` days ago go (the same purge as the
+// kept recordings runs this).
+export async function purgePendingOld(days = 30, now = Date.now()) {
+  const cutoff = now - days * 86400000;
+  let n = 0;
+  await run('readwrite', (s) => {
+    const r = s.openCursor();
+    r.onsuccess = () => {
+      const c = r.result;
+      if (!c) return;
+      if (Number.isFinite(c.value?.savedAt) && c.value.savedAt < cutoff) {
+        c.delete();
+        n++;
+      }
+      c.continue();
+    };
+    return r;
+  });
+  return n;
+}

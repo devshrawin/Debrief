@@ -2,7 +2,7 @@ import { clearAllAudio, deletePieces, deleteUnnamedClips } from './voice/samples
 import { cleanTerms } from './sttclean.js';
 import { deleteAllPending } from './audiostore.js';
 import { deleteAudio } from './audiokeep.js';
-import { plain, removeMeetingRecords, stripVoicesFromAll } from './meetingstore.js';
+import { plain, editMeetingIds, removeMeetingRecords, stripVoicesFromAll } from './meetingstore.js';
 // Settings + meeting records in chrome.storage.local; recorder state in chrome.storage.session.
 
 export const DEFAULTS = {
@@ -167,11 +167,10 @@ export function llmReady(s) {
 }
 
 // Meetings live in src/meetingstore.js (META plus chunked lists); these names stay importable from here.
-export { LISTS, CAPS, getMeeting, getMeetingMeta, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, replaceMeetingList, trimMeetingList, listMeetings, listMeetingMetas, addMeetingId, stampLoaded, withWireStamps } from './meetingstore.js';
+export { LISTS, CAPS, getMeeting, getMeetingMeta, saveMeeting, patchMeeting, updateMeetingMeta, appendMeeting, editMeetingTail, replaceMeetingList, trimMeetingList, listMeetings, listMeetingMetas, addMeetingId, editMeetingIds, stampLoaded, withWireStamps } from './meetingstore.js';
 
 export async function deleteMeeting(id) {
-  const { meetingIds = [] } = await chrome.storage.local.get('meetingIds');
-  await chrome.storage.local.set({ meetingIds: meetingIds.filter((x) => x !== id) });
+  await editMeetingIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : null));
   await removeMeetingRecords(id);
   // the audio that belonged to it too: waiting voice pieces and chunks that failed to transcribe
   await Promise.allSettled([deletePieces(id), deleteAllPending(id), deleteUnnamedClips(id), deleteAudio(id)]); // and the kept recording, if any

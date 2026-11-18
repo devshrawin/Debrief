@@ -451,36 +451,49 @@ function setLang(l) {
 }
 
 // ---- recording ----
+let starting = false; // a second press while the microphone is still opening must not open another
 async function startCapture() {
-  if (rec) return;
-  setMsg('');
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
-  const ctx = new AudioContext({ sampleRate: SR });
-  await ctx.audioWorklet.addModule('worklet.js');
-  const src = ctx.createMediaStreamSource(stream);
-  const node = new AudioWorkletNode(ctx, 'pcm-tap', { channelCount: 1, channelCountMode: 'explicit' });
-  const mute = ctx.createGain();
-  mute.gain.value = 0;
-  src.connect(node).connect(mute).connect(ctx.destination);
-  const r = { ctx, stream, node, blocks: [], started: Date.now(), timer: 0, peak: 0 };
-  node.port.onmessage = (e) => {
-    const b = e.data;
-    r.blocks.push(b);
-    let s = 0;
-    for (let i = 0; i < b.length; i++) s += b[i] * b[i];
-    const rms = Math.sqrt(s / b.length);
-    r.peak = Math.max(r.peak, rms);
-    // roughly -50 dB (silence) .. -10 dB (loud talking) across the meter
-    const db = 20 * Math.log10(rms + 1e-9);
-    $('enrolLevel').style.width = `${Math.max(0, Math.min(100, ((db + 50) / 40) * 100))}%`;
-  };
-  r.timer = setInterval(() => {
-    const sec = (Date.now() - r.started) / 1000;
-    $('enrolTime').textContent = `${clock(sec)}${sec < ENROL.targetSec ? '' : ' ✓'}`;
-    if (sec >= MAX_SEC) finishCapture();
-  }, 250);
-  rec = r;
-  syncEnrol();
+  if (rec || starting) return;
+  starting = true;
+  let stream = null;
+  let ctx = null;
+  try {
+    setMsg('');
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+    ctx = new AudioContext({ sampleRate: SR });
+    await ctx.audioWorklet.addModule('worklet.js');
+    const src = ctx.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(ctx, 'pcm-tap', { channelCount: 1, channelCountMode: 'explicit' });
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    src.connect(node).connect(mute).connect(ctx.destination);
+    const r = { ctx, stream, node, blocks: [], started: Date.now(), timer: 0, peak: 0 };
+    node.port.onmessage = (e) => {
+      const b = e.data;
+      r.blocks.push(b);
+      let s = 0;
+      for (let i = 0; i < b.length; i++) s += b[i] * b[i];
+      const rms = Math.sqrt(s / b.length);
+      r.peak = Math.max(r.peak, rms);
+      // roughly -50 dB (silence) .. -10 dB (loud talking) across the meter
+      const db = 20 * Math.log10(rms + 1e-9);
+      $('enrolLevel').style.width = `${Math.max(0, Math.min(100, ((db + 50) / 40) * 100))}%`;
+    };
+    r.timer = setInterval(() => {
+      const sec = (Date.now() - r.started) / 1000;
+      $('enrolTime').textContent = `${clock(sec)}${sec < ENROL.targetSec ? '' : ' ✓'}`;
+      if (sec >= MAX_SEC) finishCapture();
+    }, 250);
+    rec = r;
+    syncEnrol();
+  } catch (e) {
+    // the microphone must not stay open when something went wrong on the way (the worklet did not load, ...)
+    stream?.getTracks().forEach((t) => t.stop());
+    ctx?.close().catch(() => {});
+    throw e;
+  } finally {
+    starting = false;
+  }
 }
 
 function stopCapture(discard) {

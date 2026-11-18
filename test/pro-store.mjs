@@ -344,7 +344,7 @@ await test('with Web Locks (extension pages, the service worker, the offscreen d
     await Promise.all(Array.from({ length: 300 }, (_, i) => appendMeeting('m1', 'segments', [seg(i)])));
     await patchMeeting('m1', { title: 'Locked' });
     assert.deepEqual((await getMeeting('m1')).segments, Array.from({ length: 300 }, (_, i) => seg(i)));
-    assert.ok(names.length >= 302 && names.every((n) => n === 'debrief-meeting:m1'));
+    assert.ok(names.length >= 302 && names.every((n) => n === 'debrief-meeting:m1' || n === 'debrief-meeting:\0meetingIds'));
   } finally {
     delete globalThis.navigator.locks;
   }
@@ -388,11 +388,19 @@ await test('export, wipe, import gives back identical meetings and settings', as
   const before = await listMeetings();
   const file = JSON.parse(JSON.stringify(await B.exportAll({ includeKeys: true })));
   for (const k of Object.keys(mem)) delete mem[k];
-  const r = await B.importAll(file, { mode: 'replace' });
+  const r = await B.importAll(file, { mode: 'replace', acceptRouting: ['apiKeys'] });
   assert.deepEqual(r.meetings, { added: 2, skipped: 0 });
   assert.equal(r.settingsApplied, true);
   assert.equal(r.voices, 1);
-  assert.deepEqual(JSON.parse(JSON.stringify(await listMeetings())), JSON.parse(JSON.stringify(before)));
+  // an import marks each meeting decided and gives it a finished job, so nothing runs or sends by itself after a restore; otherwise identical
+  const after = JSON.parse(JSON.stringify(await listMeetings()));
+  for (const m of after) {
+    assert.equal(m.decided, true);
+    assert.ok(m.job?.state === 'done' || m.job?.state === 'failed');
+    delete m.decided;
+    delete m.job;
+  }
+  assert.deepEqual(after, JSON.parse(JSON.stringify(before)));
   assert.equal(mem.settings.geminiKey, 'G-SECRET');
   assert.equal(mem.settings.myName, 'Asha');
   assert.deepEqual(mem.emailNames, { 'a@x.com': 'Amal' });
@@ -466,7 +474,7 @@ await test('a hostile or broken file is refused or cleaned, and nothing is writt
 
 await test('old settings in a backup go through the same migration as stored ones', async () => {
   mem.schema = S.SCHEMA;
-  const r = await B.importAll({ app: 'debrief', version: 1, schema: 1, settings: { meetingLanguage: 'hinglish', geminiKey2: 'K2', minutesFormat: 'amnex' } }, { mode: 'replace' });
+  const r = await B.importAll({ app: 'debrief', version: 1, schema: 1, settings: { meetingLanguage: 'hinglish', geminiKey2: 'K2', minutesFormat: 'amnex' } }, { mode: 'replace', acceptRouting: ['apiKeys'] });
   assert.equal(r.settingsApplied, true);
   assert.deepEqual(mem.settings.meetingLanguages, ['hi', 'en']);
   assert.deepEqual(mem.settings.geminiBackups, ['K2']);
@@ -483,7 +491,7 @@ const EVIL = () => ({
     webhookUrl: 'https://evil.example/hook', emailWebhook: 'https://script.google.com/macros/s/EVIL/exec', emailTo: 'x@evil.example', emailAuto: true, emailTranscript: true,
     consentNotice: true, consentText: 'Join https://evil.example now', shareMode: 'auto', shareList: 'x@evil.example', shareGroups: 'all | x@evil.example', shareHow: 'bcc', shareDomains: true,
     shareExternalGuard: false, myOrgDomains: 'evil.example', calendarLookup: false, screenNotes: true, voiceModelUrl: 'https://evil.example/m.onnx',
-    keepAudioDays: 3, // not routing: fills a setting left at its default here
+    usdInr: 3, // not routing: fills a setting left at its default here
     momLanguage: 'English', // not routing: set here, so kept in a merge
   },
 });
@@ -493,7 +501,7 @@ await test('backup H1: every setting that decides where data goes is a routing s
   for (const k of ['sttBase', 'oaBase', 'llmProvider', 'sttProvider', 'oaModel', 'sttModel', 'webhookUrl', 'emailWebhook', 'emailTo', 'voiceModelUrl', 'shareMode', 'shareList', 'shareGroups', 'shareHow', 'shareDomains', 'shareExternalGuard', 'emailAuto', 'consentNotice', 'consentText', 'myOrgDomains', 'calendarLookup', 'emailTranscript', 'screenNotes'])
     assert.ok(B.ROUTING_SETTINGS.includes(k), `${k} must be a routing setting`);
   for (const k of B.ROUTING_SETTINGS) {
-    assert.ok(k in S.DEFAULTS, `${k} is a real setting`);
+    assert.ok(k === 'apiKeys' || k in S.DEFAULTS, `${k} is a real setting`);
     assert.match(B.ROUTING_LABELS[k], /^[A-Z][a-z' ]/, `${k} has a label in words`);
   }
   for (const k of Object.keys(S.DEFAULTS)) if (/base|url|share|email|consent|domains|provider/i.test(k) && !/^email(Secret|Pdf|Word|Md)$/.test(k)) assert.ok(B.ROUTING_SETTINGS.includes(k), `${k} looks like routing: classify it`);
@@ -511,7 +519,7 @@ for (const mode of ['merge', 'replace']) {
     assert.equal(mem.settings.sttKey, 'gsk_VICTIM');
     assert.equal(mem.settings.oaKey, 'sk-VICTIM');
     assert.equal(mem.settings.emailSecret, 'E-MINE');
-    assert.equal(mem.settings.keepAudioDays, 3, 'a default here is filled from the file');
+    assert.equal(mem.settings.usdInr, 3, 'a default here is filled from the file');
     assert.equal(mem.settings.momLanguage, mode === 'merge' ? 'Hindi' : 'English', 'merge: what is set here wins; replace: the file');
     const s = await S.getSettings();
     assert.equal(s.sttBase, S.DEFAULTS.sttBase);
@@ -531,7 +539,7 @@ await test('backup H1: keys and the relay secret are never imported over the one
   // nothing set here: the file's keys are taken (a restore on a new computer)
   for (const k of Object.keys(mem)) delete mem[k];
   mem.schema = S.SCHEMA;
-  await B.importAll({ app: 'debrief', version: 1, settings: { geminiKey: 'G-FILE', sttKey: 'T-FILE', emailSecret: 'E-FILE' } });
+  await B.importAll({ app: 'debrief', version: 1, settings: { geminiKey: 'G-FILE', sttKey: 'T-FILE', emailSecret: 'E-FILE' } }, { acceptRouting: ['apiKeys'] });
   assert.deepEqual([mem.settings.geminiKey, mem.settings.sttKey, mem.settings.emailSecret], ['G-FILE', 'T-FILE', 'E-FILE']);
 });
 
@@ -540,7 +548,7 @@ await test('backup H1: a ticked server address is taken, its key here is cleared
   mem.settings = { ...VICTIM };
   const file = EVIL();
   file.settings.oaKey = 'sk-FILE'; // the file brings a key for its own minutes server
-  const r = await B.importAll(file, { acceptRouting: ['sttBase', 'oaBase', 'emailWebhook', 'consentText', 'notASetting'] });
+  const r = await B.importAll(file, { acceptRouting: ['sttBase', 'oaBase', 'emailWebhook', 'consentText', 'notASetting', 'apiKeys'] });
   assert.deepEqual(r.routingApplied.sort(), ['consentText', 'emailWebhook', 'oaBase', 'sttBase']);
   assert.equal(mem.settings.sttBase, 'https://evil.example/v1');
   assert.equal(mem.settings.sttKey, '', 'the key for the old speech server is not sent to the new one');

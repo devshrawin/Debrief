@@ -1,4 +1,4 @@
-import { renderMd, decorateMinutes } from './md.js';
+import { renderMd, decorateMinutes as decorateMd } from './md.js';
 import { cleanTranscript, makeDeduper, isLegacyCapture } from './sttclean.js';
 import { renderMinutesHtml, isTemplateMd, setOrg, parseDirectory } from './orgtemplate.js';
 import { mountAsk } from './askui.js';
@@ -25,6 +25,8 @@ import { initExtras, afterMinutes, decorateRow, transcriptRendered, paintScreenR
 import { withScreenRows } from './actionslogic.js';
 
 const $ = (id) => document.getElementById(id);
+// the meeting's start is the year-less due dates' reference ("5 Dec" on a meeting held in Nov 2025 is 5 Dec 2025)
+const decorateMinutes = (root) => decorateMd(root, meeting?.startedAt);
 const id = new URLSearchParams(location.search).get('id');
 let meeting = null;
 let settings = null;
@@ -49,17 +51,34 @@ function renderMom() {
   $('mom').classList.remove('streaming');
   $('gen').textContent = meeting.mom ? 'Rewrite minutes' : 'Write minutes';
   syncState();
+  syncExports();
   if (meeting) paintFormat();
+}
+
+// Copy, .md, Word, Print, Edit and Email me work on minutes that exist and are not being rewritten right now.
+const hasMom = () => !!meeting?.mom?.trim();
+const exportsOff = () => !hasMom() || jobBusy;
+function syncExports() {
+  const off = exportsOff();
+  for (const b of ['copy', 'dlMd', 'dlDoc', 'print', 'edit', 'mail']) {
+    const btn = $(b);
+    if (!btn) continue;
+    if (btn.dataset.title === undefined) btn.dataset.title = btn.title || '';
+    btn.disabled = off;
+    btn.title = off ? (jobBusy ? 'Available when the minutes are written.' : 'Available once the minutes are written.') : btn.dataset.title;
+  }
 }
 
 // Shows one of: the minutes, the "no minutes yet" card, the generating skeleton; plus the red failure box.
 function syncState() {
   const busy = jobBusy;
-  const empty = !meeting.mom && !busy && !genFail;
+  const starting = !$('startCard').classList.contains('hidden'); // the start card has its own Write button
+  const empty = !meeting.mom && !busy && !genFail && !starting;
   $('failBox').classList.toggle('hidden', !genFail || busy);
   $('failText').textContent = genFail ? `${genFail} Your transcript is safe.` : '';
   $('emptyBox').classList.toggle('hidden', !empty);
   $('mom').hidden = !meeting.mom && !busy;
+  syncExports();
   $('emptyText').textContent = !meeting.segments.length ? 'No speech was transcribed, so there is nothing to summarise yet.' : !meeting.endedAt ? 'This meeting is still being recorded. The minutes are written when it ends.' : 'The transcript is ready. Press Write minutes when you are ready.';
 }
 
@@ -115,6 +134,19 @@ function renderChips() {
 // Right after a meeting: the voices Debrief found in it that have no name yet, each with its audio clip (if kept) and
 // what it said, so they can be named here and now. Naming confirms the voice for this and every later meeting.
 let playing = null;
+let playingUrl = '';
+// One clip at a time; its address is released when it ends, is paused or replaced, and when the page goes away.
+function stopPlaying() {
+  const a = playing;
+  playing = null;
+  if (a) {
+    a.onended = a.onpause = null;
+    a.pause();
+  }
+  if (playingUrl) URL.revokeObjectURL(playingUrl);
+  playingUrl = '';
+}
+addEventListener('pagehide', stopPlaying);
 // A meeting with fingerprinted speech but no trace of voice learning (it was off when the meeting ended, or it did not
 // finish) is learned from now, once, so the voices can still be named. Audio clips exist only if they were kept at the time.
 let catchUpTried = false;
@@ -173,12 +205,13 @@ async function renderNameBox() {
       const play = Object.assign(document.createElement('button'), { type: 'button', textContent: '▶ Play', hidden: !clips[i] });
       play.onclick = async () => {
         try {
-          playing?.pause();
+          stopPlaying();
           const blob = await getSample(v.id);
           if (!blob) return (play.hidden = true);
-          const url = URL.createObjectURL(blob);
-          playing = new Audio(url);
-          playing.onended = () => URL.revokeObjectURL(url);
+          playingUrl = URL.createObjectURL(blob);
+          playing = new Audio(playingUrl);
+          playing.onended = stopPlaying;
+          playing.onpause = stopPlaying;
           await playing.play();
         } catch {}
       };
@@ -257,23 +290,35 @@ function paintFormat() {
   $('mailTranscript').checked = wantTranscript(false);
   $('shareTranscript').checked = wantTranscript(true);
 }
+// Rewriting replaces minutes that were corrected by hand: every path that rewrites asks first (runGenerate), and the
+// format and type switches ask before they change anything, so "keep my edits" leaves the choice as it was.
+const willRewrite = () => !!meeting.mom && !jobBusy && llmReady(settings) && meeting.segments.length > 0;
+async function confirmRewrite() {
+  if (!(meeting.editedAt && meeting.mom)) return true;
+  const ok = await modal({ title: 'Rewrite the minutes?', text: 'You edited these minutes by hand. Rewriting replaces your edits with new minutes written from the transcript.', buttons: [{ label: 'Keep my edits', value: 'no' }, { label: 'Rewrite anyway', value: 'yes', danger: true }] });
+  return ok?.value === 'yes';
+}
 async function chooseFormat(v, regenerate) {
   if (v === currentFormat()) return;
+  const rewrite = regenerate && willRewrite();
+  if (rewrite && !(await confirmRewrite())) return;
   await patchMeeting({ format: v });
   paintFormat();
-  if (regenerate && meeting.mom && !jobBusy) {
+  if (rewrite) {
     $('genStatus').textContent = `Switching to the ${FORMATS[v]}…`;
-    runGenerate();
+    runGenerate({ confirmed: true });
   }
 }
 for (const b of $('fmtSwitch').querySelectorAll('button')) b.onclick = () => chooseFormat(b.dataset.v, true);
 $('typeSel').onchange = async (e) => {
   const v = e.target.value;
+  const rewrite = willRewrite();
+  if (rewrite && !(await confirmRewrite())) return paintType();
   await patchMeeting({ typeId: v === 'auto' ? null : v === 'none' ? '' : v });
   paintType();
-  if (meeting.mom && !jobBusy) {
+  if (rewrite) {
     $('genStatus').textContent = 'Rewriting the minutes for this meeting type…';
-    runGenerate();
+    runGenerate({ confirmed: true });
   }
 };
 // the start card shows the chosen format as text; "change" goes to the one switch
@@ -296,6 +341,7 @@ const cd = { timer: null };
 function showStartCard(job) {
   paintFormat();
   $('startCard').classList.remove('hidden');
+  syncState();
   clearInterval(cd.timer);
   if (job?.held || !job?.countdownEnd) {
     $('startCount').textContent = job?.held ? 'Press the button when you are ready.' : 'Getting ready…';
@@ -304,6 +350,10 @@ function showStartCard(job) {
   const tick = () => ($('startCount').textContent = `Writing automatically in ${Math.max(0, Math.ceil((job.countdownEnd - Date.now()) / 1000))} s`);
   tick();
   cd.timer = setInterval(tick, 500);
+}
+function hideStartCard() {
+  $('startCard').classList.add('hidden');
+  syncState();
 }
 const holdJob = () => {
   clearInterval(cd.timer);
@@ -315,7 +365,7 @@ $('startCard').addEventListener('pointerdown', holdJob, { once: true });
 $('startCard').addEventListener('keydown', holdJob, { once: true });
 async function startWriting() {
   clearInterval(cd.timer);
-  $('startCard').classList.add('hidden');
+  hideStartCard();
   await runGenerate();
 }
 $('startNow').onclick = startWriting;
@@ -509,7 +559,10 @@ function openNameMenu(chip, r) {
     if (!el.contains(e.target) && e.target !== chip) closeNameMenu(false);
   };
   document.addEventListener('keydown', onKey, true);
-  setTimeout(() => document.addEventListener('mousedown', onDown, true));
+  // added a tick later so the click that opened the menu does not close it; only if this menu is still the open one (it may have closed in that tick)
+  setTimeout(() => {
+    if (nameMenu?.el === el) document.addEventListener('mousedown', onDown, true);
+  });
   nameMenu = { el, chip, off: () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('mousedown', onDown, true); } };
   input.focus();
 }
@@ -564,9 +617,14 @@ async function requestJob(opts) {
 
 function setBusy(on) {
   jobBusy = on;
+  if (on && editing) setEditing(false); // the editor closes (its edits are saved first): minutes written meanwhile must not be overwritten by it
+  const ae = document.activeElement;
   $('gen').disabled = on;
   $('reread').disabled = on;
   $('abort').classList.toggle('hidden', !on);
+  // a button that disables or hides itself would drop the keyboard focus: it goes to the next control that makes sense
+  if (on && (ae === $('gen') || ae === $('reread'))) $('abort').focus();
+  else if (!on && ae === $('abort')) $('gen').focus();
   $('genStatus').classList.toggle('busy', on);
   if (on) $('genStatus').classList.remove('bad');
   syncState();
@@ -618,7 +676,7 @@ function applyJob(job) {
   }
   if (ACTIVE.includes(job.state)) {
     const first = !jobBusy;
-    $('startCard').classList.add('hidden');
+    hideStartCard();
     clearInterval(cd.timer);
     setBusy(true);
     if (JOB_STATUS[job.state]) $('genStatus').textContent = JOB_STATUS[job.state];
@@ -637,12 +695,13 @@ async function finishJob() {
     for (const k of Object.keys(meeting)) if (!(k in latest)) delete meeting[k];
     Object.assign(meeting, latest);
   }
+  if (editing) setEditing(false); // an editor that is still open holds older text than these minutes: it closes without writing over them
   const job = meeting.job || {};
   jobUi.buf = '';
   const emailProblem = job.state === 'failed' && meeting.mom && /^(Email|The email)/.test(job.error || '');
   genFail = job.state === 'failed' && !job.aborted && !emailProblem ? job.error || 'The minutes could not be written.' : '';
   setBusy(false);
-  $('startCard').classList.add('hidden');
+  hideStartCard();
   clearInterval(cd.timer);
   $('attendees').value = (meeting.attendees || []).join('\n');
   renderMom();
@@ -677,7 +736,7 @@ function watchJob() {
   }, 1500);
 }
 
-async function runGenerate({ reread = false } = {}) {
+async function runGenerate({ reread = false, confirmed = false } = {}) {
   if (!llmReady(settings)) {
     $('genStatus').textContent = 'Set up an LLM in Settings first.';
     return;
@@ -686,6 +745,7 @@ async function runGenerate({ reread = false } = {}) {
     $('genStatus').textContent = 'Nothing to summarise: the transcript is empty.';
     return;
   }
+  if (!confirmed && !(await confirmRewrite())) return;
   setEditing(false);
   meeting.notes = $('notes').value;
   await patchMeeting({ notes: meeting.notes });
@@ -699,9 +759,12 @@ async function runGenerate({ reread = false } = {}) {
 }
 
 // Emails the minutes to yourself, now (the automatic one is sent by the job).
+let mailing = false;
 async function emailMom() {
+  if (exportsOff() || mailing) return;
+  mailing = true;
   setEditing(false); // what is on screen is what gets sent, including unsaved edits
-  $('mail').disabled = true;
+  $('mail').setAttribute('aria-disabled', 'true'); // not `disabled`: the button keeps the keyboard focus while it sends
   $('mailStatus').textContent = 'Sending…';
   const r = await emailMinutes({ meeting, settings, auto: false, patch: patchMeeting, getLatest: () => getMeeting(id), ctxFor: nameCtx, notify: (n) => chrome.notifications?.create(n.id, { type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'), title: n.title, message: n.message }, () => void chrome.runtime.lastError) });
   $('mailStatus').textContent = r.status;
@@ -709,7 +772,9 @@ async function emailMom() {
     renderChips();
     paintMailButton();
   }
-  $('mail').disabled = false;
+  $('mail').removeAttribute('aria-disabled');
+  mailing = false;
+  syncExports();
 }
 
 // ---- ask about this meeting ----
@@ -722,6 +787,7 @@ function mountAskBox() {
     history: meeting.qa || [],
     onEntry: (entry) => patchMeeting({ qa: [...(meeting.qa || []), entry].slice(-10) }),
     placeholder: 'Ask about these minutes, e.g. "who owns the vendor contract?"',
+    placeholderNarrow: 'Ask about these minutes',
   });
 }
 
@@ -760,6 +826,7 @@ $('shareHeldNow').onclick = () => {
   $('shareSend').focus();
 };
 
+let sharing = false;
 async function shareMom() {
   setEditing(false);
   const list = parseAddresses($('shareTo').value);
@@ -770,13 +837,15 @@ async function shareMom() {
   // people outside the organisation: ask once more before anything leaves (the automatic share never sends to them)
   const warn = shareWarning(list, settings);
   if (warn) {
-    const ok = await modal({ text: `${warn} Send anyway?${wantTranscript(true) ? ' The transcript will be attached.' : ''}`, buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Send', value: 'yes', primary: true }] });
+    const ok = await modal({ title: 'Send outside your organisation?', text: `${warn} Send anyway?${wantTranscript(true) ? ' The transcript will be attached.' : ''}`, buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Send', value: 'yes', primary: true }] });
     if (ok?.value !== 'yes') {
       $('shareStatus').textContent = 'Not sent.';
       return;
     }
   }
-  $('shareSend').disabled = true;
+  if (sharing) return;
+  sharing = true;
+  $('shareSend').setAttribute('aria-disabled', 'true');
   $('shareStatus').textContent = `Sending to ${list.length} ${list.length === 1 ? 'person' : 'people'}…`;
   try {
     const r = await shareMinutes({ meeting, settings, list, how: $('shareHowSel').value, patch: patchMeeting, ctxFor: nameCtx });
@@ -785,7 +854,8 @@ async function shareMom() {
   } catch (e) {
     $('shareStatus').textContent = `Share failed: ${e.message}`;
   } finally {
-    $('shareSend').disabled = false;
+    $('shareSend').removeAttribute('aria-disabled');
+    sharing = false;
   }
 }
 
@@ -799,16 +869,20 @@ const rememberEmailNames = () => rememberNamesFor(meeting, settings, labelCache)
 const ensureAttendees = () => ensureAttendeesFor(meeting, settings, labelCache);
 
 // Re-transcribes audio chunks that failed during the meeting (the job does this by itself before writing). Returns how many still fail.
+let retrying = false;
 async function retryPending() {
   if (!(await listPending(id)).length) return 0;
-  $('retry').disabled = true;
+  if (retrying) return 0;
+  retrying = true;
+  $('retry').setAttribute('aria-disabled', 'true');
   const r = await retryPendingAudio({
     id, meeting, settings,
     onProgress: (done, total) => ($('pendingText').textContent = `Transcribing ${total} audio piece${total > 1 ? 's' : ''} that failed during the meeting… (${done}/${total})`),
   });
   renderTranscript();
   renderPending(r.pending, r.lastError);
-  $('retry').disabled = false;
+  $('retry').removeAttribute('aria-disabled');
+  retrying = false;
   return r.left;
 }
 
@@ -834,13 +908,21 @@ function paintPreview() {
   tidyTables($('mdPreview'));
   if (!isTemplateMd(md)) decorateMinutes($('mdPreview'));
 }
+// The text the editor started from (and last saved). If the minutes on the meeting are no longer that text, a job wrote
+// new ones underneath the open editor: the editor's older text is never written over them.
+let editBase = null;
 function saveEdit() {
   clearTimeout(editTimer);
   editTimer = null;
+  if (editBase !== null && (meeting.mom || '') !== editBase) {
+    if (editing) $('mailStatus').textContent = 'The minutes were rewritten while you were editing, so your edits were not saved.';
+    return Promise.resolve();
+  }
   const mom = currentMd();
   if (mom === meeting.mom) return Promise.resolve();
   meeting.mom = mom;
   meeting.editedAt = Date.now();
+  if (editBase !== null) editBase = mom;
   return patchMeeting({ mom, editedAt: meeting.editedAt });
 }
 const afterEdit = () => {
@@ -872,6 +954,7 @@ function setEditing(on) {
   if (!on) {
     saveEdit().catch(() => {});
     editing = false;
+    editBase = null;
     $('editor').classList.add('hidden');
     $('mom').classList.remove('hidden');
     $('edit').textContent = 'Edit minutes';
@@ -882,7 +965,9 @@ function setEditing(on) {
     if (meeting.editedAt) $('mailStatus').textContent = 'Saved. Press Email me, or open Share, to send the corrected minutes.';
     return;
   }
+  if (exportsOff()) return;
   editing = true;
+  editBase = meeting.mom || '';
   editTab = 'edit';
   editor = mountEditor($('edBlocks'), meeting.mom || '', afterEdit);
   showEditTab('edit');
@@ -907,13 +992,7 @@ function download(name, type, content) {
 
 const fileBase = () => `MOM ${meeting.title} ${new Date(meeting.startedAt).toISOString().slice(0, 10)}`.replace(/[\\/:*?"<>|]+/g, '-');
 
-$('gen').onclick = async () => {
-  if (meeting.editedAt && meeting.mom) {
-    const ok = await modal({ title: 'Rewrite the minutes?', text: 'You edited these minutes by hand. Rewriting replaces your edits with new minutes written from the transcript.', buttons: [{ label: 'Keep my edits', value: 'no' }, { label: 'Rewrite anyway', value: 'yes', danger: true }] });
-    if (ok?.value !== 'yes') return;
-  }
-  runGenerate();
-};
+$('gen').onclick = () => runGenerate();
 // Voices named, merged or deleted while a meeting is open: show the new names and say what to press.
 chrome.storage.onChanged.addListener(async (c) => {
   if (!c.voices && !c.settings) return;
@@ -932,16 +1011,23 @@ $('abort').onclick = () => {
 };
 $('edit').onclick = () => setEditing(!editing);
 $('print').onclick = () => {
+  if (exportsOff()) return;
   setEditing(false);
   window.print();
 };
-$('dlMd').onclick = () => (setEditing(false), download(`${fileBase()}.md`, 'text/markdown', meeting.mom));
+$('dlMd').onclick = () => {
+  if (exportsOff()) return;
+  setEditing(false);
+  download(`${fileBase()}.md`, 'text/markdown', meeting.mom);
+};
 $('dlDoc').onclick = () => {
+  if (exportsOff()) return;
   setEditing(false);
   const html = wordDocHtml(renderMd(meeting.mom), { md: meeting.mom });
   download(`${fileBase()}.doc`, 'application/msword', html);
 };
 $('copy').onclick = async () => {
+  if (exportsOff()) return;
   setEditing(false);
   const html = renderMinutesHtml(meeting.mom, renderMd);
   await navigator.clipboard.write([
@@ -1085,6 +1171,8 @@ tabBtns.forEach((b, i) => {
     },
     say: (t) => ($('genStatus').textContent = t),
   });
+  renderMeta(); // the title, the format switch and the minutes show now; the slower lookups below refresh them
+  renderMom();
   await ensureInvited();
   await rememberEmailNames();
   ensureAttendees();

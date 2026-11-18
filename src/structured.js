@@ -248,9 +248,10 @@ function parseTruncated(s) {
 }
 
 // From the first { to its matching }: text around it (a preamble, fences, a closing remark) is dropped.
-function objectText(text) {
-  const t = String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^[\s\S]*?<\/think>/i, '');
-  const start = t.indexOf('{');
+const cleanReply = (text) => String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^[\s\S]*?<\/think>/i, '');
+function objectText(text, from = 0) {
+  const t = cleanReply(text);
+  const start = t.indexOf('{', from);
   if (start < 0) return '';
   let depth = 0;
   let inStr = false;
@@ -291,8 +292,27 @@ const CUT_NOTE = /\s*_\(Output hit the length limit and was cut off\.\)_\s*$/;
 
 // { value, truncated }: truncated when the object never closed (the reply was cut off), whatever the provider said.
 function parseLoose(text) {
-  const raw = objectText(String(text || '').replace(CUT_NOTE, ''));
-  if (!raw) return { value: undefined, truncated: false };
+  const clean = cleanReply(String(text || '').replace(CUT_NOTE, ''));
+  // Every top-level "{" in turn: a brace in prose before the JSON ("here is the {minutes}:") must not hide it.
+  // The first candidate that parses into minutes wins; else the first one that parsed at all (as before).
+  let firstGood = null;
+  let first = null;
+  for (let from = 0, n = 0; n < 25; n++) {
+    const at = clean.indexOf('{', from);
+    if (at < 0) break;
+    const raw = objectText(clean, at);
+    from = raw && objectClosed(raw) ? at + raw.length : at + 1; // an unclosed brace: the next one may be the real start
+    if (!raw) continue;
+    const r = parseOne(raw);
+    first ||= r;
+    if (r.value !== undefined && normalizeStructured(r.value)) {
+      firstGood = r;
+      break;
+    }
+  }
+  return firstGood || first || { value: undefined, truncated: false };
+}
+function parseOne(raw) {
   const truncated = !objectClosed(raw);
   for (const attempt of truncated ? [] : [raw, tidy(raw), tidy(smartKeys(raw)), tidy(smartValues(smartKeys(raw)), { quotes: true })]) {
     const v = tryParse(attempt);
@@ -458,6 +478,8 @@ function rosterName(part, roster) {
   return new Set(top.map((h) => normName(h.n))).size === 1 ? top[0].n : null;
 }
 
+const TITLES = /^(?:(?:dr|mr|mrs|ms|miss|mx|shri|smt|sri|prof|er)\.?(?:\s+|$))+/i;
+const TITLE_WORDS = new Set(['dr', 'mr', 'mrs', 'ms', 'miss', 'mx', 'shri', 'smt', 'sri', 'prof', 'er']);
 const NON_LATIN = /(?![A-Za-z\u00C0-\u024F])\p{L}/u;
 // "Rahul" and "राहुल" share a skeleton (src/ask.js): the same name said in another script. Very short skeletons match too much.
 const skeleton = (w) => {
@@ -534,12 +556,14 @@ export function guardStructured(items, { transcript = '', attendees = [], absent
         keep.push('Team');
         continue;
       }
-      const name = rosterName(part, roster);
+      const bare = part.replace(TITLES, '').trim() || part; // "Dr Rahul" is the person "Rahul"
+      const name = rosterName(part, roster) || rosterName(bare, roster);
       if (name) {
         keep.push(name);
         continue;
       }
-      const first = wordsOf(part)[0];
+      const tokens = wordsOf(bare).filter((w) => !TITLE_WORDS.has(w));
+      const first = tokens[0];
       if (!first) {
         dropped = true;
         continue;
@@ -548,7 +572,7 @@ export function guardStructured(items, { transcript = '', attendees = [], absent
       // a Latin name cannot be compared with Devanagari or Malayalam text: kept when the item's stretch has any (a mixed
       // line "राहुल, तुम staging पर…"), or, for an item that could not be located, when the whole transcript has no Latin
       const otherScript = LATIN.test(first) && (wide ? NON_LATIN.test(wide) : !LATIN.test(all));
-      const ok = hay.includes(` ${first} `) || otherScript || (skeleton(first) && skel(hay).has(skeleton(first)));
+      const ok = otherScript || tokens.some((w) => hay.includes(` ${w} `) || (skeleton(w) && skel(hay).has(skeleton(w))));
       if (ok) keep.push(part);
       else dropped = true;
     }
@@ -693,7 +717,7 @@ export function assignIds(items, prev) {
 
 // ---- Markdown ---------------------------------------------------------------------------------------------------
 
-const cell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').trim();
+const cell = (s) => String(s ?? '').replace(/\\*\|/g, '\\|').replace(/\r?\n/g, ' ').trim(); // a pipe is escaped once, whatever backslashes came before it
 const line = (s) => String(s ?? '').replace(/\r?\n/g, ' ').trim();
 
 // items -> the Markdown the classic prompt asks the model for, with the header line built by code.

@@ -59,6 +59,16 @@ const toBottom = () => {
   $('newLines').classList.add('hidden');
 };
 
+// The log is a live region (new lines are read out) only once the first load has been drawn: opening a long meeting
+// must not read out 150 rows in one go.
+let firstLoaded = false;
+function armLog() {
+  if (log.getAttribute('role') || !firstLoaded || pumping) return;
+  log.setAttribute('role', 'log');
+  log.setAttribute('aria-live', 'polite');
+  log.setAttribute('aria-relevant', 'additions');
+}
+
 function pump() {
   if (pumping) return;
   pumping = true;
@@ -72,7 +82,10 @@ function pump() {
     if (following) scroller().scrollTop = scroller().scrollHeight;
     else if (end > 0) $('newLines').classList.remove('hidden');
     if (next < store.rows.length) setTimeout(step, 0);
-    else pumping = false;
+    else {
+      pumping = false;
+      armLog();
+    }
   };
   step();
 }
@@ -313,6 +326,7 @@ async function start() {
     if (id) history.replaceState(null, '', `live.html?id=${encodeURIComponent(id)}`);
   }
   if (!id) {
+    firstLoaded = true;
     $('chip').classList.add('hidden');
     const e = $('empty');
     e.textContent = 'Nothing is being recorded right now. ';
@@ -321,6 +335,7 @@ async function start() {
     e.append(a, '.');
     for (const x of ['sumGo']) $(x).disabled = true;
     mountAsk($('askBox'), { getMeetings: async () => [], getCtx: () => ({}), placeholder: 'Nothing is being recorded' });
+    armLog();
     $('askBox').querySelector('input').disabled = true;
     $('askBox').querySelector('.primary').disabled = true;
     return;
@@ -341,10 +356,13 @@ async function start() {
     },
     getCtx: () => ({ entries: parseDictionary(settings.dictionary), attendees: [], learned: (settings.learnedNames || []).slice(-40), myName: settings.myName, room: !!meta?.room }),
     placeholder: 'e.g. "What has been decided so far?"',
+    placeholderNarrow: 'Ask about this meeting',
     suggestions: ['What has been decided so far?', 'What action items have come up?', 'Who said what about the budget?', 'Summarise the last ten minutes'],
   });
 
   await pull();
+  firstLoaded = true;
+  armLog();
   pollTimer = setInterval(() => {
     if (!document.hidden) pull();
   }, POLL_MS);

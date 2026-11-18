@@ -70,11 +70,12 @@ listeners.push((m) => {
   if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(`console.error: ${m.params.args.map((a) => a.value ?? a.description).join(' ')}`);
 });
 
-async function openPage(url, wait = 1500) {
+async function openPage(url, wait = 1500, prelude = '') {
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   await send('Runtime.enable', {}, sessionId);
   await send('Page.enable', {}, sessionId);
+  if (prelude) await send('Page.addScriptToEvaluateOnNewDocument', { source: prelude }, sessionId);
   await send('Page.navigate', { url }, sessionId);
   await sleep(wait);
   const evaluate = async (expression) => {
@@ -131,10 +132,13 @@ try {
   // lv1 is being recorded: the background's recording state says so (it lives in session storage)
   const setRec = (extra = {}) => opts.evaluate(`chrome.storage.session.set({ rec: ${JSON.stringify({ recording: true, meetingId: 'lv1', tabId: 1, startedAt: now - 300000, mic: true, micOn: true, micWanted: true, ...extra })} })`);
   await setRec();
-  const p = await openPage(`chrome-extension://${id}/live.html?id=lv1`, 2500);
+  // records, for every batch of transcript rows that is drawn, whether the log was already a live region at that moment
+  const ROLE_PRELUDE = `window.__roles = []; new MutationObserver((ms) => { for (const m of ms) if ([...m.addedNodes].some((n) => n.classList?.contains('lv-line'))) window.__roles.push(document.getElementById('log').getAttribute('role') + '/' + document.getElementById('log').getAttribute('aria-live')); }).observe(document, { childList: true, subtree: true });`;
+  const p = await openPage(`chrome-extension://${id}/live.html?id=lv1`, 2500, ROLE_PRELUDE);
   check('lines render, with the time, who and text', (await p.evaluate(`document.querySelectorAll('.lv-line:not(.screen)').length`)) === 5 && (await p.evaluate(`document.querySelector('.lv-line .who').textContent`)) === 'Amal');
   check('the screen note shows as "On screen (Priya): …"', await p.evaluate(`!!document.querySelector('.lv-line.screen') && /^01:20On screen \\(Priya\\): Slide: Q2 budget table$/.test(document.querySelector('.lv-line.screen').textContent)`));
   check('the second line of one speaker folds into the first', await p.evaluate(`document.querySelectorAll('.lv-line')[1].classList.contains('cont')`));
+  check('C10 the log is not a live region while the first rows are drawn (opening a long meeting is not read out), and becomes one after', await p.evaluate(`window.__roles.length >= 1 && window.__roles.every((r) => r === 'null/null')`), await p.evaluate(`JSON.stringify(window.__roles)`));
   check('the log is a polite live region', await p.evaluate(`(() => { const l = document.getElementById('log'); return l.getAttribute('role') === 'log' && l.getAttribute('aria-live') === 'polite' && l.getAttribute('aria-relevant') === 'additions'; })()`));
   check('text is inserted as text, never as markup', (await p.evaluate(`window.__x`)) === undefined && (await p.evaluate(`document.getElementById('log').querySelector('img') === null && document.getElementById('log').textContent.includes('<img src=x onerror=window.__x=1>')`)));
   check('the waiting message is gone once there are lines', await p.evaluate(`!document.getElementById('empty')`));
@@ -217,6 +221,13 @@ try {
     await sleep(400);
     check(`no horizontal scroll at ${width} px`, await p.evaluate(`document.scrollingElement.scrollWidth <= window.innerWidth`), await p.evaluate(`document.scrollingElement.scrollWidth + ' > ' + window.innerWidth`));
   }
+  const narrow = await p.evaluate(`(() => { const chip = document.querySelector('#askBox .chipbtn'); const panel = document.querySelector('.lv-panel'); return { holder: document.querySelector('#askBox input').placeholder, radius: getComputedStyle(chip).borderTopLeftRadius, align: getComputedStyle(chip).textAlign, panelBg: getComputedStyle(panel).backgroundColor }; })()`);
+  check('U6 at 360 px the Ask placeholder is the short one (not cut off mid-word)', narrow.holder === 'Ask about this meeting', JSON.stringify(narrow));
+  check('U7 a suggestion chip that wraps is a rounded chip with its text at the start, not a tall pill', narrow.radius === '16px' && /^(start|left)$/.test(narrow.align), JSON.stringify(narrow));
+  check('U10 the "Summary so far" panel is an opaque reading surface', /^rgb\(/.test(narrow.panelBg) || /, 1\)$/.test(narrow.panelBg), narrow.panelBg);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false }, p.sessionId);
+  await sleep(300);
+  check('U6 at 1280 px the long example placeholder is shown', (await p.evaluate(`document.querySelector('#askBox input').placeholder`)).startsWith('e.g.'));
   const files = [];
   await bcast({ kind: 'state', item: { recording: true, paused: false, startedAt: Date.now() - 900000 } });
   for (const dark of [false, true]) for (const width of [1280, 360]) files.push(await shot(p, 'live', { width, dark }));

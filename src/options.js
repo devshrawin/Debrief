@@ -374,8 +374,8 @@ async function renderUsage() {
     cell(KIND[r.kind] || r.kind);
     cell(String(r.req), 'num');
     cell(r.fail ? `${r.fail}${r.rl ? ` (${r.rl} limit)` : ''}` : '0', `num${r.fail ? ' fail' : ''}`);
-    cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '-', 'num');
-    cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '-', 'num');
+    cell(r.tin || r.tout ? `${fmtN(r.tin)} / ${fmtN(r.tout)}` : '—', 'num');
+    cell(r.audioSec ? `${Math.round(r.audioSec / 60)} min` : '—', 'num');
     const paid = paidCost(r, prices);
     cell(paid.usd == null ? '—' : r.fail && !r.tin && !r.tout ? rupees(0, $('usdInr').value) : `${paid.assumed ? '~' : ''}${rupees(paid.usd, $('usdInr').value)}`, 'num cost');
     const left = tr.insertCell();
@@ -502,7 +502,19 @@ let loaded = {};
 let ready = false;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+// The settings as they stand on this page (only what was changed here, on top of what is stored), checked for a custom
+// server's permission: what the Test buttons run against. Nothing is written.
+async function onScreen() {
+  if (!ready) throw new Error('The settings are still loading. Try again in a moment.');
+  const vals = read();
+  const out = { ...(await getSettings()) };
+  for (const k of Object.keys(vals)) if (!same(vals[k], loaded[k])) out[k] = vals[k];
+  await requestOrigins(out);
+  return out;
+}
+
 async function save() {
+  if (!ready) return null; // a click before the stored values are on the page would write empty fields over them
   const vals = read();
   if (vals.webhookUrl && !validWebhook(vals.webhookUrl)) throw new Error('The address for sending minutes is not valid.');
   const out = { ...(await getSettings()) };
@@ -534,7 +546,17 @@ function updateDirty() {
   bar.classList.toggle('saved', flash?.kind === 'saved');
   bar.classList.toggle('bad', flash?.kind === 'bad');
   $('undo').hidden = !dirty;
-  $('save').setAttribute('aria-disabled', String(!dirty && !flash?.kind));
+  const off = !dirty && !flash?.kind;
+  const sv = $('save');
+  if (off && !sv.disabled && document.activeElement === sv) {
+    // a disabled button cannot keep the focus: it moves to the page's own heading area
+    const to = document.querySelector('.page.active h1') || document.querySelector('.content');
+    if (to) {
+      if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
+      to.focus({ preventScroll: true });
+    }
+  }
+  sv.disabled = off;
   $('msg').textContent = flash ? flash.text : dirty ? 'You have unsaved changes' : 'All changes saved';
 }
 function showFlash(kind, text, ms) {
@@ -716,9 +738,9 @@ $('testWhisper').onclick = async () => {
 };
 
 $('testLlm').onclick = async () => {
-  $('llmStatus').textContent = 'Testing…';
+  $('llmStatus').textContent = isDirty() ? 'Testing the values on this page (not saved yet)…' : 'Testing…';
   try {
-    const settings = await save();
+    const settings = await onScreen();
     const ping = (s) => generate({ settings: s, system: 'You are a connectivity test.', user: 'Reply with exactly: OK', onText: () => {} });
     // Test each Gemini key on its own so a dead backup key doesn't hide behind a working main key.
     const runs = [['Main', { ...settings, geminiBackups: [] }]];
@@ -1073,9 +1095,9 @@ $('backupFile').onchange = async (e) => {
 };
 
 $('testMail').onclick = async () => {
-  $('mailMsg').textContent = 'Sending…';
+  $('mailMsg').textContent = isDirty() ? 'Sending a test with the values on this page (not saved yet)…' : 'Sending…';
   try {
-    const s = await save();
+    const s = await onScreen();
     if (!mailReady(s)) throw new Error(/\/dev(\?|$)/.test(s.emailWebhook || '') ? 'That is the test URL (ends in /dev). Use Deploy → New deployment, and paste the Web app URL that ends in /exec.' : 'Paste the Apps Script web app URL: https://script.google.com/…/exec (company accounts have /a/macros/yourcompany.com/ in it).');
     const r = await sendMail(
       {
@@ -1153,7 +1175,9 @@ chrome.storage.onChanged.addListener(async (changes) => {
       renderSecret(k);
     } else if (f.type === 'checkbox') f.checked = !!fresh[k];
     else setValue(f, fresh[k]);
-    loaded[k] = fresh[k];
+    // what the field now reads as, not the stored value: a number field reads "10" for a stored 10, a colour field reads
+    // "#000000" for none. Comparing with the stored form would leave the page "changed" right after every save.
+    loaded[k] = SECRETS.includes(k) ? fresh[k] : read()[k];
   }
   $('shareAuto').checked = fresh.shareMode === 'auto';
   loaded.shareMode = fresh.shareMode;

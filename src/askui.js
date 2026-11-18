@@ -17,7 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CSS = `
 .ask { padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
 .ask-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chipbtn { font-size: 13px; font-weight: 600; min-height: 32px; padding: 3px 12px; border-radius: 999px; }
+.chipbtn { font-size: 13px; font-weight: 600; min-height: 32px; padding: 3px 12px; border-radius: 16px; text-align: start; line-height: 1.35; } /* wraps as a rounded chip with its text at the start, not a tall pill */
 .ask-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 .ask-row input { flex: 1; min-width: 0; }
 .ask > .hint { margin-top: 8px; }
@@ -122,7 +122,11 @@ export function mountAsk(root, opts) {
   const row = h('div', 'ask-row');
   const input = h('input');
   input.type = 'text';
-  input.placeholder = opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the vendor contract?"';
+  // a narrow column shows a short placeholder: the long one would be cut off mid-word
+  const narrow = matchMedia('(max-width: 480px)');
+  const setHolder = () => (input.placeholder = (narrow.matches && opts.placeholderNarrow) || opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the vendor contract?"');
+  setHolder();
+  narrow.addEventListener?.('change', setHolder);
   input.setAttribute('aria-label', 'Your question');
   const go = h('button', 'primary');
   if (opts.large) {

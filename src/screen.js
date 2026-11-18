@@ -122,8 +122,8 @@ export function verdict(r) {
 // text or none counts as a described frame; an error leaves the picture unseen so the same one is tried again at a later look,
 // after a wait that doubles (30 s ... 5 min) and does not count toward any cut-off.
 export class ScreenWatcher {
-  constructor({ video, everySec = 30, onFrame, now = Date.now, budgetOk = async () => true, makeCanvas, setTimer = setInterval, clearTimer = clearInterval, gate = new ScreenGate() }) {
-    Object.assign(this, { video, onFrame, now, budgetOk, setTimer, clearTimer, gate });
+  constructor({ video, everySec = 30, onFrame, now = Date.now, budgetOk = async () => true, onGiveUp = () => {}, makeCanvas, setTimer = setInterval, clearTimer = clearInterval, gate = new ScreenGate() }) {
+    Object.assign(this, { video, onFrame, now, budgetOk, onGiveUp, setTimer, clearTimer, gate });
     this.everySec = Math.max(5, Number(everySec) || 30);
     this.makeCanvas = makeCanvas || defaultCanvas;
     this.paused = false;
@@ -179,6 +179,15 @@ export class ScreenWatcher {
         answer = { error: e?.message || 'failed', retryable: true }; // a throwing describe is a failed one
       }
       const v = verdict(answer);
+      if (v.kind === 'error' && !v.retryable) {
+        // a rejected key or a model that cannot see pictures will not get better by asking again: stop for this recording
+        this.gaveUp = true;
+        this.stop();
+        try {
+          this.onGiveUp(String(answer?.error || 'the request was refused'));
+        } catch {}
+        return false;
+      }
       if (v.kind === 'error') {
         this.retryAt = nowSec + retryDelay(++this.errRun); // not committed: this picture is still undescribed
         return false;
