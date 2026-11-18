@@ -177,7 +177,7 @@ async function openPage(url, { width = 1100, height = 800, scale = 1.5 } = {}) {
   const popupShot = async (name) => {
     // the real popup scrolls inside 600 px; the picture shows all of it, so nothing is cut at the bottom
     await evaluate(`document.body.style.maxHeight = 'none'; document.body.style.overflowY = 'visible'`);
-    const h = await evaluate(`Math.ceil(document.body.scrollHeight)`);
+    const h = await evaluate(`Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))`); // the whole document, so the capture window never shows a scrollbar the real popup does not have
     await send('Emulation.setDeviceMetricsOverride', { width: 360, height: h, deviceScaleFactor: scale, mobile: false }, sessionId);
     await evaluate(`document.fonts.ready.then(() => true)`);
     await sleep(800);
@@ -272,11 +272,11 @@ try {
   await sleep(500);
   await t.evaluate(`document.getElementById('next').click()`);
   await sleep(700);
-  await t.shot('tour-ready', { maxHeight: 1700 });
+  await t.shot('tour-ready', { maxHeight: 1700, keepFixed: true }); // the Back / Next capsule is part of the tour
   await t.evaluate(`document.getElementById('back').click()`);
   await t.evaluate(`document.getElementById('back').click()`);
   await sleep(600);
-  await t.shot('tour-key', { maxHeight: 1000 });
+  await t.shot('tour-key', { maxHeight: 1000, keepFixed: true });
 
   await opts.evaluate(`chrome.storage.local.remove(['usage', 'learnedLimits'])`);
   // ---- the popup while recording
@@ -401,7 +401,7 @@ try {
     const pg = await openPage(url, { width: 1280, height: 800, scale: 1 });
     await sleep(900);
     if (prep) { await pg.evaluate(prep); await sleep(700); }
-    await pg.shot(name, { full: false, clip: { x: 0, y: 0, width: 1280, height: 800 } });
+    await pg.shot(name, { full: false, clip: { x: 0, y: 0, width: 1280, height: 800 }, keepFixed: true }); // a viewport-sized shot: floating bars stay where they really are
   };
   await store('store-1-minutes', `chrome-extension://${id}/mom.html?id=demo1`);
   await store('store-2-settings', `chrome-extension://${id}/options.html`, `document.querySelector('[data-tab="voices"]').click()`);
