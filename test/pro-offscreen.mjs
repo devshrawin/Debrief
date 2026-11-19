@@ -404,8 +404,8 @@ await test('a content script cannot message the offscreen document; the service 
   });
   assert.equal(await send({ type: 'job-count' }, { tab: { id: 3 }, url: 'https://meet.google.com/abc-defg-hij' }), 'ignored');
   assert.equal(await send({ type: 'stop' }, { tab: { id: 3 }, url: 'https://evil.example/' }), 'ignored');
-  assert.deepEqual(await send({ type: 'job-count' }, {}), { ok: true, count: 0 });
-  assert.deepEqual(await send({ type: 'job-count' }, { tab: { id: 4 }, url: 'chrome-extension://debrief/minutes.html' }), { ok: true, count: 0 });
+  assert.deepEqual(await send({ type: 'job-count' }, {}), { ok: true, count: 0, recording: false });
+  assert.deepEqual(await send({ type: 'job-count' }, { tab: { id: 4 }, url: 'chrome-extension://debrief/minutes.html' }), { ok: true, count: 0, recording: false });
 });
 
 await test('resuming after a pause when the kept recorder cannot restart: the handler still answers, the failure is reported once, keeping stops, the recording goes on', async () => {

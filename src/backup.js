@@ -175,6 +175,7 @@ function cleanMeeting(raw, warnings) {
   for (const k of ['shareTo', 'shareHeld', 'shareStatus', 'sharedTo', 'sharedAt', 'transcriptShare', 'transcriptMine', 'emailedTo', 'emailedAt', 'emailSending', 'webhookAt', 'webhookError']) delete m[k];
   // nothing runs or sends by itself after a restore: no job is resumed or started when the meeting is opened
   m.decided = true;
+  m.emailSkip = true; // no automatic email or share when this meeting is rewritten (the Email button still works)
   m.job = typeof m.mom === 'string' && m.mom.trim() ? { state: 'done' } : { state: 'failed', error: 'Imported from a backup: press Write minutes to write them.' };
   return m;
 }

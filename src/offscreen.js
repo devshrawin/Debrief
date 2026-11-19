@@ -7,6 +7,9 @@ import { Mixer, Meter, timelineOf, attributeMixed } from './mixer.js';
 import { segmentsFromUtterances } from './utter.js';
 import { createJobRunner, useStore } from './jobs.js';
 import { savePending } from './audiostore.js';
+import { withTimeout } from './timeout.js';
+
+const POOL_DRAIN_MS = 120000;
 import { transcribePiece } from './coverage.js';
 import { VoiceTracker } from './voice/tracker.js';
 import { createVoiceClient } from './voice/client.js';
@@ -220,7 +223,7 @@ async function teardown(r) {
   await keep?.keeper.stop().catch(() => {}); // the last piece is written before the audio contexts close
   [r.tabStream, r.micStream, r.videoStream].forEach((x) => x?.getTracks().forEach((t) => t.stop()));
   await Promise.allSettled([r.ctx?.close(), r.playCtx?.close()]);
-  await r.pool?.drain();
+  await withTimeout(r.pool?.drain(), POOL_DRAIN_MS); // a stuck transcription call or a failed save cannot hold Stop for ever
   const voice = r.voice;
   r.voice = null;
   if (voice) {
@@ -520,7 +523,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'job-run') return sendResponse(jobs.run(msg.id, { force: !!msg.force, reread: !!msg.reread, resume: !!msg.resume }));
   if (msg.type === 'job-hold') return sendResponse(jobs.hold(msg.id));
   if (msg.type === 'job-abort') return sendResponse(jobs.abort(msg.id));
-  if (msg.type === 'job-count') return sendResponse({ ok: true, count: jobs.count() });
+  if (msg.type === 'job-count') return sendResponse({ ok: true, count: jobs.count(), recording: !!rec });
   if (msg.type === 'start') {
     start(msg).then(
       (r) => sendResponse({ ok: true, ...r }),

@@ -37,7 +37,7 @@
     .page > .card, .page > .grid2 > .card { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
     .page > .card > h2, .page > .grid2 > .card > h2 { margin: 0; }
     .card h3 { margin: 0; font-size: 16px; }
-    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 20px; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 20px; align-items: start; }
     .card.danger-zone { border-color: var(--rec-line); align-items: flex-start; }
     .card.danger-zone .lbl { color: var(--rec-ink); }
     .card p { overflow-wrap: anywhere; }
@@ -1008,7 +1008,7 @@
           <label for="usageLimits" class="lbl">Daily limits</label>
           <textarea id="usageLimits" class="mono" placeholder="gemini-3.8-flash=20" rows="5"></textarea>
           <p class="hint">One <code>model=requests per day</code> per line. Debrief also learns limits from Google's quota errors, and warns you in the popup at 80%. Days roll over at midnight Pacific time, which is about 12:30 pm in India.</p>
-          <div class="trow"><div class="tx"><label for="quotaWarnings">Warn me when a model is near its daily limit</label><p class="hint" id="quotaWarnings-d">Turn off if your key is on a paid plan with no daily limit.</p></div><input type="checkbox" class="sw" role="switch" id="quotaWarnings" aria-describedby="quotaWarnings-d" checked></div>
+          <div class="trow"><div class="tx"><label for="quotaWarnings">Warn me near a daily limit</label><p class="hint" id="quotaWarnings-d">Turn off if your key is on a paid plan with no daily limit.</p></div><input type="checkbox" class="sw" role="switch" id="quotaWarnings" aria-describedby="quotaWarnings-d" checked></div>
         </section>
         <section class="card">
           <label for="usagePrices" class="lbl">Prices for "cost if paid"</label>

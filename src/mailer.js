@@ -130,7 +130,8 @@ export async function callRelay(payload, settings) {
   try {
     j = JSON.parse(raw);
   } catch {
-    const signIn = /<html|accounts\.google\.com|Sign in/i.test(raw);
+    // only Google's own sign-in page means "sign in"; any other page that answered 2xx may have been the relay after it sent
+    const signIn = /accounts\.google\.com|ServiceLogin|\/signin\/v2/i.test(raw) || (/<html/i.test(raw) && /Sign in/i.test(raw) && /google/i.test(raw));
     throw Object.assign(new Error(signIn ? 'The relay asked for a Google sign-in. Redeploy the web app with "Who has access: Anyone".' : `Unexpected reply from the mail relay (HTTP ${res.status}).`), { unsure: !signIn && res.ok });
   }
   if (!j.ok) throw new Error(j.error || 'The mail relay refused the request.');

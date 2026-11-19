@@ -68,6 +68,10 @@ export function carryText(prevMeeting, open) {
 // "Done" | "Open" | "Not mentioned" in any wording a model might use -> 'done' | 'open' | 'not mentioned'
 export function normStatus(s) {
   const t = String(s || '').toLowerCase();
+  // the first word decides: "Completed (was pending)" and "Done, ongoing review" are done, "Open, was done once" is open
+  const lead = /^\W*([a-z]+)/.exec(t)?.[1] || '';
+  if (/^(done|completed?|finished|closed|resolved)$/.test(lead)) return 'done';
+  if (/^(open|pending|ongoing|unresolved|unfinished|undone|incomplete|partial|partially|blocked|delayed)$/.test(lead)) return 'open';
   // the open and negative wordings first: "Incomplete" and "Partially done" contain "complete" and "done"
   if (/\b(un(resolved|finished|done)|incomplete|not\s+(yet\s+)?(done|complete|completed|finished|closed)|partial(ly)?|pending|to\s+be\s+(done|completed|finished)|open|in\s+progress|ongoing)\b/.test(t)) return 'open';
   if (/not\s+mention|no\s+mention|not\s+discussed|not\s+raised|unmention/.test(t)) return 'not mentioned';

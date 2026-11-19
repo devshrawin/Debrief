@@ -392,12 +392,14 @@ await test('export, wipe, import gives back identical meetings and settings', as
   assert.deepEqual(r.meetings, { added: 2, skipped: 0 });
   assert.equal(r.settingsApplied, true);
   assert.equal(r.voices, 1);
-  // an import marks each meeting decided and gives it a finished job, so nothing runs or sends by itself after a restore; otherwise identical
+  // an import marks each meeting decided and gives it a finished job, so nothing runs or sends by itself after a restore (emailSkip); otherwise identical
   const after = JSON.parse(JSON.stringify(await listMeetings()));
   for (const m of after) {
     assert.equal(m.decided, true);
+    assert.equal(m.emailSkip, true); // a restored meeting never mails by itself
     assert.ok(m.job?.state === 'done' || m.job?.state === 'failed');
     delete m.decided;
+    delete m.emailSkip;
     delete m.job;
   }
   assert.deepEqual(after, JSON.parse(JSON.stringify(before)));

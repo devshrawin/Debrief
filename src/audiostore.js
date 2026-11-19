@@ -13,7 +13,7 @@ function open() {
   });
 }
 
-async function run(mode, fn) {
+export async function run(mode, fn) {
   const db = await open();
   try {
     return await new Promise((resolve, reject) => {
@@ -21,6 +21,8 @@ async function run(mode, fn) {
       const req = fn(tx.objectStore(STORE));
       tx.oncomplete = () => resolve(req?.result);
       tx.onerror = () => reject(tx.error);
+      // a commit that fails (a full disk: QuotaExceededError) fires only abort; without this the promise never settled
+      tx.onabort = () => reject(tx.error || new Error('aborted'));
     });
   } finally {
     db.close();

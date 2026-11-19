@@ -124,7 +124,7 @@ export function mountAsk(root, opts) {
   input.type = 'text';
   // a narrow column shows a short placeholder: the long one would be cut off mid-word
   const narrow = matchMedia('(max-width: 480px)');
-  const setHolder = () => (input.placeholder = (narrow.matches && opts.placeholderNarrow) || opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the vendor contract?"');
+  const setHolder = () => (input.placeholder = (narrow.matches && (opts.placeholderNarrow || 'Ask a question')) || opts.placeholder || 'Ask anything about the meeting, e.g. "who owns the vendor contract?"');
   setHolder();
   narrow.addEventListener?.('change', setHolder);
   input.setAttribute('aria-label', 'Your question');

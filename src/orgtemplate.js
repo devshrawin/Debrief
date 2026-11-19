@@ -633,10 +633,10 @@ const navyCell = () => `border:1px solid ${ORG.accent};background:${ORG.accent};
 const ZEBRA = '#f2f2f2';
 
 const e = (s) => escapeHtml(s ?? '');
-const navy = (inner, { w, center = true, colspan, mid = false } = {}) =>
-  `<th${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''} bgcolor="${ORG.accent}" style="${navyCell()};text-align:${center ? 'center' : 'left'};${mid ? 'vertical-align:middle;' : 'vertical-align:top;'}${w ? `width:${w}px;` : ''}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
-const plain = (inner, { w, center = false, z = false, bold = false, colspan } = {}) =>
-  `<td${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''}${z ? ` bgcolor="${ZEBRA}"` : ''} style="${CELL};${z ? `background:${ZEBRA};` : ''}${center ? 'text-align:center;' : ''}${w ? `width:${w}px;` : ''}">${bold ? `<b>${inner}</b>` : inner}</td>`;
+const navy = (inner, { w, center = true, colspan, mid = false, nw = false } = {}) =>
+  `<th${nw ? ' class="amx-nw"' : ''}${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''} bgcolor="${ORG.accent}" style="${navyCell()};text-align:${center ? 'center' : 'left'};${mid ? 'vertical-align:middle;' : 'vertical-align:top;'}${w ? `width:${w}px;` : ''}"><b><span style="color:#ffffff">${inner}</span></b></th>`;
+const plain = (inner, { w, center = false, z = false, bold = false, colspan, nw = false } = {}) =>
+  `<td${nw ? ' class="amx-nw"' : ''}${colspan ? ` colspan="${colspan}"` : ''}${w ? ` width="${w}"` : ''}${z ? ` bgcolor="${ZEBRA}"` : ''} style="${CELL};${z ? `background:${ZEBRA};` : ''}${center ? 'text-align:center;' : ''}${w ? `width:${w}px;` : ''}">${bold ? `<b>${inner}</b>` : inner}</td>`;
 const tr = (cells) => `<tr style="page-break-inside:avoid">${cells}</tr>`;
 const table = (inner) => `<table class="amx-t" width="100%" cellspacing="0" cellpadding="0" border="1" style="border-collapse:collapse;width:100%;margin:0;${FONT}">${inner}</table>`;const gap = '<p class="amx-gap" style="margin:0;font-size:8pt;line-height:10pt">&nbsp;</p>';
 const ul = (items, pad = 18) => `<ul style="margin:0;padding:0 0 0 ${pad}px">${items.map((i) => `<li style="margin:0 0 2px">${e(i)}</li>`).join('')}</ul>`;
@@ -650,7 +650,7 @@ export function renderDocBody(doc) {
   out.push(table(tr(`${navy('Mode', { w: 117, mid: true })}${plain(e(h.mode), { bold: true })}`) + tr(`${navy('Location', { w: 117, mid: true })}${plain(e(h.location), { bold: true })}`)), gap);
   out.push(
     table(
-      `<thead>${tr(`${navy('Date', { w: 117 })}${navy('Time', { w: 128 })}${navy('Chairperson')}`)}</thead><tbody>${tr(`${plain(e(h.date), { center: true, bold: true })}${plain(e(h.time), { center: true, bold: true })}${plain(e(h.chair), { center: true, bold: true })}`)}</tbody>`
+      `<thead>${tr(`${navy('Date', { w: 117, nw: true })}${navy('Time', { w: 128, nw: true })}${navy('Chairperson')}`)}</thead><tbody>${tr(`${plain(e(h.date), { center: true, bold: true, nw: true })}${plain(e(h.time), { center: true, bold: true, nw: true })}${plain(e(h.chair), { center: true, bold: true })}`)}</tbody>`
     ),
     gap
   );
@@ -661,7 +661,7 @@ export function renderDocBody(doc) {
     out.push(
       table(
         `<thead>${tr(navy(title, { colspan: 4, center: false }))}${tr(navy(cols[0] === 'SR' ? 'SR No.' : cols[0], { w: 56 }) + navy(cols[1]) + navy(cols[2]) + navy(cols[3]))}</thead><tbody>${rows
-          .map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(r.name), { bold: true, z: i % 2 === 1 }) + plain(e(r.a), { z: i % 2 === 1 }) + plain(e(r.desig), { z: i % 2 === 1 })))
+          .map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, nw: true, z: i % 2 === 1 }) + plain(e(r.name), { bold: true, z: i % 2 === 1 }) + plain(e(r.a), { z: i % 2 === 1 }) + plain(e(r.desig), { z: i % 2 === 1 })))
           .join('')}</tbody>`
       ),
       gap
@@ -676,7 +676,7 @@ export function renderDocBody(doc) {
               .map((d, i) => {
                 const z = i % 2 === 1;
                 const pts = d.points.length ? d.points.map((p, k) => `<p style="margin:0 0 ${k === d.points.length - 1 ? 0 : 5}pt">${e(p)}</p>`).join('') : '—';
-                return tr(plain(String(i + 1), { w: 56, center: true, bold: true, z }) + plain(e(d.topic), { w: 150, bold: true, z }) + plain(pts, { z }) + plain(e(d.resp), { w: 130, bold: true, z }));
+                return tr(plain(String(i + 1), { w: 56, center: true, bold: true, nw: true, z }) + plain(e(d.topic), { w: 150, bold: true, z }) + plain(pts, { z }) + plain(e(d.resp), { w: 130, bold: true, z }));
               })
               .join('')
           : tr(plain('—', { colspan: 4 }))
@@ -689,7 +689,7 @@ export function renderDocBody(doc) {
     out.push(
       table(
         `<thead>${tr(navy('SR No.', { w: 56 }) + navy('Name', { w: 120 }) + cols.map((c) => navy(e(c))).join(''))}</thead><tbody>${doc.updates.rows
-          .map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(r.name), { w: 120, bold: true, z: i % 2 === 1 }) + r.cells.map((c) => plain(e(c), { z: i % 2 === 1 })).join('')))
+          .map((r, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, nw: true, z: i % 2 === 1 }) + plain(e(r.name), { w: 120, bold: true, z: i % 2 === 1 }) + r.cells.map((c) => plain(e(c), { z: i % 2 === 1 })).join('')))
           .join('')}</tbody>`
       ),
       gap
@@ -697,9 +697,9 @@ export function renderDocBody(doc) {
   }
   out.push(
     table(
-      `<thead>${tr(navy('Sr.', { w: 56 }) + navy('Action Item') + navy('Responsibility', { w: 130 }))}</thead><tbody>${
+      `<thead>${tr(navy('Sr.', { w: 56, nw: true }) + navy('Action Item') + navy('Responsibility', { w: 130 }))}</thead><tbody>${
         doc.actions.length
-          ? doc.actions.map((a, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, z: i % 2 === 1 }) + plain(e(a.text), { z: i % 2 === 1 }) + plain(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join('')
+          ? doc.actions.map((a, i) => tr(plain(String(i + 1), { w: 56, center: true, bold: true, nw: true, z: i % 2 === 1 }) + plain(e(a.text), { z: i % 2 === 1 }) + plain(e(a.resp), { w: 130, bold: true, z: i % 2 === 1 }))).join('')
           : tr(plain('None recorded.', { colspan: 3 }))
       }</tbody>`
     ),

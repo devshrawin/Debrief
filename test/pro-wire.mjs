@@ -3,6 +3,7 @@
 // (src/pill.js, bundled) running in jsdom on fake Meet markup. Real Meet could not be inspected: markup here is guessed.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import * as esbuild from 'esbuild';
 
@@ -396,7 +397,7 @@ await test('presenting reporter: sends on change and once after a recording star
 
 // ---------------------------------------------------------------- the real pill script in jsdom
 
-const bundle = (await esbuild.build({ entryPoints: [new URL('../src/pill.js', import.meta.url).pathname], bundle: true, format: 'iife', write: false, logLevel: 'silent' })).outputFiles[0].text;
+const bundle = (await esbuild.build({ entryPoints: [fileURLToPath(new URL('../src/pill.js', import.meta.url))], bundle: true, format: 'iife', write: false, logLevel: 'silent' })).outputFiles[0].text;
 
 // Fake Meet: call controls, a chat button that opens a panel with a box and a send button, optional tiles and presenting banner.
 function fakePage({ url = 'https://meet.google.com/abc-defg-hij', title = 'Daily standup - Google Meet', people = 3, chatOff = false, generic = false, visible = true, S }) {

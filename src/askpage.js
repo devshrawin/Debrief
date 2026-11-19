@@ -99,6 +99,7 @@ const span = (sec) => {
     getCtx: () => ({ entries: parseDictionary(settings.dictionary), attendees: [], learned: (settings.learnedNames || []).slice(-40), myName: settings.myName }),
     openLink: true,
     placeholder: 'e.g. "What did we decide about the budget?"',
+    placeholderNarrow: 'Ask about your meetings',
     suggestions: ['What action items are still open?', 'What did we decide about the budget?', 'Which risks came up recently?', 'Who agreed to do what this week?'],
   });
 })();

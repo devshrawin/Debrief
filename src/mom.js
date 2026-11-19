@@ -7,7 +7,7 @@ import { attributeMixed } from './mixer.js';
 import { mountEditor } from './mdedit.js';
 import { modal } from './modal.js';
 import { getSettings, setSetting, getVoices, saveVoices, llmReady, getEmailNames, getMeeting, getMeetingMeta, saveMeeting, patchMeeting as patchStored, deleteMeetingAndStop, fmtTime, normalizeFormat } from './store.js';
-import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, transcriptGaps } from './jobs.js';
+import { createJobRunner, labeledLinesFor, nameCtxFor, wantTranscript as wantT, ensureInvited as ensureInvitedFor, rememberEmailNames as rememberNamesFor, ensureAttendees as ensureAttendeesFor, retryPendingAudio, emailMinutes, shareMinutes, shareFailureText, transcriptGaps } from './jobs.js';
 import { ACTIVE, isActive, STALE_MS } from './jobstate.js';
 import { parseDictionary, applyDictionary, suggestNames, learnAlias, replaceWord, learnFromMeeting, mergeLearned } from './dictionary.js';
 import { matchPeople, setEmailNames, personLabel } from './attendance.js';
@@ -852,7 +852,7 @@ async function shareMom() {
     $('shareStatus').textContent = r.status;
     paintHeld(false);
   } catch (e) {
-    $('shareStatus').textContent = `Share failed: ${e.message}`;
+    $('shareStatus').textContent = shareFailureText(e);
   } finally {
     $('shareSend').removeAttribute('aria-disabled');
     sharing = false;

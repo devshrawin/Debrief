@@ -257,7 +257,7 @@ try {
   check('the default backup has no API keys and no email secret', b1.app === 'debrief' && !('geminiKey' in b1.settings) && !('emailSecret' in b1.settings) && !JSON.stringify(b1).includes('AIzaSECRETKEY'), Object.keys(b1.settings).slice(0, 5).join());
   await tick('#backupKeys', true);
   await click('#backupDownload');
-  await sleep(800);
+  for (let i = 0; i < 20 && readdirSync(downloads).filter((x) => x.endsWith('.json')).length < 2; i++) await sleep(250); // the second file can take longer than a fixed wait (slower disks)
   const f2 = readdirSync(downloads).filter((x) => x.endsWith('.json'));
   const withKeys = f2.map((x) => JSON.parse(readFileSync(path.join(downloads, x), 'utf8'))).find((b) => 'geminiKey' in b.settings);
   check('ticking "Include my API keys" puts them in the file', !!withKeys && withKeys.settings.geminiKey === 'AIzaSECRETKEY123456789' && /Keep it private/.test(await get('#backupDownloadMsg', 'textContent')));

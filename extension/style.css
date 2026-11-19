@@ -301,6 +301,8 @@ button.plain:disabled, button.ghost:disabled { background: transparent; color: v
 button.danger { background: var(--red-soft); color: var(--red); }
 button.danger:hover:not(:disabled) { background: var(--red-fill); color: var(--on-red); }
 button.danger-fill { background: var(--red-fill); color: var(--on-red); }
+/* a disabled destructive button is a plain grey one with readable text, not a faded red one (faded red is about 2.4:1) */
+button.danger:disabled, button.danger-fill:disabled { opacity: 1; background: var(--fill); color: var(--label-2); box-shadow: none; }
 
 /* Fields */
 input, select, textarea {
@@ -670,6 +672,8 @@ db-orb.status-orb { border-radius: 50%; background: var(--tint-soft); box-shadow
 /* Where we search or ask: the border beam draws attention (fx/beam.js adds it while focused or busy) */
 [data-beam] { position: relative; }
 .search-beam { border-radius: var(--r-md); }
+/* the beam layer is out of the flow from the start; it was static until the beam stylesheet loaded on first focus, which pushed a send button 10 px sideways (zero specificity: the beam stylesheet still sets its own box) */
+:where([data-beam] > [data-beam-bloom]) { position: absolute; width: 0; height: 0; pointer-events: none; }
 
 input[type=color] { width: 72px; min-height: 38px; padding: 4px; cursor: pointer; border: 1px solid var(--separator-strong); border-radius: var(--r-sm); }
 input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
@@ -730,7 +734,7 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
 /* The window is the only scroller: the header is a floating panel that stays at the top, the transcript flows down the page, and on a wide
    screen the summary column stays in view beside it. */
 .lv-main { max-width: 1180px; margin: 0 auto; padding: var(--s3) var(--s4) 96px; display: flex; flex-direction: column; gap: var(--s4); }
-.lv-head { position: sticky; top: 0; z-index: 30; display: flex; flex-direction: column; gap: var(--s1); padding: 12px var(--s4); border-radius: var(--r-lg); background: var(--mat-thick); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-2); }
+.lv-head { position: sticky; top: 0; z-index: 30; display: flex; flex-direction: column; gap: var(--s1); padding: 12px var(--s4); border-radius: var(--r-lg); background: var(--mat-bar); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-2); }
 .lv-crumb { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
 .lv-crumb .crumb { display: flex; align-items: center; gap: 10px; }
 .lv-crumb .crumb img { width: 26px; height: 26px; border-radius: 7px; }

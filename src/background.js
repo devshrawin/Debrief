@@ -264,12 +264,15 @@ async function ensureOffscreen() {
   });
 }
 
-async function closeOffscreen() {
+// failedStart: the recorder that was starting did not come up, so there is nothing left to protect.
+async function closeOffscreen({ failedStart = false } = {}) {
+  // a recorder that is starting (the offscreen document holds it before the state says "recording") must not be closed under
+  if (starting && !failedStart) return;
   const ctxs = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
   if (!ctxs.length) return;
   // minutes being written there must not be cut off
   const busy = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'job-count' }).catch(() => null);
-  if (busy?.count > 0) return;
+  if (busy?.count > 0 || busy?.recording) return;
   await chrome.offscreen.closeDocument();
 }
 
@@ -355,7 +358,7 @@ async function startInner(msg) {
   await ensureOffscreen();
   const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'start', streamId: msg.streamId, settings: { ...settings, roomMode: room, captureMic: settings.captureMic || room }, meetingId: id }).catch((e) => ({ ok: false, error: e.message }));
   if (!r?.ok) {
-    await closeOffscreen();
+    await closeOffscreen({ failedStart: true });
     await patchMeeting(id, { endedAt: Date.now() });
     await appendMeeting(id, 'errors', [`Start failed: ${r?.error}`]);
     return { ok: false, error: r?.error || 'Recorder did not start.' };

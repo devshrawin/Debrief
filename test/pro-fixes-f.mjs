@@ -5,6 +5,7 @@
 // suspended audio context is resumed once). The pages themselves (minutes, live, settings, voices) are covered by the chrome-*
 // suites. Usage: node test/pro-fixes-f.mjs
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import * as esbuild from 'esbuild';
@@ -171,7 +172,7 @@ await test('C8 a request that cannot succeed (retryable: false) stops the watche
 });
 
 // ---- the pill (C5, C10, C11) in jsdom ----
-const bundle = (await esbuild.build({ entryPoints: [new URL('../src/pill.js', import.meta.url).pathname], bundle: true, format: 'iife', write: false, logLevel: 'silent' })).outputFiles[0].text;
+const bundle = (await esbuild.build({ entryPoints: [fileURLToPath(new URL('../src/pill.js', import.meta.url))], bundle: true, format: 'iife', write: false, logLevel: 'silent' })).outputFiles[0].text;
 const recState = (o = {}) => ({ recording: true, meetingId: 'm1', tabId: 7, startedAt: Date.now() - 3000, mic: true, micOn: true, micWanted: true, ...o });
 const baseS = (o = {}) => ({ ok: true, rec: recState(), levels: { at: Date.now() + 1e7, tab: 0.01, mic: 0.01 }, counts: { segs: 1, errs: 0 }, follow: true, showPill: true, captionMode: 'read', otherSites: true, shortcut: 'Ctrl+Shift+Y', notice: { on: false, text: '', done: false }, nudge: { on: false, skipOneOnOne: true, meetingTypes: [], dismissed: [] }, ...o });
 function pillPage(S) {

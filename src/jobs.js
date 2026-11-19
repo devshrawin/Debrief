@@ -191,6 +191,13 @@ export async function emailMinutes({ meeting, settings, auto, patch, getLatest, 
   }
 }
 
+// What to tell the person when sending to other people failed. After an unsure failure (the request may have reached the relay)
+// the mail may be out already, so the text says to check before sending again.
+export function shareFailureText(e, lead = 'Share failed') {
+  const m = String(e?.message || e || 'unknown error').replace(/[.\s]+$/, '');
+  return e?.unsure ? `${lead}: ${m}. It may already have been sent. Check before sending again.` : `${lead}: ${m}.`;
+}
+
 // Sends the minutes to other people (cc / bcc / to). `list` is the addresses, `how` is to | cc | bcc.
 export async function shareMinutes({ meeting, settings, list, how, patch, ctxFor }) {
   if (!meeting.mom?.trim()) return { status: 'No minutes to share yet.' };
@@ -516,7 +523,7 @@ export function createJobRunner(deps = {}) {
       if (gone || !(await exists())) return;
 
       // first time only: regenerating or editing never re-sends by itself
-      if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && meeting.endedAt) {
+      if (settings.emailAuto && mailReady(settings) && !meeting.emailedAt && !meeting.emailSkip && meeting.endedAt) {
         await setJob({ state: 'emailing' });
         // outsiders are held back from automatic sharing (counts only in the notification: it can show on a shared screen)
         const auto = settings.shareMode === 'auto' && !meeting.sharedAt;
@@ -529,7 +536,16 @@ export function createJobRunner(deps = {}) {
         else {
           if (r.sent && auto) {
             if (plan.held.length) await patch({ shareHeld: plan.held, shareStatus: heldStatus(plan.held) }).catch(() => {});
-            if (plan.send.length && !gone && (await exists())) await shareMinutes({ meeting, settings, list: plan.send, how: settings.shareHow || 'to', patch, ctxFor: () => nameCtxFor(meeting, settings, cache) }).catch(() => {});
+            if (plan.send.length && !gone && (await exists())) {
+              try {
+                await shareMinutes({ meeting, settings, list: plan.send, how: settings.shareHow || 'to', patch, ctxFor: () => nameCtxFor(meeting, settings, cache) });
+              } catch (e) {
+                // never silent: the page shows it, and a notification says so
+                const text = shareFailureText(e, 'Automatic share failed');
+                await patch({ shareStatus: text }).catch(() => {});
+                d.notify?.({ id: `share-${id}`, title: 'Minutes written, not shared', message: `${text} The minutes are ready${r.sent ? ' and were emailed to you' : ''}.` });
+              }
+            }
           }
           await setJob({ state: 'done', error: null, stats: result.stats });
         }
