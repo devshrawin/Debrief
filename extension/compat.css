@@ -177,3 +177,47 @@ dialog.dbmodal.rr-dialog { width: min(760px, calc(100% - 32px)); }
 /* the popup inside the floating panel on a web page: the panel sizes to it and has no scrollbar strip */
 html.in-panel body { max-height: none; overflow-y: auto; scrollbar-width: none; }
 html.in-panel body::-webkit-scrollbar { display: none; width: 0; }
+
+/* Bare form controls and buttons, at zero specificity: pages and scripts that did not use Harbor classes still get the Harbor look,
+   and any Harbor class (.input, .btn, ...) wins over these. */
+:where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]):not([role=switch]), select, textarea) {
+  font: 400 14px/20px var(--font-sans); width: 100%; min-height: var(--control-h); padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text);
+}
+:where(input, select, textarea)::placeholder { color: var(--text-3); }
+:where(input:not([type=checkbox]):not([type=radio]), select, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+:where(input:not([type=checkbox]):not([type=radio]), select, textarea):disabled { background: var(--surface-2); color: var(--text-3); cursor: not-allowed; }
+:where(textarea) { resize: vertical; line-height: 1.5; }
+:where(select) { appearance: none; -webkit-appearance: none; padding-inline-end: 32px; background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%); background-position: calc(100% - 17px) 55%, calc(100% - 12px) 55%; background-size: 5px 5px; background-repeat: no-repeat; text-overflow: ellipsis; }
+:where(input[type=checkbox], input[type=radio]) { width: auto; min-height: 0; accent-color: var(--accent); }
+:where(label) { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 4px; }
+:where(label.check, label.chk, .check label) { display: flex; font-weight: 400; margin: 0; }
+:where(code, kbd, pre) { font-family: var(--font-mono); }
+:where(kbd) { font: 500 11px/1 var(--font-mono); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 5px; padding: 2px 5px; background: var(--surface-2); }
+:where(hr) { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+:where(button:not([class]), button.primary, button.plain, button.ghost, button.danger, button.quiet, button.small) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--control-h); padding: 0 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font: 600 14px/1 var(--font-sans); cursor: pointer; white-space: nowrap;
+}
+:where(button:not([class]):hover, button.plain:hover, button.ghost:hover, button.quiet:hover) { background: var(--surface-2); }
+:where(button.primary) { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+:where(button.primary:hover) { background: var(--primary-hover); }
+:where(button.plain, button.ghost, button.quiet) { background: transparent; border-color: transparent; }
+:where(button.danger) { color: var(--rec-text); }
+:where(button.danger:hover) { background: var(--rec-soft); border-color: var(--rec-text); }
+:where(button:not([class]):disabled, button.primary:disabled, button.plain:disabled, button.ghost:disabled, button.danger:disabled) { background: var(--surface-2); color: var(--text-3); border-color: var(--border); cursor: not-allowed; }
+:where(button:focus-visible, a:focus-visible, summary:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* a checkbox with role=switch is the Harbor switch (the settings page uses these) */
+input[role=switch], .toggle input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; position: relative; box-sizing: border-box; width: 40px !important; height: 22px; min-height: 0; padding: 0 !important; margin: 0 !important; max-width: none !important; border: 0 !important; border-radius: 999px; background: var(--border-strong); cursor: pointer; transition: background var(--dur) var(--ease); }
+input[role=switch]::after, .toggle input[type=checkbox]::after { content: ""; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform var(--dur) var(--ease); }
+input[role=switch]:checked, .toggle input[type=checkbox]:checked { background: var(--accent); }
+input[role=switch]:checked::after, .toggle input[type=checkbox]:checked::after { transform: translateX(18px); }
+input[role=switch]:disabled, .toggle input[type=checkbox]:disabled { opacity: .45; cursor: not-allowed; }
+input[role=switch]:focus-visible, .toggle input[type=checkbox]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (forced-colors: active) { input[role=switch], .toggle input[type=checkbox] { border: 1px solid CanvasText !important; } }
+
+/* numbered steps (welcome, settings) */
+.steps { margin: 0; padding-inline-start: 0; list-style: none; counter-reset: step; }
+.steps li { position: relative; margin: 8px 0; padding-inline-start: 38px; line-height: 1.5; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; inset-inline-start: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 12px/1 var(--font-sans); background: var(--accent-soft); color: var(--accent-text); }
+.steps li.done::before { content: "\2713"; background: var(--ok-soft); color: var(--ok-text); }
+.inp { }
