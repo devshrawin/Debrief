@@ -249,7 +249,7 @@ function markRow(sec, follow = false) {
   }
   // the rows are looked up once per render (transcriptRendered() clears this), not on every timeupdate
   if (!rowTimes || !rowTimes.rows[0]?.isConnected) {
-    const found = [...document.querySelectorAll('#transcript .seg[data-play]')];
+    const found = [...document.querySelectorAll('#transcript .tline[data-play]')];
     rowTimes = { rows: found, times: found.map((r) => Number(r.dataset.t)) };
   }
   const rows = rowTimes.rows;

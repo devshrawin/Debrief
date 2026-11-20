@@ -190,7 +190,7 @@ try {
   const p1 = await openPage(`chrome-extension://${id}/mom.html?id=mn1`);
   await p1.evaluate(`document.getElementById('tabTr').click()`);
   const v1 = await p1.evaluate(`(() => ({
-    rows: [...document.querySelectorAll('#transcript .seg')].map((r) => ({ cls: r.className, who: r.children[1].textContent, text: r.children[2].textContent, hasBtn: !!r.children[0].querySelector('button.seg-play'), label: r.children[0].querySelector('button')?.getAttribute('aria-label') || '', w: r.children[0].getBoundingClientRect().width, tt: r.children[0].textContent, pick: r.children[1].classList.contains('pick') })),
+    rows: [...document.querySelectorAll('#transcript .tline')].map((r) => ({ cls: r.className, who: r.children[1].textContent, text: r.children[2].textContent, hasBtn: !!r.children[0].querySelector('button.seg-play'), label: r.children[0].querySelector('button')?.getAttribute('aria-label') || '', w: r.children[0].getBoundingClientRect().width, tt: r.children[0].textContent, pick: r.children[1].classList.contains('pick') })),
     keepHint: !document.getElementById('keepHint').classList.contains('hidden'),
   }))()`);
   const speech = v1.rows.filter((r) => /Row [A-E]/.test(r.text));
@@ -207,7 +207,7 @@ try {
     // play Row B (1.5 s): the stored segment seq 1 (starts at 1 s), offset 0.5 s
     await p1.evaluate(`document.querySelectorAll('#transcript .seg-play')[2].click()`, true);
     const bar = await p1.waitFor(`!document.getElementById('playBar').hidden && document.getElementById('momAudio').dataset.seq`);
-    const a1 = await p1.evaluate(`({ seq: document.getElementById('momAudio').dataset.seq, off: document.getElementById('momAudio').dataset.offset, t0: document.getElementById('momAudio').dataset.t0, cur: [...document.querySelectorAll('#transcript .seg[aria-current]')].map((r) => r.children[2].textContent), time: document.querySelector('.pb-time').textContent, label: document.querySelector('.pb-play').getAttribute('aria-label') })`);
+    const a1 = await p1.evaluate(`({ seq: document.getElementById('momAudio').dataset.seq, off: document.getElementById('momAudio').dataset.offset, t0: document.getElementById('momAudio').dataset.t0, cur: [...document.querySelectorAll('#transcript .tline[aria-current]')].map((r) => r.children[2].textContent), time: document.querySelector('.pb-time').textContent, label: document.querySelector('.pb-play').getAttribute('aria-label') })`);
     check('the player bar opens on the right stored segment at the right offset (1.5 s is 0.5 s into the segment that starts at 1 s)', bar && a1.seq === '1' && a1.off === '0.5' && a1.t0 === '1', JSON.stringify(a1));
     check('the playing line is marked with aria-current', a1.cur.length === 1 && /Row B/.test(a1.cur[0]), JSON.stringify(a1.cur));
     await p1.shot('minutes-player-light-1280');
@@ -341,7 +341,7 @@ try {
     await p1.waitFor(`!document.querySelector('.rr-dialog .primary')?.disabled`, 8000);
     await p1.evaluate(`[...document.querySelectorAll('.rr-dialog button')].find((b) => b.textContent === 'Replace these lines').click()`);
     await sleep(900);
-    const rep = await p1.evaluate(`(async () => { const m = await (${READ})('mn1'); return { texts: m.segments.map((s) => s.text), flags: m.segments.map((s) => !!s.reread), src: m.segments.map((s) => s.src), ts: m.segments.map((s) => s.t), rows: [...document.querySelectorAll('#transcript .seg')].map((r) => r.children[2].textContent.replace(/Read this part again/, '')), status: document.getElementById('genStatus').textContent, mom: m.mom === ${JSON.stringify(mom1)} }; })()`);
+    const rep = await p1.evaluate(`(async () => { const m = await (${READ})('mn1'); return { texts: m.segments.map((s) => s.text), flags: m.segments.map((s) => !!s.reread), src: m.segments.map((s) => s.src), ts: m.segments.map((s) => s.t), rows: [...document.querySelectorAll('#transcript .tline')].map((r) => r.children[2].textContent.replace(/Read this part again/, '')), status: document.getElementById('genStatus').textContent, mom: m.mom === ${JSON.stringify(mom1)} }; })()`);
     check('"Replace these lines" swaps exactly the three lines of that piece, keeps the others in order, and marks the new ones', JSON.stringify(rep.texts) === JSON.stringify(['Fresh words one.', 'Fresh words two.', 'Row D text.', 'Row E text.']) && JSON.stringify(rep.flags) === '[true,true,false,false]' && rep.ts[0] === 0.2 && rep.ts[1] === 2.4 && rep.src.every((s) => s === 'others'), JSON.stringify(rep));
     check('the page shows the new lines and says to press Rewrite minutes; the minutes text itself is untouched', rep.rows.some((r) => /Fresh words two/.test(r)) && !rep.rows.some((r) => /Row B/.test(r)) && /Press Rewrite minutes to use the new text\./.test(rep.status) && rep.mom, JSON.stringify(rep.rows) + rep.status);
     // a gap that has no recording
@@ -411,7 +411,7 @@ try {
   await opts.evaluate(`localStorage.removeItem('db.mom.keepHint')`);
   const p2 = await openPage(`chrome-extension://${id}/mom.html?id=mn2`);
   await p2.evaluate(`document.getElementById('tabTr').click()`);
-  const v2 = await p2.evaluate(`(() => ({ btn: document.querySelectorAll('.seg-play, button.timebtn, .rr-gap').length, bar: !!document.getElementById('playBar'), cbs: document.querySelectorAll('#mom input[type=checkbox]').length, summary: !!document.querySelector('#mom .act-summary'), hint: document.getElementById('keepHint').classList.contains('hidden') ? '' : document.getElementById('keepHint').textContent, w: document.querySelector('#transcript .seg').children[0].getBoundingClientRect().width, tt: document.querySelector('#transcript .seg').children[0].textContent }))()`);
+  const v2 = await p2.evaluate(`(() => ({ btn: document.querySelectorAll('.seg-play, button.timebtn, .rr-gap').length, bar: !!document.getElementById('playBar'), cbs: document.querySelectorAll('#mom input[type=checkbox]').length, summary: !!document.querySelector('#mom .act-summary'), hint: document.getElementById('keepHint').classList.contains('hidden') ? '' : document.getElementById('keepHint').textContent, w: document.querySelector('#transcript .tline').children[0].getBoundingClientRect().width, tt: document.querySelector('#transcript .tline').children[0].textContent }))()`);
   check('without a kept recording the page has no play buttons and no player', v2.btn === 0 && !v2.bar, JSON.stringify(v2));
   check('minutes edited by hand (rows no longer match the items) get no tick boxes at all', v2.cbs === 0 && !v2.summary, JSON.stringify(v2));
   const chips2 = await p2.evaluate(`(() => { document.getElementById('tabMom').click(); const c = [...document.querySelectorAll('#mom span.timebtn')]; return { n: c.length, text: c.map((x) => x.textContent), buttons: document.querySelectorAll('#mom button.timebtn').length, bg: c[0] && getComputedStyle(c[0]).backgroundColor, tag: c[0]?.tagName }; })()`);

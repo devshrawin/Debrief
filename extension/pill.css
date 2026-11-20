@@ -1,0 +1,51 @@
+/* Debrief · Harbor — in-call pill. Paste into the <style> inside src/pill.js (Shadow DOM).
+   Self-contained: no page CSS, no inherited tokens. Always dark: it floats over Google Meet. */
+:host { all: initial; }
+.dbp {
+  --pill-bg: #132031; --pill-card: #16243a; --pill-text: #eef3f9; --pill-text-2: #a7b6c9; --pill-border: #2a3b51;
+  --rec: #ff5a4e; --ok: #5cd08a; --warn: #f5b759; --warn-ink: #241703; --stop: #c4271b; --focus: #8ab8f4;
+  font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  color: var(--pill-text); -webkit-font-smoothing: antialiased;
+}
+.dbp *, .dbp *::before, .dbp *::after { box-sizing: border-box; }
+.dbp :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.dbp .i { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+.dbp .pill { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 5px 0 13px; border-radius: 999px; background: var(--pill-bg); border: 1px solid var(--pill-border); box-shadow: 0 8px 24px rgba(0,0,0,.32); font-variant-numeric: tabular-nums; cursor: default; }
+.dbp .pill.limit { border-color: #8a6420; }
+.dbp .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 0 3px rgba(255,90,78,.22); animation: dbp-blink 1.6s ease-in-out infinite; }
+.dbp .bars { display: inline-flex; gap: 2px; align-items: center; height: 14px; }
+.dbp .bars i { width: 2.5px; border-radius: 2px; background: var(--pill-text-2); }
+.dbp .time { font-size: 14px; letter-spacing: -.01em; }
+.dbp .chip { height: 32px; padding: 0 11px; border-radius: 999px; border: 0; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; cursor: pointer; background: rgba(255,255,255,.1); color: var(--pill-text); }
+.dbp .chip:hover { background: rgba(255,255,255,.16); }
+.dbp .chip.warn { background: var(--warn); color: var(--warn-ink); }
+.dbp .x { width: 28px; height: 28px; border-radius: 50%; border: 0; background: transparent; color: var(--pill-text-2); display: grid; place-items: center; cursor: pointer; }
+.dbp .x:hover { background: rgba(255,255,255,.1); color: var(--pill-text); }
+.dbp .card { width: 308px; border-radius: 18px; background: var(--pill-card); border: 1px solid var(--pill-border); box-shadow: 0 18px 44px rgba(0,0,0,.4); padding: 14px; font-weight: 400; font-size: 13px; line-height: 18px; display: grid; gap: 12px; }
+.dbp .card-head { display: flex; align-items: center; gap: 8px; }
+.dbp .card-head b { font-size: 14px; font-weight: 650; }
+.dbp .muted { color: var(--pill-text-2); }
+.dbp .sp { flex: 1; }
+.dbp .meter-l { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.dbp .meter-l b { font-weight: 650; }
+.dbp .meter { height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; }
+.dbp .meter i { display: block; height: 100%; border-radius: inherit; background: var(--ok); }
+.dbp .note { border-radius: 12px; padding: 10px 12px; background: rgba(245,183,89,.12); border: 1px solid rgba(245,183,89,.35); font-size: 12.5px; display: flex; gap: 8px; }
+.dbp .note b { color: var(--warn); font-weight: 650; }
+.dbp .stats { display: flex; gap: 8px; font-size: 12.5px; }
+.dbp .stats b { color: var(--pill-text); font-weight: 650; }
+.dbp .toggle { display: flex; align-items: center; gap: 10px; }
+.dbp .switch { position: relative; width: 40px; height: 22px; border-radius: 999px; border: 0; padding: 0; background: rgba(255,255,255,.22); cursor: pointer; }
+.dbp .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .14s; }
+.dbp .switch[aria-checked="true"] { background: var(--ok); }
+.dbp .switch[aria-checked="true"]::after { transform: translateX(18px); }
+.dbp .stop { height: 40px; width: 100%; border: 0; border-radius: 999px; background: var(--stop); color: #fff; font: inherit; font-weight: 650; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.dbp .stop:hover { filter: brightness(1.08); }
+/* Reminder card (before recording, with countdown) */
+.dbp .remind { width: 320px; }
+.dbp .count { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; padding: 4px 0; }
+.dbp .btn2 { height: 38px; flex: 1; border-radius: 999px; border: 1px solid var(--pill-border); background: transparent; color: var(--pill-text); font: inherit; font-weight: 600; cursor: pointer; }
+.dbp .btn2.primary { background: #6aa5f0; color: #0b1420; border-color: transparent; }
+@keyframes dbp-blink { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .dbp * { animation: none !important; transition: none !important; } }
+@media (prefers-contrast: more) { .dbp { --pill-border: #8a9bb0; --pill-text-2: #d4dce6; } }

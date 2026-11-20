@@ -3,287 +3,146 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Minutes of Meeting</title>
+  <meta name="color-scheme" content="light dark">
+  <title>Minutes · Debrief</title>
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
-  <script src="fx/theme.js"></script>
+  <link rel="stylesheet" href="compat.css">
+  <link rel="stylesheet" href="mom.css">
   <link rel="stylesheet" href="print.css" media="print">
-  <style>
-    main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
-    .crumb { display: flex; align-items: center; gap: 10px; }
-    .crumb img { width: 26px; height: 26px; border-radius: 7px; }
-    .crumb b { font-weight: 700; }
-    #title { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; border: 1px solid transparent; border-radius: 10px; padding: 4px 8px; margin: 0 -8px; background: transparent; width: calc(100% + 16px); min-height: 0; resize: none; overflow: hidden; field-sizing: content; overflow-wrap: anywhere; } /* a long title wraps instead of being cut: the box grows with its text */
-    #title:hover { border-color: var(--line); }
-    #title:focus { border-color: var(--brand); background: var(--card); }
-    header { display: flex; flex-direction: column; gap: 10px; }
-    .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; color: var(--muted); }
-    .meta .who-list { min-width: 0; overflow-wrap: anywhere; }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chips:empty { display: none; }
-
-    /* collapsible boxes: People, Share */
-    .namebox { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; }
-    .namebox h2 { margin: 0 0 4px; font-size: 16px; }
-    .namerow { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
-    .namerow:first-of-type { border-top: 0; }
-    .namerow .who { font-weight: 700; }
-    .namerow .said { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; margin: -4px 0 0; }
-    .namerow input { min-width: 0; }
-    @media (max-width: 640px) { .namerow { grid-template-columns: 1fr; } }
-    .startcard { background: var(--card); border: 1px solid var(--brand); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
-    .startcard h2 { margin: 0; font-size: 16px; }
-    .startrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .startrow .lab { font-weight: 600; }
-    .chk { display: flex; gap: 8px; align-items: center; margin: 0; font-weight: 500; cursor: pointer; }
-    .chk.inl { font-size: 13px; white-space: nowrap; }
-    /* Delete is deliberately quiet: a small red link, away from the safe actions */
-    #del { background: none; box-shadow: none; border: 0; min-height: 32px; padding: 4px 8px; font: var(--t-footnote); font-weight: 600; color: var(--rec-ink); text-decoration: underline; margin-left: auto; }
-    #nameWhy { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--r-md); background: var(--fill); color: var(--label-2); font: var(--t-footnote); line-height: 1.5; }
-    #nameWhy.hidden { display: none; }
-    .seg-ctl.small > button { min-height: 32px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
-    details.box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin: 0; }
-    details.box > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; padding: 0 18px; border-radius: 14px; }
-    details.box > summary::-webkit-details-marker { display: none; }
-    details.box > summary::before { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; margin-right: 4px; flex: none; }
-    details.box[open] > summary::before { transform: rotate(45deg); }
-    .box-body { padding: 0 18px 18px; display: grid; gap: 18px; }
-    .people-grid { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
-    .people-grid .wide { grid-column: 1 / -1; }
-    .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-    .col label, .col .flabel { margin: 0; }
-    .col .hint-inline { font-weight: 400; color: var(--muted); font-size: 12.5px; }
-    #attendees { min-height: 130px; }
-    #notes { min-height: 70px; }
-    .fixrow { display: flex; gap: 8px; flex-wrap: wrap; }
-    .fixrow input { flex: 1 1 140px; width: auto; }
-    label.check { display: flex; gap: 8px; align-items: center; min-height: 32px; margin: 0; font-weight: 400; }
-    #suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-    #suggest.hidden { display: none; }
-    #suggest .chip { cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; min-height: 32px; padding: 2px 12px; }
-    #suggest .chip:hover { background: var(--tint-soft); color: var(--tint); }
-
-    /* tabs */
-    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-    .tabs button { min-height: 44px; padding: 0 18px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; color: var(--muted); font-weight: 700; }
-    .tabs button:hover:not(:disabled) { background: none; color: var(--text); }
-    .tabs button[aria-selected="true"], .tabs button.active { color: var(--text); border-bottom-color: var(--brand); }
-    .tabs .count { font-weight: 400; font-size: 12.5px; color: var(--muted); }
-    .panel { display: flex; flex-direction: column; gap: 14px; }
-    .panel.hidden { display: none; }
-
-    /* toolbar */
-    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
-    .toolbar .grow { flex: 1; }
-    .toolbar #typeSel { width: auto; max-width: min(100%, 340px); }
-    .toolbar .acts { display: flex; flex-wrap: wrap; gap: 6px; }
-    .toolbar .stat { display: inline-flex; gap: 8px; align-items: center; min-width: 0; overflow-wrap: anywhere; margin: 0; }
-    .toolbar .stat:empty { display: none; }
-    .toolbar .stat.busy::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--brand); border-right-color: transparent; animation: sp 0.8s linear infinite; flex: none; }
-    /* One primary and one status at a time. While the "Before the minutes are written" card shows, it owns both (its own Write
-       minutes button and its countdown), so the toolbar's are hidden; while the skeleton shows, the document card owns the status. */
-    #momTab:has(#startCard:not(.hidden)) .toolbar > #gen,
-    #momTab:has(#startCard:not(.hidden)) .toolbar > #genStatus,
-    #momTab:has(#startCard:not(.hidden)) .toolbar > db-orb.status-orb { display: none; }
-    #momTab:has(#emptyBox:not(.hidden)) .toolbar > #gen { display: none; } /* the "No minutes yet" card has the one Write minutes button */
-    #momTab:has(#mom .skel) .toolbar > db-orb.status-orb { display: none; }
-    #momTab:has(#mom .skel) .toolbar > #genStatus { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* still announced, not drawn twice */
-    .toolbar .stat.bad { padding: 6px 12px; border-radius: var(--r-sm); background: var(--tier-red); box-shadow: inset 0 0 0 1px var(--rec-line); color: var(--label); font: var(--t-subheadline); }
-    #momTab:has(#failBox:not(.hidden)) .toolbar > #genStatus.bad { display: none; } /* the red box under the toolbar already says it */
-    .acts { align-items: center; }
-    .acts button { font-size: 13.5px; padding: 6px 12px; }
-    /* the email button and its option are one group, set apart from the buttons before it */
-    .mailgrp { display: inline-flex; align-items: center; gap: 12px; margin-inline-start: 8px; padding-inline-start: 14px; border-inline-start: 1px solid var(--separator); }
-    .mailgrp .chk { margin: 0; }
-    .mailgrp input[type="checkbox"] { margin: 0; vertical-align: baseline; }
-
-    /* share */
-    .sharebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .sharebar select { width: auto; }
-    #shareStatus { flex: 1; text-align: right; min-width: 120px; }
-    #shareTo { min-height: 56px; }
-
-    /* ask box (askui.js) */
-    #askBox { padding: 12px; }
-    #askBox > h3 { margin: 0 0 8px 4px; font-size: 14px; }
-
-    /* state cards */
-    .state { padding: 16px 18px; border-radius: 14px; display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-    .state > div { flex: 1 1 300px; min-width: 0; }
-    .state p { margin: 2px 0 0; }
-    .state.fail { background: var(--tier-red); border: 1px solid var(--rec-line); color: var(--rec-ink); }
-    .state.warnc { background: var(--tier-orange); border: 1px solid var(--amber-line); color: var(--amber-ink); }
-    .state.none { flex-direction: column; align-items: center; text-align: center; padding: 48px 24px; gap: 8px; }
-    .state.none > div { flex: none; }
-    .state.none strong { font-size: 16px; }
-    .state.none .hint { margin: 0; }
-
-    /* the minutes article (token based so a print stylesheet can override it) */
-    #mom { padding: 8px 40px 32px; min-height: 120px; overflow-wrap: anywhere; }
-    #mom > :first-child { margin-top: 24px; }
-    #mom h1 { font-size: 22px; margin: 24px 0 6px; }
-    #mom h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); margin: 28px 0 10px; }
-    #mom h3 { font-size: 15px; margin: 18px 0 6px; }
-    #mom p, #mom li { font-size: 15px; line-height: 1.75; text-wrap: pretty; }
-    #mom p { margin: 0 0 10px; }
-    #mom ul, #mom ol { margin: 0 0 10px; padding-left: 22px; }
-    #mom ul { display: flex; flex-direction: column; gap: 4px; }
-    #mom li > p { margin: 0; }
-    #mom a { overflow-wrap: anywhere; }
-    #mom .tablewrap { overflow-x: auto; margin: 8px 0 12px; }
-    #mom table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    #mom th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); }
-    #mom td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.6; }
-    #mom td .chip { font-size: 12px; padding: 1px 9px; }
-    /* long "Name (address)" cells must not squeeze the other columns into one letter per line: only the first column breaks anywhere */
-    #mom td, #mom th { overflow-wrap: normal; }
-    #mom td:first-child, #mom th:first-child { overflow-wrap: anywhere; min-width: 140px; }
-    #mom table { min-width: 560px; }
-    #mom td[data-label^="Owner"], #mom td[data-label^="Due"] { white-space: nowrap; }
-    #mom table[data-stack] td[data-label^="Action"] { min-width: 260px; }
-    #mom hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
-    #mom blockquote { margin: 8px 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--line-strong); color: var(--muted); }
-    #mom code { font: 13px ui-monospace, Consolas, monospace; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
-    #mom .added { margin: 26px 0 0; padding: 16px 18px; border-radius: 12px; background: var(--info-bg); border: 1px dashed var(--info-line); }
-    #mom .added h2 { margin: 0 0 8px; color: var(--brand); font-size: 11.5px; }
-    #mom .added p, #mom .added li { font-size: 14.5px; }
-    #mom .added > :last-child { margin-bottom: 0; }
-    #mom .added p.note, #mom .added p.note em { font-size: 12.5px; color: var(--muted); font-style: normal; }
-    #mom p.foot, #mom p.foot em { margin-top: 18px; font-size: 12.5px; color: var(--muted); font-style: normal; }
-    /* the official sheet fills its card with the same space on every side */
-    @media screen { #mom:has(> .amx) { padding: 20px; } #mom:has(> .amx) > .amx { max-width: none !important; margin: 0 !important; border-radius: var(--r-sm); } #mom:has(> .amx) > :first-child { margin-top: 0; } }
-    /* the official sheet on a narrow screen: its tables reflow (cells wrap, the fixed column widths give way) instead of running past the card. Screen only: print, Word and email use the markup as it is. */
-    @media screen and (max-width: 600px) {
-      #mom:has(> .amx) { padding: 8px; }
-      #mom .amx { padding: 8px 4px !important; }
-      #mom .amx table { min-width: 0; }
-      #mom .amx { overflow-x: auto; }
-      #mom .amx th, #mom .amx td { width: auto !important; min-width: 0 !important; padding: 3px 4px !important; font-size: 9pt !important; overflow-wrap: break-word; hyphens: auto; }
-      #mom .amx th { font-size: 8.5pt !important; }
-      #mom .amx td p, #mom .amx td li { font-size: 9pt; line-height: 1.35; }
-      #mom .amx th[width="56"], #mom .amx td[width="56"] { width: 34px !important; padding-inline: 2px !important; }
-      #mom .amx .amx-nw { white-space: nowrap; overflow-wrap: normal; hyphens: none; }
-      #mom .amx .amx-h1 { font-size: 24pt !important; }
-    }
-    #mom.streaming > :last-child::after { content: ""; display: inline-block; width: 8px; height: 18px; margin-left: 3px; background: var(--brand); vertical-align: text-bottom; animation: bl 1s steps(2) infinite; }
-    @keyframes bl { 50% { opacity: 0; } }
-    #mom .skel { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
-    #mom .skel .sk { height: 14px; }
-    #mom .skel .sk.w96 { width: 96%; } #mom .skel .sk.w92 { width: 92%; } #mom .skel .sk.w88 { width: 88%; } #mom .skel .sk.w82 { width: 82%; } #mom .skel .sk.w70 { width: 70%; }
-    #mom .skel .sk.h { height: 12px; width: 120px; margin-top: 14px; }
-    #mom .skel .busy { display: flex; gap: 10px; align-items: center; color: var(--label); font-weight: 650; font-size: 15px; }
-    #mdEdit { min-height: 480px; font: 13px/1.6 ui-monospace, Consolas, monospace; }
-    .editor { margin: 12px 0 20px; }
-    .editor.hidden, .editor .hidden { display: none; }
-    .ed-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .ed { display: flex; flex-direction: column; gap: 14px; }
-    .ed-block { background: var(--card, #fff); border: 1px solid var(--line, #e3e5ea); border-radius: 14px; padding: 12px 14px; }
-    .ed-block.ed-head { padding: 6px 10px; background: transparent; border-color: transparent; }
-    .ed-f { width: 100%; box-sizing: border-box; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; resize: none; overflow: hidden; line-height: 1.5; }
-    .ed-f:hover { border-color: var(--line, #e3e5ea); }
-    .ed-f:focus { outline: 2px solid var(--brand, #3b2fa8); outline-offset: 0; background: var(--bg, #fff); border-color: transparent; }
-    .ed-h { font-weight: 700; }
-    .ed-h1 { font-size: 24px; }
-    .ed-h2 { font-size: 18px; }
-    .ed-h3 { font-size: 15px; }
-    .ed-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) 32px; align-items: start; gap: 4px; }
-    .ed-item.sub { margin-left: 28px; }
-    .ed-bullet { text-align: center; padding-top: 7px; color: var(--muted, #6b7280); }
-    .ed-x { border: 0; background: transparent; color: var(--muted, #6b7280); font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
-    .ed-x:hover, .ed-x:focus-visible { background: var(--rec-bg, #fde8e8); color: var(--rec-ink, #b42318); }
-    .ed-add { border: 1px dashed var(--line-strong, #c9cdd6); background: transparent; color: var(--brand, #3b2fa8); border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; margin-top: 8px; }
-    .ed-add:hover { background: var(--tint, #eeecfb); }
-    .ed-rm { display: block; margin: 10px 0 0 auto; border: 0; background: transparent; color: var(--muted, #6b7280); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
-    .ed-rm:hover { color: var(--rec-ink, #b42318); }
-    .ed-scroll { overflow-x: auto; }
-    .ed-table { border-collapse: collapse; width: 100%; min-width: 520px; }
-    .ed-table th { text-align: left; font-size: 12.5px; color: var(--muted, #6b7280); padding: 0 2px 6px; }
-    .ed-table td { vertical-align: top; padding: 2px; border-top: 1px solid var(--line, #e3e5ea); }
-    .ed-th { font-weight: 600; font-size: 12.5px; }
-    .ed-no { width: 36px; text-align: center; color: var(--muted, #6b7280); padding-top: 9px !important; }
-    .ed-gutter { width: 36px; }
-    #mdEdit { width: 100%; box-sizing: border-box; }
-
-    /* transcript */
-    #transcript { padding: 8px 0; }
-    .seg { display: grid; grid-template-columns: 80px 150px 1fr; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
-    .seg:first-child { border-top: 0; }
-    .seg .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--brand); white-space: nowrap; }
-    .seg .who { justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
-    .seg .who.named { background: var(--tint-soft); color: var(--tint); border-color: transparent; }
-    .seg .who.pick { cursor: pointer; }
-    .seg .who.pick:hover { box-shadow: 0 0 0 2px var(--tint-soft); }
-    .seg .who.pick:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
-    .seg .who.own::after { content: "\270E"; margin-left: 6px; font-weight: 400; opacity: .75; }
-    .namemenu { position: fixed; z-index: 60; width: min(300px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface-read, var(--bg, #fff)); color: var(--text); box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
-    .namemenu .nm-title { font-size: 12px; font-weight: 700; color: var(--muted); }
-    .namemenu .nm-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
-    .namemenu .nm-list button { display: block; width: 100%; text-align: left; justify-content: flex-start; padding: 6px 8px; box-shadow: none; border-radius: 8px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
-    .namemenu .nm-list button:hover, .namemenu .nm-list button:focus-visible { background: var(--tint-soft); color: var(--tint); }
-    .namemenu .nm-list button.cur { font-weight: 700; }
-    .namemenu .nm-form { display: flex; gap: 6px; }
-    .namemenu .nm-form input { flex: 1; min-width: 0; }
-    .namemenu .nm-reset { align-self: flex-start; border: 0; background: transparent; color: var(--tint); text-decoration: underline; cursor: pointer; font: inherit; padding: 2px 0; }
-    .seg .who.me { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
-    .seg .who.unknown { background: transparent; color: var(--muted); border: 1px dashed var(--line-strong); }
-    .seg .who.conflict { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
-    .seg .text { font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
-    .tr-empty { padding: 28px 20px; text-align: center; color: var(--muted); margin: 0; }
-
-    @media (max-width: 600px) {
-      main { padding: 20px 16px 48px; }
-      #title { font-size: 24px; }
-      #mom { padding: 4px 16px 24px; }
-      .seg { grid-template-columns: 76px 1fr; padding: 10px 14px; }
-      .seg .text { grid-column: 1 / -1; }
-      .tabs button { padding: 0 12px; }
-      #shareStatus { text-align: left; flex-basis: 100%; }
-      #del { margin-left: 0; }
-      .mailgrp { flex-basis: 100%; margin-inline-start: 0; padding-inline-start: 0; border-inline-start: 0; }
-    }
-    @media print {
-      .no-print, .tabs, .toolbar, details, #errors, #pendingBox, .crumb { display: none !important; }
-      body { background: #fff; color: #000; }
-      main { max-width: none; padding: 0; display: block; }
-      #title { border: 0; font-size: 22px; }
-      #mom { border: 0; box-shadow: none; padding: 0; background: #fff; }
-      #mom .added { background: none; border-color: #999; }
-    }
-  </style>
+  <script src="theme.js"></script>
 </head>
 <body>
-<main>
-  <header>
-    <div class="crumb no-print"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint">/ Minutes</span></div>
-    <textarea id="title" rows="1" aria-label="Meeting title" spellcheck="false"></textarea>
-    <div class="meta" id="meta"></div>
-    <p class="carried hint no-print hidden" id="carried"></p>
-    <div class="chips no-print" id="chips"></div>
+<header class="topbar"><div class="topbar-inner">
+<a class="brand" href="ask.html"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6.5" fill="currentColor"/><path d="M6.5 8h11M6.5 12h11M6.5 16h6" stroke="var(--on-primary)" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="16" r="1.9" fill="var(--rec)"/></svg>Debrief</a>
+<nav class="crumbs" aria-label="Breadcrumb"><span class="sep" aria-hidden="true">/</span><a href="ask.html" class="muted" style="text-decoration:none">Meetings</a><span class="sep" aria-hidden="true">/</span><span aria-current="page">Minutes</span></nav>
+<div class="topbar-actions">
+<a class="btn sm plain" href="actions.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6h9M11 12h9M11 18h9"/><path d="M3.5 6l1.5 1.5L8 4.5M3.5 12l1.5 1.5L8 10.5"/><circle cx="5.5" cy="18" r="1.5"/></svg><span class="hide-sm">Actions</span></a>
+<a class="btn sm plain" href="ask.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="hide-sm">Ask</span></a>
+<a class="btn icon sm plain" href="options.html" aria-label="Settings"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></a>
+</div></div></header>
+<main class="page"><div class="with-rail"><div class="mom-col">
+  <header class="page-head">
+    <div class="titles">
+      <textarea id="title" class="t-display" rows="1" aria-label="Meeting title" spellcheck="false"></textarea>
+      <div class="meta" id="meta"></div>
+      <p class="carried hint no-print hidden" id="carried"></p>
+      <div class="chips no-print" id="chips"></div>
+    </div>
+    <div class="actions no-print">
+      <details class="menu" id="exportMenu"><summary class="btn"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></svg>Export</summary>
+        <div class="menu-list">
+          <button id="copy">Copy</button>
+          <button id="dlMd">Markdown (.md)</button>
+          <button id="dlDoc">Word</button>
+          <button id="print">Print / PDF</button>
+          <hr>
+          <label class="check menu-check" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript">Attach the transcript</label>
+          <button id="mail" title="Send these minutes to your own email">Email me</button>
+        </div>
+      </details>
+      <button type="button" class="btn" id="shareOpen"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7h16v-7M12 3v12M8 7l4-4 4 4"/></svg>Share</button>
+    </div>
   </header>
   <div id="errors" class="warn hidden no-print" role="alert"></div>
   <div id="pendingBox" class="state warnc hidden no-print" role="status"><div><strong>Recovering missing audio</strong><p id="pendingText"></p></div><button id="retry">Retry transcription</button></div>
 
+
+  <div class="tabs no-print" role="tablist" aria-label="View">
+    <button role="tab" id="tabMom" data-tab="momTab" aria-selected="true" aria-controls="momTab" class="active">Minutes</button>
+    <button role="tab" id="tabTr" data-tab="trTab" aria-selected="false" aria-controls="trTab" tabindex="-1">Transcript <span class="count" id="trCount"></span></button>
+    <button role="tab" id="tabSp" data-tab="spTab" aria-selected="false" aria-controls="spTab" tabindex="-1">Speakers <span class="count" id="spCount"></span></button>
+  </div>
+
+  <div id="momTab" class="panel" role="tabpanel" aria-labelledby="tabMom">
+    <div id="nameBanner" class="banner info no-print hidden" role="status"><div class="banner-b" id="nameBannerText"></div><button type="button" class="btn sm" id="nameGo">Name voices</button></div>
+    <section class="startcard no-print hidden" id="startCard" aria-labelledby="hStart">
+      <h2 id="hStart">Before the minutes are written</h2>
+      <p class="startrow"><span class="lab">Format:</span> <strong id="fmtText"></strong> · <a href="#" id="fmtChange">change</a></p>
+      <p class="hint">The format switch is just below this card. Whether the transcript is attached is set next to "Email me" and in the Share box; the defaults are in Settings → Email → Attachments.</p>
+      <div class="row"><button id="startNow" class="btn primary">Write minutes</button><span id="startCount" class="hint" role="status"></span></div>
+    </section>
+
+    <div class="actbar no-print">
+      <button id="gen" class="btn primary">Write minutes</button>
+      <div class="seg sm" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="template">Organisation template</button><button type="button" role="radio" data-v="standard">Standard</button></div>
+      <select id="typeSel" class="select auto hidden" aria-label="Meeting type" title="A meeting type adds its own sections to the minutes (for example a table of updates by person). Press Rewrite minutes after changing it."></select>
+      <button class="btn" id="edit" title="Fix the minutes by hand: remove what is wrong, add what was missed. Then email or share the corrected version.">Edit minutes</button>
+      <button class="btn" id="reread" class="hidden" title="Read the transcript again from scratch instead of reusing the items found last time">Re-read transcript</button>
+      <button class="btn" id="abort" class="hidden">Stop</button>
+      <span id="genStatus" class="hint stat" role="status"></span>
+      <span id="mailStatus" class="hint stat" role="status"></span>
+    </div>
+    <section id="editor" class="editor no-print hidden" aria-label="Edit the minutes">
+      <div class="ed-bar">
+        <div class="seg sm" id="edTabs" role="radiogroup" aria-label="How to edit">
+          <button type="button" role="radio" data-v="edit" aria-checked="true">Edit</button>
+          <button type="button" role="radio" data-v="preview" aria-checked="false">Preview</button>
+          <button type="button" role="radio" data-v="text" aria-checked="false">Text</button>
+        </div>
+        <button type="button" class="btn sm" id="edUndo">Undo</button>
+        <span class="hint" id="edHint">Change any text, remove what is wrong with ×, add what was missed. Changes save by themselves.</span>
+      </div>
+      <div id="edBlocks" class="ed"></div>
+      <article id="mdPreview" class="card hidden" aria-label="Preview of your edits"></article>
+      <textarea id="mdEdit" class="hidden" aria-label="The minutes as plain text (Markdown)"></textarea>
+    </section>
+    <details class="card no-print" id="shareBox">
+      <summary>Share these minutes with others</summary>
+      <div class="card-body stack share-body">
+        <p class="hint" id="shareSrc"></p>
+        <label class="check"><input type="checkbox" id="shareTranscript"> Include the transcript when sharing</label>
+        <textarea class="input" id="shareTo" rows="2" aria-label="Recipients" placeholder="priya@company.com, ravi@company.com"></textarea>
+        <div class="sharebar">
+          <select class="select auto" id="shareHowSel" aria-label="Send as"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc</option></select>
+          <button class="btn hidden" id="shareInvited">Add everyone invited</button>
+          <button class="btn hidden" id="shareAbsent">Add people who were absent</button>
+          <span id="shareStatus" class="hint" role="status"></span>
+          <button class="btn hidden" id="shareHeldNow">Send to them now</button>
+          <button id="shareSend" class="btn primary">Share</button>
+        </div>
+      </div>
+    </details>
+    <div id="failBox" class="state fail hidden no-print" role="alert"><div><strong>The minutes couldn't be written</strong><p id="failText"></p></div><button class="btn" id="failRetry">Try again</button></div>
+    <div id="emptyBox" class="card state none hidden no-print"><div><strong>No minutes yet</strong></div><p class="hint" id="emptyText">The transcript is ready. Press Write minutes when you are ready.</p><button class="btn primary" id="genEmpty" class="primary">Write minutes</button></div>
+    <article id="mom" class="doc" hidden></article>
+  </div>
+
+
+  <div id="trTab" class="panel hidden" role="tabpanel" aria-labelledby="tabTr">
+    <div class="actbar no-print">
+      <span id="trInfo" class="hint" style="flex:1 1 300px"></span>
+      <button class="btn sm" id="dlTxt">Download .txt</button>
+      <button class="btn sm" id="dlJson" title="The whole meeting as a file you can keep or move to another computer. It has no audio and no voice fingerprints.">Download .json</button>
+      <button id="del" class="btn sm danger">Delete meeting</button>
+    </div>
+    <p class="keephint hint no-print hidden" id="keepHint"><span>Turn on Keep the recording in Settings to play lines back.</span><button type="button" class="btn sm plain" id="keepHintX" aria-label="Dismiss this tip">Dismiss</button></p>
+    <div class="transcript card" id="transcript"></div>
+    <p class="hint no-print">Speaker styles: <strong>you</strong> in indigo, a <strong>named person</strong> on the tint, <strong>others</strong> grey, <strong>Unknown speaker</strong> dashed, and a <strong>caption dispute</strong> in saffron.</p>
+  </div>
+
+  <div id="spTab" class="panel hidden" role="tabpanel" aria-labelledby="tabSp">
   <p class="hint no-print hidden" id="nameWhy" role="status"></p>
-  <section class="namebox no-print hidden" id="nameBox" aria-labelledby="hName">
+  <section class="card card-pad namebox no-print hidden" id="nameBox" aria-labelledby="hName">
     <h2 id="hName">Who was speaking? Name the voices from this meeting</h2>
     <p class="hint" id="nameNote"></p>
     <div id="nameList"></div>
   </section>
 
-  <details class="box no-print" id="notesBox">
+  <details class="card no-print" id="notesBox">
     <summary>People, names and context</summary>
-    <div class="box-body people-grid">
+    <div class="card-body people-grid">
       <div class="col">
         <label for="attendees">Who was in the meeting <span class="hint-inline">one name per line</span></label>
-        <textarea id="attendees" rows="6" placeholder="Amal Raj&#10;Priya Nair"></textarea>
+        <textarea class="input" id="attendees" rows="6" placeholder="Amal Raj&#10;Priya Nair"></textarea>
         <p class="hint">Used to fix misheard names (Aman becomes Amal when Amal is here and Aman is not) and to spell names exactly in the minutes.</p>
       </div>
       <div class="col">
         <span class="flabel" style="font-weight:600">Fix a name everywhere</span>
         <div class="fixrow">
-          <input id="fixWrong" placeholder="Heard as" aria-label="Heard as">
-          <input id="fixRight" placeholder="Should be" aria-label="Should be">
-          <button id="fixApply">Fix</button>
+          <input class="input" id="fixWrong" placeholder="Heard as" aria-label="Heard as">
+          <input class="input" id="fixRight" placeholder="Should be" aria-label="Should be">
+          <button class="btn" id="fixApply">Fix</button>
         </div>
         <label class="check"><input type="checkbox" id="fixRemember" checked>Remember for next time</label>
         <span id="fixMsg" class="hint" role="status"></span>
@@ -291,91 +150,16 @@
       </div>
       <div class="col wide">
         <label for="notes">Other context for the minutes</label>
-        <textarea id="notes" rows="2" placeholder="e.g. Agenda, project name is spelled 'UR Masters'."></textarea>
+        <textarea class="input" id="notes" rows="2" placeholder="e.g. Agenda, project name is spelled 'UR Masters'."></textarea>
       </div>
     </div>
   </details>
 
-  <div class="tabs no-print" role="tablist" aria-label="View">
-    <button role="tab" id="tabMom" data-tab="momTab" aria-selected="true" aria-controls="momTab" class="active">Minutes</button>
-    <button role="tab" id="tabTr" data-tab="trTab" aria-selected="false" aria-controls="trTab" tabindex="-1">Transcript <span class="count" id="trCount"></span></button>
   </div>
-
-  <div id="momTab" class="panel" role="tabpanel" aria-labelledby="tabMom">
-    <section class="startcard no-print hidden" id="startCard" aria-labelledby="hStart">
-      <h2 id="hStart">Before the minutes are written</h2>
-      <p class="startrow"><span class="lab">Format:</span> <strong id="fmtText"></strong> · <a href="#" id="fmtChange">change</a></p>
-      <p class="hint">The format switch is just below this card. Whether the transcript is attached is set next to "Email me" and in the Share box; the defaults are in Settings → Email → Attachments.</p>
-      <div class="row"><button id="startNow" class="primary">Write minutes</button><span id="startCount" class="hint" role="status"></span></div>
-    </section>
-
-    <div class="toolbar no-print">
-      <button id="gen" class="primary">Write minutes</button>
-      <div class="seg-ctl small" id="fmtSwitch" role="radiogroup" aria-label="Minutes format"><button type="button" role="radio" data-v="template">Organisation template</button><button type="button" role="radio" data-v="standard">Standard</button></div>
-      <select id="typeSel" class="hidden" aria-label="Meeting type" title="A meeting type adds its own sections to the minutes (for example a table of updates by person). Press Rewrite minutes after changing it."></select>
-      <button id="edit" title="Fix the minutes by hand: remove what is wrong, add what was missed. Then email or share the corrected version.">Edit minutes</button>
-      <button id="reread" class="hidden" title="Read the transcript again from scratch instead of reusing the items found last time">Re-read transcript</button>
-      <button id="abort" class="hidden">Stop</button>
-      <span id="genStatus" class="hint stat" role="status"></span>
-      <span id="mailStatus" class="hint stat" role="status"></span>
-      <span class="grow"></span>
-      <div class="acts">
-        <button id="copy">Copy</button>
-        <button id="dlMd">.md</button>
-        <button id="dlDoc">Word</button>
-        <button id="print">Print / PDF</button>
-        <span class="mailgrp"><label class="chk inl" title="Attach the transcript to the email"><input type="checkbox" id="mailTranscript">Attach transcript to my email</label>
-        <button id="mail" title="Send this MOM to your email">Email me</button></span>
-      </div>
-    </div>
-    <section id="editor" class="editor no-print hidden" aria-label="Edit the minutes">
-      <div class="ed-bar">
-        <div class="seg-ctl small" id="edTabs" role="radiogroup" aria-label="How to edit">
-          <button type="button" role="radio" data-v="edit" aria-checked="true">Edit</button>
-          <button type="button" role="radio" data-v="preview" aria-checked="false">Preview</button>
-          <button type="button" role="radio" data-v="text" aria-checked="false">Text</button>
-        </div>
-        <button type="button" id="edUndo">Undo</button>
-        <span class="hint" id="edHint">Change any text, remove what is wrong with ×, add what was missed. Changes save by themselves.</span>
-      </div>
-      <div id="edBlocks" class="ed"></div>
-      <article id="mdPreview" class="card hidden" aria-label="Preview of your edits"></article>
-      <textarea id="mdEdit" class="hidden" aria-label="The minutes as plain text (Markdown)"></textarea>
-    </section>
-    <details class="box no-print" id="shareBox">
-      <summary>Share these minutes with others</summary>
-      <div class="box-body">
-        <p class="hint" id="shareSrc"></p>
-        <label class="chk"><input type="checkbox" id="shareTranscript"> Include the transcript when sharing</label>
-        <textarea id="shareTo" rows="2" aria-label="Recipients" placeholder="priya@company.com, ravi@company.com"></textarea>
-        <div class="sharebar">
-          <select id="shareHowSel" aria-label="Send as"><option value="to">To</option><option value="cc">Cc</option><option value="bcc">Bcc</option></select>
-          <button id="shareInvited" class="hidden">Add everyone invited</button>
-          <button id="shareAbsent" class="hidden">Add people who were absent</button>
-          <span id="shareStatus" class="hint" role="status"></span>
-          <button id="shareHeldNow" class="hidden">Send to them now</button>
-          <button id="shareSend" class="primary">Share</button>
-        </div>
-      </div>
-    </details>
-    <section id="askBox" class="no-print" aria-label="Ask about this meeting"></section>
-    <div id="failBox" class="state fail hidden no-print" role="alert"><div><strong>The minutes couldn't be written</strong><p id="failText"></p></div><button id="failRetry">Try again</button></div>
-    <div id="emptyBox" class="card state none hidden no-print"><div><strong>No minutes yet</strong></div><p class="hint" id="emptyText">The transcript is ready. Press Write minutes when you are ready.</p><button id="genEmpty" class="primary">Write minutes</button></div>
-    <article id="mom" class="card" hidden></article>
-  </div>
-
-  <div id="trTab" class="panel hidden" role="tabpanel" aria-labelledby="tabTr">
-    <div class="toolbar no-print">
-      <span id="trInfo" class="hint" style="flex:1 1 300px"></span>
-      <button id="dlTxt">Download .txt</button>
-      <button id="dlJson" title="The whole meeting as a file you can keep or move to another computer. It has no audio and no voice fingerprints.">Download .json</button>
-      <button id="del" class="danger">Delete meeting</button>
-    </div>
-    <p class="keephint hint no-print hidden" id="keepHint"><span>Turn on Keep the recording in Settings to play lines back.</span><button type="button" class="plain" id="keepHintX" aria-label="Dismiss this tip">Dismiss</button></p>
-    <div class="transcript card" id="transcript"></div>
-    <p class="hint no-print">Speaker styles: <strong>you</strong> in indigo, a <strong>named person</strong> on the tint, <strong>others</strong> grey, <strong>Unknown speaker</strong> dashed, and a <strong>caption dispute</strong> in saffron.</p>
-  </div>
-</main>
+</div>
+<aside class="rail-stack no-print" aria-label="Meeting tools">
+  <section class="card"><div class="card-head"><h2>Ask about this meeting</h2></div><div class="card-body"><div id="askBox" aria-label="Ask about this meeting"></div></div></section>
+</aside></div></main>
 <script src="dist/mom.js"></script>
 </body>
 </html>

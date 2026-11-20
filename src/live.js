@@ -39,12 +39,12 @@ let pumping = false;
 let following = true; // true while the reader is at the bottom
 
 function makeRow(row, prev) {
-  const el = h('div', row.kind === 'screen' ? 'lv-line screen' : 'lv-line');
-  const t = h('span', 't', fmtTime(row.t));
+  const el = h('div', row.kind === 'screen' ? 'transcript-line screen' : 'transcript-line');
+  const t = h('time', null, fmtTime(row.t));
   if (row.kind === 'screen') {
-    el.append(t, h('span', 'text', `On screen${row.presenter ? ` (${row.presenter})` : ''}: ${row.text}`));
+    el.append(t, h('span', 'who'), h('p', null, `On screen${row.presenter ? ` (${row.presenter})` : ''}: ${row.text}`));
   } else {
-    el.append(t, h('span', `who ${row.src}`, row.who), h('span', 'text', row.text));
+    el.append(t, h('span', `who ${row.src}`, row.who), h('p', null, row.text));
     if (continues(prev, row)) el.classList.add('cont');
   }
   els.set(row.key, el);
@@ -127,7 +127,7 @@ function take(m) {
 const tickChip = () => {
   const chip = $('chip');
   const p = state.phase;
-  chip.className = `badge lv-chip ${p === 'recording' ? 'rec' : p === 'paused' ? 'warn' : ''}`;
+  chip.className = `badge ${p === 'recording' ? 'rec' : p === 'paused' ? 'warn' : ''}`;
   $('chipDot').classList.toggle('hidden', p !== 'recording');
   $('chipText').textContent = chipText(state);
 };
@@ -148,7 +148,6 @@ function setState() {
 // note about pieces of text (which is about a running meeting) step back. A summary needs enough words to be worth asking for.
 function syncControls() {
   const ended = state.phase === 'ended';
-  $('minutesLink').classList.toggle('primary', ended);
   $('sumGo').classList.toggle('primary', !ended);
   for (const x of ['latency', 'latencyHint']) $(x).classList.toggle('hidden', ended || !$(x).textContent);
   if (!id) return;
@@ -305,10 +304,9 @@ async function start() {
   $('latency').textContent = lat.text;
   $('latencyHint').textContent = lat.hint;
   $('latencyHint').classList.toggle('hidden', !lat.hint);
-  const head = document.querySelector('.lv-head');
-  if (head && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--lv-head', `${head.offsetHeight}px`)).observe(head);
+  // a tall side column would hide its lower part under a sticky position: let it scroll with the page then
   const side = document.querySelector('.lv-side');
-  const fitSide = () => side?.classList.toggle('flow', !!head && side.offsetHeight > innerHeight - head.offsetHeight - 32);
+  const fitSide = () => side?.classList.toggle('flow', side.offsetHeight > innerHeight - 88);
   if (side && window.ResizeObserver) new ResizeObserver(fitSide).observe(side);
   addEventListener('resize', fitSide);
   fitSide();

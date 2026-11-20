@@ -130,7 +130,7 @@ try {
   check('failed audio is retried on open and stays queued when retry fails', await mom.evaluate(`!document.getElementById('pendingBox').classList.contains('hidden') && document.getElementById('pendingText').textContent.includes('1 audio piece (~1.5 min) still not transcribed. Last error: Gemini HTTP 400')`), await mom.evaluate(`document.getElementById('pendingText').textContent`));
   check('MOM page renders markdown table', await mom.evaluate(`document.querySelectorAll('#mom table td').length === 4`));
   check('raw HTML from model is escaped', await mom.evaluate(`!document.querySelector('#mom img') && document.getElementById('mom').textContent.includes('<img')`));
-  check('transcript shows speakers in order', await mom.evaluate(`[...document.querySelectorAll('.seg .who')].map(e => e.textContent).join(',') === 'Shrawin,Others'`));
+  check('transcript shows speakers in order', await mom.evaluate(`[...document.querySelectorAll('.tline .who')].map(e => e.textContent).join(',') === 'Shrawin,Others'`));
   check('title field populated', await mom.evaluate(`document.getElementById('title').value === 'Weekly sync'`));
 
   // Generate with a bogus key: must surface the auth error in the UI rather than hang or crash.

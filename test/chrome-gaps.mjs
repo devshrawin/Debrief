@@ -98,7 +98,7 @@ try {
   // 1. the minutes page for the meeting with a gap
   const p1 = await openPage(`chrome-extension://${id}/mom.html?id=gp1`);
   const v1 = await p1.evaluate(`(() => {
-    const rows = [...document.querySelectorAll('#transcript .seg')].map((r) => ({ t: r.children[0].textContent, who: r.children[1].textContent, text: r.children[2].textContent }));
+    const rows = [...document.querySelectorAll('#transcript .tline')].map((r) => ({ t: r.children[0].textContent, who: r.children[1].textContent, text: r.children[2].textContent }));
     const err = document.getElementById('errors');
     return { rows, errHidden: err.classList.contains('hidden'), errText: err.textContent, body: document.body.innerText };
   })()`);
@@ -112,12 +112,12 @@ try {
 
   // 2. a meeting with no gap shows nothing extra
   const p2 = await openPage(`chrome-extension://${id}/mom.html?id=gp2`);
-  const v2 = await p2.evaluate(`({ gapRows: [...document.querySelectorAll('#transcript .seg .who')].filter((w) => w.textContent === 'Gap').length, errHidden: document.getElementById('errors').classList.contains('hidden') })`);
+  const v2 = await p2.evaluate(`({ gapRows: [...document.querySelectorAll('#transcript .tline .who')].filter((w) => w.textContent === 'Gap').length, errHidden: document.getElementById('errors').classList.contains('hidden') })`);
   check('a whole transcript has no Gap note and no warning', v2.gapRows === 0 && v2.errHidden, JSON.stringify(v2));
 
   // 3. a gap found while recording is shown, a silent stretch recorded beside it is not
   const p3 = await openPage(`chrome-extension://${id}/mom.html?id=gp3`);
-  const v3 = await p3.evaluate(`({ gaps: [...document.querySelectorAll('#transcript .seg')].filter((r) => r.children[1].textContent === 'Gap').map((r) => r.children[0].textContent + ' ' + r.children[2].textContent), err: document.getElementById('errors').textContent })`);
+  const v3 = await p3.evaluate(`({ gaps: [...document.querySelectorAll('#transcript .tline')].filter((r) => r.children[1].textContent === 'Gap').map((r) => r.children[0].textContent + ' ' + r.children[2].textContent), err: document.getElementById('errors').textContent })`);
   check('a gap the recorder reported is shown (02:30 to 05:00); the silent piece is not', v3.gaps.length === 1 && /02:30/.test(v3.gaps[0]) && /05:00/.test(v3.gaps[0]) && !/06:40/.test(v3.err), JSON.stringify(v3));
 
   // 4. the minutes say it too

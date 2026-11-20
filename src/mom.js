@@ -180,6 +180,9 @@ function whyNoVoices(m, s) {
 async function renderNameBox() {
   const here = (settings.voices || []).filter((v) => v.auto && isAnon(v) && (v.learnedFrom || []).includes(meeting.id));
   $('nameBox').classList.toggle('hidden', !here.length);
+  $('spCount').textContent = here.length ? `${here.length} unnamed` : '';
+  $('nameBannerText').textContent = here.length === 1 ? 'One voice is unnamed. Name it once and Debrief recognises it in every future meeting.' : `${here.length} voices are unnamed. Name them once and Debrief recognises them in every future meeting.`;
+  $('nameBanner').classList.toggle('hidden', !here.length);
   // no voices to name: say why, so "where is the Play button?" has an answer
   const why = here.length || !meeting.endedAt ? '' : whyNoVoices(meeting, settings);
   $('nameWhy').textContent = why;
@@ -435,7 +438,7 @@ function renderTranscript() {
   $('transcript').replaceChildren(
     ...rows.map((r) => {
       const row = document.createElement('div');
-      row.className = 'seg';
+      row.className = 'tline';
       row.innerHTML = `<span class="t"></span><span class="who"></span><span class="text"></span>`;
       row.children[0].textContent = fmtTime(r.t);
       row.children[1].textContent = r.who;
@@ -793,7 +796,7 @@ async function emailMom() {
 // ---- ask about this meeting ----
 function mountAskBox() {
   const box = $('askBox');
-  box.replaceChildren(Object.assign(document.createElement('h3'), { textContent: 'Ask about this meeting' }));
+  box.replaceChildren(Object.assign(document.createElement('h3'), { className: 'sr-only', textContent: 'Ask about this meeting' }));
   mountAsk(box, {
     getMeetings: async () => [(await getMeeting(id)) || meeting],
     getCtx: () => ({ ...nameCtx(), myName: settings.myName }),
@@ -1145,6 +1148,13 @@ $('attendees').onchange = async () => {
 $('genEmpty').onclick = () => runGenerate();
 $('failRetry').onclick = () => runGenerate();
 
+$('nameGo').onclick = () => showTab($('tabSp'), true);
+$('shareOpen').onclick = () => {
+  $('shareBox').open = true;
+  $('shareBox').scrollIntoView({ block: 'nearest' });
+  $('shareTo').focus();
+};
+
 // Tabs: click, or arrow keys / Home / End on the tab list (roving tabindex).
 const tabBtns = [...document.querySelectorAll('.tabs button')];
 const showTab = (b, focus) => {
@@ -1153,8 +1163,7 @@ const showTab = (b, focus) => {
     x.setAttribute('aria-selected', String(x === b));
     x.tabIndex = x === b ? 0 : -1;
   });
-  $('momTab').classList.toggle('hidden', b.dataset.tab !== 'momTab');
-  $('trTab').classList.toggle('hidden', b.dataset.tab !== 'trTab');
+  for (const id of ['momTab', 'trTab', 'spTab']) $(id).classList.toggle('hidden', b.dataset.tab !== id);
   if (b.dataset.tab === 'trTab') transcriptShown();
   if (focus) b.focus();
 };

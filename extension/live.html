@@ -3,57 +3,56 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Live · Debrief</title>
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="style.css">
-  <script src="fx/theme.js"></script>
+  <link rel="stylesheet" href="compat.css">
+  <script src="theme.js"></script>
 </head>
 <body>
-<main class="lv-main">
-  <header class="lv-head">
-    <div class="crumb"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint" style="margin:0">/ Live</span></div>
-    <span id="chip" class="badge lv-chip"><span class="recdot hidden" id="chipDot" aria-hidden="true"></span><span id="chipText">Looking for the meeting…</span></span>
-    <span class="lv-grow"></span>
-    <a id="minutesLink" class="button primary hidden" href="mom.html">Open minutes</a>
-    <p id="stateNote" class="sr-only" role="status"></p>
-  </header>
-  <h1 id="mtitle" class="lv-title"></h1>
-  <div class="lv-notes">
-    <p id="latency" class="hint"></p>
-    <p id="latencyHint" class="hint hidden"></p>
-  </div>
-
-  <div class="lv-grid">
-    <div class="lv-col">
-    <h2 class="lv-h">Transcript</h2>
-    <section class="lv-tr" aria-label="Transcript">
-      <div id="log" class="lv-log" aria-label="Transcript so far" tabindex="0"><p id="empty" class="lv-empty">Looking for the meeting…</p></div>
-      <button id="newLines" class="primary lv-new hidden" type="button">New lines <span aria-hidden="true">↓</span></button>
-    </section>
+<header class="topbar"><div class="topbar-inner">
+<a class="brand" href="ask.html"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6.5" fill="currentColor"/><path d="M6.5 8h11M6.5 12h11M6.5 16h6" stroke="var(--on-primary)" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="16" r="1.9" fill="var(--rec)"/></svg>Debrief</a>
+<nav class="crumbs" aria-label="Breadcrumb"><span class="sep" aria-hidden="true">/</span><a href="ask.html" class="muted" style="text-decoration:none">Meetings</a><span class="sep" aria-hidden="true">/</span><span aria-current="page">Live</span></nav>
+<div class="topbar-actions">
+<a class="btn sm plain" href="actions.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6h9M11 12h9M11 18h9"/><path d="M3.5 6l1.5 1.5L8 4.5M3.5 12l1.5 1.5L8 10.5"/><circle cx="5.5" cy="18" r="1.5"/></svg><span class="hide-sm">Actions</span></a>
+<a class="btn sm plain" href="ask.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="hide-sm">Ask</span></a>
+<a class="btn icon sm plain" href="options.html" aria-label="Settings"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></a>
+</div></div></header>
+<main class="page"><div class="with-rail"><div>
+<header class="page-head"><div class="titles">
+  <div class="row-x"><span id="chip" class="badge"><span class="dot hidden" id="chipDot" aria-hidden="true"></span><span id="chipText">Looking for the meeting…</span></span></div>
+  <h1 id="mtitle" class="t-display lv-title"></h1>
+  <p id="latency" class="meta"></p>
+  <p id="latencyHint" class="meta hidden"></p>
+  <p id="stateNote" class="sr-only" role="status"></p>
+</div>
+<div class="actions"><a id="minutesLink" class="btn primary hidden" href="mom.html">Open minutes</a></div></header>
+<div class="stack" style="--gap:16px">
+<section class="card" aria-label="Transcript"><div class="card-head"><h2>Transcript</h2></div>
+  <div id="log" class="card-body lv-log" aria-label="Transcript so far" tabindex="0"><p id="empty" class="lv-empty">Looking for the meeting…</p></div>
+  <button id="newLines" class="btn primary lv-new hidden" type="button">New lines <span aria-hidden="true">↓</span></button>
+</section>
+</div></div>
+<aside class="rail-stack lv-side" aria-label="Summary and questions">
+  <section class="card"><div class="card-head"><h2>Summary so far</h2><span class="badge">Provisional</span></div><div class="card-body">
+    <p class="hint">One summary of what has been said up to now. Press it again for a newer one.</p>
+    <div class="btnrow">
+      <button id="sumGo" class="btn primary" type="button">Summarise so far</button>
+      <button id="sumStop" class="btn hidden" type="button">Stop</button>
     </div>
-
-    <aside class="lv-side" aria-label="Summary and questions">
-      <h2 class="lv-h">Summary so far</h2>
-      <div class="lv-panel">
-        <p class="hint" style="margin:0">One summary of what has been said up to now. Press it again for a newer one.</p>
-        <div class="row" style="margin-top:12px">
-          <button id="sumGo" class="primary" type="button">Summarise so far</button>
-          <button id="sumStop" class="hidden" type="button">Stop</button>
-        </div>
-        <p id="sumStatus" class="hint lv-status" role="status"></p>
-        <div id="sumNotice" class="ask-notice hidden" role="alert"></div>
-        <div id="sumOut" class="lv-sum hidden">
-          <p id="sumLabel" class="lv-prov"></p>
-          <div id="sumBody" class="lv-md"></div>
-        </div>
-      </div>
-
-      <h2 class="lv-h">Ask about this meeting</h2>
-      <div id="askBox"></div>
-      <p class="hint" id="privacy">Your question and the transcript so far go to the model you chose for the minutes. No audio is sent. Answers can be wrong.</p>
-    </aside>
-  </div>
-</main>
+    <p id="sumStatus" class="hint lv-status" role="status"></p>
+    <div id="sumNotice" class="ask-notice hidden" role="alert"></div>
+    <div id="sumOut" class="lv-sum hidden">
+      <p id="sumLabel" class="lv-prov"></p>
+      <div id="sumBody" class="lv-md"></div>
+    </div>
+  </div></section>
+  <section class="card"><div class="card-head"><h2>Ask about this meeting</h2></div><div class="card-body">
+    <div id="askBox"></div>
+    <p class="hint" id="privacy" style="margin-top:12px">Your question and the transcript so far go to the model you chose for the minutes. No audio is sent. Answers can be wrong.</p>
+  </div></section>
+</aside></div></main>
 <script src="dist/live.js"></script>
 </body>
 </html>
