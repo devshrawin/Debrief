@@ -281,7 +281,7 @@ try {
   await opts.evaluate(`chrome.storage.local.remove(['usage', 'learnedLimits'])`);
   // ---- the popup while recording
   await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetCode: 'abc-defg-hij' }, levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
-  const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 640, scale: 2 });
+  const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 380, height: 640, scale: 2 });
   await sleep(1500);
   await pr.evaluate(`chrome.storage.session.set({ levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
   await sleep(800);
@@ -388,7 +388,7 @@ try {
   const dk = await openPage(`chrome-extension://${id}/mom.html?id=demo2`, { width: 1100, height: 800 });
   await sleep(1500);
   await dk.shot('minutes-dark', { full: false, clip: { x: 0, y: 0, width: 1100, height: 800 } });
-  const dp = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 640, scale: 2 });
+  const dp = await openPage(`chrome-extension://${id}/popup.html`, { width: 380, height: 640, scale: 2 });
   await sleep(900);
   await dp.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('start').disabled = false;`);
   await sleep(400);
@@ -409,7 +409,7 @@ try {
   await store('store-4-ask', `chrome-extension://${id}/ask.html`, `document.querySelector('#askBox input')?.focus()`);
 
   // ---- the popup, as it looks outside a meeting
-  const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
+  const p = await openPage(`chrome-extension://${id}/popup.html`, { width: 380, height: 760, scale: 2 });
   // a popup opened as a page cannot record its own tab: show the idle popup as it looks on a meeting tab
   await p.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('modeOnline')?.click(); document.getElementById('modeHint').textContent = 'Online meeting: the call is recorded from this tab and your voice from your microphone.'; document.getElementById('start').disabled = false;`);
   await sleep(500);
@@ -447,7 +447,7 @@ try {
         await sleep(400);
         await tr.shot(`audit/${theme}-tour-${step + 1}`, { maxHeight: 2000 });
       }
-      const pop = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
+      const pop = await openPage(`chrome-extension://${id}/popup.html`, { width: 380, height: 760, scale: 2 });
       await pop.evaluate(`document.head.insertAdjacentHTML('beforeend', '<style>#modeBox{display:block !important}#cantRecord{display:none !important}</style>'); document.getElementById('start').disabled = false;`);
       await sleep(600);
       await pop.popupShot(`audit/${theme}-popup-home`);
@@ -455,11 +455,11 @@ try {
       await sleep(600);
       await pop.popupShot(`audit/${theme}-popup-meetings`);
       await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000, mic: true, micOn: true, micWanted: true, meetCode: 'abc-defg-hij' }, levels: { tab: 0.22, mic: 0.05, ctx: 'running', at: Date.now() } })`);
-      const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
+      const pr = await openPage(`chrome-extension://${id}/popup.html`, { width: 380, height: 760, scale: 2 });
       await sleep(1200);
       await pr.popupShot(`audit/${theme}-popup-recording`);
       await opts.evaluate(`chrome.storage.session.set({ rec: { recording: true, stopping: true, meetingId: 'demo1', tabId: 1, startedAt: Date.now() - 754000 } })`);
-      const pf = await openPage(`chrome-extension://${id}/popup.html`, { width: 360, height: 760, scale: 2 });
+      const pf = await openPage(`chrome-extension://${id}/popup.html`, { width: 380, height: 760, scale: 2 });
       await sleep(1200);
       await pf.popupShot(`audit/${theme}-popup-finishing`);
       await opts.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);

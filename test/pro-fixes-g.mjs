@@ -142,22 +142,24 @@ await test('D7 normStatus: the leading word decides; the old cases still hold', 
 
 // ---- E1-E7: cosmetic fixes (their looks are checked in the screenshots; these keep the rules from being dropped) ----
 const ext = (f) => readFileSync(fileURLToPath(new URL(`../extension/${f}`, import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
-await test('E1 the beam layer is out of the flow from the start (the send button did not move on focus); a short placeholder on a narrow screen', () => {
-  assert.match(ext('style.css'), /:where\(\[data-beam\] > \[data-beam-bloom\]\) \{ position: absolute;/);
+await test('E1 the Ask box has a short placeholder on a narrow screen', () => {
   assert.match(src('askui.js'), /opts\.placeholderNarrow \|\| 'Ask a question'/);
   assert.match(src('askpage.js'), /placeholderNarrow: 'Ask about your meetings'/);
 });
-await test('E2 the live header is opaque, so text does not show through it', () => assert.match(ext('style.css'), /\.lv-head \{[^}]*background: var\(--surface-read\)/));
-await test('E3 a disabled danger button is grey with readable text, not faded red', () => {
-  assert.match(ext('style.css'), /button\.danger:disabled, button\.danger-fill:disabled \{ opacity: 1; background: var\(--fill\); color: var\(--label-2\)/);
+await test('E2 the live page sits under the opaque top bar of the shared layout', () => {
+  assert.match(ext('live.html'), /<header class="topbar">/);
+  assert.match(ext('style.css'), /\.topbar \{[^}]*background: var\(--surface\)/);
+});
+await test('E3 a disabled button is grey with readable text, not faded', () => {
+  assert.match(ext('style.css'), /\.btn:disabled, \.btn\[aria-disabled="true"\] \{ background: var\(--surface-2\); color: var\(--text-3\)/);
 });
 await test('E4 cards in a pair keep their own height; the quota label is short', () => {
   const o = ext('options.html');
-  assert.match(o, /\.grid2 \{[^}]*align-items: start/);
+  assert.match(ext('options.css'), /\.grid2 \{[^}]*align-items: start/);
   assert.match(o, /<label for="quotaWarnings">Warn me near a daily limit<\/label>/);
 });
 await test('E5 the writing state has little blank space above it and a readable label', () => {
-  const m = ext('mom.html');
+  const m = ext('mom.css');
   assert.match(m, /#mom \.skel \{[^}]*padding-top: 4px/);
   assert.match(m, /#mom \.skel \.busy \{[^}]*color: var\(--label\)/);
 });
@@ -168,7 +170,7 @@ await test('E7 date, time and serial cells of the organisation template carry a 
   assert.match(html, /<td class="amx-nw"[^>]*>(?:<b>)?18-Nov-26/);
   assert.match(html, /<td class="amx-nw"[^>]*>(?:<b>)?10:00 AM/);
   assert.match(html, /<th class="amx-nw"[^>]*>(?:<b>)?<span[^>]*>Sr\./);
-  assert.match(ext('mom.html'), /@media screen and \(max-width: 600px\) \{[\s\S]*#mom \.amx \.amx-nw \{ white-space: nowrap;/);
+  assert.match(ext('mom.css'), /@media screen and \(max-width: 600px\) \{[\s\S]*#mom \.amx \.amx-nw \{ white-space: nowrap;/);
 });
 
 // ---- F1 an unnamed voice can be removed; F2 the live page follows the shared page layout ----
@@ -178,16 +180,14 @@ await test('F1 each unnamed voice has a Remove button that asks first, deletes t
   assert.match(m, /title: 'Remove this voice\?'/);
   assert.match(m, /saveVoices\(\(await getVoices\(\)\)\.filter\(\(x\) => x\.id !== v\.id\)\)/);
   assert.match(m, /row\.append\(who, input, play, save, drop, excerpt\)/);
-  assert.match(ext('mom.html'), /\.namerow \{ display: grid; grid-template-columns: auto 1fr auto auto auto;/);
+  assert.match(ext('mom.css'), /\.namerow \{ display: grid; grid-template-columns: auto 1fr auto auto auto;/);
 });
-await test('F2 the live page: a slim opaque bar (logo, state, Open minutes), the meeting title as the page title, transcript text at the minutes size', () => {
+await test('F2 the live page: the shared top bar, the meeting title as the page title, Open minutes in the header, transcript lines in the shared style', () => {
   const h = ext('live.html');
-  assert.match(h, /<h1 id="mtitle" class="lv-title"><\/h1>/);
+  assert.match(h, /<h1 id="mtitle" class="t-display lv-title"><\/h1>/);
   assert.ok(!/<h1>Live<\/h1>/.test(h), 'no second large "Live" title');
-  assert.match(h, /<header class="lv-head">[\s\S]*id="chip"[\s\S]*id="minutesLink"/);
-  const c = ext('style.css');
-  assert.match(c, /\.lv-head \{[^}]*background: var\(--surface-read\)/);
-  assert.match(c, /\.lv-line \.text \{ font-size: 15px; line-height: 1\.7;/);
+  assert.match(h, /id="chip"[\s\S]*id="minutesLink"/);
+  assert.match(ext('style.css'), /\.transcript-line \{ display: grid;/);
 });
 
 console.log(`\n${passed} passed`);

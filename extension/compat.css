@@ -221,3 +221,14 @@ input[role=switch]:focus-visible, .toggle input[type=checkbox]:focus-visible { o
 .steps li::before { counter-increment: step; content: counter(step); position: absolute; inset-inline-start: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 12px/1 var(--font-sans); background: var(--accent-soft); color: var(--accent-text); }
 .steps li.done::before { content: "\2713"; background: var(--ok-soft); color: var(--ok-text); }
 .inp { }
+
+/* the older segmented control (a radiogroup of buttons marked aria-checked / .active) looks like Harbor's .seg */
+.seg-ctl { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; border-radius: calc(var(--radius-md) + 2px); background: var(--surface-2); border: 1px solid var(--border); max-width: 100%; }
+.seg-ctl > button { height: calc(var(--control-h) - 8px); padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font: 550 13px/1 var(--font-sans); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.seg-ctl > button:hover:not(:disabled) { color: var(--text); }
+.seg-ctl > button[aria-checked="true"], .seg-ctl > button[aria-selected="true"], .seg-ctl > button.active, .seg-ctl > button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1), 0 0 0 1px var(--border); }
+.seg-ctl.wide { display: flex; }
+.seg-ctl.wide > button { flex: 1; }
+.seg-ctl.small > button { height: 28px; }
+.hint, .hint p { text-wrap: pretty; }
+html.in-panel body.popup { width: 100%; min-width: 0; }

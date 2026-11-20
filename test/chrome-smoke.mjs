@@ -279,7 +279,7 @@ try {
     await send({ type: 'usage', entry: { provider: 'gemini', model: 'gemini-3.8-flash', kind: 'llm', req: 17, tin: 1200, tout: 300 } });
     await send({ type: 'usage', entry: { provider: 'gemini', model: 'gemini-3.8-flash', kind: 'llm', req: 1, fail: true, rl: true, learned: { model: 'gemini-3.8-flash', limit: 20 } } });
     await new Promise((r) => setTimeout(r, 600));
-    document.querySelector('#nav button[data-tab=usage]').click();
+    document.querySelector('#nav [data-tab=usage]').click();
     await new Promise((r) => setTimeout(r, 400));
     const rows = [...document.querySelectorAll('#usageTable tbody tr')].map((r) => r.textContent);
     return { rows, totals: document.getElementById('usageTotals').textContent, active: document.getElementById('page-usage').classList.contains('active'),
@@ -353,7 +353,7 @@ try {
 
   // ---- Pro: the setup check ----
   const chk = await opts.evaluate(`(async () => {
-    document.querySelector('#nav button[data-tab=start]').click();
+    document.querySelector('#nav [data-tab=start]').click();
     document.getElementById('checkup').click();
     await new Promise((r) => setTimeout(r, 2500));
     return { out: document.getElementById('checkupOut').textContent, msg: document.getElementById('checkupMsg').textContent, copy: !document.getElementById('checkupCopy').hidden };
@@ -365,7 +365,7 @@ try {
     const fp = 'A'.repeat(344);
     const people = [{ id: 'v1', name: 'Amal Raj', lang: 'en', centroid: fp, windows: [fp], secs: 21, created: Date.now() }, { id: 'v2', name: 'Priya Nair', lang: 'ml', langs: ['ml'], centroid: fp, windows: [fp], secs: 19, created: Date.now() }];
     await chrome.storage.local.set({ voices: people, 'meeting:vtest': { id: 'vtest', segments: [], voiceSegs: [{ t0: 0, t1: 2, e: fp }], voiceModel: 'x' }, meetingIds: ['vtest'] });
-    document.querySelector('#nav button[data-tab=voices]').click();
+    document.querySelector('#nav [data-tab=voices]').click();
     await new Promise((r) => setTimeout(r, 500));
     const out = {
       page: document.getElementById('page-voices').classList.contains('active'),

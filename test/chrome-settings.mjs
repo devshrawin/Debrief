@@ -105,7 +105,7 @@ try {
   const pg = await openPage(`chrome-extension://${id}/options.html`);
   const { ev } = pg;
   const tab = async (name) => {
-    await ev(`document.querySelector('#nav [data-tab="${name}"]').click()`);
+    await ev(`document.querySelector('#nav [data-tab="${{ general: 'recording' }[name] || name}"]').click()`);
     await sleep(150);
   };
   const saved = () => ev(`chrome.storage.local.get('settings').then((r) => r.settings || {})`);

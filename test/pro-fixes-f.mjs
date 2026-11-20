@@ -73,7 +73,7 @@ await test('U4 an empty cell of a stacked table is a truly empty cell, which the
   assert.equal(empty.textContent, '');
   assert.equal(empty.matches(':empty'), true, 'a cell with no content at all, which the stylesheet hides when stacked');
   assert.equal(rows[1].cells[2].getAttribute('data-label'), 'Note');
-  const css = readFileSync(new URL('../extension/style.css', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../extension/mom.css', import.meta.url), 'utf8');
   assert.match(css, /table\[data-stack\] td:empty\s*\{\s*display:\s*none/);
 });
 

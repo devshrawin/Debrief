@@ -1,125 +1,110 @@
-# Debrief design system: clear glass over a quiet room
+# Debrief · Harbor design system
 
-Every extension page loads one stylesheet, `extension/style.css`. Pages only lay things out; colours, type, materials and controls come from tokens. The effects layer in `extension/fx/` adds motion on top. If it fails to load, every page still works and looks finished.
+## Principles
 
-Principles (Apple HIG): **clarity, deference, depth.**
-- Content sits on opaque reading surfaces. Glass only frames it.
-- One brand tint: indigo.
-- Saffron (`--orange`) means only "a call is on and you are not recording", or a gentle warning.
-- Red means only recording or deleting.
-- Green means only "works, allowed, saved".
+1. **Solid, not glass.** Opaque surfaces, hairline borders and soft shadows. No blur and no background gradients.
+2. **One loud thing per view.** One blue primary button per view. Red (`rec`) only ever means recording or danger.
+3. **Rows, not paragraphs.** A setting is a label, one sentence and a control. Longer explanations move behind Advanced or a link.
+4. **Same rhythm everywhere.** One top bar, one page header (title, meta, actions on the right), one card and one row list.
+5. **Centred.** Content sits in a centred column at every width; nothing hugs the left edge of a wide window.
+6. **Say what happened.** Status is a badge or a banner: the fact in bold, then what happens next.
 
-## Tokens
+## Colour
 
-### Type
-HIG names, with sizes tuned for desktop and for Devanagari and Malayalam (body line height 1.6).
+Light is the default. Dark applies through `prefers-color-scheme`, or `data-theme="dark"` on `<html>`. Every text pair is at least 4.5:1, and every control border and focus ring at least 3:1.
 
-| Token | Use | Size / line |
-|---|---|---|
-| `--t-large-title` | Page title (collapses on scroll on the minutes page) | 30/38, 700 |
-| `--t-title-1` | Document title | 24/32, 700 |
-| `--t-title-2` | Empty-state title | 20/28, 600 |
-| `--t-title-3` | Card title, wordmark | 17/24, 600 |
-| `--t-headline` | Buttons, labels, list titles | 15/22, 600 |
-| `--t-body` | Reading text, ledes | 15/24 |
-| `--t-callout` | Default UI text | 14/22 |
-| `--t-subheadline` | Secondary UI text | 13/20 |
-| `--t-footnote` | Hints | 12/18 |
-| `--t-caption` | Badges, table headers | 11/16, 500 |
-
-- Font stack: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, "Nirmala UI", "Kartika", sans-serif`.
-- No web fonts.
-- Times and counts use `tabular-nums`.
-
-### Colour (light / dark)
-Values were picked by **measured** contrast over glass (`docs/LIBRARIES-INVENTORY.md`, Phase 0 brief §3). The worst case is text over each tier composited on the most saturated ambient colour, before blur.
-
-| Token | Light | Dark | Rule |
+| Token | Light | Dark | Use |
 |---|---|---|---|
-| `--label` | `#1d1d1f` | `#f5f5f7` | ≥ 10.6:1 on every tier |
-| `--label-2` | `#55555c` (opaque) | `#a3a3ad` | ≥ 5.4:1 on thin and heavier. Apple's translucent secondaryLabel fails here, so it is not used |
-| `--label-3` | `#8a8a92` | `#6e6e78` | Disabled controls only |
-| `--tint` / `--on-tint` | `#3634a3` / white | `#a9a6ff` / `#14123a` | Prominent buttons 9.6:1 and 6.2:1 |
-| `--red`, `--red-fill` | `#b0000e`, `#d70015` | `#ff7a72`, `#ff6961` | Recording and destructive actions |
-| `--orange`, `--orange-fill` | `#a8370a`, `#ff9f0a` | `#ffb340` | Call on; warnings |
-| `--green`, `--green-fill` | `#146c2e`, `#28a745` | `#30db5b`, `#30d158` | Works, allowed, saved; switches |
-| `--separator`, `--fill`, `--fill-2`, `--fill-3` | translucent greys | translucent greys | Hairlines and control fills |
-| `--surface-read` | `#ffffff` | `#1c1c1e` | The minutes document, transcript, tables |
+| `bg` | `#eef2f6` | `#0f1620` | Page background behind cards and documents. |
+| `surface` | `#ffffff` | `#16202c` | Cards, popup body, the minutes document (opaque reading surface). |
+| `surface-2` | `#e6ecf3` | `#1c2836` | Rails, table headers, segmented track, hover fill. |
+| `border` | `#d8e0ea` | `#263445` | Hairline borders and dividers. |
+| `border-strong` | `#8496ab` | `#5b6f87` | Input and control borders (3:1 against surface). |
+| `text` | `#142233` | `#e6edf5` | Primary text on bg, surface and surface-2. |
+| `text-2` | `#4a5b70` | `#a3b3c6` | Secondary text: meta, descriptions, hints. 4.5:1 on surface-2. |
+| `text-3` | `#7d8ca0` | `#6d7f94` | Disabled text and placeholders only. Not for content. |
+| `primary` | `#1f5fbf` | `#6aa5f0` | Main button fill. One per view. |
+| `primary-hover` | `#194f9f` | `#8ab8f4` | Main button hover. |
+| `on-primary` | `#ffffff` | `#0b1420` | Text and icons on primary. |
+| `accent` | `#1f5fbf` | `#6aa5f0` | Brand accent: links, selected nav, focus ring, active tab. |
+| `accent-text` | `#1d58b3` | `#8ab8f4` | Accent used as text on surface (4.5:1). |
+| `accent-soft` | `#e4eefb` | `#1a3352` | Selected nav background, info banner, accent badge fill. |
+| `focus` | `#1f5fbf` | `#8ab8f4` | Focus ring (3:1 against bg and surface). |
+| `rec` | `#c4271b` | `#d92d20` | Recording: Start recording fill, record dot, Stop. |
+| `on-rec` | `#ffffff` | `#ffffff` | Text on rec. |
+| `rec-text` | `#b42318` | `#ff8a80` | Recording and danger as text. |
+| `rec-soft` | `#fdecea` | `#3a1512` | Recording and danger banner fill. |
+| `warn-text` | `#8a4b00` | `#f5b759` | Warning text and icon. |
+| `warn-soft` | `#fff4e0` | `#2e2210` | Warning banner fill (quota, free tier). |
+| `warn-border` | `#efc27d` | `#5c4317` | Warning banner border. |
+| `ok-text` | `#116b37` | `#5cd08a` | Success text and icon: Saved, Emailed, Present. |
+| `ok-soft` | `#e6f4ea` | `#12291b` | Success badge fill. |
+| `pill-bg` | `#132031` | `#1a2839` | In-call pill and its card. Always dark: it floats over Google Meet. |
+| `pill-text` | `#eef3f9` | `#eef3f9` | Text on the pill. |
+| `pill-text-2` | `#a7b6c9` | `#a7b6c9` | Secondary text on the pill. |
+| `pill-border` | `#2a3b51` | `#34475f` | Pill edge. |
+| `scrim` | `rgba(15, 30, 50, 0.4)` | `rgba(0, 0, 0, 0.6)` | Modal backdrop. |
 
-**Coloured text** (red, green or orange) goes only on regular or thick glass, or on its own tinted badge.
+`text-3` is only for placeholders and disabled text.
 
-Older pages and generated markup still use the previous variable names (`--accent`, `--muted`, `--border`, `--panel`…). These are aliased to the new tokens.
+## Type
 
-### Space, radius, motion
-- Space: 4, 8, 12, 16, 24, 32, 48 (`--s1`…`--s7`).
-- Hit targets: `--hit` 44 px, `--hit-compact` 36 px for dense toolbars.
-- Radii: `--r-xs` 6 (chips), `--r-sm` 10 (controls), `--r-md` 14 (cards), `--r-lg` 20 (sheets, sidebar), `--r-pill`.
-- Motion: `--spring` and `--spring-smooth` are CSS `linear()` curves compiled at build time from liquid-gooey's `snappy` and `smooth` springs. Durations are `--d-fast` 200 ms, `--d-base` 280 ms and `--d-slow` 350 ms. Nothing blocks input.
+System fonts only: `-apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, "Nirmala UI"`. Nirmala UI covers Hindi and Malayalam on Windows.
 
-## Materials
-
-| Tier | Token | Blur / saturate | Used for |
+| Class | Size / line | Weight | Use |
 |---|---|---|---|
-| Ultra-thin | `--mat-ultrathin` (40%) | 12 px / 160% | Decorative layers only; no text |
-| Thin | `--mat-thin` (58%) | 20 px / 170% | Sidebar, bottom toolbars, minutes header |
-| Regular | `--mat-regular` (72%) | 28 px / 180% | Cards, popup hero, job card, Ask box, details panels |
-| Thick | `--mat-thick` (86%) | 36 px / 180% | Dialogs, toasts, the pill's panel |
-| Bar | `--mat-bar` (94%) | 36 px / 180% | Floating bars that content scrolls under: the Settings save bar, the tour's Back / Next. Solid when transparency is reduced |
+| `.t-display` | 28/36 (24/31 under 600px) | 700 | Page titles, tour steps |
+| `.t-title` | 20/28 (Settings: 24/32) | 700 | Section page titles |
+| `.t-heading` | 15/22 | 600 | Card headings |
+| body | 14/21 | 400 | Default |
+| `.t-small` | 13/19 | 400 | Descriptions, meta |
+| `.t-label` | 12/16 | 550 | Table headers, badges |
+| `.t-overline` | 11/16, uppercase, +0.06em | 600 | Group labels, minutes sections |
+| `.doc p` | 15/25, max 72ch | 400 | Minutes and transcript |
 
-- Every tier carries `--edge` (a 1 px inner highlight) and a layered shadow that grows with depth.
-- **Depth order:** ambient background < content (regular) < toolbar (thin, sticky) < popover < modal (thick).
-- **The ambient room** is `body::before`: three soft radial shapes (indigo, saffron, sky), fixed and never animated. It gives the glass something to refract.
-- **Reading surfaces stay opaque.** The minutes document, transcript, usage table and meetings list use `--surface-read`. No blur sits under scrolling rows.
-- **Print** removes the ambient layer and all glass. Word and email output are unchanged.
-- **Blur turns on after the first paint.** `theme.js` adds `html.glass` one frame after paint, so opening a page never waits on blur.
+## Space, radius, depth, motion
 
-### Fallbacks (all automatic)
-- **Solid surfaces:** `prefers-reduced-transparency: reduce`, `prefers-contrast: more`, `forced-colors: active`, browsers without `backdrop-filter`, and the in-app **Settings → General → Appearance → Reduce transparency** switch (`html.solid`, its own storage key `uiSolid`). All of these give solid surfaces, a plain background, beams and metal off.
-- **Reduced motion:** `prefers-reduced-motion: reduce` stops every CSS animation. Orbs draw one static frame, beams stay off, and metal is paused.
-- `prefers-contrast: more` also raises secondary text to `--label`.
+- **Space:** 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48 (`--space-1` to `--space-8`).
+- **Radius:** `--radius-sm` 8 (badges, small buttons) · `--radius-md` 10 (buttons, inputs) · `--radius-lg` 16 (cards, rows, modals) · pill 999.
+- **Controls:** 38px default, 30px small, 46px large.
+- **Shadow:** `--shadow-1` resting cards · `--shadow-2` menus, toasts · `--shadow-3` modals.
+- **Motion:** 140ms `cubic-bezier(.2,.7,.2,1)`, hover and toggle only. All motion is off under `prefers-reduced-motion`.
 
-## Components (in `style.css`)
-- **Buttons:**
-  - Classes: `.primary` (prominent), `.tinted`, `.plain`, default (gray fill), `.danger` (tinted red that fills red on hover), `.danger-fill`.
-  - States: pressed (scale 0.97), disabled (a readable neutral fill for `.primary`), and focus (a 3 px tint ring).
-- **Fields:** inputs, selects and textareas. Focus switches to an opaque surface with the tint ring.
-- **Switch:** any `input[type=checkbox][role=switch]` or `.toggle input`; iOS proportions at 44×26.
-- **Segmented control:** `.segmented` / `.seg` containing buttons with `.active`. `fx/goo.js` adds the liquid thumb.
-- **Chips and badges:** `.chip`, `.chipbtn`, `.badge.{ok,warn,rec,tint}`, and `.metal-badge` (metal rim with a tinted fallback).
-- **Callouts and alerts:** `.warn`, `.callout`, `.callout.warnc`; popup `.alert` (red), `.alert.key` (orange). They fill with the opaque tiers `--tier-orange`, `--tier-red`, `--tier-tint`, `--tier-green` (a tint mixed into `--surface-read`), so a warning is one colour whatever the ambient room is doing behind it.
-- **App shell:** `.shell`, `.side > .side-panel`, `.navlist`, `.content`, `.card`, `.row2`, `.toggle`, `.btnrow`, `.status`, `.toolbar-bottom`.
-- **Lists:** `.steps`, `ol.how`, `.checklist`, `.mini`, `.grid2`.
-- **Disclosure:** `details > summary` with a rotating chevron.
-- **Dialog:** `dialog` and `.dbmodal` in thick glass with a dim backdrop. A dialog opens with a title (`h2`), e.g. "Restore from a backup".
-- **Progress:** `<db-orb state size>` next to the status text, which is announced politely. An orb has a solid tinted resting frame (`db-orb.status-orb`), so a still picture of it is never a bare ring of dots. One status at a time: while a card shows the status (the countdown card before minutes are written, the skeleton while they are written), the toolbar's own button and status are hidden.
+## Components (all in `style.css`)
 
-## Effects layer (`extension/fx/`)
-Built by `npm run build:fx` from `fx/src/` and `third_party/libraries-dev/`.
+| Component | Classes |
+|---|---|
+| Button | `.btn` + `.primary` `.plain` `.link` `.danger` (`.solid`) `.rec`, sizes `.sm` `.lg` `.icon` `.round` `.block`, `:disabled` |
+| Menu | `details.menu > summary.btn + .menu-list` |
+| Field | `.field > label + .input/.select + .hint(.error)`, `.input-group`, `.search` |
+| Switch | `button.switch[role=switch][aria-checked]` |
+| Segmented | `.seg` (`.block`, `.sm`) with `button[aria-pressed]` |
+| Radio card | `label.choice > input[type=radio] + .choice-b` |
+| Badge, count, status, avatar | `.badge` (`.ok` `.warn` `.rec` `.accent`), `.count`, `.status` (`.done` `.now`), `.avatar` |
+| Card | `.card` (`.flat`), `.card-head` `.card-body` `.card-foot`, `details.card` |
+| Rows | `.rows > .row > .row-label + .row-ctl`, `.group-head`, `a.row` |
+| Banner | `.banner` + `.info` `.warn` `.danger` `.ok` |
+| Modal | `dialog.modal` + `.modal-head` `.modal-body` `.card-foot` |
+| Toast | `.toast` (fixed, bottom centre) |
+| Table | `.table-wrap > .table` (`.stack-sm` with `data-label` on cells) |
+| Empty | `.empty > .empty-icon + h + p + action` |
+| Loading | `.spinner`, `.progress > i` (`.ok` `.warn`), `.skeleton` |
+| Chrome | `.topbar > .topbar-inner`, `.brand`, `.mark`, `.crumbs`, `.tabs [role=tab]` |
+| Page | `.page` (`.narrow`), `.page-head`, `.with-rail` + `.rail-stack` |
+| Settings | `.settings > .settings-rail + .settings-main > .settings-page`, `.setup-card`, `.provider-grid`, `.danger-zone` |
+| Tour | `body.welcome`, `.stepper`, `.welcome-card`, `.how`, `.opt-grid` |
+| Popup | `body.popup`, `.popup-head` `.popup-body` `.popup-foot`, `.timer`, `.meter-row` |
+| Pill | `pill.css`: `.dbp .pill .chip .x .card .meter .note .switch .stop .remind` |
 
-| Effect | Library | Where | Behaviour |
-|---|---|---|---|
-| Orb | thinking-orbs (engine) | Every "…" status: minutes job, Ask, recovery, sharing, key and connection tests, popup "Finishing" | One state per stage (see `ORB_RULES` in `fx/src/common.js`). Pauses offscreen and on hidden tabs; static under reduced motion |
-| Beam | border-beam | Popup recording card (`pulse-inner`), Start while a call is on (`md` sunset), job card while writing (`md`), Ask box on focus or while answering (`line`), a card while its test runs (`line`) | Static and off when idle. CSS loads only the first time a beam turns on |
-| Goo thumb | liquid-gooey (spring) + vanilla goo | Home/Meetings, Minutes/Transcript, usage range, enrol language | CSS transitions only; zero idle cost |
-| Metal | metal-fx (engine) | Tour wordmark, Start ring while a call is on, "Emailed" badge | WebGL2, lazily loaded; never in lists or the pill; off without WebGL2 or when transparency is reduced |
+## Layout rules
 
-## Accessibility rules
-- Text contrast ≥ 4.5:1 over every tier it is allowed on (table above). `test/smoke.mjs` runs axe on every page in light and dark and fails on any serious or critical issue.
-- Focus: visible `:focus-visible` ring on every control. Every page works fully from the keyboard. The pill's switch is now focusable; it was `display: none` before.
-- Icon-only buttons carry `aria-label`. Status text uses `aria-live="polite"`. Orbs are `role="img"` with the status as their label.
-- RTL-safe: logical properties are used, and the smoke test runs the pages with `dir="rtl"` without overflow.
-- Pages hold from 360 to 1440 px and at 200% zoom without horizontal scroll.
+- **Top bar** (`.topbar-inner`) and **page** (`.page`) share one centred 1240px column, so the logo lines up with the title.
+- **Minutes, Live:** document plus a 320px side column of tools at 1040px and wider; below that the tools sit under the document.
+- **Actions, Ask:** a single centred 880px column (`.page.narrow`). Ask centres its heading.
+- **Settings:** a 280px menu that is always as tall as the window, with its groups spread to fill it (`justify-content: space-between`), and the setup card and help at the bottom. The content is a centred 760px column. Under 760px the menu becomes the Settings home page.
+- **Tour:** a centred 620px column with the step tracker above one card.
+- **Popup:** 380px (works 360–400px), header, body, footer; one filled control per state.
 
-## The colour room (fluid background)
+## Logo
 
-Every page draws the same slow, fluid backdrop behind the glass: six soft blobs of colour that drift and cross-fade (`.fx-bg`, added by `fx/theme.js`, styled in `extension/style.css`). Only `transform` and `opacity` animate, so it runs on the GPU; the layer is fixed, `contain: strict`, and pauses when the tab is hidden. It is switched off by `prefers-reduced-motion` (it holds still), `prefers-reduced-transparency`, `prefers-contrast: more`, forced colours, print, and the in-app **Reduce transparency** setting (`html.solid`). Palettes: `--amb-1..3` (first set) and `--amb-4..6` (second set, cross-faded in), light and dark.
-
-## Older names
-
-Pages written before the glass pass use short names (`--card`, `--line`, `--muted`, `--brand`, `--rec`, `--amber`, `--ok`...). Section 5 of `style.css` maps each onto the glass tokens, so they follow light and dark and the materials automatically. New code should use the tokens named above.
-
-## Loading and search
-
-- Every wait shows a **thinking orb** (`fx/src/orb.js`, from thinking-orbs): the state follows the words ("Reading the transcript…" is *searching*, "Writing…" is *composing*, "Sending…" is *connecting*). Any `.spin` element a page adds is swapped for an orb.
-- Any search or question field (Meetings search, Ask box, Find a meeting) carries the **border beam** while it has focus or is working (`searchBeam` in `fx/src/common.js`; CSS generated at build time from border-beam).
-
+A rounded blue square with three lines of minutes and a red record dot. Use `icon-small.svg` at 16 and 32px (two lines, bigger dot) and `icon-recording.svg` on the toolbar while recording. `icon-mono.svg` is for one-colour uses.

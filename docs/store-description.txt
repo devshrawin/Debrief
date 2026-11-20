@@ -10,7 +10,7 @@ WHAT IT DOES
 • Ask a question about one meeting, or across all your past meetings. Every answer shows which meeting it came from.
 • Optional: name speakers by voice. This runs on your computer.
 • Started a recording by mistake? Discard it in one tap and nothing is kept.
-• A floating glass panel opens over your page, in light or dark, with calm motion you can switch off.
+• A floating panel opens over your page, in light or dark.
 
 YOUR DATA STAYS YOURS
 Debrief has no server of its own. Your API keys stay in your browser. Audio and text go directly from your browser to the service you pick (Google Gemini, Sarvam, Deepgram, Anthropic Claude, an OpenAI-compatible service, or a model running on your own computer), under your own account. Nothing goes anywhere else, and there is no advertising or tracking. Voice fingerprints never leave your device.

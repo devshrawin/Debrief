@@ -279,19 +279,56 @@ function initSegs() {
 const syncSegs = () => document.querySelectorAll('[data-seg-for]').forEach((b) => b._sync());
 
 // Left-hand navigation: one page at a time, remembered in the URL hash.
+// Pages of earlier versions keep working as links: "general" is now Recording, and so on.
+const OLD_TABS = { general: 'recording', speech: 'speech', minutes: 'minutes', email: 'email', voices: 'voices', usage: 'usage', appearance: 'appearance' };
 function showTab(name) {
+  name = OLD_TABS[name] || name;
   if (!document.getElementById(`page-${name}`)) name = 'start';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
-  document.querySelectorAll('#nav button').forEach((b) => {
+  document.querySelectorAll('#nav [data-tab]').forEach((b) => {
     const on = b.dataset.tab === name;
     b.classList.toggle('active', on);
     if (on) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
+  // a narrow window shows the list of pages first, then one page with a Back link
+  const shell = document.querySelector('.settings');
+  if (shell) shell.dataset.view = 'page';
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   window.scrollTo(0, 0);
 }
-document.querySelectorAll('#nav button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+document.querySelectorAll('#nav [data-tab], .setup-card[data-tab]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); showTab(b.dataset.tab); }));
+$('settingsBack')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  document.querySelector('.settings').dataset.view = 'home';
+  history.replaceState(null, '', location.pathname);
+  window.scrollTo(0, 0);
+});
+// search: hides the pages (and groups) whose text has no match
+$('settingsSearch')?.addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  const links = [...document.querySelectorAll('#nav a[data-tab]')];
+  for (const a of links) {
+    const pg = document.getElementById(`page-${a.dataset.tab}`);
+    const hit = !q || `${a.textContent} ${pg?.textContent || ''}`.toLowerCase().includes(q);
+    a.classList.toggle('hidden-by-search', !hit);
+  }
+  document.querySelectorAll('#nav .nav-group').forEach((g) => g.classList.toggle('hidden-by-search', ![...g.querySelectorAll('a')].some((a) => !a.classList.contains('hidden-by-search'))));
+});
+// Appearance: the colour theme and the floating panel are saved at once, in their own keys
+{
+  const store = chrome.storage.local;
+  const paintTheme = (v) => document.querySelectorAll('#uiTheme > button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === v)));
+  store.get(['uiTheme', 'uiPanel']).then((r) => {
+    paintTheme(r.uiTheme || 'auto');
+    if ($('uiPanel')) $('uiPanel').checked = r.uiPanel !== false;
+  });
+  document.querySelectorAll('#uiTheme > button').forEach((b) => b.addEventListener('click', () => {
+    paintTheme(b.dataset.v);
+    store.set({ uiTheme: b.dataset.v });
+  }));
+  $('uiPanel')?.addEventListener('change', (e) => store.set({ uiPanel: e.target.checked }));
+}
 document.querySelectorAll('[data-go]').forEach((a) => (a.onclick = () => showTab(a.dataset.go)));
 
 // ---- learned names and suggested fixes ----
@@ -786,6 +823,14 @@ async function updateGuide() {
     if (opt) opt.hidden = ok;
   }
   const n = Object.values(done).filter(Boolean).length;
+  // the setup card at the foot of the page list
+  if ($('setupCount')) {
+    $('setupCount').textContent = `${n} of 4 done`;
+    $('setupFill').style.width = `${n * 25}%`;
+    if ($('navStartBadge')) { $('navStartBadge').textContent = `${n} of 4`; $('navStartBadge').hidden = n === 4; }
+    const next = ['g1', 'g2', 'g3', 'g4'].find((k) => !done[k]);
+    $('setupNext').textContent = next ? `Next: ${text[next].replace(/^./, (c) => c.toLowerCase())}` : 'Everything is set up';
+  }
   $('startLede').textContent = n === 4 ? 'Everything is set up. Debrief is ready to record your next meeting.' : `Four things make Debrief work. ${['None', 'One', 'Two', 'Three'][n]} ${n === 1 ? 'is' : 'are'} done.`;
 }
 $('g1go').onclick = () => {

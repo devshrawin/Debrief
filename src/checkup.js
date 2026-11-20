@@ -92,7 +92,7 @@ export async function runCheckup() {
       const silent = dbg.find((x) => /^mic: the raw microphone/.test(x));
       add(OK, `Last meeting: ${m.title || m.id}`, `${(m.segments || []).length} transcript pieces, ${(m.errors || []).length} errors, ${Object.keys(m.presence || {}).length} people seen, ${(m.voiceSegs || []).length} voice pieces, ${(m.captions || []).length} caption lines`);
       add(muteLines.length ? OK : WARN, 'Last meeting: the call\'s mute button', muteLines.length ? `${muteLines.length} changes seen; last: ${muteLines.at(-1)}` : 'no mute changes were seen (either you never muted, or the mute button was not found on the page)');
-      if (silent) add(BAD, 'Last meeting: microphone', 'it delivered only silence: check the microphone chosen in General and Windows privacy settings', 'general', 'Open General');
+      if (silent) add(BAD, 'Last meeting: microphone', 'it delivered only silence: check the microphone chosen in Recording and Windows privacy settings', 'general', 'Open General');
       add(m.invited?.length ? OK : WARN, 'Last meeting: calendar invite', m.invited?.length ? `${m.invited.length} invitees found${m.invitedHow ? ` (by ${m.invitedHow})` : ''}` : m.invitedError ? `lookup failed: ${String(m.invitedError).slice(0, 100)}` : m.invitedNotFound ? 'no calendar event matched the Meet link or title' : 'not looked up yet');
     }
   } catch {}

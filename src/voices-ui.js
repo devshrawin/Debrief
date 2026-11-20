@@ -714,7 +714,7 @@ export async function initVoices() {
       $('enrolStop').focus();
       setMsg('Listening… keep going until about 20 seconds.', 'info');
     } catch (e) {
-      setMsg(e.name === 'NotAllowedError' ? 'The microphone is blocked. Use “Allow microphone” on the General page, then try again.' : e.name === 'NotFoundError' ? 'No microphone is available. Allow it in General, under Microphone, or plug one in.' : `Could not start the microphone: ${e.message}`, 'bad');
+      setMsg(e.name === 'NotAllowedError' ? 'The microphone is blocked. Use “Allow microphone” on the Recording page, then try again.' : e.name === 'NotFoundError' ? 'No microphone is available. Allow it in General, under Microphone, or plug one in.' : `Could not start the microphone: ${e.message}`, 'bad');
     }
   };
   $('enrolStop').onclick = () => {

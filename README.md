@@ -53,15 +53,15 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 <table>
 <tr>
 <td width="50%" valign="top"><img src="docs/img/popup.png" alt="The popup"><br><sub><b>The popup.</b> Liquid tabs, one big button. When a call is on, the button glows.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/popup-recording.png" alt="The popup while recording"><br><sub><b>Recording.</b> Live meters for the meeting and your mic, and a breathing glass bar.</sub></td>
+ <td width="50%" valign="top"><img src="docs/img/popup-recording.png" alt="The popup while recording"><br><sub><b>Recording.</b> Live meters for the meeting and your mic, a red timer, and one red Stop button.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/writing.png" alt="Minutes being written: a thinking orb shows the stage"><br><sub><b>Writing.</b> A thinking orb shows the stage (reading, writing, checking, emailing). Close the tab; it keeps going.</sub></td>
+ <td width="50%" valign="top"><img src="docs/img/writing.png" alt="Minutes being written: a progress card shows the stage"><br><sub><b>Writing.</b> One card shows the stage (reading, writing, checking, emailing). Close the tab; it keeps going.</sub></td>
 <td width="50%" valign="top"><img src="docs/img/countdown.png" alt="The countdown before the minutes are written"><br><sub><b>After the call.</b> A 10 second window to pick the format; touch the page and it waits.</sub></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><img src="docs/img/minutes-standard.png" alt="Standard minutes with the attendance table"><br><sub><b>Standard layout</b> with an attendance table: invited, seen, joined and left.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/ask.png" alt="Ask your meetings: the question box glows with the border beam"><br><sub><b>Ask your meetings.</b> Anywhere you search or ask, the border beam lights the field.</sub></td>
+ <td width="50%" valign="top"><img src="docs/img/ask.png" alt="Ask your meetings"><br><sub><b>Ask your meetings.</b> One search box; every point in the answer links to the meeting and the moment it came from.</sub></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><img src="docs/img/voices.png" alt="Voices settings with Play sample buttons"><br><sub><b>Voices.</b> Name speakers by voice, on your computer. ▶ Play sample tells you who "Unnamed voice 1" is.</sub></td>
@@ -69,7 +69,7 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 </tr>
 <tr>
 <td width="50%" valign="top"><img src="docs/img/appearance.png" alt="Settings, Appearance: theme, transparency, moving background and effects"><br><sub><b>Appearance.</b> Light, dark or follow the computer; reduce transparency; moving background Off / Calm / Lively; switch the animated effects off.</sub></td>
-<td width="50%" valign="top"><img src="docs/img/minutes-dark.png" alt="The minutes page in the dark theme"><br><sub><b>Dark.</b> The same glass over a darker, moving field of colour.</sub></td>
+ <td width="50%" valign="top"><img src="docs/img/minutes-dark.png" alt="The minutes page in the dark theme"><br><sub><b>Dark.</b> The same pages in the dark theme, which follows your computer or can be set in Settings.</sub></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><img src="docs/img/tour-key.png" alt="First-run tour"><br><sub><b>Two-step first run.</b> Paste a free Gemini key (tested live), allow the microphone, record.</sub></td>
@@ -81,7 +81,7 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 
 ### The look
 
-Glass over a slowly moving field of colour. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md)) follows Apple's Human Interface Guidelines: content on opaque reading surfaces, glass only for the frame, system type scale, 44 px hit targets, light and dark. Effects come from [Libraries.dev](https://github.com/Jakubantalik/Libraries.dev) by Jakub Antalik (MIT), ported to plain JavaScript: **thinking orbs** for every wait, the **border beam** on search and question fields and on the recording bar, **liquid** segmented controls, and a **liquid-metal** ring on the Start button during a call. **Settings → Appearance** sets the theme (light, dark or follow your computer), reduces transparency, chooses the moving background (Off, Calm or Lively) and switches the animated effects off. Your computer's reduced-motion, reduced-transparency and high-contrast settings always win.
+The Harbor design: a calm blue-grey background, solid blue buttons, red only for recording and danger, system fonts, no blur and no moving effects. One design system (`extension/style.css`, see [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md); tokens in `docs/tokens/`) is used on every page: one top bar, one page header, one card, one list of rows. The minutes document is an opaque reading surface; printed, Word and email output stay plain. Text contrast is at least 4.5:1 and control borders at least 3:1, in light and dark. **Settings → Appearance** sets the theme (light, dark or follow your computer). Your computer's reduced-motion, high-contrast and forced-colours settings are honoured.
 
 ---
 
@@ -286,13 +286,13 @@ Model IDs follow each provider's naming; `gemini-3.5-transcribe` and `nova-3` ar
 ## Develop
 
 ```bash
-npm run build        # bundle src/ into extension/dist/ and the glass effects into extension/fx/
+npm run build        # bundle src/ into extension/dist/
 npm run watch        # rebuild on change
 npm test             # 17 suites (243 checks): chunker, mixer, providers on a mocked fetch,
                      # minutes pipeline, jobs, relay script, voices, org template, migration
 node test/chrome-smoke.mjs   # real headless Chrome drives every page
 node test/chrome-job.mjs     # real Chrome: minutes written with no tab, resumed after a restart
-node test/chrome-glass.mjs   # real Chrome: the colour room, orbs, beams and liquid controls on every page
+
 npm run pack         # release/Debrief-Pro-v<version>.zip for the Web Store (no dev key)
 npm run src-zip      # source zip without node_modules, release, .git, dist
 node scripts/screenshots.mjs # regenerate the screenshots in docs/img
@@ -306,7 +306,7 @@ src/
   mixer.js            mic + tab mixing, me / others from levels
   chunker.js          pause-aware chunking
   stt.js, gemini.js   speech-to-text clients and model fallback
-  ../fx/src           the glass effects layer (orbs, border beam, liquid controls, metal), built into extension/fx/
+
   jobs.js             the minutes job: pipeline, runner, email and share (shared by the page and the background)
   jobstate.js         job states and resume rules
   minutes.js          the multi-pass minutes pipeline
