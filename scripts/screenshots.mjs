@@ -241,7 +241,7 @@ try {
   const m3 = await openPage(`chrome-extension://${id}/mom.html?id=demo3`, { width: 1100, height: 900 });
   await sleep(500);
   // the whole card, its button and the countdown running ("Writing automatically in 12 s"), plus the toolbar under it
-  const cardBottom = await m3.evaluate(`Math.ceil(document.querySelector('.toolbar').getBoundingClientRect().bottom + scrollY)`);
+  const cardBottom = await m3.evaluate(`Math.ceil(document.querySelector('.tabs').getBoundingClientRect().bottom + scrollY)`);
   await m3.shot('countdown', { full: false, clip: { x: 0, y: 0, width: 1100, height: Math.min(900, cardBottom + 32) } });
 
   // ---- settings: voices

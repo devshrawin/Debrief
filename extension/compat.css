@@ -173,3 +173,7 @@ dialog.dbmodal.rr-dialog { width: min(760px, calc(100% - 32px)); }
 }
 .ac-tick input:focus, .ac-tick input:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); border-radius: 3px; }
 .count:empty { display: none; }
+
+/* the popup inside the floating panel on a web page: the panel sizes to it and has no scrollbar strip */
+html.in-panel body { max-height: none; overflow-y: auto; scrollbar-width: none; }
+html.in-panel body::-webkit-scrollbar { display: none; width: 0; }

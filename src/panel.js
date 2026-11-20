@@ -1,4 +1,4 @@
-// The floating glass panel: the popup, opened on top of the web page instead of in Chrome's own popup window. Chrome draws
+// The floating panel: the popup, opened on top of the web page instead of in Chrome's own popup window. Chrome draws
 // its popup as a separate opaque window that nothing can see through; this panel lives in the page, so the page really
 // shows through the frosted glass. Injected by the service worker when the toolbar button is pressed (activeTab).
 // Pressing the button again, Esc, or a click on the page closes it. If the page does not allow it, the service worker
@@ -27,12 +27,11 @@
 
   const paint = (ui) => {
     const dark = ui.uiTheme === 'dark' || (ui.uiTheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-    const solid = !!ui.uiSolid;
-    const tint = solid ? (dark ? 'rgb(28 28 36)' : 'rgb(246 246 250)') : dark ? 'rgb(24 24 34 / .66)' : 'rgb(255 255 255 / .8)';
+    const tint = dark ? '#0f1620' : '#eef2f6';
     css.textContent = `
-      .box { position: relative; width: 360px; max-width: calc(100vw - 24px); height: 460px; max-height: calc(100vh - 24px); border-radius: 18px; overflow: hidden;
-        background: ${tint}; ${solid ? '' : '-webkit-backdrop-filter: blur(32px) saturate(1.4); backdrop-filter: blur(32px) saturate(1.4);'}
-        box-shadow: 0 0 0 .5px ${dark ? 'rgb(255 255 255 / .22)' : 'rgb(255 255 255 / .8)'}, inset 0 1px 0 ${dark ? 'rgb(255 255 255 / .14)' : 'rgb(255 255 255 / .9)'}, 0 18px 50px rgb(0 0 0 / ${dark ? '.55' : '.28'});
+      .box { position: relative; box-sizing: border-box; width: 360px; max-width: calc(100vw - 24px); height: 460px; max-height: calc(100vh - 24px); border-radius: 18px; overflow: hidden;
+        background: ${tint}; border: 1px solid ${dark ? '#263445' : '#d8e0ea'};
+        box-shadow: 0 18px 44px rgb(0 0 0 / ${dark ? '.55' : '.28'});
         animation: in .18s cubic-bezier(.2, .8, .2, 1); transform-origin: top right; }
       iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: ${dark ? 'dark' : 'light'}; }
       @keyframes in { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }

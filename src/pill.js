@@ -9,31 +9,30 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   window.__debriefPill = true;
 
   const POS_KEY = 'debrief.pill.pos';
-  // Solid dark surface (tokens from docs/redesign/Pill.dc.html) so it reads on any video or page background.
+  // Harbor: a solid dark surface with a hairline edge (no blur) so it reads on any video or page background. It never uses page CSS.
   const CSS = `
   :host { all: initial; }
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, "Nirmala UI", sans-serif; }
-  /* Dark glass that reads over any video: a scrim plus blur, hairline edge, layered shadow */
-  .wrap { --ink:#f5f5f7; --dim:#c7c7d1; --line:rgba(255,255,255,.14); --ok:#30d158; --warn:#ffb340; --bad:#ff6961; --tint:#a9a6ff;
-    --glass: rgba(24,24,30,.86); --glass-thick: rgba(24,24,30,.95);
+  .wrap { --ink:#eef3f9; --dim:#a7b6c9; --line:#2a3b51; --ok:#5cd08a; --warn:#f5b759; --bad:#ff5a4e; --tint:#8ab8f4; --stop:#c4271b; --focus:#8ab8f4;
+    --glass: #132031; --glass-thick: #16243a;
     display:flex; flex-direction:column; align-items:flex-end; gap:8px; color:var(--ink); -webkit-font-smoothing:antialiased;
     pointer-events:none; } /* the host and wrapper let clicks through to the page; only the pill and panel catch them */
   .wrap > * { pointer-events:auto; }
 
   .pill { position:relative; display:flex; align-items:center; gap:10px; min-height:40px; padding:4px 4px 4px 14px; border-radius:999px;
-    background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(170%); backdrop-filter:blur(20px) saturate(170%);
+    background:var(--glass); 
     border:1px solid var(--line);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 2px 6px rgba(0,0,0,.30), 0 14px 34px -12px rgba(0,0,0,.55);
+    box-shadow:0 8px 24px rgba(0,0,0,.32);
     font-size:13px; font-weight:600; line-height:1; cursor:grab; user-select:none; white-space:nowrap; touch-action:none;
     transition: box-shadow .28s ease, border-color .28s ease; }
   .sr { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; } /* spoken to screen readers, never drawn */
   .pill:active { cursor:grabbing; }
   /* Calm breathing edge while recording (border-beam "pulse" idea, CSS only so nothing is injected into the page) */
   .pill::after { content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
-    box-shadow:0 0 0 1px rgba(169,166,255,.0), 0 0 14px 0 rgba(169,166,255,.0); animation:breathe 3.2s ease-in-out infinite; }
-  @keyframes breathe { 50% { box-shadow:0 0 0 1px rgba(169,166,255,.45), 0 0 16px 1px rgba(124,120,255,.28); } }
-  .pill.alert { border-color:rgba(255,179,64,.65); }
-  .pill.alert::after { animation:none; box-shadow:0 0 0 1px rgba(255,179,64,.35), 0 0 16px 1px rgba(255,159,10,.25); }
+    box-shadow:0 0 0 1px rgba(138,184,244,.0), 0 0 14px 0 rgba(138,184,244,.0); animation:breathe 3.2s ease-in-out infinite; }
+  @keyframes breathe { 50% { box-shadow:0 0 0 1px rgba(138,184,244,.40), 0 0 14px 1px rgba(138,184,244,.20); } }
+  .pill.alert { border-color:#8a6420; }
+  .pill.alert::after { animation:none; box-shadow:0 0 0 1px rgba(245,183,89,.30), 0 0 14px 1px rgba(245,183,89,.18); }
 
   .rec { width:8px; height:8px; border-radius:50%; background:var(--bad); box-shadow:0 0 0 0 rgba(255,105,97,.7); animation:ring 1.6s infinite; flex:none; }
   @keyframes ring { 70% { box-shadow:0 0 0 7px rgba(255,105,97,0); } 100% { box-shadow:0 0 0 0 rgba(255,105,97,0); } }
@@ -54,19 +53,20 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .mic:hover { filter:brightness(1.08); } .mic:active { transform:scale(.95); }
   .pillx { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; margin-left:-2px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--dim); font:inherit; font-size:17px; line-height:1; cursor:pointer; }
   .pillx:hover { background:rgba(255,255,255,.14); color:#fff; }
-  .pillx:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
-  .mic:focus-visible, .stop:focus-visible, .alertbox button:focus-visible, .switch:focus-within .track { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
+  .pillx:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(138,184,244,.8); }
+  .mic:focus-visible, .stop:focus-visible, .alertbox button:focus-visible, .switch:focus-within .track { outline:none; box-shadow:0 0 0 3px rgba(138,184,244,.8); }
   .mic:disabled { opacity:.5; cursor:default; }
+  @media (prefers-contrast: more) { .wrap { --line:#8a9bb0; --dim:#d4dce6; } }
   .mic svg { width:14px; height:14px; flex:none; }
-  .mic.on { background:#30d158; color:#05210f; }
-  .mic.off { background:rgba(255,255,255,.10); border-color:var(--line); color:var(--dim); }
-  .mic.paused, .mic.muted { background:#ffb340; color:#241500; } /* mic held by the call mute: saffron, like the paused state */
+  .mic.on { background:rgba(255,255,255,.10); color:var(--ink); }
+  .mic.off { background:transparent; border-color:var(--line); color:var(--dim); }
+  .mic.paused, .mic.muted { background:var(--warn); color:#241703; } /* mic held by the call mute: saffron, like the paused state */
   .toggle { display:flex; align-items:center; gap:10px; min-height:32px; margin:0; padding:0; border:0; border-radius:999px; background:none; color:inherit; font:inherit; line-height:1; cursor:inherit; white-space:nowrap; }
-  .toggle:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
+  .toggle:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(138,184,244,.8); }
 
   .panel { width:288px; padding:14px 16px 16px; border-radius:20px; color:var(--ink);
-    background:var(--glass-thick); -webkit-backdrop-filter:blur(36px) saturate(180%); backdrop-filter:blur(36px) saturate(180%);
-    border:1px solid var(--line); box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 8px 24px rgba(0,0,0,.4), 0 30px 70px -20px rgba(0,0,0,.7); font-size:12.5px;
+    background:var(--glass-thick);
+    border:1px solid var(--line); box-shadow:0 18px 44px rgba(0,0,0,.4); font-size:12.5px;
     transform-origin: bottom right; animation: pop .28s cubic-bezier(.2,.9,.3,1.1); }
   @keyframes pop { from { opacity:0; transform:scale(.94) translateY(6px); } }
   .panel h4 { margin:0 0 10px; font-size:14px; font-weight:700; display:flex; align-items:center; gap:6px; }
@@ -83,7 +83,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .stat span { color:var(--dim); font-size:11px; }
   .stat.err b { color:var(--bad); }
 
-  .alertbox { margin:10px 0; padding:10px 12px; border-radius:12px; background:rgba(255,105,97,.14); border:1px solid rgba(255,105,97,.45); }
+  .alertbox { margin:10px 0; padding:10px 12px; border-radius:12px; background:rgba(255,90,78,.14); border:1px solid rgba(255,90,78,.45); }
   .alertbox.key { background:rgba(255,179,64,.12); border-color:rgba(255,179,64,.45); }
   .alertbox strong { display:flex; justify-content:space-between; align-items:center; font-size:12.5px; margin-bottom:4px; color:#ffc4bf; }
   .alertbox.key strong { color:#ffd59a; }
@@ -96,8 +96,8 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .track::after { content:""; position:absolute; left:2px; top:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .28s cubic-bezier(.2,.9,.3,1.15); box-shadow:0 2px 4px rgba(0,0,0,.35); }
   .switch input:checked + .track { background:var(--ok); } .switch input:checked + .track::after { transform:translateX(16px); }
 
-  .stop { width:100%; min-height:40px; margin-top:12px; padding:9px; border-radius:12px; border:0; font:inherit; font-weight:700; font-size:13px; cursor:pointer;
-    color:#2a0705; background:var(--bad); box-shadow:0 6px 16px -8px rgba(255,105,97,.8); }
+  .stop { width:100%; min-height:40px; margin-top:12px; padding:9px; border-radius:999px; border:0; font:inherit; font-weight:700; font-size:13px; cursor:pointer;
+    color:#fff; background:var(--stop); }
   .stop:hover { filter:brightness(1.06); }
   .stop { display:flex; align-items:center; justify-content:center; gap:8px; }
   .stop svg { flex:none; }
@@ -112,7 +112,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .note strong { display:block; margin-bottom:2px; color:#ffd59a; font-size:12.5px; }
   .note .x { all:unset; position:absolute; top:6px; right:6px; width:24px; height:24px; display:grid; place-items:center; cursor:pointer; color:var(--dim); font-size:16px; line-height:1; border-radius:8px; }
   .note .x:hover { background:rgba(255,255,255,.12); color:var(--ink); }
-  .note .x:focus-visible, .psw:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
+  .note .x:focus-visible, .psw:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(138,184,244,.8); }
   .row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:40px; margin:12px 0 4px; }
   .row .grow { flex:1; min-width:0; color:#ececf2; font-size:12.5px; }
   .psw { all:unset; box-sizing:border-box; position:relative; flex:none; width:40px; height:24px; border-radius:999px; background:rgba(255,255,255,.18); cursor:pointer; transition:background .25s; }
@@ -122,7 +122,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .hint { color:var(--dim); font-size:11.5px; margin-top:8px; line-height:1.45; }
   .hidden { display:none !important; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
-  @media (prefers-reduced-transparency: reduce) { .pill, .panel { -webkit-backdrop-filter:none; backdrop-filter:none; background:#1c1c22; } }
+  @media (prefers-reduced-transparency: reduce) { .pill, .panel { background:#16243a; } }
   `;
   const MIC_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
   const MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg>';

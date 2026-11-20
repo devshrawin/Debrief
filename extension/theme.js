@@ -3,6 +3,7 @@
 // With no choice the page follows the system setting (style.css).
 (() => {
   const html = document.documentElement;
+  if (window.top !== window) html.classList.add('in-panel'); // the popup inside the floating panel
   const set = (v) => { if (v === 'light' || v === 'dark') html.dataset.theme = v; else delete html.dataset.theme; };
   try { set(localStorage.getItem('db.theme')); } catch {}
   try {

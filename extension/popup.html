@@ -5,149 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Debrief</title>
   <link rel="stylesheet" href="style.css">
-  <script src="fx/theme.js"></script>
-  <style>
-    /* Popup-only layout. Colours, buttons, chips, meters, switch and the rest come from style.css. */
-    /* The popup is a rounded sheet: the page behind it is transparent and the body carries the corners, so nothing square
-       shows at the edges, and the scrollbar is a slim rounded thumb that stays inside the curve. */
-    html { background: transparent; }
-    body { width: 360px; margin: 0; background: var(--amb-base); overflow-x: hidden; border-radius: 16px; overflow-y: auto; max-height: 600px; }
-    body::-webkit-scrollbar { width: 10px; }
-    body::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
-    body::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid var(--card); }
-    header.top { border-top-left-radius: 16px; border-top-right-radius: 16px; }
-    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .stack { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
-    .stack > * { margin: 0; }
-    .stack .hint { line-height: 1.6; }
-
-    header.top { display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px; }
-    header.top h1 { margin: 0; flex: 1; font-size: 16px; display: flex; align-items: center; gap: 10px; min-width: 0; }
-    header.top h1 img { width: 32px; height: 32px; border-radius: 9px; flex: none; }
-    header.top h1 > span { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
-    header.top h1 .tag { font: var(--t-footnote); color: var(--label-2); font-weight: 400; }
-
-    /* same look as the mode switch below (style.css .seg-ctl) */
-    .tabs { position: relative; isolation: isolate; display: flex; gap: 2px; margin: 0 16px; padding: 2px; border-radius: var(--r-sm); background: var(--fill); }
-    .tabs button { position: relative; z-index: 1; flex: 1; min-height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--label-2); padding: 4px 10px; font: var(--t-headline); font-size: 13px; white-space: nowrap; box-shadow: none; }
-    .tabs button:hover:not(:disabled) { background: transparent; color: var(--label); }
-    .tabs button[aria-selected="true"] { color: var(--label); }
-    .tabs:not(.has-goo) button[aria-selected="true"] { background: var(--surface-read); box-shadow: var(--shadow-1); }
-    #diagnose { background: none; box-shadow: none; color: var(--label-2); text-decoration: underline; font: var(--t-footnote); }
-    .linkrow { align-items: baseline; }
-    #diagnose { color: var(--tint); }
-    #live .lv + .lv, .stat-sep { }
-    #discard { background: none; box-shadow: none; min-height: 32px; font: var(--t-footnote); color: var(--label-2); text-decoration: underline; padding: 4px 8px; }
-    #discard[data-sure="1"] { color: var(--rec-ink); font-weight: 600; }
-    .tabs .chip { margin-left: 4px; padding: 0 6px; min-height: 0; font-size: 11px; line-height: 18px; }
-
-    .banner { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); font-size: 13.5px; line-height: 1.45; }
-    .banner .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(255, 122, 26, 0.25); flex: none; }
-    .banner small { font-size: 12.5px; }
-    .banner.err { background: var(--rec-bg); border-color: var(--rec-line); color: var(--rec-ink); align-items: flex-start; }
-    .banner.plain { background: var(--sunk); border-color: var(--line); color: var(--text); }
-    .banner.plain svg { flex: none; }
-    .banner strong.blk { display: block; }
-
-    .big, #fullscreen { min-height: 52px; font-size: 15.5px; border-radius: 12px; width: 100%; }
-    #modeSeg > button { min-height: 30px; font-size: 12.5px; }
-    header.recbar { box-shadow: none; }
-    header.recbar::after, header.recbar::before { box-shadow: none; }
-    .lv { }
-    /* the three quiet buttons while recording are one size; Stop is the only bigger one */
-    #pause, #fullscreen, #liveLink { width: 100%; min-height: 40px; padding-block: 6px; font-size: 14px; border-radius: 12px; }
-    #recView .stack { gap: 10px; }
-    /* the beam is the card's outline while it runs: no second border inside it */
-    html:not(.fx-off):not(.solid) header.recbar[data-active] { border-color: transparent; }
-    .big.stopbtn { background: var(--rec); border-color: var(--rec); color: var(--on-rec); font-weight: 700; gap: 10px; }
-    .big.stopbtn:hover:not(:disabled) { background: var(--rec); filter: brightness(0.93); color: var(--on-rec); }
-
-    .box { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-    .box .ttl { font-weight: 600; }
-    .box .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .box .meta .sp { flex: 1; }
-    .box a.btn { min-height: 32px; padding: 4px 8px; }
-
-    .linkrow { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 0 20px; } /* every quiet link on one rhythm: they flow left to right and wrap evenly */
-    .btn2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .linkrow a { font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
-    #diagnose { min-height: 36px; padding: 4px 6px; font: var(--t-subheadline); font-weight: 600; color: var(--tint); text-decoration: underline; }
-    #diagnose { padding-inline: 0; } /* starts where the links above it start */
-    #diagnose:hover:not(:disabled) { background: transparent; }
-    #diagnose::after { content: ""; width: 6px; height: 6px; margin-inline-start: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform var(--d-base) var(--spring); } /* a chevron, not an arrow that reads as a download */
-    #diagnose[aria-expanded="true"]::after { transform: translateY(1px) rotate(-135deg); }
-    #diagResult { border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; align-items: center; }
-    #diagResult .full { grid-column: 1 / -1; }
-    #diagResult .chip { white-space: normal; text-align: right; }
-
-    header.recbar { display: flex; align-items: center; gap: 10px; margin: 14px 16px 0; padding: 12px 16px; border-radius: var(--r-md); background: var(--rec-bg); border: 1px solid var(--rec-line); box-shadow: none; }
-    header.recbar #timer { font-variant-numeric: tabular-nums; }
-    header.recbar strong { color: var(--rec-ink); flex: 1; }
-    #timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--rec-ink); line-height: 1.3; }
-
-    #alert .body { flex: 1; font-size: 13px; line-height: 1.6; min-width: 0; overflow-wrap: anywhere; }
-    #alert strong { display: block; }
-    #alert a { font-weight: 700; color: inherit; }
-    #alert .x { align-self: flex-start; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; background: none; color: inherit; border-radius: 8px; font-size: 18px; line-height: 1; }
-    #alert .x:hover:not(:disabled) { background: rgba(0, 0, 0, 0.08); color: inherit; }
-
-    .lv { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
-    .lv b { font-weight: 600; }
-    .lv .meter { grid-column: 1 / -1; }
-    .lv .meter > i { width: 0; transition: width 0.3s; }
-
-    .micbox { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
-    .micbox .grow { flex: 1; min-width: 0; }
-    .micbox .grow > div { font-weight: 600; }
-    #micState { display: flex; gap: 6px; align-items: flex-start; }
-    #micState .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; margin-top: 8px; }
-    #micState.paused .pip { background: var(--amber); }
-    #micState.off .pip { background: var(--line-strong); }
-    #micState.unknown .pip { background: var(--amber); }
-    .counts { display: flex; gap: 6px 14px; flex-wrap: wrap; }
-
-    .fin { padding: 20px 16px; display: flex; flex-direction: column; gap: 12px; }
-    .fin > * { margin: 0; }
-    .fin .head { display: flex; gap: 10px; align-items: center; color: var(--brand); }
-    .fin .head strong { color: var(--text); }
-    .fin .meter > i { background: var(--brand); width: 100%; animation: indet 1.6s ease-in-out infinite; transform-origin: left; }
-    @keyframes indet { 0% { transform: scaleX(0.1); } 60% { transform: scaleX(0.9); } 100% { transform: scaleX(0.1); } }
-    @media (prefers-reduced-motion: reduce) { .fin .meter > i { transform: none; } }
-
-    .searchwrap { position: relative; }
-    .searchwrap svg { position: absolute; left: 12px; top: 11px; pointer-events: none; }
-    #q { padding-left: 38px; background: var(--surface-read); }
-    /* the border beam is the focus ring: the field itself stays borderless and fills the beam's rounded rectangle exactly */
-    .searchwrap.search-beam { border-radius: var(--r-md); }
-    .searchwrap.search-beam #q { border-color: transparent; border-radius: var(--r-md); box-shadow: none; }
-    .searchwrap.search-beam #q:focus, .searchwrap.search-beam #q:focus-visible { border-color: transparent; box-shadow: none; }
-    .searchwrap svg { top: 50%; transform: translateY(-50%); }
-    /* one scrollbar only: the whole popup scrolls, the search field stays in view */
-    #paneMeet .searchwrap { position: sticky; top: 0; z-index: 3; }
-    #recent { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0 6px; }
-    .item { display: flex; align-items: center; gap: 6px; padding: 8px 6px 8px 10px; border-radius: 10px; }
-    .item:hover { background: var(--sunk); }
-    .item.armed { background: var(--rec-bg); }
-    .item a.open { flex: 1; min-width: 0; text-decoration: none; color: var(--text); }
-    .item .t { font-weight: 600; }
-    .item .m { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
-    .item .m .chip { font-size: 11px; padding: 0 7px; }
-    .item button { flex: none; }
-    .item .del { width: 36px; height: 36px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--muted); border-radius: 8px; }
-    .item .del:hover:not(:disabled) { background: var(--rec-bg); color: var(--rec-ink); }
-    .item .confirm { min-height: 32px; padding: 4px 10px; border-radius: 8px; border: 0; background: var(--rec); color: var(--on-rec); font-size: 12.5px; font-weight: 700; }
-    .item .confirm:hover:not(:disabled) { background: var(--rec); color: var(--on-rec); filter: brightness(0.93); }
-    .empty { padding: 24px 16px; gap: 6px; }
-    #clearAll { font-size: 12.5px; min-height: 32px; padding: 2px 8px; color: var(--muted); align-self: flex-end; }
-    #clearAll.armed { color: var(--rec-ink); }
-    #tab-meet-empty { margin: 0; }
-  </style>
+  <link rel="stylesheet" href="compat.css">
+  <link rel="stylesheet" href="popup.css">
+  <script src="theme.js"></script>
 </head>
 <body class="popup">
   <!-- Idle: Home and Meetings -->
   <div id="idleView">
     <header class="top">
-      <h1 class="brand"><img src="icons/icon.svg" alt="" width="32" height="32"><span><strong>Debrief</strong><span class="tag">Minutes for every meeting</span></span></h1>
+      <h1 class="brand"><img src="icons/icon.svg" alt="" width="28" height="28"><span><strong>Debrief</strong><span class="tag">Minutes for every meeting</span></span></h1>
       <a href="#" id="openSettings" class="icon-btn" aria-label="Settings" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
     </header>
     <div class="tabs" id="tabs" role="tablist" aria-label="Popup sections">
@@ -160,7 +26,7 @@
         <div style="flex:1">
           <strong class="blk" id="setupMsg">Add your free Gemini key first.</strong>
           <span class="hint" style="display:block;margin:4px 0 8px;color:inherit">Debrief needs a key to transcribe. It takes two minutes and stays on this computer.</span>
-          <span class="row"><a href="#" id="openTour1" class="btn primary">Take the 5-minute tour</a><a href="#" id="openSettings1" class="btn">Settings</a></span>
+          <span class="row-x wrap"><a href="#" id="openTour1" class="btn primary">Take the 5-minute tour</a><a href="#" id="openSettings1" class="btn">Settings</a></span>
         </div>
       </div>
       <div id="offline" class="banner plain hidden" role="status">
@@ -179,7 +45,7 @@
       <div id="error" class="banner err hidden" role="alert"></div>
 
       <div class="mode" id="modeBox">
-        <div class="seg-ctl" id="modeSeg" role="radiogroup" aria-label="What are you recording?">
+        <div class="seg block" id="modeSeg" role="radiogroup" aria-label="What are you recording?">
           <button type="button" role="radio" id="modeOnline" aria-checked="true">Online meeting</button>
           <button type="button" role="radio" id="modeRoom" aria-checked="false">In a room</button>
         </div>
@@ -187,7 +53,7 @@
         <p class="hint hidden" id="platformHint" style="margin-top:6px"></p>
       </div>
 
-      <button id="start" class="btn primary big">
+      <button id="start" class="btn rec lg block">
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="currentColor"></circle></svg><span id="startLabel">Start recording this tab</span>
       </button>
       <p class="hint" id="shortcutHint" style="text-align:center">Tell people you are recording.</p>
@@ -195,14 +61,14 @@
       <div class="box hidden" id="lastBox">
         <p class="lbl">Last meeting</p>
         <div class="ttl trunc" id="lastTitle"></div>
-        <div class="meta"><span class="hint" id="lastWhen"></span><span class="chip brand hidden" id="lastMail">Emailed</span><span class="sp"></span><a href="#" class="btn ghost" id="lastOpen">Open minutes</a></div>
+        <div class="meta"><span class="hint" id="lastWhen"></span><span class="chip brand hidden" id="lastMail">Emailed</span><span class="sp"></span><a href="#" class="btn sm plain" id="lastOpen">Open minutes</a></div>
       </div>
 
       <div class="linkrow">
         <a href="#" id="askHome"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>Ask a question</a>
         <a href="#" id="openActions" class="hidden">Open actions <span class="badge tint" id="actionsN"></span></a>
         <a href="#" id="openTour">Take the tour</a>
-        <button id="diagnose" class="btn ghost" aria-expanded="false" aria-controls="diagResult">Check page detection</button>
+        <button id="diagnose" class="btn sm plain" aria-expanded="false" aria-controls="diagResult">Check page detection</button>
       </div>
       <div id="diagResult" role="region" aria-label="What Debrief can read from this page" aria-live="polite" class="hidden"></div>
     </div>
@@ -242,16 +108,16 @@
         </div>
         <p class="hint counts" id="segInfo"></p>
       </div>
-      <button id="pause" class="btn big" aria-pressed="false">Pause recording</button>
+      <button id="pause" class="btn block" aria-pressed="false">Pause recording</button>
       <div class="btn2">
-        <button id="fullscreen" class="btn" title="Make this browser window full screen, or bring it back (Alt+Shift+F)">Full screen</button>
-        <button id="liveLink" class="btn" title="Watch the transcript as it arrives, and ask questions during the meeting">Live transcript</button>
+        <button id="fullscreen" class="btn block" title="Make this browser window full screen, or bring it back (Alt+Shift+F)">Full screen</button>
+        <button id="liveLink" class="btn block" title="Watch the transcript as it arrives, and ask questions during the meeting">Live transcript</button>
       </div>
-      <button id="stop" class="btn big stopbtn">
+      <button id="stop" class="btn rec lg block stopbtn">
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="currentColor"></rect></svg>Stop and write minutes
       </button>
       <p class="hint" style="text-align:center">Nothing is lost when you stop. The last minute is still transcribed.</p>
-      <button id="discard" class="btn quiet" type="button" style="align-self:center">Started by mistake? Discard this recording</button>
+      <button id="discard" class="btn sm plain" type="button" style="align-self:center">Started by mistake? Discard this recording</button>
     </div>
   </div>
 

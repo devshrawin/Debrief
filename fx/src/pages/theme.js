@@ -17,7 +17,7 @@ const apply = (ui) => {
   try { localStorage.setItem('db.ui', JSON.stringify(ui)); } catch {}
   document.dispatchEvent(new Event('db-fx-change'));
 };
-if (window.top !== window) html.classList.add('in-panel'); // the popup inside the floating glass panel
+if (window.top !== window) html.classList.add('in-panel'); // the popup inside the floating panel
 let ui = read();
 apply(ui);
 try {
