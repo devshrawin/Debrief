@@ -147,7 +147,7 @@ await test('E1 the beam layer is out of the flow from the start (the send button
   assert.match(src('askui.js'), /opts\.placeholderNarrow \|\| 'Ask a question'/);
   assert.match(src('askpage.js'), /placeholderNarrow: 'Ask about your meetings'/);
 });
-await test('E2 the live header uses the thicker bar tier, so text does not show through it', () => assert.match(ext('style.css'), /\.lv-head \{[^}]*background: var\(--mat-bar\)/));
+await test('E2 the live header is opaque, so text does not show through it', () => assert.match(ext('style.css'), /\.lv-head \{[^}]*background: var\(--surface-read\)/));
 await test('E3 a disabled danger button is grey with readable text, not faded red', () => {
   assert.match(ext('style.css'), /button\.danger:disabled, button\.danger-fill:disabled \{ opacity: 1; background: var\(--fill\); color: var\(--label-2\)/);
 });
@@ -169,6 +169,25 @@ await test('E7 date, time and serial cells of the organisation template carry a 
   assert.match(html, /<td class="amx-nw"[^>]*>(?:<b>)?10:00 AM/);
   assert.match(html, /<th class="amx-nw"[^>]*>(?:<b>)?<span[^>]*>Sr\./);
   assert.match(ext('mom.html'), /@media screen and \(max-width: 600px\) \{[\s\S]*#mom \.amx \.amx-nw \{ white-space: nowrap;/);
+});
+
+// ---- F1 an unnamed voice can be removed; F2 the live page follows the shared page layout ----
+await test('F1 each unnamed voice has a Remove button that asks first, deletes the voice and its clip, and leaves the transcript alone', () => {
+  const m = src('mom.js');
+  assert.match(m, /textContent: 'Remove', title: 'This is not a person to name/);
+  assert.match(m, /title: 'Remove this voice\?'/);
+  assert.match(m, /saveVoices\(\(await getVoices\(\)\)\.filter\(\(x\) => x\.id !== v\.id\)\)/);
+  assert.match(m, /row\.append\(who, input, play, save, drop, excerpt\)/);
+  assert.match(ext('mom.html'), /\.namerow \{ display: grid; grid-template-columns: auto 1fr auto auto auto;/);
+});
+await test('F2 the live page: a slim opaque bar (logo, state, Open minutes), the meeting title as the page title, transcript text at the minutes size', () => {
+  const h = ext('live.html');
+  assert.match(h, /<h1 id="mtitle" class="lv-title"><\/h1>/);
+  assert.ok(!/<h1>Live<\/h1>/.test(h), 'no second large "Live" title');
+  assert.match(h, /<header class="lv-head">[\s\S]*id="chip"[\s\S]*id="minutesLink"/);
+  const c = ext('style.css');
+  assert.match(c, /\.lv-head \{[^}]*background: var\(--surface-read\)/);
+  assert.match(c, /\.lv-line \.text \{ font-size: 15px; line-height: 1\.7;/);
 });
 
 console.log(`\n${passed} passed`);

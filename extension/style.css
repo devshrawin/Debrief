@@ -734,15 +734,14 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
 /* The window is the only scroller: the header is a floating panel that stays at the top, the transcript flows down the page, and on a wide
    screen the summary column stays in view beside it. */
 .lv-main { max-width: 1180px; margin: 0 auto; padding: var(--s3) var(--s4) 96px; display: flex; flex-direction: column; gap: var(--s4); }
-.lv-head { position: sticky; top: 0; z-index: 30; display: flex; flex-direction: column; gap: var(--s1); padding: 12px var(--s4); border-radius: var(--r-lg); background: var(--mat-bar); -webkit-backdrop-filter: var(--blur-thick); backdrop-filter: var(--blur-thick); box-shadow: var(--edge), var(--shadow-2); }
-.lv-crumb { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
-.lv-crumb .crumb { display: flex; align-items: center; gap: 10px; }
-.lv-crumb .crumb img { width: 26px; height: 26px; border-radius: 7px; }
-.lv-titlerow { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
-.lv-titlerow h1 { font: var(--t-large-title); letter-spacing: -.015em; }
+/* the bar: a slim, opaque strip that stays at the top (the same logo / crumb as every other page); the meeting's title is the page title below it, as on the minutes page */
+.lv-head { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; padding: 8px var(--s4); border-radius: var(--r-md); background: var(--surface-read); border: 1px solid var(--separator); box-shadow: var(--shadow-1); }
+.lv-head .crumb { display: flex; align-items: center; gap: 10px; }
+.lv-head .crumb img { width: 26px; height: 26px; border-radius: 7px; }
+.lv-grow { flex: 1 1 0; }
 .lv-chip { min-height: 28px; padding: 2px 12px; font: var(--t-subheadline); font-weight: 600; font-variant-numeric: tabular-nums; gap: 8px; }
-.lv-mtitle { margin: 0; font: var(--t-title-3); color: var(--label); overflow-wrap: anywhere; }
-.lv-mtitle:empty { display: none; }
+.lv-title { margin: var(--s2) 0 0; overflow-wrap: anywhere; }
+.lv-title:empty { display: none; }
 .lv-notes { display: flex; flex-direction: column; gap: var(--s1); }
 .lv-notes:not(:has(.hint:not(.hidden):not(:empty))) { display: none; }
 .lv-notes .hint { margin: 0; max-width: 72ch; }
@@ -753,7 +752,7 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
 .lv-log:focus-visible { box-shadow: inset var(--focus); border-radius: var(--r-md); }
 .lv-log:has(> .lv-empty) { min-height: 0; }
 .lv-empty { margin: 0; padding: 40px var(--s5); text-align: center; color: var(--label-2); font: var(--t-body); }
-.lv-line { display: grid; grid-template-columns: 64px 128px minmax(0, 1fr); gap: var(--s3); align-items: baseline; padding: 10px var(--s5); border-top: 1px solid var(--separator); }
+.lv-line { display: grid; grid-template-columns: 72px 140px minmax(0, 1fr); gap: var(--s3); align-items: baseline; padding: 10px var(--s5); border-top: 1px solid var(--separator); }
 .lv-line:first-child { border-top: 0; }
 .lv-line.cont { border-top-color: transparent; padding-top: 2px; }
 .lv-line .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--tint); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -762,7 +761,7 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
 /* the label is taken out of the grid, so the text keeps the third column */
 .lv-line.cont .text { grid-column: 3; }
 .lv-line.cont .who { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; padding: 0; } /* still read aloud, not drawn */
-.lv-line .text { font: var(--t-body); overflow-wrap: anywhere; }
+.lv-line .text { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; text-wrap: pretty; }
 .lv-line.screen { padding-block: 6px; }
 .lv-line.screen .text { grid-column: 2 / -1; font: var(--t-subheadline); font-style: italic; color: var(--label-2); }
 .lv-line.screen .t { color: var(--label-2); }
@@ -800,8 +799,7 @@ html::-webkit-scrollbar-button, html::-webkit-scrollbar-corner { display: none; 
 }
 @media (max-width: 600px) {
   .lv-main { padding-top: var(--s2); padding-bottom: 96px; }
-  .lv-head { padding: 10px var(--s3); gap: 2px; }
-  .lv-titlerow h1 { font: var(--t-title-1); }
+  .lv-head { padding: 8px var(--s3); gap: var(--s2); }
   .lv-line { grid-template-columns: 56px minmax(0, 1fr); padding: 10px var(--s4); }
   .lv-line .text { grid-column: 1 / -1; }
   .lv-line.screen .text { grid-column: 1 / -1; }

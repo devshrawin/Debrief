@@ -240,13 +240,26 @@ async function renderNameBox() {
         }
         await saveVoices(all.map((x) => (x.id === v.id ? { ...x, name: clean, confirmed: true } : x)));
       };
+      // a voice that is not a person to name (a phone, noise, a voice that is not needed) can be removed; before, an unnamed voice with no clip stayed for ever
+      const drop = Object.assign(document.createElement('button'), { type: 'button', className: 'plain', textContent: 'Remove', title: 'This is not a person to name. The voice is deleted from this computer.' });
+      drop.setAttribute('aria-label', `Remove ${v.name}`);
+      drop.onclick = async () => {
+        const ask = await modal({ title: 'Remove this voice?', text: `${v.name} is deleted from this computer, with its audio clip if one was kept. The transcript is not changed. This cannot be undone.`, buttons: [{ label: 'Keep it', value: 'no' }, { label: 'Remove', value: 'yes', primary: true }] });
+        if (ask?.value !== 'yes') return;
+        try {
+          await saveVoices((await getVoices()).filter((x) => x.id !== v.id));
+          deleteSample(v.id).catch(() => {});
+        } catch (e) {
+          $('nameNote').textContent = e.message;
+        }
+      };
       input.addEventListener('keydown', (e) => e.key === 'Enter' && save.click());
       const said = lines.filter((l) => l.name === v.name).slice(0, 2);
       const excerpt = Object.assign(document.createElement('p'), {
         className: 'said',
         textContent: said.length ? said.map((l) => `[${fmtTime(l.t)}] “${l.text.length > 110 ? `${l.text.slice(0, 107)}…` : l.text}”`).join('   ') : 'Nothing from this voice was long enough to show.',
       });
-      row.append(who, input, play, save, excerpt);
+      row.append(who, input, play, save, drop, excerpt);
       return row;
     })
   );

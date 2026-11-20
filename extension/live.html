@@ -11,17 +11,13 @@
 <body>
 <main class="lv-main">
   <header class="lv-head">
-    <div class="lv-crumb">
-      <div class="crumb"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint" style="margin:0">/ Live</span></div>
-      <a id="minutesLink" class="button hidden" href="mom.html">Open minutes</a>
-    </div>
-    <div class="lv-titlerow">
-      <h1>Live</h1>
-      <span id="chip" class="badge lv-chip"><span class="recdot hidden" id="chipDot" aria-hidden="true"></span><span id="chipText">Looking for the meeting…</span></span>
-    </div>
-    <p id="mtitle" class="lede lv-mtitle"></p>
+    <div class="crumb"><img src="icons/icon48.png" alt=""><b>Debrief</b><span class="hint" style="margin:0">/ Live</span></div>
+    <span id="chip" class="badge lv-chip"><span class="recdot hidden" id="chipDot" aria-hidden="true"></span><span id="chipText">Looking for the meeting…</span></span>
+    <span class="lv-grow"></span>
+    <a id="minutesLink" class="button primary hidden" href="mom.html">Open minutes</a>
     <p id="stateNote" class="sr-only" role="status"></p>
   </header>
+  <h1 id="mtitle" class="lv-title"></h1>
   <div class="lv-notes">
     <p id="latency" class="hint"></p>
     <p id="latencyHint" class="hint hidden"></p>
