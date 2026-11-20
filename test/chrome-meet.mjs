@@ -112,6 +112,14 @@ const pillText = async () => (await ext.evaluate(`chrome.scripting.executeScript
   const dbg = await ext.evaluate(`(async (id) => { const k = 'meeting:' + id; const m = (await chrome.storage.local.get(k))[k]; if (!m) return m; for (const [l, p] of Object.entries(m.parts || {})) { const keys = Array.from({ length: p.chunks }, (_, i) => 'mp:' + id + ':' + l + ':' + (p.first + i)); const r = await chrome.storage.local.get(keys); m[l] = keys.flatMap((x) => r[x] || []); } return m; })('mm1').then((m) => m.debug || [])`);
   check('the meeting records each mute change', dbg.some((x) => /Meet mic: muted/.test(x)) && dbg.some((x) => /Meet mic: unmuted/.test(x)), JSON.stringify(dbg));
 
+  // the cross on the pill hides it for this recording; the recording itself carries on
+  const pillShown = () => ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => { const r = document.querySelector('[data-debrief]')?.__debriefRoot; const p = r?.querySelector('.pill'); return !!p && !p.classList.contains('hidden'); } }).then((x) => x[0].result)`);
+  const before = await pillShown();
+  await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => document.querySelector('[data-debrief]').__debriefRoot.querySelector('.pillx').click() })`);
+  await sleep(600);
+  const recNow = await ext.evaluate(`chrome.storage.session.get('rec').then((r) => !!r.rec?.recording)`);
+  check('the cross hides the pill and the recording keeps going', before === true && (await pillShown()) === false && recNow === true, JSON.stringify({ before, after: await pillShown(), recNow }));
+
   // the panel on this page: an online meeting, not a room
   await ext.evaluate(`chrome.storage.session.set({ rec: { recording: false } })`);
   await ext.evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, files: ['dist/panel.js'] })`);

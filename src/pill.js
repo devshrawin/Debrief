@@ -52,6 +52,9 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   .mic { display:inline-flex; align-items:center; gap:6px; min-height:32px; font:inherit; font-size:12.5px; font-weight:650; cursor:pointer;
     border:1px solid transparent; border-radius:999px; padding:6px 12px 6px 9px; transition:transform .2s cubic-bezier(.2,.9,.3,1.2), background .2s; }
   .mic:hover { filter:brightness(1.08); } .mic:active { transform:scale(.95); }
+  .pillx { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; margin-left:-2px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--dim); font:inherit; font-size:17px; line-height:1; cursor:pointer; }
+  .pillx:hover { background:rgba(255,255,255,.14); color:#fff; }
+  .pillx:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
   .mic:focus-visible, .stop:focus-visible, .alertbox button:focus-visible, .switch:focus-within .track { outline:none; box-shadow:0 0 0 3px rgba(169,166,255,.6); }
   .mic:disabled { opacity:.5; cursor:default; }
   .mic svg { width:14px; height:14px; flex:none; }
@@ -178,6 +181,8 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
   let timeEl;
   let micBtn;
   let warnChip;
+  let closeBtn;
+  let hiddenFor = null; // startedAt of the recording whose pill was closed with the cross
   let panel;
   let status;
   let expanded = false;
@@ -268,11 +273,22 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     micBtn = el('button', 'mic');
     micBtn.type = 'button';
     toggle.append(dot, eq, silentMsg, timeEl, warnChip);
-    pill.append(toggle, micBtn);
+    closeBtn = el('button', 'pillx', '×');
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Hide this pill');
+    closeBtn.title = 'Hide this pill. The recording keeps going; stop it from the Debrief button on the toolbar.';
+    pill.append(toggle, micBtn, closeBtn);
     wrap.append(status, card, panel, pill);
     root.append(style, wrap);
     document.documentElement.appendChild(host);
 
+    closeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hiddenFor = S.rec.startedAt;
+      expanded = false;
+      render();
+    });
     micBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     micBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -436,7 +452,7 @@ import { noticeController, nudgeController, presentingReporter } from './adapter
     if (!host) return;
     const rec = S.rec;
     const mine = rec.recording && !rec.stopping && rec.tabId === myTab;
-    const pillOn = mine && S.showPill;
+    const pillOn = mine && S.showPill && hiddenFor !== rec.startedAt;
     renderCard();
     // The reminder is its own setting: its card shows even when the pill is switched off.
     host.style.display = pillOn || cardOn ? '' : 'none';
