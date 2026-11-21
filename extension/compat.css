@@ -80,7 +80,8 @@ dialog.dbmodal { width: min(460px, calc(100% - 32px)); max-width: none; padding:
 dialog.dbmodal::backdrop { background: var(--scrim); }
 dialog.dbmodal > h2 { font-size: 17px; line-height: 24px; margin: 0 0 8px; }
 dialog.dbmodal input, dialog.dbmodal select { width: 100%; height: var(--control-h); padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text); }
-dialog.dbmodal .btn { height: var(--control-h); }
+dialog.dbmodal { overflow-wrap: anywhere; }
+dialog.dbmodal .btn { max-width: 100%; white-space: normal; height: auto; min-height: var(--control-h); }
 dialog.dbmodal.rr-dialog { width: min(760px, calc(100% - 32px)); }
 
 /* live page */
@@ -112,7 +113,8 @@ dialog.dbmodal.rr-dialog { width: min(760px, calc(100% - 32px)); }
 .ac-tools { margin-bottom: 16px; }
 .ac-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); margin-bottom: 16px; overflow: hidden; }
 .ac-group > h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 14px 16px 10px; font-size: 15px; line-height: 22px; font-weight: 600; }
-.ac-group > h2 a { color: var(--text); text-decoration: none; }
+.ac-group > h2 { min-width: 0; }
+.ac-group > h2 a { overflow-wrap: anywhere; min-width: 0; color: var(--text); text-decoration: none; }
 .ac-group > h2 a:hover { text-decoration: underline; }
 .ac-sub, .ac-n { font-size: 13px; font-weight: 400; color: var(--text-2); }
 .ac-n { margin-inline-start: auto; }
@@ -134,11 +136,24 @@ dialog.dbmodal.rr-dialog { width: min(760px, calc(100% - 32px)); }
 .ac-empty .hint { max-width: 46ch; text-wrap: balance; }
 .ac-status { position: fixed; z-index: 40; inset-inline: 16px; bottom: 16px; margin: 0 auto; width: max-content; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 16px; border-radius: var(--radius-md); background: var(--pill-bg); color: var(--pill-text); box-shadow: var(--shadow-2); }
 .ac-status:has(#statusText:empty) { opacity: 0; pointer-events: none; }
-.ac-status .btn { color: var(--pill-text); }
+.ac-status .btn { color: var(--pill-text); flex: none; }
+.ac-status #statusText { min-width: 0; overflow-wrap: anywhere; }
+.ac-status { width: fit-content; }
 
 /* Ask page */
 .ask-wrap { display: flex; flex-direction: column; gap: 16px; max-width: 720px; margin: 0 auto; }
-.ask-wrap .scope { justify-content: flex-start; }
+.ask-wrap .scope { justify-content: center; align-items: center; }
+.ask-wrap .scope > * { margin-block: 0; }
+.ask-wrap, #askBox { min-width: 0; }
+#rangeBox { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+#rangeBox:not([hidden]) { display: flex; }
+#rangeBox .input { width: auto !important; flex: 1 1 130px; min-width: 0; }
+.ask-chips { justify-content: center; }
+.ask.large .ask-chips { justify-content: center; }
+.sw { position: relative; width: 40px; height: 22px; border-radius: 999px; border: 0; padding: 0; cursor: pointer; background: var(--border-strong); flex: none; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform var(--dur) var(--ease); }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(18px); }
 .pick .card-head { flex-wrap: wrap; }
 .pick-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
 .pick-list label { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 6px 4px; border-radius: var(--radius-sm); cursor: pointer; }

@@ -41,6 +41,12 @@ const CSS = `
 .ask-srcs li { display: flex; gap: 10px; align-items: baseline; min-height: 32px; flex-wrap: wrap; }
 .ask-srcs .src { margin: 0; vertical-align: baseline; }
 .ask-srcs a { font-weight: 600; overflow-wrap: anywhere; }
+.ask-srcs li { flex-wrap: nowrap; }
+.ask-srcs li > a, .ask-srcs li > .hint { min-width: 0; }
+.ask-a pre, .ask-a table { display: block; max-width: 100%; overflow-x: auto; }
+.ask-a pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-a td, .ask-a th { overflow-wrap: anywhere; }
+.ask-a, .ask-turn, .ask-log, .ask-wrap, #askBox { min-width: 0; }
 .ask-a.nomatch { border: 1px solid var(--line); border-radius: 14px; background: var(--card); text-align: center; padding: 28px; }
 .ask-a.err { border: 1px solid var(--rec-line); border-radius: 14px; background: var(--rec-bg); color: var(--rec-ink); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .ask-a.err > div { flex: 1 1 260px; }

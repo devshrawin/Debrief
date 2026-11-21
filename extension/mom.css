@@ -11,7 +11,8 @@
 .menu[open] > summary { background: var(--surface-2); }
 .panel { display: flex; flex-direction: column; gap: 16px; }
 .panel.hidden { display: none; }
-.mom-col > .tabs { border-bottom: 1px solid var(--border); margin-bottom: -4px; }
+.mom-col > .tabs { border-bottom: 1px solid var(--border); margin-bottom: -4px; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.mom-col > .tabs::-webkit-scrollbar { display: none; }
 .people-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
 .people-grid .wide { grid-column: 1 / -1; }
 details.card > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 20px; font-weight: 600; list-style: none; }
@@ -94,6 +95,7 @@ label.check { display: flex; gap: 8px; align-items: center; min-height: 32px; ma
 .state { padding: 16px 18px; border-radius: 14px; display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
 .state > div { flex: 1 1 300px; min-width: 0; }
 .state p { margin: 2px 0 0; }
+.state p, .state strong, #failText, #pendingText, #errors { overflow-wrap: anywhere; }
 .state.fail { background: var(--tier-red); border: 1px solid var(--rec-line); color: var(--rec-ink); }
 .state.warnc { background: var(--tier-orange); border: 1px solid var(--amber-line); color: var(--amber-ink); }
 .state.none { flex-direction: column; align-items: center; text-align: center; padding: 48px 24px; gap: 8px; }
@@ -107,7 +109,7 @@ label.check { display: flex; gap: 8px; align-items: center; min-height: 32px; ma
 #mom h1 { font-size: 22px; margin: 24px 0 6px; }
 #mom h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); margin: 28px 0 10px; }
 #mom h3 { font-size: 15px; margin: 18px 0 6px; }
-#mom p, #mom li { font-size: 15px; line-height: 1.75; text-wrap: pretty; }
+#mom p, #mom li { font-size: 15px; line-height: 1.75; text-wrap: pretty; max-width: none; }
 #mom p { margin: 0 0 10px; }
 #mom ul, #mom ol { margin: 0 0 10px; padding-left: 22px; }
 #mom ul { display: flex; flex-direction: column; gap: 4px; }
@@ -119,10 +121,17 @@ label.check { display: flex; gap: 8px; align-items: center; min-height: 32px; ma
 #mom td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.6; }
 #mom td .chip { font-size: 12px; padding: 1px 9px; }
 /* long "Name (address)" cells must not squeeze the other columns into one letter per line: only the first column breaks anywhere */
-#mom td, #mom th { overflow-wrap: normal; }
+#mom td, #mom th { overflow-wrap: break-word; }
 #mom td:first-child, #mom th:first-child { overflow-wrap: anywhere; min-width: 140px; }
 #mom table { min-width: 560px; }
-#mom td[data-label^="Owner"], #mom td[data-label^="Due"] { white-space: nowrap; }
+#mom td[data-label^="Owner"], #mom td[data-label^="Due"] { white-space: normal; min-width: 90px; }
+#mom td[data-label^="Action"] { overflow-wrap: anywhere; }
+#mom:has(> .amx) { overflow-x: auto; }
+#mom .amx td, #mom .amx th { overflow-wrap: anywhere; }
+#mom .amx table { max-width: 100%; }
+#mdPreview { overflow-wrap: anywhere; min-width: 0; }
+#mdPreview a { overflow-wrap: anywhere; }
+#mdPreview table { display: block; overflow-x: auto; }
 #mom table[data-stack] td[data-label^="Action"] { min-width: 260px; }
 #mom hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
 #mom blockquote { margin: 8px 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--line-strong); color: var(--muted); }
@@ -189,10 +198,10 @@ label.check { display: flex; gap: 8px; align-items: center; min-height: 32px; ma
 
 /* transcript */
 #transcript { padding: 8px 0; }
-.tline { display: grid; grid-template-columns: 80px 150px 1fr; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
+.tline { display: grid; grid-template-columns: 80px 150px minmax(0, 1fr); gap: 12px; padding: 10px 20px; border-top: 1px solid var(--line); align-items: baseline; }
 .tline:first-child { border-top: 0; }
 .tline .t { font: 12.5px ui-monospace, Consolas, monospace; color: var(--brand); white-space: nowrap; }
-.tline .who { justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
+.tline .who { max-width: 100%; min-width: 0; overflow-wrap: anywhere; justify-self: start; display: inline-flex; font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 7px; background: var(--sunk); color: var(--text); border: 1px solid var(--line); }
 .tline .who.named { background: var(--tint-soft); color: var(--tint); border-color: transparent; }
 .tline .who.pick { cursor: pointer; }
 .tline .who.pick:hover { box-shadow: 0 0 0 2px var(--tint-soft); }
@@ -210,16 +219,18 @@ label.check { display: flex; gap: 8px; align-items: center; min-height: 32px; ma
 .tline .who.me { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
 .tline .who.unknown { background: transparent; color: var(--muted); border: 1px dashed var(--line-strong); }
 .tline .who.conflict { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
-.tline .text { font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+.tline .text { min-width: 0; font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
 .tr-empty { padding: 28px 20px; text-align: center; color: var(--muted); margin: 0; }
 
 @media (max-width: 600px) {
   main { padding: 20px 16px 48px; }
   #title { font-size: 24px; }
   #mom { padding: 4px 16px 24px; }
-  .tline { grid-template-columns: 76px 1fr; padding: 10px 14px; }
+  .tline { grid-template-columns: 76px minmax(0, 1fr); padding: 10px 14px; }
   .tline .text { grid-column: 1 / -1; }
   .tabs button { padding: 0 12px; }
+  #spCount { font-size: 11px; }
+  .tabs [role=tab] { padding: 0 10px; }
   #shareStatus { text-align: left; flex-basis: 100%; }
   #del { margin-left: 0; }
   .mailgrp { flex-basis: 100%; margin-inline-start: 0; padding-inline-start: 0; border-inline-start: 0; }
@@ -324,7 +335,7 @@ body.has-playbar main { padding-bottom: 128px; }
   table[data-stack] tbody { display: block; }
   table[data-stack] tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--separator); }
   table[data-stack] tbody tr:last-child { border-bottom: 0; }
-  table[data-stack] td { display: block; width: auto !important; min-width: 0 !important; padding: 1px 0 !important; border: 0 !important; overflow-wrap: anywhere; }
+  table[data-stack] td { display: block; width: auto !important; min-width: 0 !important; padding: 1px 0 !important; border: 0 !important; overflow-wrap: anywhere; white-space: normal; }
   table[data-stack] td[data-label="#"], table[data-stack] td:empty { display: none; } /* an empty cell has no label line either ("Note:" with nothing after it) */
   table[data-stack] td[data-label]:not(.act-cell)::before { content: attr(data-label) ": "; font: var(--t-caption); letter-spacing: .02em; color: var(--label-2); }
   table[data-stack] td[data-label^="Action"]:not(.act-cell)::before, table[data-stack] td[data-label^="Item"]:not(.act-cell)::before, table[data-stack] td[data-label="Person"]:not(.act-cell)::before { content: none; }
@@ -341,5 +352,4 @@ body.has-playbar main { padding-bottom: 128px; }
   .act-done .act-text { text-decoration: none; color: inherit; }
   .timebtn { background: none; color: inherit; padding: 0; margin: 0; font-weight: inherit; }
   #transcript .tline[aria-current="true"] { background: none; box-shadow: none; }
-}
 }

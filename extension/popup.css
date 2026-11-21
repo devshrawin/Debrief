@@ -1,26 +1,31 @@
 /* Toolbar popup on Harbor. Tokens and shared controls come from style.css and compat.css. */
 body.popup { width: 380px; min-width: 360px; max-width: 400px; margin: 0; min-height: 0; max-height: 600px; overflow-x: hidden; overflow-y: auto; display: block; }
-body.popup::-webkit-scrollbar { width: 10px; }
-body.popup::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 2px solid var(--bg); }
+/* the popup scrolls without a scrollbar strip, so the page stays symmetrical */
+body.popup { scrollbar-width: none; }
+body.popup::-webkit-scrollbar { display: none; width: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .stack { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
 .stack > * { margin: 0; }
 .stack .hint { line-height: 1.55; }
 
-header.top { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
-header.top h1 { margin: 0; flex: 1; font-size: 15px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+header.top { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px 52px; background: var(--surface); border-bottom: 1px solid var(--border); }
+header.top h1 { margin: 0; flex: 0 1 auto; flex-direction: column; text-align: center; font-size: 15px; display: flex; align-items: center; gap: 6px; min-width: 0; }
 header.top h1 img { width: 28px; height: 28px; border-radius: 7px; flex: none; }
-header.top h1 > span { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+header.top h1 > span { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; line-height: 1.2; }
+header.top .icon-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
 header.top h1 .tag { font-size: 12px; color: var(--text-2); font-weight: 400; }
 .icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md); color: var(--text-2); }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
-.tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
-.tabs button { position: relative; height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); font: 550 14px/1 var(--font-sans); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; margin-bottom: -1px; }
+.tabs { display: flex; justify-content: center; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.tabs button { border-radius: 0; flex: 1; justify-content: center; max-width: 160px; position: relative; height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); font: 550 14px/1 var(--font-sans); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; margin-bottom: -1px; }
 .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
 .tabs .chip { min-height: 0; padding: 0 7px; font-size: 11px; line-height: 18px; }
 
 .banner { align-items: center; }
+.banner { min-width: 0; overflow-wrap: anywhere; }
+#cantRecord, #error, #setup, #offline { text-align: center; justify-content: center; }
+#setup .row-x { justify-content: center; }
 .banner.err { background: var(--rec-soft); border-color: transparent; color: var(--rec-text); align-items: flex-start; }
 .banner.plain { background: var(--surface-2); color: var(--text); }
 .banner .pip, .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--warn-text); flex: none; }
@@ -47,13 +52,13 @@ header.top h1 .tag { font-size: 12px; color: var(--text-2); font-weight: 400; }
 .box .meta .sp { flex: 1; }
 .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.linkrow { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 0 20px; }
+.linkrow { text-align: center; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 20px; }
 .linkrow a { font-size: 13px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
 .badge.tint { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
 .chip.brand { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; min-height: 0; padding: 0 8px; font-size: 12px; line-height: 20px; }
-#diagResult { border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; align-items: center; }
+#diagResult { border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border); padding: 10px 12px; display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 13px; align-items: center; }
 #diagResult .full { grid-column: 1 / -1; }
-#diagResult .chip { white-space: normal; text-align: right; }
+#diagResult .chip { white-space: normal; text-align: left; border-radius: var(--radius-sm); height: auto; padding: 3px 8px; line-height: 18px; overflow-wrap: anywhere; justify-self: end; max-width: 100%; }
 
 header.recbar { display: flex; align-items: center; gap: 10px; margin: 14px 16px 0; padding: 12px 16px; border-radius: var(--radius-lg); background: var(--rec-soft); border: 1px solid transparent; }
 header.recbar strong { color: var(--rec-text); flex: 1; }
@@ -114,5 +119,6 @@ header.recbar strong { color: var(--rec-text); flex: 1; }
 .item .del:hover { background: var(--rec-soft); color: var(--rec-text); }
 .item .confirm { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--rec); color: var(--on-rec); font-size: 12.5px; font-weight: 700; }
 .empty { padding: 24px 16px; gap: 6px; }
-#clearAll { font-size: 12.5px; height: 32px; padding: 0 8px; color: var(--text-2); align-self: flex-end; }
+#clearAll { font-size: 12.5px; height: 32px; padding: 0 8px; color: var(--text-2); align-self: center; }
 #clearAll.armed { color: var(--rec-text); }
+.item .t, .item .t.trunc, #lastTitle, #lastTitle.trunc { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: clip; overflow-wrap: anywhere; }
