@@ -1,0 +1,62 @@
+{
+  "primary-blue": {
+    "name": "Primary Blue",
+    "hex": "#1F5FBF",
+    "rgb": [
+      31,
+      95,
+      191
+    ],
+    "use": "Tile, buttons, links"
+  },
+  "recording-red": {
+    "name": "Recording Red",
+    "hex": "#C4271B",
+    "rgb": [
+      196,
+      39,
+      27
+    ],
+    "use": "Recording state and danger only"
+  },
+  "navy": {
+    "name": "Navy",
+    "hex": "#142233",
+    "rgb": [
+      20,
+      34,
+      51
+    ],
+    "use": "Text, dark backgrounds"
+  },
+  "gray": {
+    "name": "Gray",
+    "hex": "#E5E7EB",
+    "rgb": [
+      229,
+      231,
+      235
+    ],
+    "use": "Borders, dividers, light fills"
+  },
+  "panel-tint": {
+    "name": "Panel Tint",
+    "hex": "#A9C7F5",
+    "rgb": [
+      169,
+      199,
+      245
+    ],
+    "use": "Right panel of the mark on blue"
+  },
+  "white": {
+    "name": "White",
+    "hex": "#FFFFFF",
+    "rgb": [
+      255,
+      255,
+      255
+    ],
+    "use": "Backgrounds, mark on blue"
+  }
+}

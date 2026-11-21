@@ -1,0 +1,9 @@
+:root {
+  --debrief-primary-blue: #1F5FBF;  /* Tile, buttons, links */
+  --debrief-recording-red: #C4271B;  /* Recording state and danger only */
+  --debrief-navy: #142233;  /* Text, dark backgrounds */
+  --debrief-gray: #E5E7EB;  /* Borders, dividers, light fills */
+  --debrief-panel-tint: #A9C7F5;  /* Right panel of the mark on blue */
+  --debrief-white: #FFFFFF;  /* Backgrounds, mark on blue */
+  --debrief-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}

@@ -21,7 +21,7 @@ function inlineStyles(html) {
     add('th', th),
     add('td', td),
     add('h1', 'font-size:20px;margin:18px 0 8px'),
-    add('h2', 'font-size:17px;margin:18px 0 6px;color:#1e1b6b'),
+    add('h2', 'font-size:17px;margin:18px 0 6px;color:#142233'),
     add('h3', 'font-size:15px;margin:14px 0 4px'),
   ].reduce((acc, fn) => fn(acc), html);
 }
@@ -45,7 +45,7 @@ export function wordDocHtml(bodyHtml, { md } = {}) {
 
 // The relay turns this page into a PDF (Apps Script can convert HTML to PDF, the browser cannot offline).
 const pdfPageHtml = (bodyHtml, m) =>
-  `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1f2328}h1{font-size:18pt;color:#1e1b6b;border-bottom:3px solid #ff7a1a;padding-bottom:6px}h2{font-size:14pt;color:#1e1b6b;margin-top:18px}h3{font-size:12pt}table{border-collapse:collapse;width:100%;margin:10px 0}th{background:#eef0f8;text-align:left}td,th{border:1px solid #c8ccd4;padding:5px 8px;vertical-align:top}.meta{color:#656d76;margin-bottom:14px}</style></head><body><h1>${escapeHtml(m.title)}</h1><div class="meta">${escapeHtml(meta(m))}</div>${bodyHtml}</body></html>`;
+  `<html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1f2328}h1{font-size:18pt;color:#142233;border-bottom:3px solid #1F5FBF;padding-bottom:6px}h2{font-size:14pt;color:#142233;margin-top:18px}h3{font-size:12pt}table{border-collapse:collapse;width:100%;margin:10px 0}th{background:#eef0f8;text-align:left}td,th{border:1px solid #c8ccd4;padding:5px 8px;vertical-align:top}.meta{color:#656d76;margin-bottom:14px}</style></head><body><h1>${escapeHtml(m.title)}</h1><div class="meta">${escapeHtml(meta(m))}</div>${bodyHtml}</body></html>`;
 
 const meta = (m) => {
   const start = new Date(m.startedAt);
@@ -86,8 +86,8 @@ export function buildEmail(meeting, settings, renderHtml, transcriptText) {
   const date = new Date(meeting.startedAt).toISOString().slice(0, 10);
   const body = inlineStyles(renderHtml(meeting.mom || ''));
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2328;max-width:760px">
-<div style="border-left:4px solid #ff7a1a;padding:2px 0 2px 12px;margin-bottom:14px">
-<div style="font-size:19px;font-weight:700;color:#1e1b6b">${escapeHtml(meeting.title)}</div>
+<div style="border-left:4px solid #1F5FBF;padding:2px 0 2px 12px;margin-bottom:14px">
+<div style="font-size:19px;font-weight:700;color:#142233">${escapeHtml(meeting.title)}</div>
 <div style="color:#656d76;font-size:13px">${escapeHtml(meta(meeting))}</div>
 </div>
 ${body}

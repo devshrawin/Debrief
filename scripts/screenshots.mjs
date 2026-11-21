@@ -173,12 +173,12 @@ async function openPage(url, { width = 1100, height = 800, scale = 1.5 } = {}) {
     writeFileSync(path.join(OUT, `${name}.png`), Buffer.from(data, 'base64'));
     console.log('wrote', name);
   };
-  // the popup at its real width (360 px) and its full height (the body scrolls inside 600 px)
+  // the popup at its real width (380 px) and its full height (the body scrolls inside 600 px)
   const popupShot = async (name) => {
     // the real popup scrolls inside 600 px; the picture shows all of it, so nothing is cut at the bottom
     await evaluate(`document.body.style.maxHeight = 'none'; document.body.style.overflowY = 'visible'`);
     const h = await evaluate(`Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))`); // the whole document, so the capture window never shows a scrollbar the real popup does not have
-    await send('Emulation.setDeviceMetricsOverride', { width: 360, height: h, deviceScaleFactor: scale, mobile: false }, sessionId);
+    await send('Emulation.setDeviceMetricsOverride', { width: 380, height: h, deviceScaleFactor: scale, mobile: false }, sessionId);
     await evaluate(`document.fonts.ready.then(() => true)`);
     await sleep(800);
     const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId);

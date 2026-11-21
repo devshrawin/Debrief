@@ -107,4 +107,4 @@ System fonts only: `-apple-system, "Segoe UI Variable Text", "Segoe UI", system-
 
 ## Logo
 
-A rounded blue square with three lines of minutes and a red record dot. Use `icon-small.svg` at 16 and 32px (two lines, bigger dot) and `icon-recording.svg` on the toolbar while recording. `icon-mono.svg` is for one-colour uses.
+Two facing panels (white left, light blue right) on a rounded blue square. Brand pack in `docs/brand/` (mark, lockups, store and social images, colours). Use `icon-small.svg` at 32px and below; `icon-recording.svg` (red tile, white dot) is the recording state; `icon-mono.svg` is for one-colour uses. Recording Red is never part of the logo.

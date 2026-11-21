@@ -1,4 +1,4 @@
-// Regenerates extension/icons/*.png from extension/icons/icon.svg by rasterising in headless Chrome
+// Regenerates the state icons (glow, recording) in extension/icons from the brand mark by rasterising in headless Chrome
 // (CDP over a pipe, same technique as test/chrome-smoke.mjs). No npm dependencies.
 // Usage: node scripts/make-icons.mjs
 import { spawn } from 'node:child_process';
@@ -11,24 +11,18 @@ const DIR = path.resolve('extension/icons');
 const main = readFileSync(path.join(DIR, 'icon.svg'), 'utf8');
 const inner = main.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
 
-// 16 px hinted variant from the brand sheet (bars and line snapped to whole-ish pixels).
-const hinted16 = `<rect width="16" height="16" rx="4" fill="#3a33a8"/><rect x="2" y="2.5" width="12" height="9" rx="2.5" fill="#fff"/><path d="M4 11h3l-3 3z" fill="#fff"/><rect x="3.5" y="4" width="9" height="1.6" rx=".8" fill="#ff7a1a"/><rect x="5" y="5" width="1.6" height="4" rx=".8" fill="#3a33a8"/><rect x="7.2" y="5" width="1.6" height="5" rx=".8" fill="#3a33a8"/><rect x="9.4" y="5" width="1.6" height="3" rx=".8" fill="#3a33a8"/>`;
-
-const svg = (vb, body, defs = '') => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb} ${vb}">${defs}${body}</svg>`;
-const plain = (size) => (size === 16 ? svg(16, hinted16) : svg(128, inner));
-// "Call on" variant: the same mark, slightly smaller, inside a saffron halo and ring.
+const small = readFileSync(path.join(DIR, 'icon-small.svg'), 'utf8');
+const innerSmall = small.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').replace(/<title>[\s\S]*?<\/title>/, '');
+const svg = (vb, body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb} ${vb}">${body}</svg>`;
+// "Call on" variant: the brand mark, a little smaller, inside a flat amber ring (no blur or glow).
 const glow = (size) =>
-  size === 16
-    ? svg(16, `<rect x="0.5" y="0.5" width="15" height="15" rx="4.5" fill="none" stroke="#ff9a2e" stroke-width="1"/><g transform="translate(1.5 1.5) scale(.8125)">${hinted16}</g>`)
-    : svg(
-        128,
-        `<rect x="6" y="6" width="116" height="116" rx="36" fill="#ff7a1a" opacity=".55" filter="url(#b)"/><rect x="7" y="7" width="114" height="114" rx="35" fill="none" stroke="#ff9a2e" stroke-width="7"/><g transform="translate(14 14) scale(.78125)">${inner}</g>`,
-        '<defs><filter id="b" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter></defs>'
-      );
-
+  svg(100, `<rect x="3" y="3" width="94" height="94" rx="26" fill="none" stroke="#F59E0B" stroke-width="${size === 16 ? 8 : 6}"/><g transform="translate(14 14) scale(.72)">${size <= 32 ? innerSmall : inner}</g>`);
+// Recording variant: a flat red tile with a white dot.
+const rec = () => svg(16, '<rect width="16" height="16" rx="4" fill="#C4271B"/><circle cx="8" cy="8" r="3.2" fill="#fff"/>');
+// The plain icons (icon16/32/48/128/512.png) come from the brand pack in docs/brand; only the state variants are drawn here.
 const jobs = [
-  ...[16, 32, 48, 128, 512].map((s) => [`icon${s}.png`, s, plain(s)]),
   ...[16, 32, 48].map((s) => [`icon${s}-glow.png`, s, glow(s)]),
+  ...[16, 32].map((s) => [`icon${s}-recording.png`, s, rec()]),
 ];
 
 const profile = mkdtempSync(path.join(tmpdir(), 'debrief-icons-'));
