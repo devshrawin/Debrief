@@ -44,10 +44,10 @@ await test('meet: mic button state from data-is-muted, with a label fallback', (
 await test('meet: participants from video tiles, ignoring labels and badges', () => {
   const doc = page(`
     <div data-participant-id="a"><div>Amal Raj</div><div>Mute</div></div>
-    <div data-participant-id="b"><div data-self-name="Shrawin Sisodiya">You</div></div>
+    <div data-participant-id="b"><div data-self-name="Sam Carter">You</div></div>
     <div data-participant-id="c"><div>Presenting</div><div>Priya Nair</div></div>
     <div data-participant-id="d"><div>+3</div></div>`);
-  assert.deepEqual(meet.readParticipants(doc).sort(), ['Amal Raj', 'Priya Nair', 'Shrawin Sisodiya']);
+  assert.deepEqual(meet.readParticipants(doc).sort(), ['Amal Raj', 'Priya Nair', 'Sam Carter']);
 });
 
 await test('meet: participants from the People panel when it is open', () => {
@@ -172,8 +172,8 @@ await test('meet: Meet control text (Pin ... to your main screen, Reframe, Zoom 
     <div data-participant-id="a"><div>Akash Behera</div><div>Pin Akash Behera to your main screen</div><div>Reframe</div><div>Zoom in</div></div>
     <div data-participant-id="b"><div>Akash Behera's presentation</div><div>Unpin Akash Behera's presentation from your main screen</div></div>
     <div data-participant-id="c"><div>Pin Pratul Shah to your main screen</div><div>Pratul Shah</div></div>
-    <div data-participant-id="d"><div>Shrawin Sisodia</div><div>Pin Shrawin Sisodia to your main screen</div></div>`);
-  assert.deepEqual(meet.readParticipants(doc).sort(), ['Akash Behera', 'Pratul Shah', 'Shrawin Sisodia']);
+    <div data-participant-id="d"><div>Sam Carter</div><div>Pin Sam Carter to your main screen</div></div>`);
+  assert.deepEqual(meet.readParticipants(doc).sort(), ['Akash Behera', 'Pratul Shah', 'Sam Carter']);
   const { cleanPresence, isMenuText } = await import('../src/iconText.js');
   assert.ok(['Pin Deep Patel to your main screen', 'Unpin Akash Behera\'s presentation from your main screen', 'Reframe', 'Zoom in', 'Pin'].every(isMenuText));
   assert.ok(!isMenuText('Deep Patel') && !isMenuText('Pinaki Sen') && !isMenuText('Keeran Joshi'));
@@ -184,7 +184,7 @@ await test('meet: Meet control text (Pin ... to your main screen, Reframe, Zoom 
 await test('meet: panel headings and sentences from Meet (Backgrounds and effects, You can\'t remotely mute this participant) are not participants', async () => {
   const { isMenuText } = await import('../src/iconText.js');
   for (const t of ['Backgrounds and effects', "You can't remotely mute this participant", "You can't unmute someone else", 'You can’t remotely mute this participant', 'Host controls', 'Turn on captions', 'Meeting details', 'More options', 'Present now']) assert.ok(isMenuText(t), t);
-  for (const t of ['Deep Patel', 'Akash Behera', 'Amal Samad', 'Dr. Anil Kumar Sharma', 'Mahaveer Prajapati', 'Shrawin Sisodia', 'Ankur Desai']) assert.ok(!isMenuText(t), t);
+  for (const t of ['Deep Patel', 'Akash Behera', 'Amal Samad', 'Dr. Anil Kumar Sharma', 'Mahaveer Prajapati', 'Sam Carter', 'Ankur Desai']) assert.ok(!isMenuText(t), t);
   const doc = page(`<div data-participant-id="a"><div>Deep Patel</div><div>You can't remotely mute this participant</div></div><div data-participant-id="b"><div>Backgrounds and effects</div><div>Ankur Desai</div></div>`);
   assert.deepEqual(meet.readParticipants(doc).sort(), ['Ankur Desai', 'Deep Patel']);
 });

@@ -124,8 +124,8 @@ await test('voice: a whole meeting is labelled, lines of one speaker merge, the 
       { t: 6, dur: 2, src: 'me', text: 'Yes please go ahead.' },
     ],
   };
-  const lines = V.labelTranscript(meeting, people, { myName: 'Shrawin' });
-  assert.deepEqual(lines.map((l) => l.label), ['Amal Raj', 'Shrawin', 'Priya Nair']);
+  const lines = V.labelTranscript(meeting, people, { myName: 'Sam' });
+  assert.deepEqual(lines.map((l) => l.label), ['Amal Raj', 'Sam', 'Priya Nair']);
   assert.match(lines[0].text, /Good morning everyone\. Let us begin/);
   assert.equal(V.labelTranscript({ ...meeting, voiceSegs: [] }, people), null, 'nothing to label with');
   assert.equal(V.labelTranscript(meeting, [], {}), null, 'nobody enrolled');

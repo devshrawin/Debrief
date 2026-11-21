@@ -247,3 +247,16 @@ input[role=switch]:focus-visible, .toggle input[type=checkbox]:focus-visible { o
 .seg-ctl.small > button { height: 28px; }
 .hint, .hint p { text-wrap: pretty; }
 html.in-panel body.popup { width: 100%; min-width: 0; }
+
+/* Segmented controls: the row is divided equally between its buttons, on every page.
+   Full width by default; the small header ones (.sm) stay compact but their buttons are still equal. */
+.seg, .seg-ctl, .seg-ctl.wide, .seg.block { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; max-width: 100%; box-sizing: border-box; }
+.seg.sm, .seg-ctl.small { display: inline-grid; width: auto; }
+.seg > button, .seg-ctl > button { min-width: 0; width: 100%; padding-inline: 8px; white-space: normal; text-align: center; line-height: 1.2; min-height: calc(var(--control-h) - 8px); height: auto; }
+.seg.sm > button { min-height: 24px; }
+/* four or more choices go two to a row on a narrow screen, so no label is squeezed */
+@media (max-width: 480px) {
+  .seg-ctl:has(> button:nth-child(4)), .seg:not(.sm):has(> button:nth-child(4)) { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-columns: auto; }
+}
+/* a long button label wraps inside its row instead of running past the card */
+.btnrow .btn, .btnrow > button { white-space: normal; max-width: 100%; height: auto; min-height: var(--control-h); text-align: center; }

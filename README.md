@@ -9,10 +9,10 @@
 Records your Google Meet tab, transcribes it as people actually talk (Hindi, English, Malayalam and every mix in between), and writes clean minutes with owners and action items.<br>
 **No backend. No subscription.** It runs in your browser with your own API key.
 
-[![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-3b2fa8?logo=googlechrome&logoColor=white)](#quick-start)
-[![Languages](https://img.shields.io/badge/20%20languages-Hinglish%20ready-FF7A1A)](#languages)
+[![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-1F5FBF?logo=googlechrome&logoColor=white)](#quick-start)
+[![Languages](https://img.shields.io/badge/20%20languages-Hinglish%20ready-C4271B)](#languages)
 [![No backend](https://img.shields.io/badge/backend-none-10B981)](#privacy)
-[![Voices](https://img.shields.io/badge/voice%20recognition-on--device-3b2fa8)](#who-said-what)
+[![Voices](https://img.shields.io/badge/voice%20recognition-on--device-1F5FBF)](#who-said-what)
 [![Tests](https://img.shields.io/badge/tests-713%20passing-10B981)](#develop)
 
 <br>
@@ -52,7 +52,7 @@ Email them to yourself, share with the team, or copy, `.md`, Word and Print / PD
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="docs/img/popup.png" alt="The popup"><br><sub><b>The popup.</b> Liquid tabs, one big button. When a call is on, the button glows.</sub></td>
+<td width="50%" valign="top"><img src="docs/img/popup.png" alt="The popup"><br><sub><b>The popup.</b> A mode switch, one big red button, and your last meeting.</sub></td>
  <td width="50%" valign="top"><img src="docs/img/popup-recording.png" alt="The popup while recording"><br><sub><b>Recording.</b> Live meters for the meeting and your mic, a red timer, and one red Stop button.</sub></td>
 </tr>
 <tr>

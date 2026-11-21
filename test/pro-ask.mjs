@@ -43,13 +43,13 @@ await test('ask: tokenizer drops stop words, keeps Unicode words and splits Chin
 });
 
 await test('ask: meetings are cut into minutes paragraphs and timed transcript windows', () => {
-  const chunks = A.chunkMeeting(sync, { myName: 'Shrawin' });
+  const chunks = A.chunkMeeting(sync, { myName: 'Sam' });
   assert.ok(chunks.some((c) => c.kind === 'minutes' && /Tuesday/.test(c.text)));
   const tr = chunks.filter((c) => c.kind === 'transcript');
   assert.ok(tr.length >= 1);
   assert.equal(tr[0].t, 60);
   assert.ok(chunks.every((c) => c.title === 'Cadence call' && /2026/.test(c.date)));
-  assert.match(chunks.map((c) => c.text).join(' '), /Shrawin: Let us close the call/);
+  assert.match(chunks.map((c) => c.text).join(' '), /Sam: Let us close the call/);
 });
 
 await test('ask: the right excerpts rank first, across meetings', () => {

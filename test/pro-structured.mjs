@@ -429,7 +429,7 @@ await test('meeting type: the updates table is still inserted before Action Item
 });
 
 await test('template format: the dedicated template call is kept (no JSON call) and items are read from its result', async () => {
-  const org = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'template', myName: 'Shrawin Sisodia' };
+  const org = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'template', myName: 'Sam Sisodia' };
   A.setOrg(org);
   const reply = '## Agenda\n- Status\n\n## Discussion\n| Topic | Discussion / Decision Points | Responsibility |\n|---|---|---|\n| Scheme | Demo done.<br>Rollout planned. | Amnex |\n\n## Action Items\n| Action Item | Responsibility |\n|---|---|\n| Amnex to deploy the build by 16-Oct-26. | Amnex |\n| Share the notes. | [RESPONSIBILITY] |\n\n## Next Meeting\nDate and Time: Monday 10:00\nLocation: Meet';
   const log = [];

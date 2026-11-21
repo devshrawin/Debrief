@@ -231,7 +231,7 @@ const ALL = [
     lede: 'Your name labels your lines in the transcript. The languages tune the speech recognition.',
     nodes: () => [
       card('',
-        field('Your name', 't-name', S.myName, { placeholder: 'e.g. Shrawin Sisodiya', hint: 'Your voice is labelled with this name.' }),
+        field('Your name', 't-name', S.myName, { placeholder: 'Type your full name', hint: 'Your voice is labelled with this name.' }),
         h('div', { class: 'fld' },
           h('span', { id: 't-langs-l', style: 'font-weight: 600' }, 'Languages spoken in your meetings (pick any number)'),
           h('div', { class: 'chips', id: 't-langs', role: 'group', 'aria-labelledby': 't-langs-l' }, ...LANGUAGES.map((l) => h('label', { class: 'chip' }, h('input', { type: 'checkbox', 'data-lang': l.code }), l.name))),

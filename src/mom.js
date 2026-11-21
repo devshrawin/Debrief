@@ -283,7 +283,7 @@ function applyOrg() {
     st = document.head.appendChild(Object.assign(document.createElement('style'), { id: 'orgPrint', media: 'print' }));
   }
   const line = String(settings.orgConfidential || '').trim().replace(/["\\\n]/g, ' ');
-  st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-left { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } @bottom-right { border-top-color: ${settings.orgAccent || '#3b2fa8'}; } }` : '';
+  st.textContent = line ? `@page amx { @bottom-center { content: "${line}"; border-top-color: ${settings.orgAccent || '#1F5FBF'}; } @bottom-left { border-top-color: ${settings.orgAccent || '#1F5FBF'}; } @bottom-right { border-top-color: ${settings.orgAccent || '#1F5FBF'}; } }` : '';
 }
 // Old records and settings hold 'amnex' for the template; it reads as 'template'.
 const currentFormat = () => normalizeFormat(meeting.format || settings.minutesFormat || 'template');

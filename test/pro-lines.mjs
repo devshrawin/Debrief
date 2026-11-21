@@ -52,11 +52,11 @@ const meeting = { id: 'm', segments: [{ t: 10, src: 'others', text: 'Actually to
 
 await test('without voice recognition: the model reads the name on that line, the others stay OTHERS', () => {
   const lineNames = L.setLineName({}, meeting.segments[0], 'Devashish Banerjee');
-  const t = formatTranscript(meeting, 'Shrawin', { lineNames }).split('\n');
+  const t = formatTranscript(meeting, 'Sam', { lineNames }).split('\n');
   assert.match(t[0], /^\[00:10\] Devashish Banerjee: Actually today/);
   assert.match(t[1], /^\[00:40\] OTHERS: Okay/);
-  assert.match(t[2], /^\[01:10\] ME \(Shrawin\): Thanks/);
-  assert.match(formatTranscript(meeting, 'Shrawin', {}).split('\n')[0], /OTHERS/);
+  assert.match(t[2], /^\[01:10\] ME \(Sam\): Thanks/);
+  assert.match(formatTranscript(meeting, 'Sam', {}).split('\n')[0], /OTHERS/);
 });
 
 await test('with voice recognition: the name wins over the guess, a wrong guess can be corrected, other lines keep their label', () => {

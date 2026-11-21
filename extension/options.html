@@ -14,7 +14,7 @@
 <body>
 <div class="settings" data-view="page">
   <aside class="settings-rail" aria-label="Settings sections">
-    <div class="rail-brand"><svg class="mark lg" viewBox="0 0 24 24" aria-hidden="true" width="28" height="28"><rect width="24" height="24" rx="6.5" fill="currentColor"/><path d="M6.5 8h11M6.5 12h11M6.5 16h6" stroke="var(--on-primary)" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="16" r="1.9" fill="var(--rec)"/></svg><div><b style="font-size:16px">Debrief</b><small>Settings</small></div></div>
+    <div class="rail-brand"><svg class="mark lg" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#1F5FBF"/><path d="M24.13 21.99 L40.87 28.51 Q46.00 30.50 46.00 36.00 L46.00 64.00 Q46.00 69.50 40.87 71.49 L24.13 78.01 Q19.00 80.00 19.00 74.50 L19.00 25.50 Q19.00 20.00 24.13 21.99 Z" fill="#FFFFFF"/><path d="M59.13 28.51 L75.87 21.99 Q81.00 20.00 81.00 25.50 L81.00 74.50 Q81.00 80.00 75.87 78.01 L59.13 71.49 Q54.00 69.50 54.00 64.00 L54.00 36.00 Q54.00 30.50 59.13 28.51 Z" fill="#A9C7F5"/></svg><div><b style="font-size:16px">Debrief</b><small>Settings</small></div></div>
     <div class="search rail-search"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="settingsSearch" class="input" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></div>
     <nav class="nav" id="nav" aria-label="Settings"><div class="nav-group"><a href="#start" data-tab="start"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span>Get started</span><span class="badge accent" id="navStartBadge" hidden></span></a></div><div class="nav-group"><div class="nav-head">Capture</div><a href="#recording" data-tab="recording"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>Recording</span></a><a href="#speech" data-tab="speech"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></svg><span>Speech to text</span></a><a href="#voices" data-tab="voices"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>Voices</span></a><a href="#terms" data-tab="terms"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5a2 2 0 0 1 2-2h12v15H7a2 2 0 0 0-2 2z"/><path d="M5 20a2 2 0 0 0 2 1h12"/></svg><span>Names and terms</span></a></div><div class="nav-group"><div class="nav-head">Output</div><a href="#minutes" data-tab="minutes"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7a0 0 0 0 1 0 0z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg><span>Minutes</span></a><a href="#email" data-tab="email"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Email and sharing</span></a><a href="#integrations" data-tab="integrations"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg><span>Integrations</span></a></div><div class="nav-group"><div class="nav-head">Account</div><a href="#usage" data-tab="usage"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-6M3 20h18"/></svg><span>Usage</span></a><a href="#backup" data-tab="backup"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></svg><span>Backup and reset</span></a><a href="#appearance" data-tab="appearance"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><span>Appearance</span></a></div></nav>
     <div class="rail-foot">
@@ -299,7 +299,7 @@
       <section class="card" id="enrol" aria-labelledby="enrolTitle">
         <h2 id="enrolTitle" class="lbl">Add a person</h2>
         <div class="fgrid align-end">
-          <div class="fld"><label for="enrolName">Name</label><input id="enrolName" placeholder="e.g. Amal Raj" maxlength="60" autocomplete="off"></div>
+          <div class="fld"><label for="enrolName">Name</label><input id="enrolName" placeholder="Type their full name" maxlength="60" autocomplete="off"></div>
           <div class="fld"><span class="flabel" id="lgl">They will read in</span>
             <div class="seg-ctl" id="enrolLang" role="radiogroup" aria-labelledby="lgl">
               <button type="button" role="radio" data-lang="en" lang="en" aria-checked="true" class="active">English</button>
@@ -348,7 +348,7 @@
         <h2 id="hProfile" class="lbl">Profile</h2>
         <div class="fld">
           <label for="myName">Your name</label>
-          <input id="myName" placeholder="e.g. Shrawin Sisodiya" autocomplete="name">
+          <input id="myName" placeholder="Type your full name" autocomplete="name">
           <p class="hint">Lines from your microphone are labelled with this name in the transcript.</p>
         </div>
       </section>
@@ -511,7 +511,7 @@
         </div>
         <div class="fld">
           <label for="myOrgDomains">Our email domains</label>
-          <input id="myOrgDomains" placeholder="amnex.com" autocomplete="off">
+          <input id="myOrgDomains" placeholder="example.com" autocomplete="off">
           <p class="hint">Comma separated. People with these email domains are listed as the System Integrator; everyone else as Client Side. Leave blank to use the domain of your "Send to" address.</p>
         </div>
         <div class="fld">
@@ -717,7 +717,7 @@
 
       <section class="card" aria-labelledby="hPopup">
         <h2 id="hPopup" class="lbl">Popup</h2>
-        <div class="trow"><div class="tx"><label for="uiPanel">Open Debrief as a floating panel</label><p class="hint" id="uiPanel-d">The toolbar button opens Debrief on top of the page, so the page shows through the glass. Off uses Chrome's own popup window, which cannot be see-through. Chrome's own pages always use that window.</p></div><input type="checkbox" class="sw" role="switch" id="uiPanel" aria-describedby="uiPanel-d" checked></div>
+        <div class="trow"><div class="tx"><label for="uiPanel">Open Debrief as a floating panel</label><p class="hint" id="uiPanel-d">The toolbar button opens Debrief on top of the page, so you stay on the page you are working on. Off uses Chrome's own popup window. Chrome's own pages always use that window.</p></div><input type="checkbox" class="sw" role="switch" id="uiPanel" aria-describedby="uiPanel-d" checked></div>
       </section>
 
       <section class="card" aria-labelledby="hWhileRec">

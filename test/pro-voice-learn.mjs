@@ -40,7 +40,7 @@ function meeting(id, { who1 = 'Amal Raj', who2 = 'Priya Nair', swap = false, off
 }
 
 await test('learn: pieces inside exactly one speaker caption count, and the learned voice waits for a second meeting', () => {
-  const r = L.learnFromMeeting(meeting('m1'), [], { myName: 'Shrawin' });
+  const r = L.learnFromMeeting(meeting('m1'), [], { myName: 'Sam' });
   assert.equal(r.changed, true);
   assert.deepEqual(r.list.map((p) => p.name).sort(), ['Amal Raj', 'Priya Nair']);
   const amal = r.list.find((p) => p.name === 'Amal Raj');
@@ -76,9 +76,9 @@ await test('learn: pieces near another speaker caption, or without any caption, 
 
 await test('learn: the note-taker ("You") is never learned from the other side of the call', () => {
   const m = meeting('m4', { who1: 'You' });
-  const r = L.learnFromMeeting(m, [], { myName: 'Shrawin Sisodia' });
+  const r = L.learnFromMeeting(m, [], { myName: 'Sam Carter' });
   assert.deepEqual(r.list.map((p) => p.name), ['Priya Nair']);
-  const named = L.learnFromMeeting(meeting('m5', { who1: 'Shrawin Sisodia' }), [], { myName: 'shrawin sisodia' });
+  const named = L.learnFromMeeting(meeting('m5', { who1: 'Sam Carter' }), [], { myName: 'sam carter' });
   assert.deepEqual(named.list.map((p) => p.name), ['Priya Nair']);
 });
 

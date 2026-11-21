@@ -93,7 +93,7 @@ try {
 
   // Save settings and seed a finished meeting, as the service worker would after a recording.
   await opts.evaluate(`(async () => {
-    document.getElementById('myName').value = 'Shrawin';
+    document.getElementById('myName').value = 'Sam';
     document.getElementById('sttProvider').value = 'gemini';
     document.getElementById('llmProvider').value = 'gemini';
     document.getElementById('geminiKey').value = 'AIzaDummyKeyForTest';
@@ -104,7 +104,7 @@ try {
   await opts.evaluate(`document.getElementById('save').click()`);
   await sleep(500);
   const saved = await opts.evaluate(`chrome.storage.local.get('settings').then(r => r.settings)`);
-  check('settings save', saved?.myName === 'Shrawin' && saved?.geminiKey === 'AIzaDummyKeyForTest' && saved?.llmProvider === 'gemini' && saved?.sttGeminiModel === 'gemini-3.5-transcribe', JSON.stringify({ myName: saved?.myName, llm: saved?.llmProvider }));
+  check('settings save', saved?.myName === 'Sam' && saved?.geminiKey === 'AIzaDummyKeyForTest' && saved?.llmProvider === 'gemini' && saved?.sttGeminiModel === 'gemini-3.5-transcribe', JSON.stringify({ myName: saved?.myName, llm: saved?.llmProvider }));
 
   await opts.evaluate(`(async () => {
     const m = { id: 'mtest', title: 'Weekly sync', url: 'https://meet.google.com/abc-defg-hij', startedAt: Date.now() - 42*60000, endedAt: Date.now(),
@@ -130,7 +130,7 @@ try {
   check('failed audio is retried on open and stays queued when retry fails', await mom.evaluate(`!document.getElementById('pendingBox').classList.contains('hidden') && document.getElementById('pendingText').textContent.includes('1 audio piece (~1.5 min) still not transcribed. Last error: Gemini HTTP 400')`), await mom.evaluate(`document.getElementById('pendingText').textContent`));
   check('MOM page renders markdown table', await mom.evaluate(`document.querySelectorAll('#mom table td').length === 4`));
   check('raw HTML from model is escaped', await mom.evaluate(`!document.querySelector('#mom img') && document.getElementById('mom').textContent.includes('<img')`));
-  check('transcript shows speakers in order', await mom.evaluate(`[...document.querySelectorAll('.tline .who')].map(e => e.textContent).join(',') === 'Shrawin,Others'`));
+  check('transcript shows speakers in order', await mom.evaluate(`[...document.querySelectorAll('.tline .who')].map(e => e.textContent).join(',') === 'Sam,Others'`));
   check('title field populated', await mom.evaluate(`document.getElementById('title').value === 'Weekly sync'`));
 
   // Generate with a bogus key: must surface the auth error in the UI rather than hang or crash.
@@ -515,7 +515,7 @@ try {
   check('tour: skip works, the ready page lists 7 optional set-ups, and opening one reveals the rest of the steps', /Gemini key/i.test(t1.key) && /microphone/i.test(t1.skipped) && /ready/i.test(t1.ready) && t1.navReady === 3 && t1.readyNext === 'Finish' && t1.moreItems === 7 && t1.navMore === 12, JSON.stringify([t1.key, t1.skipped, t1.ready, t1.navReady, t1.readyNext, t1.moreItems, t1.navMore]));
   check('tour: steps advance and answers are saved as you go', /Your microphone/.test(t1.mic) && /name and languages/i.test(t1.you) && /Teach Debrief your names/.test(t1.names) && t1.saved.name === 'Tour Tester' && JSON.stringify(t1.saved.lang) === JSON.stringify(['ml', 'ta']) && t1.saved.dict === 'Amal | Aman', JSON.stringify(t1));
   check('tour: the last step of the full tour shows a setup checklist and Finish', /ready/i.test(t1.done) && t1.items.length === 7 && t1.finish === 'Finish', JSON.stringify([t1.done, t1.items, t1.finish]));
-  await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Shrawin', meetingLanguages: [], dictionary: '' } }))`);
+  await opts.evaluate(`chrome.storage.local.get('settings').then((r) => chrome.storage.local.set({ settings: { ...r.settings, myName: 'Sam', meetingLanguages: [], dictionary: '' } }))`);
   const qx = await popup.evaluate(`(async () => { document.getElementById('quotaWarn').classList.remove('hidden'); document.getElementById('quotaWarnX').click(); await new Promise((r) => setTimeout(r, 200)); const r = { hidden: document.getElementById('quotaWarn').classList.contains('hidden'), saved: (await chrome.storage.local.get('quotaWarnHidden')).quotaWarnHidden }; await chrome.storage.local.remove('quotaWarnHidden'); return r; })()`);
   check('the quota warning has a close button that hides it and remembers', qx.hidden && qx.saved === true, JSON.stringify(qx));
   const why = await mom.evaluate(`({ text: document.getElementById('nameWhy').textContent, shown: !document.getElementById('nameWhy').classList.contains('hidden'), box: document.getElementById('nameBox').classList.contains('hidden') })`);

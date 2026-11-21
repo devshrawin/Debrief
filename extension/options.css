@@ -87,7 +87,7 @@ details.guide .steps li { margin: 10px 0; }
 .pick:has(input:focus-visible) { outline: 2px solid var(--focus-color); outline-offset: 2px; }
 
 /* segmented controls (style.css .seg-ctl) used on this page */
-.seg-ctl > button { padding: 0 10px; white-space: nowrap; }
+.seg-ctl > button { padding: 0 10px; }
 .seg-ctl.wide { display: flex; }
 
 /* Get started */

@@ -1,6 +1,6 @@
 // The floating panel: the popup, opened on top of the web page instead of in Chrome's own popup window. Chrome draws
 // its popup as a separate opaque window that nothing can see through; this panel lives in the page, so the page really
-// shows through the frosted glass. Injected by the service worker when the toolbar button is pressed (activeTab).
+//  Injected by the service worker when the toolbar button is pressed (activeTab).
 // Pressing the button again, Esc, or a click on the page closes it. If the page does not allow it, the service worker
 // opens the ordinary popup instead.
 (() => {

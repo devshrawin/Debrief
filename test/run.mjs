@@ -89,10 +89,10 @@ const meeting = {
   ],
 };
 await test('prompt orders segments and tags speakers', () => {
-  const u = buildUserPrompt(meeting, { ...DEFAULTS, myName: 'Shrawin' }, 'Attendees: Rahul');
+  const u = buildUserPrompt(meeting, { ...DEFAULTS, myName: 'Sam' }, 'Attendees: Rahul');
   assert.match(u, /Duration: 42 min/);
   assert.match(u, /Attendees: Rahul/);
-  const iMe = u.indexOf('[00:03] ME (Shrawin): Chaliye');
+  const iMe = u.indexOf('[00:03] ME (Sam): Chaliye');
   const iOt = u.indexOf('[01:05] OTHERS: Rahul');
   assert.ok(iMe > 0 && iOt > iMe, u);
   assert.match(buildSystemPrompt('English'), /Write the MOM in English/);

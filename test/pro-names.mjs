@@ -64,7 +64,7 @@ const meeting = { title: 'UR sync', startedAt: Date.UTC(2026, 9, 13, 5, 0), ende
 
 await test('prompt: fixes names in the transcript and lists names, attendees and absentees', () => {
   const entries = D.parseDictionary('Amal | Aman');
-  const u = P.buildUserPrompt(meeting, { ...DEFAULTS, myName: 'Shrawin' }, '', { entries, attendees: ['Amal Raj'], absent: ['Priya'], checklist: 'ACTION [00:12] share file' });
+  const u = P.buildUserPrompt(meeting, { ...DEFAULTS, myName: 'Sam' }, '', { entries, attendees: ['Amal Raj'], absent: ['Priya'], checklist: 'ACTION [00:12] share file' });
   assert.match(u, /Amal will share the file/);
   assert.doesNotMatch(u, /Aman will/);
   assert.match(u, /Names and terms \(spell exactly like this\): Amal Raj, Amal/);
@@ -216,14 +216,14 @@ const invited = [
   { name: 'Amal Raj', email: 'amal.raj@co.com', status: 'yes' },
   { name: 'Priya Nair', email: 'priya@co.com', status: 'yes' },
   { name: 'Ravi Kumar', email: 'ravi.kumar@co.com', status: 'maybe' },
-  { name: 'Shrawin Sisodiya', email: 'shrawin@co.com', status: 'owner' },
+  { name: 'Sam Carter', email: 'sam@co.com', status: 'owner' },
 ];
 const presence = { 'Amal R.': [10, 1500, 90], You: [0, 1800, 100], 'Priya Nair': [400, 1800, 80], 'Guest Visitor': [900, 1000, 10] };
 
 await test('attendance: matches calendar names to display names, finds absent and uninvited', () => {
-  const m = A.matchPeople(invited, presence, { entries: [], myName: 'Shrawin Sisodiya' });
+  const m = A.matchPeople(invited, presence, { entries: [], myName: 'Sam Carter' });
   const by = Object.fromEntries(m.rows.map((r) => [r.name, !!r.present]));
-  assert.deepEqual(by, { 'Amal Raj': true, 'Priya Nair': true, 'Ravi Kumar': false, 'Shrawin Sisodiya': true });
+  assert.deepEqual(by, { 'Amal Raj': true, 'Priya Nair': true, 'Ravi Kumar': false, 'Sam Carter': true });
   assert.deepEqual(m.uninvited.map((p) => p.name), ['Guest Visitor']);
 });
 
@@ -241,7 +241,7 @@ await test('attendance: nobody is "left early" just because the recording ran pa
 });
 
 await test('attendance: table lists absent people, late joiners and early leavers', () => {
-  const md = A.attendanceMarkdown({ invited, presence, durationSec: 1800, entries: [], myName: 'Shrawin Sisodiya' });
+  const md = A.attendanceMarkdown({ invited, presence, durationSec: 1800, entries: [], myName: 'Sam Carter' });
   assert.match(md, /3 of 4 invited people were seen/);
   assert.match(md, /\| Ravi Kumar \(ravi.kumar@co.com\) \| Maybe \| \*\*Absent\*\*/);
   assert.match(md, /\| Priya Nair \(priya@co.com\) \| Accepted \| Yes \| 06:40 \| 30:00 \| joined late \|/);
@@ -287,8 +287,8 @@ await test('learning: real names from the meeting are learned, mishearings are q
     captions: [{ name: 'Amal Raj', text: 'hi' }],
     segments: [{ t: 1, src: 'others', text: 'Then Amam will check it. Amam again said yes. Ok Priya.' }],
   };
-  const r = D.learnFromMeeting(m, { entries: [], myName: 'Shrawin' });
-  assert.deepEqual(r.names.sort(), ['Amal Raj', 'Priya N.', 'Ravi Kumar', 'Shrawin', 'Sita Menon'].sort());
+  const r = D.learnFromMeeting(m, { entries: [], myName: 'Sam' });
+  assert.deepEqual(r.names.sort(), ['Amal Raj', 'Priya N.', 'Ravi Kumar', 'Sam', 'Sita Menon'].sort());
   assert.deepEqual(r.candidates.map((c) => [c.found, c.suggest, c.count]), [['Amam', 'Amal', 2]]);
 });
 

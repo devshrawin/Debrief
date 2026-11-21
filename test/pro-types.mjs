@@ -20,7 +20,7 @@ async function test(name, fn) {
 
 const at = (d, h, mi) => new Date(2026, 10, d, h, mi).getTime();
 const meeting = { id: 'm1', title: 'KERALA UR - Cadence Call', url: 'https://meet.google.com/abc-defg-hij', startedAt: at(2, 10, 0), endedAt: at(2, 10, 47), invited: [], segments: Array.from({ length: 30 }, (_, i) => ({ t: i * 60, src: 'others', text: `status item ${i} `.repeat(60) })) };
-const presence = { 'Amal Samad': [0, 2800, 9], 'Shrawin Sisodia': [0, 2800, 9], 'Akhil Azad': [80, 2800, 9], 'Darshika Patel': [190, 1600, 9] };
+const presence = { 'Amal Samad': [0, 2800, 9], 'Sam Sisodia': [0, 2800, 9], 'Akhil Azad': [80, 2800, 9], 'Darshika Patel': [190, 1600, 9] };
 
 // ---------------- matching ----------------
 await test('normalize: ids are unique, columns capped and defaulted, empty types dropped', () => {
@@ -65,9 +65,9 @@ await test('parse: a model table becomes rows with exactly the columns; header, 
 await test('roster: everyone present gets a row in order, matched by name; extras the model found follow', () => {
   const cols = ['Yesterday', 'Today'];
   const roster = T.rosterOf({ presence, attendees: ['Amal Samad', 'Unknown speaker', 'Me', 'Mahaveer Prajapati'] });
-  assert.deepEqual(roster, ['Amal Samad', 'Shrawin Sisodia', 'Akhil Azad', 'Darshika Patel', 'Mahaveer Prajapati']);
+  assert.deepEqual(roster, ['Amal Samad', 'Sam Sisodia', 'Akhil Azad', 'Darshika Patel', 'Mahaveer Prajapati']);
   const rows = T.fillRoster([{ name: 'Akhil', cells: ['users', 'menus'] }, { name: 'Safeena Mol', cells: ['grafana', 'servers'] }, { name: 'Amal S.', cells: ['tests', 'tests'] }], roster, cols);
-  assert.deepEqual(rows.map((r) => r.name), ['Amal Samad', 'Shrawin Sisodia', 'Akhil Azad', 'Darshika Patel', 'Mahaveer Prajapati', 'Safeena Mol']);
+  assert.deepEqual(rows.map((r) => r.name), ['Amal Samad', 'Sam Sisodia', 'Akhil Azad', 'Darshika Patel', 'Mahaveer Prajapati', 'Safeena Mol']);
   assert.deepEqual(rows[0].cells, ['tests', 'tests']);
   assert.deepEqual(rows[1].cells, [T.NO_UPDATE, T.NO_UPDATE]);
   assert.deepEqual(rows[2].cells, ['users', 'menus']);
@@ -82,7 +82,7 @@ await test('markdown: the block goes before Action Items, else before Risks, els
 });
 
 // ---------------- the pipeline ----------------
-const TABLE = '| Person | Yesterday | Today | Blockers |\n|---|---|---|---|\n| Amal Samad | portal testing | continue testing | No update stated |\n| Shrawin Sisodia | bulk upload tests | close bugs | No update stated |\n| Akhil Azad | created 4 users | No update stated | No update stated |';
+const TABLE = '| Person | Yesterday | Today | Blockers |\n|---|---|---|---|\n| Amal Samad | portal testing | continue testing | No update stated |\n| Sam Sisodia | bulk upload tests | close bugs | No update stated |\n| Akhil Azad | created 4 users | No update stated | No update stated |';
 const STANDARD = '# KERALA UR - Cadence Call\n\n## Overview\nx\n\n## Discussion\n### Scheme\n- done\n\n## Action Items\n| # | Action | Owner | Due | Source |\n|---|---|---|---|---|\n| 1 | a | b | c | d |\n';
 const TEMPLATE_REPLY = `## Agenda
 - Status
@@ -125,7 +125,7 @@ await test('standard minutes: the updates table is added before Action Items, ex
   assert.ok(log.some((c) => /Extra instructions for this kind of meeting/.test(c.user) && /Always write names in English/.test(c.user)));
   assert.equal(log.filter((c) => /record what they said under these columns/.test(c.system)).length, 1);
   const upd = log.find((c) => /record what they said/.test(c.system));
-  assert.match(upd.user, /Roster \(people present, in this order\): Amal Samad; Shrawin Sisodia; Akhil Azad; Darshika Patel/);
+  assert.match(upd.user, /Roster \(people present, in this order\): Amal Samad; Sam Sisodia; Akhil Azad; Darshika Patel/);
 });
 
 await test('a meeting with no type gets no table and no extra call', async () => {
@@ -143,7 +143,7 @@ await test('if the updates call fails the minutes still come out, with a note to
 });
 
 await test('official format: the table is stored, parsed back and rendered in the document', async () => {
-  const settings = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'template', myName: 'Shrawin Sisodia' };
+  const settings = { ...DEFAULTS, ...A.AMNEX_PRESET, minutesFormat: 'template', myName: 'Sam Sisodia' };
   A.setOrg(settings);
   const r = await writeMinutes({ meeting: { ...meeting, presence }, settings, notes: '', gen: makeGen([]), ctx: { meetingType: type } });
   assert.equal(r.format, 'template');
