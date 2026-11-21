@@ -34,7 +34,7 @@ function Test-Python($exe) {
   try { & $exe -c "import faster_whisper, fastapi, uvicorn, multipart" 2>$null; return ($LASTEXITCODE -eq 0) } catch { return $false }
 }
 $py = $null
-foreach ($c in @("$here\.venv\Scripts\python.exe", "$env:USERPROFILE\Desktop\UR Files\Projects\MalayalamScribe\.venv\Scripts\python.exe", 'python')) {
+foreach ($c in @("$here\.venv\Scripts\python.exe", "$env:USERPROFILE\Desktop\UR Files\Projects\2 Relevant (not now)\MalayalamScribe\.venv\Scripts\python.exe", 'python')) {
   if ((Get-Command $c -ErrorAction SilentlyContinue) -and (Test-Python $c)) { $py = $c; break }
 }
 if (-not $py) {
